@@ -123,6 +123,8 @@ internal fun ConnectLastFm(controller: MusicController, dismiss: () -> Unit) {
     SettingsScreen(onDismissRequest = { if (!connecting) dismiss() }, title = { Text("Connect Last.fm") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Enter the API credentials for your Last.fm application, then authorize Nevumi in your browser.")
+            Text("Leave the Callback URL field blank when creating your Last.fm API application.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = { browser.openUri("https://www.last.fm/api/account/create") }) { Text("Get API credentials") }
             OutlinedTextField(apiKey, { apiKey = it }, modifier = Modifier.fillMaxWidth(), enabled = !connecting, label = { Text("Application API key") }, leadingIcon = { Icon(AppIcon.KEY.vector, null) }, singleLine = true)
             OutlinedTextField(sharedSecret, { sharedSecret = it }, modifier = Modifier.fillMaxWidth(), enabled = !connecting, label = { Text("Application shared secret") }, leadingIcon = { Icon(AppIcon.LOCK.vector, null) },
