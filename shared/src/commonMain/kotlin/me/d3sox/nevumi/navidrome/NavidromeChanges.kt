@@ -188,10 +188,13 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
     suspend fun synchronize() = synchronization.withLock {
         val connection = client() ?: return@withLock
         // Each journal entry is sent on its own so one rejected change cannot block every later change forever.
+        // A server that cannot be reached or rejects the account fails every entry, so those stop the run at once.
         var failure: Exception? = null
         suspend fun attempt(block: suspend () -> Unit) {
             try { block() }
             catch (cancelled: CancellationException) { throw cancelled }
+            catch (unreachable: NavidromeRequestException) { throw unreachable }
+            catch (rejected: NavidromeException) { if (rejected.code in setOf(40, 41, 50)) throw rejected; if (failure == null) failure = rejected }
             catch (error: Exception) { if (failure == null) failure = error }
         }
         // A song the server no longer has cannot take the change; drop it from the journal.

@@ -680,6 +680,14 @@ class NavidromeChangesTest {
             assertEquals(listOf("kept"), starred, "A failing rating must not block the favorite that follows it")
             assertEquals(1, changes.pendingCount(), "The deleted song's rating is dropped; the failing one is retried later")
             assertEquals(2, ratingAttempts)
+            // An unreachable server would fail every entry, so the run stops after the first attempt.
+            val offline = NavidromeChanges(store, library) { NavidromeClient(HttpClient(MockEngine { respond("down", io.ktor.http.HttpStatusCode.BadGateway) }),
+                "https://music.example.test", ServerCredentials("fixture", "test")) }
+            changes.setFavorite(gone.id, true)
+            val before = starred.size
+            assertFailsWith<NavidromeRequestException> { offline.synchronize() }
+            assertEquals(before, starred.size)
+            assertEquals(2, offline.pendingCount(), "Nothing is dropped while the server is unreachable")
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 }
