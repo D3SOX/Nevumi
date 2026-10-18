@@ -491,8 +491,10 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         operations.withLock { refresh() }
     }
     suspend fun tailscaleStatus() = requireNotNull(serverFiles) { "Tailscale is unavailable" }.tailscaleStatus()
-    suspend fun signInToTailscale(controlUrl: String, authKey: String?) =
-        requireNotNull(serverFiles) { "Tailscale is unavailable" }.signInToTailscale(controlUrl, authKey)
+    suspend fun signInToTailscale(controlUrl: String, authKey: String?): TailscaleStatus {
+        if (controlUrl.isNotEmpty()) networkAccess(controlUrl)
+        return requireNotNull(serverFiles) { "Tailscale is unavailable" }.signInToTailscale(controlUrl, authKey)
+    }
     suspend fun signOutOfTailscale() = requireNotNull(serverFiles) { "Tailscale is unavailable" }.signOutOfTailscale()
     suspend fun disconnectServerFiles() {
         requireNotNull(serverFiles) { "Server file editing is unavailable" }.disconnect()

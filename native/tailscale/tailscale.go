@@ -35,6 +35,7 @@ import (
 	"unsafe"
 
 	"tailscale.com/envknob"
+	"tailscale.com/ipn"
 	"tailscale.com/tsnet"
 	"tailscale.com/types/logger"
 )
@@ -155,10 +156,22 @@ func signOut() error {
 		return nil
 	}
 	directory := server.Dir
-	if client, err := server.LocalClient(); err == nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		client.Logout(ctx)
-		cancel()
+	client, err := server.LocalClient()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	state, err := client.StatusWithoutPeers(ctx)
+	if err != nil {
+		return err
+	}
+	// A node the tailnet knows about keeps its identity until the control server confirms the logout, so the user can retry.
+	if registered := state.BackendState == ipn.Running.String() || state.BackendState == ipn.Starting.String() ||
+		state.BackendState == ipn.NeedsMachineAuth.String(); registered {
+		if err := client.Logout(ctx); err != nil {
+			return errors.New("Tailscale could not reach the control server to sign out")
+		}
 	}
 	server.Close()
 	server = nil

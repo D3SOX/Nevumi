@@ -45,6 +45,7 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
     }
 
     @Synchronized fun signOut() {
+        resume()
         TailscaleNative.signOut()
         directory.deleteRecursively()
     }
