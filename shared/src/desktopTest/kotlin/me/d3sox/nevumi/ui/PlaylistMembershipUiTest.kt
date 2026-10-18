@@ -163,6 +163,8 @@ class PlaylistMembershipUiTest {
                 onAllNodesWithText("Road ▸ Drive", useUnmergedTree = true).assertCountEquals(0)
                 kotlin.test.assertTrue(onNodeWithText("Road").fetchSemanticsNode().boundsInRoot.top >
                     onNodeWithContentDescription("Playlist membership: Morning").fetchSemanticsNode().boundsInRoot.top)
+                kotlin.test.assertTrue(onNodeWithContentDescription("Playlist membership: Road ▸ Drive").fetchSemanticsNode().boundsInRoot.top >
+                    onNodeWithText("Road").fetchSemanticsNode().boundsInRoot.top)
                 onNodeWithText("Apply").assertIsNotEnabled()
                 onNodeWithContentDescription("Playlist membership: Road ▸ Drive").performClick()
                 onNodeWithText("Apply").assertIsEnabled()

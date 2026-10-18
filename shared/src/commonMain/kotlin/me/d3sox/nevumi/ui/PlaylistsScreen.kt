@@ -229,7 +229,9 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
         state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }.sortedBy { it.title.lowercase() }
             .sortedWith { a, b ->
                 val (x, y) = segments(a) to segments(b)
-                x.zip(y).firstOrNull { it.first != it.second }?.let { it.first.compareTo(it.second, ignoreCase = true) } ?: (x.size - y.size)
+                // Break case-only ties so "Road" and "road" stay separate, contiguous groups.
+                x.zip(y).firstOrNull { it.first != it.second }?.let { (c, d) -> c.compareTo(d, ignoreCase = true).takeIf { it != 0 } ?: c.compareTo(d) }
+                    ?: (x.size - y.size)
             }.flatMap { playlist ->
                 val folders = segments(playlist)
                 val shared = folders.zip(previous).takeWhile { it.first == it.second }.size
