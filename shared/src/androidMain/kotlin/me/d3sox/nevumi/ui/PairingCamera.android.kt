@@ -2,6 +2,7 @@ package me.d3sox.nevumi.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.view.ViewOutlineProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -39,7 +40,14 @@ internal actual fun PairingCameraPreview(modifier: Modifier, onScanned: (String)
         }
         return
     }
-    val view = remember(context) { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE } }
+    val view = remember(context) {
+        PreviewView(context).apply {
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            // AndroidView does not clip the camera's scaled texture to its layout bounds.
+            outlineProvider = ViewOutlineProvider.BOUNDS
+            clipToOutline = true
+        }
+    }
     AndroidView(factory = { view }, modifier = modifier.height(280.dp).semantics { contentDescription = "Pairing camera preview" })
     DisposableEffect(context, lifecycle, view) {
         val executor = Executors.newSingleThreadExecutor()
