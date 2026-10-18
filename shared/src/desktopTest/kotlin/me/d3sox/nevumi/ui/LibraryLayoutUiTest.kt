@@ -40,12 +40,25 @@ class LibraryLayoutUiTest {
                 fun top(label: String) = onNodeWithText(label).fetchSemanticsNode().boundsInRoot.top
                 assertTrue(kotlin.math.abs(top("Album A") - top("Album B")) < 2)
                 assertTrue(top("Album C") > top("Album A") + 20)
+                runOnIdle { width = 460 }
+                assertTrue(kotlin.math.abs(top("Album A") - top("Album C")) < 2,
+                    "Automatic should fit three columns at the Pixel 8 Pro's 460 dp width")
+                assertTrue(top("Album D") > top("Album A") + 20)
                 runOnIdle { width = 1000 }
                 assertTrue(kotlin.math.abs(top("Album A") - top("Album D")) < 2,
                     "A laptop window should fit at least four cards instead of two oversized cards")
                 onNodeWithContentDescription("Collection view").performClick()
                 onNodeWithText("Automatic").assertIsSelected()
                 onNodeWithText("3 columns").performClick()
+                assertTrue(kotlin.math.abs(top("Album A") - top("Album C")) < 2)
+                assertTrue(top("Album D") > top("Album A") + 20)
+                runOnIdle { width = 460 }
+                onNodeWithContentDescription("Collection view").performClick()
+                onNodeWithText("2 columns").performClick()
+                assertTrue(kotlin.math.abs(top("Album A") - top("Album B")) < 2)
+                assertTrue(top("Album C") > top("Album A") + 20)
+                onNodeWithContentDescription("Collection view").performClick()
+                onNodeWithText("Automatic").performClick()
                 assertTrue(kotlin.math.abs(top("Album A") - top("Album C")) < 2)
                 assertTrue(top("Album D") > top("Album A") + 20)
             }
@@ -85,14 +98,19 @@ class LibraryLayoutUiTest {
                 onNodeWithContentDescription("Track options: Song A").assertIsDisplayed()
                 onNodeWithContentDescription("Back").performClick()
                 onNodeWithText("Artists").performClick()
-                assertTrue(kotlin.math.abs(bounds("Artist A").top - bounds("Artist B").top) < 2)
-                onNodeWithContentDescription("Collection view").performClick()
-                onNodeWithText("List").performClick()
                 assertTrue(bounds("Artist B").top >= bounds("Artist A").bottom)
+                onNodeWithContentDescription("Collection order").performClick()
+                onNodeWithText("Name").performClick()
+                assertTrue(bounds("Artist B").top >= bounds("Artist A").bottom,
+                    "Changing the sort should retain the default list view")
+                onNodeWithContentDescription("Collection view").performClick()
+                onNodeWithText("List").assertIsSelected()
+                onNodeWithText("Grid").performClick()
+                assertTrue(kotlin.math.abs(bounds("Artist A").top - bounds("Artist B").top) < 2)
                 for ((page, first, second) in listOf(Triple("Album artists", "Album artist A", "Album artist B"),
                     Triple("Genres", "Genre A", "Genre B"), Triple("Folders", "Music/A", "Music/B"))) {
                     openLibraryPage(page)
-                    assertTrue(kotlin.math.abs(bounds(first).top - bounds(second).top) < 2, "$page defaults to a grid")
+                    assertTrue(bounds(second).top >= bounds(first).bottom, "$page defaults to a list")
                 }
                 openLibraryPage("Albums")
                 assertTrue(kotlin.math.abs(bounds("Album A").top - bounds("Album C").top) < 2)
@@ -100,7 +118,8 @@ class LibraryLayoutUiTest {
                 runOnIdle { active = controller() }
                 waitUntil(timeoutMillis = 3_000) { !active.state.value.loading }
                 onNodeWithText("Artists").performClick()
-                assertTrue(bounds("Artist B").top >= bounds("Artist A").bottom)
+                assertTrue(kotlin.math.abs(bounds("Artist A").top - bounds("Artist B").top) < 2,
+                    "An explicit grid choice should survive restart")
                 onNodeWithText("Albums").performClick()
                 assertTrue(kotlin.math.abs(bounds("Album A").top - bounds("Album C").top) < 2)
                 onNodeWithContentDescription("Collection view").performClick()

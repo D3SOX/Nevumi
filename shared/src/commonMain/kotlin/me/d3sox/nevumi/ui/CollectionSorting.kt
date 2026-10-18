@@ -49,7 +49,7 @@ internal fun CollectionOrder(tab: LibraryTab, layout: CollectionLayout, controll
     var expanded by remember { mutableStateOf(false) }
     fun update(change: (CollectionLayout) -> CollectionLayout) {
         controller.updatePreferences { settings -> settings.copy(collectionLayouts = settings.collectionLayouts +
-            (tab to change(settings.collectionLayouts[tab] ?: CollectionLayout()))) }
+            (tab to change(settings.collectionLayout(tab)))) }
     }
     Box {
         val current = if (layout.sort == CollectionSort.CUSTOM) layout.sort.label()

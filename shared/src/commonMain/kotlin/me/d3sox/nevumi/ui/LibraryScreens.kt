@@ -132,7 +132,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             }
             if (activeSongLists == 0 && !rearrangingPlaylists && currentTab in setOf(LibraryTab.ALBUMS, LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS,
                     LibraryTab.GENRES, LibraryTab.FOLDERS, LibraryTab.PLAYLISTS))
-                CollectionOrder(currentTab, state.preferences.collectionLayouts[currentTab] ?: me.d3sox.nevumi.settings.CollectionLayout(), controller,
+                CollectionOrder(currentTab, state.preferences.collectionLayout(currentTab), controller,
                     rearrange = if (currentTab == LibraryTab.PLAYLISTS) ({ rearrangingPlaylists = true }) else null)
             AppIconButton(AppIcon.SETTINGS, "Settings", onClick = onSettings)
             Box {

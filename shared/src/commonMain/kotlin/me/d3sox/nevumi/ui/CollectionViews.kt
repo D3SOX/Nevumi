@@ -43,7 +43,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
     modifier: Modifier = Modifier, total: Int = entries.size, rearranging: Boolean = false, finishRearranging: () -> Unit = {}, open: (String) -> Unit) {
     val listScroll = rememberLibraryListState(controller, "collections:${tab.name}:list")
     val gridScroll = rememberLibraryGridState(controller, "collections:${tab.name}:grid")
-    val layout = state.preferences.collectionLayouts[tab] ?: CollectionLayout()
+    val layout = state.preferences.collectionLayout(tab)
     val sorted = remember(entries, layout.sort, layout.descending, layout.order) {
         val positions = layout.order.withIndex().associate { it.value to it.index }
         val comparator = when (layout.sort) {
@@ -73,11 +73,11 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
     }
     val rearrangeScroll = rememberLazyListState()
     val reorder = rememberReorderableLazyListState(rearrangeScroll) { from, to -> move(from.key, to.key) }
-    val gridCells = layout.columns?.let { GridCells.Fixed(it.coerceIn(2, 6)) } ?: GridCells.Adaptive(156.dp)
+    val gridCells = layout.columns?.let { GridCells.Fixed(it.coerceIn(2, 6)) } ?: GridCells.Adaptive(128.dp)
     var menu by remember { mutableStateOf(false) }
     fun update(change: (CollectionLayout) -> CollectionLayout) {
         controller.updatePreferences { settings ->
-            settings.copy(collectionLayouts = settings.collectionLayouts + (tab to change(settings.collectionLayouts[tab] ?: CollectionLayout())))
+            settings.copy(collectionLayouts = settings.collectionLayouts + (tab to change(settings.collectionLayout(tab))))
         }
     }
     // Playlist folders are ordered separately, so keep the positions of entries this page does not show.

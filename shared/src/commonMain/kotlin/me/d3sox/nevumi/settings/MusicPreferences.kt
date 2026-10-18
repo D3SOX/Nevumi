@@ -84,7 +84,12 @@ data class MusicSettings(
     val excludeFolders: List<String> = emptyList(),
     val undoRetentionDays: Int = 30,
     val undoBackupBytes: Long = 1_073_741_824L,
-)
+) {
+    fun collectionLayout(tab: LibraryTab): CollectionLayout = collectionLayouts[tab] ?: CollectionLayout(view = when (tab) {
+        LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS -> CollectionView.LIST
+        else -> CollectionView.GRID
+    })
+}
 
 class MusicPreferences(private val store: MusicStore) {
     suspend fun load(): MusicSettings = store.read("settings:music") ?: MusicSettings()
