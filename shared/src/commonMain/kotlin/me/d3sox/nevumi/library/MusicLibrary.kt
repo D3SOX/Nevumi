@@ -118,7 +118,8 @@ class MusicLibrary(private val store: MusicStore) {
     private val decoded = kotlinx.coroutines.sync.Mutex()
     private var cachedRecords = emptyList<me.d3sox.nevumi.storage.StoredRecord>()
     private var cachedTracks = emptyList<Track>()
-    private suspend fun decodeTracks(records: List<me.d3sox.nevumi.storage.StoredRecord>): List<Track> = decoded.withLock {
+    private suspend fun decodeTracks(records: List<me.d3sox.nevumi.storage.StoredRecord>): List<Track> = decoded.withLock { decodeTracksLocked(records) }
+    private fun decodeTracksLocked(records: List<me.d3sox.nevumi.storage.StoredRecord>): List<Track> {
         if (records != cachedRecords) {
             val previous = cachedRecords.associateBy { it.key }
             val tracks = cachedTracks.associateBy { "track:${it.id}" }
@@ -128,7 +129,7 @@ class MusicLibrary(private val store: MusicStore) {
             }, LibraryQuery())
             cachedRecords = records
         }
-        cachedTracks
+        return cachedTracks
     }
     internal suspend fun localFolderRules(): LocalFolderRules {
         val settings = store.read<me.d3sox.nevumi.settings.MusicSettings>("settings:music")
@@ -178,7 +179,27 @@ class MusicLibrary(private val store: MusicStore) {
             sources = existing?.sources.orEmpty().filterNot { it.id == source.id } + source)
         store.put("track:${track.id}", "tracks", track)
         store.put("source-owner:${source.id}", "source-owners", SourceOwner(track.id))
+        rememberRecording(track)
         track
+    }
+
+    // MusicBrainz recording id (lowercase) to track ids, so a first import does not scan the whole library per song.
+    private var recordings: MutableMap<String, MutableSet<String>>? = null
+    private suspend fun rememberRecording(track: Track) = decoded.withLock {
+        val id = track.metadata.recordingId.takeIf { it.isNotBlank() }?.lowercase() ?: return@withLock
+        recordings?.getOrPut(id) { mutableSetOf() }?.add(track.id)
+    }
+    private suspend fun recordingCandidates(recordingId: String): List<Track> {
+        val ids = decoded.withLock {
+            val index = recordings ?: HashMap<String, MutableSet<String>>().also { index ->
+                for (track in decodeTracksLocked(store.database.records().list("tracks"))) {
+                    track.metadata.recordingId.takeIf { it.isNotBlank() }?.let { index.getOrPut(it.lowercase()) { mutableSetOf() }.add(track.id) }
+                }
+                recordings = index
+            }
+            index[recordingId.lowercase()].orEmpty().toList()
+        }
+        return ids.mapNotNull { findTrack(it) }
     }
 
     private suspend fun matchingTrack(metadata: TrackMetadata, source: TrackSource): Track? {
@@ -190,7 +211,7 @@ class MusicLibrary(private val store: MusicStore) {
         fun identified(value: TrackMetadata) = value.recordingId.matches(musicBrainzId) && value.releaseId.matches(musicBrainzId) &&
             value.trackNumber > 0 && value.discNumber > 0 && value.durationMs > 0
         if (!identified(metadata)) return null
-        return tracks().singleOrNull { track ->
+        return recordingCandidates(metadata.recordingId).singleOrNull { track ->
             val other = track.metadata
             track.sources.any { it.kind == counterpart } && identified(other) &&
                 metadata.recordingId.equals(other.recordingId, ignoreCase = true) &&

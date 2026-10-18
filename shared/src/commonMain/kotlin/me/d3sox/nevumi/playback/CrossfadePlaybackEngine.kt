@@ -28,6 +28,9 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var tracks = emptyList<PlayableTrack>()
     private var preparedEntry: String? = null
     private var selectedEntry: String? = null
+    private data class PendingLoad(val track: PlayableTrack, val positionMs: Long)
+    // Set by callers and cleared by the worker once the decoder reports the requested entry.
+    @kotlin.concurrent.Volatile private var pendingLoad: PendingLoad? = null
     private var crossfadeMs = 0L
     private var gapless = true
     private var masterVolume = 1.0
@@ -105,7 +108,10 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
         require(startIndex in tracks.indices)
         requestedPlaying.value = play
-        mutableStatus.update { it.copy(playWhenReady = play, playing = it.playing && play) }
+        val pending = PendingLoad(tracks[startIndex], positionMs.coerceAtLeast(0))
+        pendingLoad = pending
+        // Report the requested song immediately so observers never see the previous song selected again.
+        mutableStatus.update { pendingStatus(it, pending).copy(playWhenReady = play) }
         command {
             cancelFade()
             this.tracks = tracks.toList()
@@ -260,7 +266,10 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         if (!gapless && crossfadeMs == 0L && current.ended && current.entryId == selectedEntry && requestedPlaying.value) {
             nextTrack()?.let { next -> selectedEntry = next.entryId; active.load(next) }
         }
-        val playback = active.status.value
+        val requested = pendingLoad
+        if (requested != null && active.status.value.entryId == requested.track.entryId) pendingLoad = null
+        val playback = if (requested != null && active.status.value.entryId != requested.track.entryId) pendingStatus(active.status.value, requested)
+            else active.status.value
         val tail = outgoing?.status?.value?.takeIf { !it.ended }
         mutableAudioLevel.value = if (audioLevelEnabled && requestedPlaying.value && playback.playing) {
             val energy = active.audioLevel.value * playback.volume
@@ -271,6 +280,10 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             playWhenReady = requestedPlaying.value, playing = playback.playing && requestedPlaying.value,
             repeatMode = repeatMode, repeatPlays = repeatPlays, fadingOut = tail, crossfadeDurationMs = crossfadeMs)
     }
+
+    private fun pendingStatus(current: PlaybackStatus, pending: PendingLoad) = current.copy(trackId = pending.track.id,
+        entryId = pending.track.entryId, sourceId = pending.track.sourceId, positionMs = pending.positionMs, durationMs = 0,
+        playing = false, ended = false, error = null, playbackId = null, fadingOut = null, audioInfo = null)
 
     private fun applyGains() {
         if (outgoing == null) active.setVolume(masterVolume)

@@ -4,6 +4,7 @@ import me.d3sox.nevumi.storage.MusicStore
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -106,9 +107,8 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     fun observe(): Flow<List<Playlist>> = store.database.records().observe("playlists").distinctUntilChanged().flatMapLatest { records ->
         val playlists = records.map { store.json.decodeFromString<Playlist>(it.value) }
         if (playlists.none { it.rule != null }) flowOf(playlists)
-        else combine(MusicLibrary(store).observe(), store.database.records().observe("listens").distinctUntilChanged(),
-        flow { while (true) { emit(clock()); delay(refreshEveryMs) } }) { tracks, listens, now ->
-        val statistics = listeningStatistics(listens.map { store.json.decodeFromString<Listen>(it.value) })
+        else combine(MusicLibrary(store).observe(), me.d3sox.nevumi.history.ListeningHistory(store, MusicLibrary(store)).observe().map { listens -> listeningStatistics(listens) }.distinctUntilChanged(),
+        flow { while (true) { emit(clock()); delay(refreshEveryMs) } }) { tracks, statistics, now ->
         playlists.map { playlist ->
             playlist.rule?.let { rule -> playlist.copy(trackIds = filterTracks(tracks, rule, statistics, now).map { it.id }) } ?: playlist
         }

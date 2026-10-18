@@ -185,4 +185,18 @@ class ScrobblingClientsTest {
 
     private fun body(content: OutgoingContent) = (content as OutgoingContent.ByteArrayContent).bytes().decodeToString()
     private val jsonHeaders = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+
+    @Test
+    fun requestsThatNeverReachTheServiceAreRetriedInsteadOfLeftUncertain() = runBlocking {
+        val unreachable = HttpClient(MockEngine { throw java.net.ConnectException("Connection refused") })
+        val refused = assertFailsWith<ScrobbleException> { ListenBrainzClient(unreachable, "token", "https://listenbrainz.example").validateToken() }
+        assertEquals(ScrobbleFailure.RETRYABLE, refused.failure)
+        val unknownHost = HttpClient(MockEngine { throw java.net.UnknownHostException("listenbrainz.example") })
+        assertEquals(ScrobbleFailure.RETRYABLE,
+            assertFailsWith<ScrobbleException> { ListenBrainzClient(unknownHost, "token", "https://listenbrainz.example").validateToken() }.failure)
+        val timedOut = HttpClient(MockEngine { throw java.net.SocketTimeoutException("Read timed out") })
+        assertEquals(ScrobbleFailure.UNCERTAIN,
+            assertFailsWith<ScrobbleException> { ListenBrainzClient(timedOut, "token", "https://listenbrainz.example").validateToken() }.failure)
+        unreachable.close(); unknownHost.close(); timedOut.close()
+    }
 }

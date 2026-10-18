@@ -99,8 +99,9 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
 
     suspend fun refreshLibrary(connection: NavidromeClient, includeFilePaths: Boolean = false): List<Pair<Track, ServerSong>> = synchronization.withLock {
         val catalogue = connection.songs(includeFilePaths)
+        // Short transactions let playback checkpoints and user actions write between batches of a large import.
+        val imported = catalogue.chunked(200).flatMap { batch -> store.transaction { batch.map { song -> importSong(connection, song) to song } } }
         val songs = store.transaction {
-            val imported = catalogue.map { song -> importSong(connection, song) to song }
             val present = catalogue.map { "server:${connection.serverId}:${it.id}" }.toSet()
             val absent = library.tracks().flatMap { track -> track.sources.filter {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:") && it.id !in present

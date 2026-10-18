@@ -626,6 +626,8 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
     var seeking by remember(state.playback.entryId) { mutableStateOf<Float?>(null) }
     var seekRequest by remember(state.playback.entryId) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    val positionFlow = remember(controller) { controller.state.map { it.playback.positionMs }.distinctUntilChanged() }
+    val positionMs by positionFlow.collectAsState(controller.state.value.playback.positionMs)
     val durationMs = state.playback.durationMs.takeIf { it > 0 } ?: current.metadata.durationMs
     val duration = durationMs.coerceAtLeast(1).toFloat()
     val waveforms = LocalAudioWaveforms.current ?: rememberAudioWaveforms()
@@ -650,7 +652,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe)
         Column(Modifier.fillMaxWidth()) {
-            Slider(value = (seeking ?: state.playback.positionMs.toFloat()).coerceIn(0f, duration), valueRange = 0f..duration, colors = sliderColors,
+            Slider(value = (seeking ?: positionMs.toFloat()).coerceIn(0f, duration), valueRange = 0f..duration, colors = sliderColors,
                 enabled = durationMs > 0 && state.playback.entryId != null, onValueChange = { seekRequest++; seeking = it },
                 onValueChangeFinished = {
                     val entry = state.playback.entryId
@@ -677,7 +679,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
                     }
                 })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                val position = (seeking ?: state.playback.positionMs.toFloat()).toLong()
+                val position = (seeking ?: positionMs.toFloat()).toLong()
                 val remaining = state.preferences.showRemainingTime
                 Surface(onClick = { controller.updatePreferences { it.copy(showRemainingTime = !it.showRemainingTime) } },
                     modifier = Modifier.semantics { contentDescription = if (remaining) "Remaining time" else "Elapsed time" },

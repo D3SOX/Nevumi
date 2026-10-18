@@ -218,7 +218,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
             }
             listen()
         }
-        val snapshot = library.snapshot(peer.deviceId)
+        val snapshot = library.snapshot(peer.deviceId, listensSince = listensSince(peer))
         connect(peer.host, peer.port, peer.certificateSha256) { socket ->
             socket.soTimeout = MATCHING_TIMEOUT_MS
             write(socket, SyncRequest(action = "sync", deviceId = requireNotNull(ownId), name = name,
@@ -262,7 +262,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
                     require(request.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
                     library.merge(requireNotNull(request.snapshot))
                     write(socket, SyncResponse(deviceId = requireNotNull(ownId), name = name, listeningPort = requireNotNull(server).localPort,
-                        snapshot = library.snapshot(peer.deviceId)))
+                        snapshot = library.snapshot(peer.deviceId, listensSince = listensSince(peer))))
                     savePeer(peer.copy(host = socket.inetAddress.hostAddress, port = request.listeningPort, name = request.name, lastSyncedAt = clock()))
                 }
                 "prepare-playback", "activate-playback", "return-playback", "cancel-playback" -> {
@@ -301,6 +301,9 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         reloadPeers()
         lifecycle.withLock { if (state.value.peers.isEmpty() && offer.get() == null) stopListening() }
     }
+
+    // After the first sync a peer already holds the older history; sharing the last month keeps frames small.
+    private fun listensSince(peer: SyncPeer): Long? = peer.lastSyncedAt?.let { it - 30L * 24 * 60 * 60 * 1_000 }
 
     private suspend fun savePeer(peer: SyncPeer) {
         store.put("sync:peer:${peer.deviceId}", "sync-peers", peer)

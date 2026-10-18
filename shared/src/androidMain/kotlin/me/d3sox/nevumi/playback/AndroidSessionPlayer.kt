@@ -135,13 +135,25 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
     override fun getPlaceholderMediaItemData(mediaItem: MediaItem): MediaItemData =
         super.getPlaceholderMediaItemData(publicItem(mediaItem))
 
-    override fun getState(): State {
+    private data class Timeline(val items: List<MediaItem>, val artworkKey: Pair<String?, String?>?, val artworkData: ByteArray?,
+        val entryId: String?, val durationMs: Long, val index: Int, val data: List<MediaItemData>)
+    private var timeline: Timeline? = null
+
+    // The state is rebuilt on every position tick; mapping thousands of queue items each time would stall the main thread.
+    private fun timeline(): Timeline {
+        timeline?.takeIf { it.items === items && it.artworkKey == artworkKey && it.artworkData === artworkData &&
+            it.entryId == playback.entryId && it.durationMs == playback.durationMs }?.let { return it }
         val index = items.indexOfFirst { it.mediaId == playback.entryId }.coerceAtLeast(0)
-        val timeline = items.map { item ->
+        val data = items.map { item ->
             // Public controllers need metadata and an opaque queue identifier, never an authenticated URI or source ID.
             MediaItemData.Builder(item.mediaId).setMediaItem(publicItem(item)).setIsSeekable(true)
                 .setDurationUs(if (item.mediaId == playback.entryId && playback.durationMs > 0) playback.durationMs * 1_000 else C.TIME_UNSET).build()
         }
+        return Timeline(items, artworkKey, artworkData, playback.entryId, playback.durationMs, index, data).also { timeline = it }
+    }
+
+    override fun getState(): State {
+        val (index, timeline) = timeline().let { it.index to it.data }
         val state = when {
             !prepared || items.isEmpty() || playback.error != null -> Player.STATE_IDLE
             playback.ended -> Player.STATE_ENDED

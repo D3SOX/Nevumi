@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.playback
 
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -18,7 +19,7 @@ class CrossfadeQueueTest {
         try {
             val tracks = (1..3).map { PlayableTrack("same-song", audio, entryId = "entry-$it") }
             engine.loadQueue(tracks, positionMs = 2_400, play = false)
-            val initial = withTimeout(3_000) { engine.status.first { it.positionMs >= 2_350 && it.entryId == "entry-1" } }
+            val initial = withTimeout(3_000) { engine.status.first { it.positionMs >= 2_350 && it.entryId == "entry-1" && it.durationMs > 0 } }
             engine.setGaplessPlayback(false)
             kotlinx.coroutines.delay(200)
             assertEquals(initial.playbackId, engine.status.value.playbackId)
@@ -127,6 +128,21 @@ class CrossfadeQueueTest {
                     kotlinx.coroutines.delay(25)
                 }
             }
+        } finally { engine.close() }
+    }
+
+    @Test fun loadingAnotherSongReportsItImmediatelyWithoutRevertingToThePreviousSong() = runBlocking {
+        val engine = CrossfadePlaybackEngine { MpvPlaybackEngine("null") }
+        try {
+            val tracks = (1..2).map { PlayableTrack("same-song", audio, entryId = "entry-$it") }
+            engine.loadQueue(tracks, 0, play = false)
+            withTimeout(3_000) { engine.status.first { it.entryId == "entry-1" && it.durationMs > 0 } }
+            engine.loadQueue(tracks, 1, positionMs = 1_000, play = false)
+            assertEquals("entry-2", engine.status.value.entryId)
+            val seen = mutableListOf<String?>()
+            val loaded = withTimeout(3_000) { engine.status.onEach { seen += it.entryId }.first { it.entryId == "entry-2" && it.durationMs > 0 } }
+            assertTrue(seen.none { it == "entry-1" }, "The previous song was reported again: $seen")
+            assertTrue(loaded.positionMs in 900..1_200, "Position ${loaded.positionMs}")
         } finally { engine.close() }
     }
 }

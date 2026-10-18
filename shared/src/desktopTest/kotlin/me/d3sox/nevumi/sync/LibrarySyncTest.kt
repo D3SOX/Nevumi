@@ -683,4 +683,20 @@ class LibrarySyncTest {
             Unit
         } finally { firstStore.close(); secondStore.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test fun laterSyncsShareOnlyRecentOrUnfinishedListens() = runBlocking {
+        val directory = Files.createTempDirectory("incremental-listens")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val track = library.importTrack(TrackMetadata("Song"), TrackSource("server:fixture:1", SourceKind.SERVER, "1"))
+            fun listen(id: String, startedAt: Long, ended: Boolean) = me.d3sox.nevumi.history.Listen(id, track.id, "play-$id", startedAt,
+                track.metadata, listenedMs = 1_000, playedMs = 1_000, durationMs = 200_000, ended = ended)
+            for (event in listOf(listen("old", 1_000, true), listen("running", 2_000, false), listen("new", 50_000, true)))
+                store.put("listen:${event.id}", "listens", event)
+            val sync = LibrarySync(store, library)
+            assertEquals(setOf("old", "running", "new"), sync.snapshot().listens.map { it.id }.toSet())
+            assertEquals(setOf("running", "new"), sync.snapshot(listensSince = 10_000).listens.map { it.id }.toSet())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
 }

@@ -123,8 +123,11 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
     suspend fun deviceId(): String = store.transaction {
         store.read<String>("sync:device-id") ?: Uuid.random().toString().also { store.put("sync:device-id", "sync-settings", it) }
     }
-    suspend fun snapshot(peerDeviceId: String? = null, additionalTracks: Set<String> = emptySet()): SyncSnapshot = work.withLock {
-        val snapshot = createSnapshot()
+    /** [listensSince] limits the shared listening history to listens started at or after that time; the first sync shares everything. */
+    suspend fun snapshot(peerDeviceId: String? = null, additionalTracks: Set<String> = emptySet(), listensSince: Long? = null): SyncSnapshot = work.withLock {
+        val snapshot = createSnapshot().let { full ->
+            if (listensSince == null) full else full.copy(listens = full.listens.filter { it.startedAt >= listensSince || !it.ended })
+        }
         val favorites = snapshot.favorites.filter { it.revision.counter > 0 }
         val ratings = snapshot.ratings.filter { it.revision.counter > 0 }
         val references = (favorites.map { it.trackKey } + ratings.map { it.trackKey } + snapshot.listens.map { it.trackId } +
@@ -324,9 +327,10 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
             store.put("sync:clock", "sync-settings", counter)
             val suppressedListens = store.list<String>("listen-suppressed").toSet()
             val sharedListens = snapshot.listens.filter { it.id !in suppressedListens }
+            // Matched listens are imported below; only listens waiting for a song match need to be kept, so the record stays bounded.
             store.put("sync:received:${snapshot.deviceId}", "sync-received", snapshot.copy(
                 tracks = snapshot.tracks.map { it.copy(metadata = it.metadata.copy(folder = "")) },
-                listens = sharedListens.map { it.copy(metadata = it.metadata.copy(folder = "")) }))
+                listens = sharedListens.filter { matched[it.trackId] == null }.map { it.copy(metadata = it.metadata.copy(folder = "")) }))
             for (previous in unmatched().filter { it.peerDeviceId == snapshot.deviceId })
                 store.database.records().delete("sync:unmatched:${snapshot.deviceId}:${previous.track.key}")
             for (previous in pendingFolders().filter { it.peerDeviceId == snapshot.deviceId })
