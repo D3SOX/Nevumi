@@ -33,7 +33,7 @@ internal fun QueueAction.label(): String = when (this) {
 
 @Composable
 internal fun AppSettings(state: AppState, controller: MusicController, server: () -> Unit, downloads: () -> Unit,
-    savedQueues: () -> Unit, audioEffects: () -> Unit, serverFiles: () -> Unit, pairedDevices: () -> Unit,
+    savedQueues: () -> Unit, audioEffects: () -> Unit, serverFiles: () -> Unit, tunnel: () -> Unit, pairedDevices: () -> Unit,
     fileRecovery: () -> Unit, categoryState: MutableState<String?>, onAddMusic: (() -> Unit)? = null, folderPicker: FolderPicker, dismiss: () -> Unit) {
     val settings = state.preferences
     val trackActions = remember { TrackAction.entries.filter { it != TrackAction.PLAY }.map { it to it.label() } }
@@ -87,6 +87,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 "Manage downloads" -> downloads()
                 "Audio effects" -> audioEffects()
                 "Server files (SFTP)" -> serverFiles()
+                "Tunnel" -> tunnel()
                 "Paired devices" -> pairedDevices()
                 "Saved queues" -> savedQueues()
                 "About Nevumi" -> about = true
@@ -280,6 +281,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 SettingsGroup {
                 SettingsLink("Downloads & cache", AppIcon.DOWNLOAD, "Offline music, network and source priority") { categoryState.value = "Downloads & cache" }
                 SettingsLink("Music server", AppIcon.SERVER, "Navidrome and Subsonic", server)
+                if (controller.tunnel != null) SettingsLink("Tunnel", AppIcon.TAILSCALE, "Reach your servers through Tailscale", tunnel)
                 SettingsLink("Listening & scrobbling", AppIcon.HISTORY, "History, statistics and connected services") { categoryState.value = "Listening & scrobbling" }
                 }
                 SettingsGroup {

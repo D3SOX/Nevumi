@@ -9,7 +9,9 @@ import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.security.CredentialVault
 import me.d3sox.nevumi.sftp.SftpConnection
-import me.d3sox.nevumi.sftp.Tailscale
+import me.d3sox.nevumi.tunnel.Tailscale
+import me.d3sox.nevumi.tunnel.TailscaleTunnel
+import me.d3sox.nevumi.tunnel.TunnelRoutes
 import me.d3sox.nevumi.storage.openMusicStore
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -19,9 +21,9 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 
 @OptIn(ExperimentalTestApi::class)
-class TailscaleUiTest {
+class TunnelUiTest {
     @Test
-    fun sftpCanStartAndCancelATailscaleSignInWithACustomControlServer() {
+    fun tunnelSettingsStartAndCancelASignInAndSaveTheRoutes() {
         val directory = Files.createTempDirectory("nevumi-tailscale-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val http = HttpClient(OkHttp)
@@ -33,23 +35,23 @@ class TailscaleUiTest {
         val library = MusicLibrary(store)
         val navidrome = NavidromeConnection(store, http, vault)
         val node = directory.resolve("tailscale").toFile()
+        val tunnel = TailscaleTunnel(store, Tailscale(node, "nevumi-ui-test"))
         val files = SftpConnection(store, library, navidrome::client, vault, directory.resolve("server-edits").toString(),
-            tailscale = Tailscale(node, "nevumi-ui-test"))
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, serverFiles = files)
+            tailscale = tunnel::serverFiles)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, serverFiles = files, tunnel = tunnel)
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
                 onNodeWithContentDescription("Settings").performClick()
-                onNodeWithText("Files & recovery").performScrollTo().performClick()
-                onNodeWithText("Server files (SFTP)").performScrollTo().performClick()
-                onNodeWithText("Connect through Tailscale").performScrollTo().performClick()
+                onNodeWithText("Tunnel").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Sign in to Tailscale").fetchSemanticsNodes().isNotEmpty() }
-                onNodeWithText("Tailscale host name or IP").assertExists()
+                onNodeWithContentDescription("Music server").performScrollTo().performClick()
+                waitUntil(timeoutMillis = 5_000) { runBlocking { tunnel.routes() } == TunnelRoutes(musicServer = true) }
+                onNodeWithText("Sign in to Tailscale to use these connections.").assertExists()
                 onNodeWithText("Control server (optional)").performScrollTo().performTextInput("http://127.0.0.1:9")
                 onNodeWithText("Sign in to Tailscale").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("Cancel sign-in").fetchSemanticsNodes().isNotEmpty() }
-                onNodeWithText("Connect SFTP").assertIsNotEnabled()
                 onNodeWithText("Cancel sign-in").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("Sign in to Tailscale").fetchSemanticsNodes().isNotEmpty() }
                 assertFalse(node.exists())

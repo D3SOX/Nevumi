@@ -1,4 +1,4 @@
-// Package main exposes a userspace Tailscale node to Nevumi's SFTP client through JNI.
+// Package main exposes a userspace Tailscale node to Nevumi through JNI.
 package main
 
 /*
@@ -72,6 +72,7 @@ func start(directory, hostname, controlURL, authKey string) error {
 		if server.Dir == directory && server.ControlURL == controlURL && authKey == "" {
 			return nil
 		}
+		closeRelays()
 		server.Close()
 		server = nil
 	}
@@ -189,20 +190,21 @@ func signOut() error {
 			return errors.New("Tailscale could not reach the control server to sign out")
 		}
 	}
+	closeRelays()
 	server.Close()
 	server = nil
 	return os.RemoveAll(directory)
 }
 
-//export Java_me_d3sox_nevumi_sftp_TailscaleNative_start
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_start(env *C.JNIEnv, receiver C.jobject, directory, hostname, controlURL, authKey C.jstring) {
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_start
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_start(env *C.JNIEnv, receiver C.jobject, directory, hostname, controlURL, authKey C.jstring) {
 	if err := start(goString(env, directory), goString(env, hostname), goString(env, controlURL), goString(env, authKey)); err != nil {
 		throw(env, err)
 	}
 }
 
-//export Java_me_d3sox_nevumi_sftp_TailscaleNative_status
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_status(env *C.JNIEnv, receiver C.jobject) C.jstring {
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_status
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_status(env *C.JNIEnv, receiver C.jobject) C.jstring {
 	result, err := status()
 	if err != nil {
 		throw(env, err)
@@ -213,15 +215,27 @@ func Java_me_d3sox_nevumi_sftp_TailscaleNative_status(env *C.JNIEnv, receiver C.
 	return C.new_string(env, value)
 }
 
-//export Java_me_d3sox_nevumi_sftp_TailscaleNative_signOut
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_signOut(env *C.JNIEnv, receiver C.jobject) {
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_signOut
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_signOut(env *C.JNIEnv, receiver C.jobject) {
 	if err := signOut(); err != nil {
 		throw(env, err)
 	}
 }
 
-//export Java_me_d3sox_nevumi_sftp_TailscaleNative_dial
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_dial(env *C.JNIEnv, receiver C.jobject, host C.jstring, port, timeoutMs, ioTimeoutMs C.jint) C.jlong {
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_relay
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_relay(env *C.JNIEnv, receiver C.jobject, origin C.jstring) C.jstring {
+	address, err := relay(goString(env, origin))
+	if err != nil {
+		throw(env, err)
+		return 0
+	}
+	value := C.CString(address)
+	defer C.free(unsafe.Pointer(value))
+	return C.new_string(env, value)
+}
+
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_dial
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_dial(env *C.JNIEnv, receiver C.jobject, host C.jstring, port, timeoutMs, ioTimeoutMs C.jint) C.jlong {
 	handle, err := dial(goString(env, host), int(port), time.Duration(timeoutMs)*time.Millisecond,
 		time.Duration(ioTimeoutMs)*time.Millisecond)
 	if err != nil {
@@ -231,8 +245,8 @@ func Java_me_d3sox_nevumi_sftp_TailscaleNative_dial(env *C.JNIEnv, receiver C.jo
 	return C.jlong(handle)
 }
 
-//export Java_me_d3sox_nevumi_sftp_TailscaleNative_read
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_read(env *C.JNIEnv, receiver C.jobject, handle C.jlong, array C.jbyteArray, offset, length C.jint) C.jint {
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_read
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_read(env *C.JNIEnv, receiver C.jobject, handle C.jlong, array C.jbyteArray, offset, length C.jint) C.jint {
 	conn, err := connection(handle)
 	if err != nil {
 		throw(env, err)
@@ -253,8 +267,8 @@ func Java_me_d3sox_nevumi_sftp_TailscaleNative_read(env *C.JNIEnv, receiver C.jo
 	return 0
 }
 
-//export Java_me_d3sox_nevumi_sftp_TailscaleNative_write
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_write(env *C.JNIEnv, receiver C.jobject, handle C.jlong, array C.jbyteArray, offset, length C.jint) {
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_write
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_write(env *C.JNIEnv, receiver C.jobject, handle C.jlong, array C.jbyteArray, offset, length C.jint) {
 	conn, err := connection(handle)
 	if err != nil {
 		throw(env, err)
@@ -270,8 +284,8 @@ func Java_me_d3sox_nevumi_sftp_TailscaleNative_write(env *C.JNIEnv, receiver C.j
 	}
 }
 
-//export Java_me_d3sox_nevumi_sftp_TailscaleNative_close
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_close(env *C.JNIEnv, receiver C.jobject, handle C.jlong) {
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_close
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_close(env *C.JNIEnv, receiver C.jobject, handle C.jlong) {
 	if value, ok := connections.LoadAndDelete(int64(handle)); ok {
 		value.(net.Conn).Close()
 	}

@@ -1,4 +1,4 @@
-package me.d3sox.nevumi.sftp
+package me.d3sox.nevumi.tunnel
 
 import java.io.Closeable
 import java.io.File
@@ -20,13 +20,17 @@ internal object TailscaleNative {
     external fun start(directory: String, hostname: String, controlUrl: String, authKey: String)
     external fun status(): String
     external fun signOut()
+    external fun relay(origin: String): String
     external fun dial(host: String, port: Int, timeoutMs: Int, ioTimeoutMs: Int): Long
     external fun read(handle: Long, buffer: ByteArray, offset: Int, length: Int): Int
     external fun write(handle: Long, buffer: ByteArray, offset: Int, length: Int)
     external fun close(handle: Long)
 }
 
-/** Joins the tailnet inside Nevumi, so SFTP works without the Tailscale app or a system VPN. */
+/** Thrown when a route uses Tailscale but this device has not joined a tailnet. */
+class TailscaleSignInRequired : IOException("Sign in to Tailscale in Tunnel settings")
+
+/** Joins the tailnet inside Nevumi, so its connections work without the Tailscale app or a system VPN. */
 class Tailscale(private val directory: File, private val hostname: String = "nevumi") {
     private val controlUrlFile get() = File(directory, "nevumi-control-url")
 
@@ -57,15 +61,23 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
     }
 
     fun connect(host: String, port: Int, timeoutMs: Int, ioTimeoutMs: Int): TailscaleConnection {
-        synchronized(this) {
-            TailscaleNative.requireLoaded()
-            if (!controlUrlFile.isFile) throw SftpFailure(SftpFailure.Kind.TAILSCALE)
-            resume()
-        }
+        ready()
         return try { TailscaleConnection(TailscaleNative.dial(host, port, timeoutMs, ioTimeoutMs)) }
         catch (failure: IOException) {
-            throw if (status().state != "Running") SftpFailure(SftpFailure.Kind.TAILSCALE) else failure
+            throw if (status().state != "Running") TailscaleSignInRequired() else failure
         }
+    }
+
+    /** Returns a loopback URL that forwards HTTP requests to [origin] over the tailnet. */
+    fun relay(origin: String): String {
+        ready()
+        return TailscaleNative.relay(origin)
+    }
+
+    @Synchronized private fun ready() {
+        TailscaleNative.requireLoaded()
+        if (!controlUrlFile.isFile) throw TailscaleSignInRequired()
+        resume()
     }
 
     /** Restarts a previously signed-in node after the app restarts. */

@@ -41,7 +41,8 @@ I started it because I couldn't find a music player with all the features I want
 - Download server music for offline playback. Match local and server copies of the same song instead of showing duplicates.
 - Use gapless playback, crossfade, speed and pitch controls, repeat counts, an equalizer, mono audio and a sleep timer. Open common playback settings from Now playing. Browse AutoEQ headphone profiles or save your own settings as a profile.
 - Show waveforms from the actual audio. Prepare a library in the background with bounded parallel decoding and a persistent cache.
-- Edit local tags and artwork, or edit Navidrome's music files over SFTP. Reach an SFTP server on your tailnet through Nevumi's built-in Tailscale client, without the Tailscale app. Headscale works too. Find metadata through MusicBrainz.
+- Edit local tags and artwork, or edit Navidrome's music files over SFTP. Find metadata through MusicBrainz.
+- Reach your music server and SFTP server on a tailnet through Nevumi's built-in Tailscale client, without the Tailscale app or a VPN. Headscale works too. Choose which connections use it in Settings › Tunnel.
 - Track listening history and scrobble through your music server, Last.fm or ListenBrainz.
 - Pair devices with a camera QR scan or a manual code. Sync playlists, favorites, ratings, listening history and saved queue contents. Playback positions stay separate on each device.
 - Choose light, dark, system or artwork-based colors, including a custom color palette. Desktop has a volume slider in the mini player, right-click menus and MPRIS media controls.
@@ -213,7 +214,7 @@ bun run deploy
 
 Nevumi uses [AGPL-3.0-only](LICENSE). Namida inspired the feature requirements. Nevumi does not include its implementation or assets.
 
-The built-in Tailscale client uses [tsnet](https://tailscale.com/kb/1244/tsnet), under BSD-3-Clause, built without log uploads. Its Go dependencies' license notices ship with the Linux libraries.
+The built-in Tailscale client uses [tsnet](https://tailscale.com/kb/1244/tsnet), under BSD-3-Clause, built without log uploads. Its Go dependencies' license notices ship with the Linux libraries and inside the APK.
 
 MilkDrop rendering uses [projectM](https://github.com/projectM-visualizer/projectm/tree/4967dc003e5206d7df3ff447287f7609c47d2343), under LGPL-2.1-or-later. The desktop window follows the approach used by [Spotifast](https://github.com/crmne/spotifast). Third-party license notices ship with the native libraries. Run `python scripts/package-native-sources.py --output .test-environment/release-sources` to download the exact projectM, evaluator and mpv sources and copy Nevumi's projectM patch. The source URLs and checksums are pinned in [native/CMakeLists.txt](native/CMakeLists.txt) and [scripts/build_mpv.py](scripts/build_mpv.py).
 

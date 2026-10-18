@@ -106,13 +106,15 @@ private suspend fun downloadCallback(block: suspend () -> Unit) {
 
 private const val CONCURRENT_REQUESTS = 6
 
+/** Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server. */
 class NavidromeClient(
     private val http: HttpClient,
     baseUrl: String,
     private val credentials: ServerCredentials,
+    requestUrl: String = baseUrl,
 ) {
-    private val baseUrl = normalizeServerAddress(baseUrl)
-    val serverId: String = ServerProfile(this.baseUrl, credentials.username).serverId
+    private val baseUrl = normalizeServerAddress(requestUrl)
+    val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username).serverId
     val username: String get() = credentials.username
     private val nativeAccess = Mutex()
     private var nativeToken: String? = null

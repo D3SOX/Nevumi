@@ -17,6 +17,8 @@ import java.util.UUID
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RenameFlags
 import net.schmizz.sshj.sftp.FileMode
+import me.d3sox.nevumi.tunnel.Tailscale
+import me.d3sox.nevumi.tunnel.TailscaleSignInRequired
 
 class SftpFailure(val kind: Kind) : IOException(when (kind) {
     Kind.HOST_KEY -> "The SFTP server's host key does not match the verified fingerprint"
@@ -24,7 +26,7 @@ class SftpFailure(val kind: Kind) : IOException(when (kind) {
     Kind.CONNECTION -> "Could not connect to the SFTP server"
     Kind.FILE_OPERATION -> "Could not complete the SFTP file operation"
     Kind.CONFLICT -> "A file already exists there or the server file changed"
-    Kind.TAILSCALE -> "Sign in to Tailscale in Server files (SFTP)"
+    Kind.TAILSCALE -> "Sign in to Tailscale in Tunnel settings"
 }) {
     enum class Kind { HOST_KEY, AUTHENTICATION, CONNECTION, FILE_OPERATION, CONFLICT, TAILSCALE }
 }
@@ -41,6 +43,7 @@ private object SftpCrypto {
     fun initialize() {}
 }
 
+/** [tailscale] carries the connection over the tailnet when set. */
 class SftpFiles(private val profile: SftpProfile, private val authentication: SftpAuthentication,
     private val tailscale: Tailscale? = null) {
     fun verifyDirectory() = connected { client ->
@@ -175,8 +178,8 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
                 ssh.connectTimeout = 10_000
                 ssh.timeout = 20_000
                 ssh.addHostKeyVerifier(FingerprintVerifier.getInstance(profile.hostKeySha256))
-                if (profile.tailscale) {
-                    val tunnel = checkNotNull(tailscale) { "Tailscale is unavailable" }.connect(profile.host, profile.port, 30_000, ssh.timeout)
+                if (tailscale != null) {
+                    val tunnel = tailscale.connect(profile.host, profile.port, 30_000, ssh.timeout)
                     try { ssh.connectVia(tunnel.input, tunnel.output) } catch (failure: IOException) { tunnel.close(); throw failure }
                 } else ssh.connect(profile.host, profile.port)
                 stage = SftpFailure.Kind.AUTHENTICATION
@@ -190,7 +193,7 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         } catch (failure: IOException) {
             if (failure is SftpFailure) throw failure
             val kind = if (failure is SSHException && failure.disconnectReason == DisconnectReason.HOST_KEY_NOT_VERIFIABLE)
-                SftpFailure.Kind.HOST_KEY else stage
+                SftpFailure.Kind.HOST_KEY else if (failure is TailscaleSignInRequired) SftpFailure.Kind.TAILSCALE else stage
             throw SftpFailure(kind)
         }
     }

@@ -26,7 +26,8 @@ import me.d3sox.nevumi.artwork.ArtworkLibrary
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import me.d3sox.nevumi.sftp.SftpConnection
-import me.d3sox.nevumi.sftp.Tailscale
+import me.d3sox.nevumi.tunnel.Tailscale
+import me.d3sox.nevumi.tunnel.TailscaleTunnel
 import android.net.Uri
 
 class MusicApplication : Application() {
@@ -59,13 +60,14 @@ class MusicApplication : Application() {
         val library = MusicLibrary(store)
         val credentials = AndroidCredentialVault(this)
         val artwork = ArtworkLibrary(File(filesDir, "artwork").path)
-        connection = NavidromeConnection(store, http, credentials)
+        val tunnel = TailscaleTunnel(store, Tailscale(File(noBackupFilesDir, "tailscale"), "nevumi-android"))
+        connection = NavidromeConnection(store, http, credentials, tunnel::musicServerUrl)
         serverChanges = NavidromeChanges(store, library, artwork, connection::client)
         serverFiles = SftpConnection(store, library, connection::client, credentials, File(filesDir, "server-edits").path,
             readLocal = { location ->
                 if (location.startsWith("content:")) requireNotNull(contentResolver.openInputStream(Uri.parse(location))) { "The local music file is unavailable" }
                 else File(location).inputStream()
-            }, changes = serverChanges, artwork = artwork, tailscale = Tailscale(File(noBackupFilesDir, "tailscale"), "nevumi-android"))
+            }, changes = serverChanges, artwork = artwork, tailscale = tunnel::serverFiles)
         val playlists = Playlists(store)
         downloadNetwork = AndroidDownloadNetwork(this)
         downloadJobs = AndroidDownloadJobs(this, MusicPreferences(store), playlists) { mutableDownloadNotifications.tryEmit(Unit) }
@@ -82,7 +84,7 @@ class MusicApplication : Application() {
             pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges, AndroidAudioAccess(this)::contentId), credentials, "Android phone",
                 networkAccess = localNetworkRequests::request),
-            networkAccess = localNetworkRequests::request)
+            tunnel = tunnel, networkAccess = localNetworkRequests::request)
     }
 
     suspend fun refreshOfflinePlaylists() {

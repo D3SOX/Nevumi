@@ -11,6 +11,7 @@ import java.nio.file.Files
 import okio.ByteString.Companion.encodeUtf8
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import org.jaudiotagger.audio.AudioFileIO
+import me.d3sox.nevumi.tunnel.Tailscale
 
 class SftpMusicFileEdits(store: MusicStore, library: MusicLibrary, client: NavidromeClient,
     profile: SftpProfile, authentication: SftpAuthentication, backupDirectory: String,

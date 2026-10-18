@@ -10,4 +10,4 @@
 -dontwarn javax.swing.**
 # JNI entry points retain their Kotlin class and method names.
 -keep class me.d3sox.nevumi.visualizer.ProjectMNative { *; }
--keep class me.d3sox.nevumi.sftp.TailscaleNative { *; }
+-keep class me.d3sox.nevumi.tunnel.TailscaleNative { *; }

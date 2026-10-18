@@ -16,13 +16,14 @@ import java.nio.file.Files
 import org.jaudiotagger.audio.AudioFileIO
 import java.util.UUID
 import me.d3sox.nevumi.artwork.ArtworkLibrary
+import me.d3sox.nevumi.tunnel.Tailscale
 
 class SftpConnection(private val store: MusicStore, private val library: MusicLibrary,
     private val client: suspend () -> NavidromeClient?, private val vault: CredentialVault,
     private val backupDirectory: String,
     private val readLocal: (String) -> InputStream = { File(it).inputStream() },
     private val changes: NavidromeChanges = NavidromeChanges(store, library, client = client),
-    private val artwork: ArtworkLibrary? = null, private val tailscale: Tailscale? = null) : ServerFiles {
+    private val artwork: ArtworkLibrary? = null, private val tailscale: suspend () -> Tailscale? = { null }) : ServerFiles {
     private val work = Mutex()
     override suspend fun pendingUploads(): List<PendingServerUpload> = store.list("server-uploads")
     override suspend fun retryUpload(id: String): Track = work.withLock {
@@ -44,7 +45,7 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         withContext(Dispatchers.IO) {
             val server = requireNotNull(client()) { "Connect to Navidrome first" }
             val directory = requireNotNull(libraries().firstOrNull { it.id == libraryId }) { "Choose a Navidrome music library" }
-            val files = SftpFiles(profile, authentication, tailscale)
+            val files = SftpFiles(profile, authentication, tailscale())
             files.verifyDirectory()
             val sample = server.songs(includeFilePaths = true).filter { it.fileLibraryId == libraryId }.minByOrNull { it.sizeBytes }
             if (sample != null) {
@@ -64,11 +65,6 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
             }
         }
     }
-    override suspend fun tailscaleStatus() = withContext(Dispatchers.IO) { requireTailscale().status() }
-    override suspend fun signInToTailscale(controlUrl: String, authKey: String?) =
-        withContext(Dispatchers.IO) { requireTailscale().signIn(controlUrl, authKey) }
-    override suspend fun signOutOfTailscale() = withContext(Dispatchers.IO) { requireTailscale().signOut() }
-    private fun requireTailscale() = requireNotNull(tailscale) { "Tailscale is unavailable" }
     override suspend fun disconnect() = work.withLock {
         for (profile in store.list<SftpConfiguration>("sftp-profiles")) vault.delete(profile.id)
         store.database.records().delete("sftp:current")
@@ -85,7 +81,7 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
             it.configurationId == configuration.id && it.trackId == trackId && it.relativePath == relativePath
         }
         val record = previous ?: prepareUpload(configuration, trackId, relativePath)
-        val files = SftpFiles(configuration.connection, authentication, tailscale)
+        val files = SftpFiles(configuration.connection, authentication, tailscale())
         try {
             if (previous != null && files.exists(relativePath)) {
                 if (files.hash(relativePath) != record.sha256) throw SftpFailure(SftpFailure.Kind.CONFLICT)
@@ -153,7 +149,7 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         check(secret != null || !credentialsRequired) { "Unlock your credential store or reconnect to the original SFTP directory" }
         val authentication = secret?.let { store.json.decodeFromString<SftpAuthentication>(it) } ?: SftpAuthentication()
         return SftpMusicFileEdits(store, library, server, configuration.connection, authentication,
-            File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork, tailscale)
+            File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork, tailscale())
     }
 
     private suspend fun currentEditor(): MusicFileEdits = editor(checkNotNull(configuration()) { "Connect to SFTP first" })
