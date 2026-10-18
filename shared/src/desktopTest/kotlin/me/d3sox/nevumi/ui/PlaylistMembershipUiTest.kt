@@ -137,4 +137,38 @@ class PlaylistMembershipUiTest {
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun pickerGroupsPlaylistsByFolderAndRevertedChoicesLeaveApplyDisabled() {
+        val directory = Files.createTempDirectory("playlist-membership-folders")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        runBlocking {
+            library.importTrack(TrackMetadata("Song"), TrackSource("song", SourceKind.LOCAL, "/music/song.flac"))
+            playlists.create("Road ▸ Drive", emptyList())
+            playlists.create("Morning", emptyList())
+        }
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                waitUntil(timeoutMillis = 3_000) { !player.state.value.loading }
+                onNodeWithContentDescription("Track options: Song").performClick()
+                onNodeWithText("Select song").performClick()
+                onNodeWithContentDescription("Selection actions").performClick()
+                onNodeWithText("Add to playlist").performClick()
+                onNodeWithText("Road").assertIsDisplayed()
+                onNodeWithText("Drive", useUnmergedTree = true).assertIsDisplayed()
+                onAllNodesWithText("Road ▸ Drive", useUnmergedTree = true).assertCountEquals(0)
+                kotlin.test.assertTrue(onNodeWithText("Road").fetchSemanticsNode().boundsInRoot.top >
+                    onNodeWithContentDescription("Playlist membership: Morning").fetchSemanticsNode().boundsInRoot.top)
+                onNodeWithText("Apply").assertIsNotEnabled()
+                onNodeWithContentDescription("Playlist membership: Road ▸ Drive").performClick()
+                onNodeWithText("Apply").assertIsEnabled()
+                onNodeWithContentDescription("Playlist membership: Road ▸ Drive").performClick()
+                onNodeWithText("Apply").assertIsNotEnabled()
+            }
+        } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
 }

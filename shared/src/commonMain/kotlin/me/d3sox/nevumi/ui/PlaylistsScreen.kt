@@ -208,6 +208,9 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
 
 private const val FOLDER_PREFIX = "playlist-folder:"
 
+/** A playlist picker row: a folder header (keyed by its path) or a playlist (keyed by its id). */
+private class PickerRow(val key: String, val label: String, val depth: Int, val playlist: Playlist?)
+
 @Composable
 internal fun PlaylistPicker(state: AppState, controller: MusicController, trackId: String, dismiss: () -> Unit) {
     PlaylistPicker(state, controller, listOf(trackId), dismiss)
@@ -219,8 +222,21 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
     var creating by remember { mutableStateOf(false) }
     var choices by remember(trackIds) { mutableStateOf(emptyMap<String, Boolean>()) }
     var query by remember { mutableStateOf("") }
-    val playlists = remember(state.playlists, query) {
-        state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }.sortedBy { it.name.lowercase() }
+    // Each folder's own playlists come first, then its subfolders, each introduced by a header row.
+    val rows = remember(state.playlists, query) {
+        fun segments(playlist: Playlist) = playlist.folder?.let(::folderSegments).orEmpty()
+        var previous = emptyList<String>()
+        state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }.sortedBy { it.title.lowercase() }
+            .sortedWith { a, b ->
+                val (x, y) = segments(a) to segments(b)
+                x.zip(y).firstOrNull { it.first != it.second }?.let { it.first.compareTo(it.second, ignoreCase = true) } ?: (x.size - y.size)
+            }.flatMap { playlist ->
+                val folders = segments(playlist)
+                val shared = folders.zip(previous).takeWhile { it.first == it.second }.size
+                previous = folders
+                (shared until folders.size).map { PickerRow(FOLDER_PREFIX + folderPath(folders.take(it + 1)), folders[it], it, null) } +
+                    PickerRow(playlist.id, playlist.title, folders.size, playlist)
+            }
     }
     val selected = remember(trackIds) { trackIds.distinct() }
     val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
@@ -233,23 +249,35 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
                 label = { Text("Search playlists") }, singleLine = true,
                 trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, "Clear search") { query = "" } })
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                items(playlists, key = { it.id }) { playlist ->
+                items(rows, key = { it.key }) { row ->
+                    val indent = Modifier.padding(start = 16.dp * row.depth)
+                    val playlist = row.playlist ?: return@items Row(indent.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(AppIcon.FOLDER.vector, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(row.label, style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     val contained = selected.count { it in playlist.trackIds }
-                    val checked = choices[playlist.id]?.let { if (it) ToggleableState.On else ToggleableState.Off }
-                        ?: when (contained) { 0 -> ToggleableState.Off; selected.size -> ToggleableState.On; else -> ToggleableState.Indeterminate }
+                    val initial = when (contained) { 0 -> ToggleableState.Off; selected.size -> ToggleableState.On; else -> ToggleableState.Indeterminate }
+                    val checked = choices[playlist.id]?.let { if (it) ToggleableState.On else ToggleableState.Off } ?: initial
                     val eligible = playlist.server == null || selected.all { id -> catalog[id]?.sources?.any {
                         it.kind == SourceKind.SERVER && it.id.startsWith("server:${playlist.server.serverId}:")
                     } == true }
                     val editable = playlist.rule == null && playlist.server?.readOnly != true && eligible
-                    Row(Modifier.fillMaxWidth().triStateToggleable(checked, enabled = editable, role = Role.Checkbox,
-                        onClick = { choices = choices + (playlist.id to (checked != ToggleableState.On)) })
+                    Row(indent.fillMaxWidth().triStateToggleable(checked, enabled = editable, role = Role.Checkbox,
+                        onClick = {
+                            val next = checked != ToggleableState.On
+                            // Toggling back to the original state is no change, so Apply stays disabled.
+                            choices = if (initial == if (next) ToggleableState.On else ToggleableState.Off) choices - playlist.id
+                                else choices + (playlist.id to next)
+                        })
                         .semantics { contentDescription = "Playlist membership: ${playlist.name}" }
                         .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CollectionArtwork(playlist.artworkPath(state), playlist.name, AppIcon.QUEUE,
                             Modifier.size(48.dp).semantics { contentDescription = "Playlist artwork: ${playlist.name}" })
                         Column(Modifier.weight(1f)) {
-                            Text(playlist.name, style = MaterialTheme.typography.titleSmall)
+                            Text(playlist.title, style = MaterialTheme.typography.titleSmall)
                             Text(when {
                                 playlist.rule != null -> "Smart playlist"
                                 playlist.server?.readOnly == true -> "Read-only"
@@ -262,7 +290,7 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
                     }
                 }
                 if (state.playlists.isEmpty()) item { Text("Create a playlist to keep these songs together.") }
-                else if (playlists.isEmpty()) item { Text("No playlists match \"${query.trim()}\".") }
+                else if (rows.isEmpty()) item { Text("No playlists match \"${query.trim()}\".") }
             }
             OutlinedButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(AppIcon.PLUS.vector, null); Spacer(Modifier.width(8.dp)); Text("New playlist")
