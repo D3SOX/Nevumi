@@ -700,6 +700,8 @@ class LibrarySyncTest {
             // A listen received from another device after the last sync is new to this peer even though it started long ago.
             assertEquals(setOf("running", "new", "from-third-device"), sync.snapshot(listensSince = 10_000).listens.map { it.id }.toSet())
             assertTrue(sync.snapshot().listens.all { it.importedAt == null }, "Import times stay on this device")
+            val wire = Json { encodeDefaults = true }.encodeToString(sync.snapshot())
+            assertFalse(wire.contains("importedAt"), "Shared snapshots keep the wire format previous versions accept")
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
 }

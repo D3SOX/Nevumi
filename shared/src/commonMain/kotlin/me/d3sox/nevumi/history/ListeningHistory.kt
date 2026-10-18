@@ -14,12 +14,14 @@ import kotlin.time.Clock
 import kotlin.time.TimeSource
 import kotlin.uuid.Uuid
 
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
 data class Listen(val id: String, val trackId: String, val playbackId: String, val startedAt: Long,
     val metadata: TrackMetadata, val listenedMs: Long = 0, val playedMs: Long = 0, val durationMs: Long = 0, val ended: Boolean = false,
     val originDeviceId: String? = null,
-    /** When this device first received the listen from a paired device; local, never shared. */
-    val importedAt: Long? = null) {
+    /** When this device first received the listen from a paired device; local, never shared. Omitted when absent so
+     *  shared snapshots keep the wire format that previous versions accept. */
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val importedAt: Long? = null) {
     val qualified: Boolean get() = playedMs >= (if (durationMs > 0) minOf(durationMs / 2, 240_000) else 240_000).coerceAtLeast(1)
 }
 
