@@ -236,14 +236,18 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
             awaitSelection(items[index].mediaId, previousId, revision, previousSource, selectedSource)
         }
     }
-    private fun updateQueueAfterInsertion() {
+    private suspend fun updateQueueAfterInsertion() {
         val current = engine.status.value
         val index = items.indexOfFirst { it.mediaId == current.entryId }
         val resumesEndedQueue = current.ended && current.playWhenReady && index >= 0 && index < items.lastIndex
         if (resumesEndedQueue) {
+            revision++
+            val selected = items[index + 1]
             // Queue exhaustion releases focus and clears the session's play intent.
             requestPlayback()
             engine.loadQueue(tracks(), index + 1, play = wantedPlaying && !suppressed)
+            awaitSelection(selected.mediaId, current.playbackId, revision, current.sourceId,
+                selected.mediaMetadata.extras?.getString("sourceId"))
         } else engine.updateQueue(tracks())
     }
 
