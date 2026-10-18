@@ -145,6 +145,45 @@ class AndroidTransferNotificationsTest {
             server.close(); scenario.close(); audio.delete(); http.close()
         }
     }
+
+    // After a relaunch, pending downloads continue in a background job that the user did not start.
+    @Test
+    fun aBackgroundDownloadShowsItsProgress() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
+        val app = context.applicationContext as MusicApplication
+        val controller = app.controller
+        val original = MusicPreferences(app.store).load()
+        val server = HeldAudioServer(instrumentation.context.assets.open("fixture.flac").use { it.readBytes() })
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        val http = HttpClient(OkHttp)
+        val notifications = context.getSystemService(NotificationManager::class.java)
+        fun transfer() = notifications.activeNotifications.firstOrNull {
+            it.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() == "Notification download"
+        }
+        try {
+            controller.updatePreferences { it.copy(downloadsPaused = false, downloadOnMetered = true) }.join()
+            controller.connectServer(server.address, "test", "test").join()
+            check(controller.state.value.error == null) { controller.state.value.error.orEmpty() }
+            val remote = controller.state.value.tracks.single { it.metadata.title == "Notification download" }
+            // Automatic requests schedule only the background job, like the pending work found after a relaunch.
+            app.offline.request(listOf(remote.id), owner = null)
+            withTimeout(10_000) { controller.state.first {
+                it.downloads[remote.id]?.let { record -> record.status == DownloadStatus.DOWNLOADING && record.bytesDownloaded > 0 } == true
+            } }
+            assertTrue(context.getSystemService(android.app.job.JobScheduler::class.java).allPendingJobs.none { it.isUserInitiated })
+            withTimeout(5_000) { while (transfer() == null) delay(20) }
+            server.release.countDown()
+            withTimeout(10_000) { controller.state.first { it.downloads[remote.id]?.status == DownloadStatus.COMPLETE } }
+            withTimeout(5_000) { while (transfer() != null) delay(20) }
+        } finally {
+            controller.setDownloadsPaused(true).join()
+            NavidromeConnection(app.store, http, AndroidCredentialVault(context)).disconnect()
+            controller.updatePreferences { original }.join()
+            server.close(); scenario.close(); http.close()
+        }
+    }
 }
 
 private class HeldAudioServer(private val audio: ByteArray) : AutoCloseable {

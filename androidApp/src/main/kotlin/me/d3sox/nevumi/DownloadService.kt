@@ -19,19 +19,27 @@ import kotlinx.coroutines.flow.sample
 class DownloadService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val running = mutableMapOf<Pair<Int, String?>, Job>()
+    private var visibleJobs = 0
 
     override fun onStartJob(params: JobParameters): Boolean {
         val key = requestKey(params)
         val visibleTransfer = Build.VERSION.SDK_INT >= 34 && params.isUserInitiatedJob
-        if (visibleTransfer) showTransfer(params)
+        if (visibleTransfer) { visibleJobs++; showTransfer(params) }
         val app = application as MusicApplication
         val offline = app.offline
         val task = scope.launch(start = CoroutineStart.LAZY) {
             var retry = false
-            val progress = if (visibleTransfer) launch {
-                app.controller.state.map { transferProgress(it) }.distinctUntilChanged().sample(1_000)
-                    .collect { progress -> showTransfer(params, progress) }
-            } else null
+            var posted = false
+            val progress = launch {
+                val updates = app.controller.state.map { transferProgress(it) }.distinctUntilChanged().sample(1_000)
+                if (visibleTransfer) updates.collect { progress -> showTransfer(params, progress) }
+                // Background jobs, such as those after a relaunch or playlist refreshes, post the notification once a song transfers.
+                else updates.collect { progress ->
+                    if (visibleJobs > 0 || !(posted || progress.active)) return@collect
+                    posted = true
+                    getSystemService(NotificationManager::class.java).notify(TRANSFER_NOTIFICATION, transferNotification(progress))
+                }
+            }
             try {
                 withContext(Dispatchers.IO) {
                     if (params.extras.getBoolean("refresh-playlists")) app.refreshOfflinePlaylists()
@@ -47,7 +55,9 @@ class DownloadService : JobService() {
             } catch (_: Exception) {
                 retry = true
             } finally {
-                progress?.cancel()
+                progress.cancel()
+                if (visibleTransfer) visibleJobs--
+                else if (posted && visibleJobs == 0) getSystemService(NotificationManager::class.java).cancel(TRANSFER_NOTIFICATION)
                 if (isActive) {
                     running.remove(key)
                     jobFinished(params, retry)
@@ -69,7 +79,8 @@ class DownloadService : JobService() {
 
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
 
-    private data class TransferProgress(val title: String = "Nevumi", val text: String = "Downloading music", val percent: Int? = null)
+    private data class TransferProgress(val title: String = "Nevumi", val text: String = "Downloading music", val percent: Int? = null,
+        val active: Boolean = false)
 
     // Batches of several songs report how many are done; a single song reports its transferred bytes.
     private fun transferProgress(state: AppState): TransferProgress {
@@ -84,18 +95,21 @@ class DownloadService : JobService() {
                 ?: metadata.map { it.artist }.distinct().singleOrNull()?.takeIf { it.isNotBlank() }
                 ?: song
             return TransferProgress(title, "Downloading · ${batch.downloaded} of ${batch.total} songs",
-                (batch.fraction * 100).toInt().coerceIn(0, 100))
+                (batch.fraction * 100).toInt().coerceIn(0, 100), record != null)
         }
         if (record == null) return TransferProgress()
         val percent = if (record.sizeBytes > 0) (record.bytesDownloaded.toDouble() / record.sizeBytes * 100).toInt().coerceIn(0, 100) else null
-        return TransferProgress(song, percent = percent)
+        return TransferProgress(song, percent = percent, active = true)
     }
 
     @androidx.annotation.RequiresApi(34)
-    private fun showTransfer(params: JobParameters, progress: TransferProgress = TransferProgress()) {
+    private fun showTransfer(params: JobParameters, progress: TransferProgress = TransferProgress()) =
+        setNotification(params, TRANSFER_NOTIFICATION, transferNotification(progress), JOB_END_NOTIFICATION_POLICY_REMOVE)
+
+    private fun transferNotification(progress: TransferProgress): Notification {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel("offline-downloads", "Music downloads", NotificationManager.IMPORTANCE_LOW))
-        val notification = Notification.Builder(this, "offline-downloads")
+        return Notification.Builder(this, "offline-downloads")
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(progress.title)
             .setContentText(progress.text)
@@ -106,6 +120,7 @@ class DownloadService : JobService() {
                 Intent(this, DownloadActionReceiver::class.java).setAction(DownloadActionReceiver.PAUSE), PendingIntent.FLAG_IMMUTABLE)).build())
             .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
             .build()
-        setNotification(params, 2001, notification, JOB_END_NOTIFICATION_POLICY_REMOVE)
     }
+
+    private companion object { const val TRANSFER_NOTIFICATION = 2001 }
 }
