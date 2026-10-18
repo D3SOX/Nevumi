@@ -1,6 +1,8 @@
 package me.d3sox.nevumi.queue
 
 import me.d3sox.nevumi.storage.MusicStore
+import me.d3sox.nevumi.storage.StoredRecord
+import kotlin.concurrent.Volatile
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
 import kotlin.random.Random
@@ -66,6 +68,10 @@ data class QueueSnapshot(
 }
 
 class PlaybackQueue(private val store: MusicStore, private val queueId: String = "main") {
+    private val key = "queue:$queueId"
+    /** The last decoded queue with its stored JSON; playback reads the queue many times per second. */
+    @Volatile private var decoded: Pair<String, QueueSnapshot>? = null
+
     private suspend fun write(snapshot: QueueSnapshot, replacement: Boolean = false, captureEdits: Boolean = true) = store.transaction {
         if (captureEdits) {
             val settings = store.read<MusicSettings>("settings:music") ?: MusicSettings()
@@ -79,7 +85,9 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         }
         val selected = snapshot.selectedSavedQueueId?.let { store.read<SavedQueue>("saved-queue:$it") }?.takeIf { it.kind == SavedQueueKind.LIVE }
         val live = if (selected == null) snapshot.copy(selectedSavedQueueId = null) else snapshot
-        store.put("queue:$queueId", "queues", live)
+        val json = store.json.encodeToString(live)
+        store.database.records().put(StoredRecord(key, "queues", json))
+        decoded = json to live
         if (selected != null) store.put("saved-queue:${selected.id}", "saved-queues",
             selected.copy(snapshot = live.copy(selectedSavedQueueId = null)))
     }
@@ -119,8 +127,9 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         } else if (!enabled && current.unshuffledEntryIds != null) {
             val entries = current.entries.associateBy { it.id }
             val original = current.unshuffledEntryIds.mapNotNull(entries::get)
+            val originalIds = current.unshuffledEntryIds.toHashSet()
             write(current.copy(
-                entries = (original + current.entries.filterNot { it.id in current.unshuffledEntryIds }).let { restored ->
+                entries = (original + current.entries.filterNot { it.id in originalIds }).let { restored ->
                     val split = restored.indexOfFirst { it.id == current.currentEntryId } + 1
                     restored.take(split) + restored.drop(split).filter { it.section == QueueSection.MANUAL } +
                         restored.drop(split).filter { it.section == QueueSection.CONTEXT }
@@ -230,7 +239,11 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
     }
 
     suspend fun playAfter(trackId: String) = enqueue(listOf(trackId), QueueAction.PLAY_AFTER)
-    suspend fun snapshot(): QueueSnapshot = store.read("queue:$queueId") ?: QueueSnapshot()
+    suspend fun snapshot(): QueueSnapshot {
+        val json = store.database.records().read(key) ?: return QueueSnapshot()
+        decoded?.let { (stored, snapshot) -> if (stored == json) return snapshot }
+        return store.json.decodeFromString<QueueSnapshot>(json).also { decoded = json to it }
+    }
 
     suspend fun playNow(trackId: String) = store.transaction {
         val current = snapshot()

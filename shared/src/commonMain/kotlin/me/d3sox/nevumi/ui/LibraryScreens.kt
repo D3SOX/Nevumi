@@ -89,7 +89,10 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     val sources = state.preferences.sourceFilter
     val now = rememberLibraryTime()
     val statistics = remember(state.listens) { listeningStatistics(state.listens) }
-    val tracks = remember(state.tracks, statistics, order, reversed, sources, state.preferences.libraryFilter, state.preferences.includeFolders, state.preferences.excludeFolders, now) {
+    val filter = state.preferences.libraryFilter
+    // Only time-window filters depend on the clock; everything else must not re-sort the library every minute.
+    val filterTime = if (filter.lastPlayedWithinDays != null || filter.notPlayedWithinDays != null) now else 0L
+    val tracks = remember(state.tracks, statistics, order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders, filterTime) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         val visible = state.tracks.filter { track ->
             val localAllowed = folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
@@ -172,13 +175,13 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                         } }
                     TrackCollections(albums, LibraryTab.ALBUMS, state, controller, handleBack, destination)
                 }
-                LibraryTab.ARTISTS -> GroupedSongs(tracks.groupBy { it.metadata.artist }, LibraryTab.ARTISTS, state, controller, handleBack, destination)
-                LibraryTab.ALBUM_ARTISTS -> GroupedSongs(tracks.groupBy { it.metadata.albumArtist.ifBlank { it.metadata.artist } }, LibraryTab.ALBUM_ARTISTS, state, controller, handleBack, destination)
-                LibraryTab.GENRES -> GroupedSongs(tracks.flatMap { track -> track.metadata.genres.ifEmpty { listOf("") }
-                    .map { it to track } }.groupBy({ it.first }, { it.second }), LibraryTab.GENRES, state, controller, handleBack, destination)
-                LibraryTab.FOLDERS -> GroupedSongs(tracks.groupBy { it.metadata.folder }, LibraryTab.FOLDERS, state, controller, handleBack, destination)
-                LibraryTab.FAVORITES -> SongList(tracks.filter { it.favorite }, controller, statistics = statistics, scrollSort = order, contextName = "Favorites")
-                LibraryTab.RECENT -> SongList(tracks.sortedByDescending { it.recentAt }, controller, scrollSort = LibrarySort.RECENT, contextName = "Recently added")
+                LibraryTab.ARTISTS -> GroupedSongs(remember(tracks) { tracks.groupBy { it.metadata.artist } }, LibraryTab.ARTISTS, state, controller, handleBack, destination)
+                LibraryTab.ALBUM_ARTISTS -> GroupedSongs(remember(tracks) { tracks.groupBy { it.metadata.albumArtist.ifBlank { it.metadata.artist } } }, LibraryTab.ALBUM_ARTISTS, state, controller, handleBack, destination)
+                LibraryTab.GENRES -> GroupedSongs(remember(tracks) { tracks.flatMap { track -> track.metadata.genres.ifEmpty { listOf("") }
+                    .map { it to track } }.groupBy({ it.first }, { it.second }) }, LibraryTab.GENRES, state, controller, handleBack, destination)
+                LibraryTab.FOLDERS -> GroupedSongs(remember(tracks) { tracks.groupBy { it.metadata.folder } }, LibraryTab.FOLDERS, state, controller, handleBack, destination)
+                LibraryTab.FAVORITES -> SongList(remember(tracks) { tracks.filter { it.favorite } }, controller, statistics = statistics, scrollSort = order, contextName = "Favorites")
+                LibraryTab.RECENT -> SongList(remember(tracks) { tracks.sortedByDescending { it.recentAt } }, controller, scrollSort = LibrarySort.RECENT, contextName = "Recently added")
                 LibraryTab.PLAYLISTS -> PlaylistsScreen(state, controller, backEnabled = handleBack, destination = destination,
                     rearranging = rearrangingPlaylists, finishRearranging = { rearrangingPlaylists = false })
                 LibraryTab.HISTORY -> ListeningHistoryScreen(state, controller, tracks)

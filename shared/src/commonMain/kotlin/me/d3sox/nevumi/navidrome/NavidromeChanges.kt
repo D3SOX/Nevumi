@@ -186,22 +186,33 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
 
     suspend fun synchronize() = synchronization.withLock {
         val connection = client() ?: return@withLock
-        store.list<RatingChange>("rating-changes").filter { it.sourceId.startsWith("server:${connection.serverId}:") }.forEach { change ->
-            connection.setRating(change.songId, change.rating)
+        // Each journal entry is sent on its own so one rejected change cannot block every later change forever.
+        var failure: Exception? = null
+        suspend fun attempt(block: suspend () -> Unit) {
+            try { block() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { if (failure == null) failure = error }
+        }
+        // A song the server no longer has cannot take the change; drop it from the journal.
+        suspend fun ifPresent(block: suspend () -> Unit) {
+            try { block() } catch (error: NavidromeException) { if (error.code != 70) throw error }
+        }
+        store.list<RatingChange>("rating-changes").filter { it.sourceId.startsWith("server:${connection.serverId}:") }.forEach { change -> attempt {
+            ifPresent { connection.setRating(change.songId, change.rating) }
             store.transaction {
                 val key = "rating-change:${change.sourceId}"
                 if (store.read<RatingChange>(key) == change) store.database.records().delete(key)
             }
-        }
+        } }
         store.list<FavoriteChange>("favorite-changes")
-            .filter { it.sourceId.startsWith("server:${connection.serverId}:") }.forEach { change ->
-                connection.setFavorite(change.songId, change.favorite)
+            .filter { it.sourceId.startsWith("server:${connection.serverId}:") }.forEach { change -> attempt {
+                ifPresent { connection.setFavorite(change.songId, change.favorite) }
                 store.transaction {
                     val key = "favorite-change:${change.sourceId}"
                     if (store.read<FavoriteChange>(key) == change) store.database.records().delete(key)
                 }
-            }
-        for (removal in store.list<PlaylistRemoval>("playlist-removals").filter { it.playlist.server?.serverId == connection.serverId }) {
+            } }
+        for (removal in store.list<PlaylistRemoval>("playlist-removals").filter { it.playlist.server?.serverId == connection.serverId }) attempt {
             val link = requireNotNull(removal.playlist.server)
             val remote = if (link.id == null) pendingPlaylist(connection, removal.playlist.id) else
                 try { connection.playlist(link.id) }
@@ -220,7 +231,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                         store.database.records().delete(key)
                     }
                 }
-                continue
+                return@attempt
             }
             if (remote != null) {
                 try { connection.deletePlaylist(remote.id) }
@@ -231,7 +242,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 if (store.read<PlaylistRemoval>(key) == removal) store.database.records().delete(key)
             }
         }
-        for (playlist in Playlists(store).all().filter { it.pendingSync && it.conflict == null && it.server?.serverId == connection.serverId }) {
+        for (playlist in Playlists(store).all().filter { it.pendingSync && it.conflict == null && it.server?.serverId == connection.serverId }) attempt {
             val songIds = serverSongIds(playlist, connection)
             var link = requireNotNull(playlist.server)
             if (link.id == null) {
@@ -252,7 +263,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                         true
                     }
                 }
-                if (!retained) continue
+                if (!retained) return@attempt
             }
             val remote = connection.playlist(requireNotNull(link.id))
             val alreadySaved = remote.name == playlist.name && remote.songIds == songIds && remote.description == playlist.description
@@ -266,7 +277,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                     store.put("playlist:${playlist.id}", "playlists", current.copy(
                         conflict = PlaylistConflict(remote.name, remote.songIds, remoteTracks, description = remote.description)))
                 }
-                continue
+                return@attempt
             }
             val saved = if (alreadySaved) remote else connection.savePlaylist(playlist.name, songIds, link.id, description = playlist.description)
             store.transaction {
@@ -276,6 +287,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                     pendingSync = current.revision != playlist.revision))
             }
         }
+        failure?.let { throw it }
     }
 
     private suspend fun pendingPlaylist(connection: NavidromeClient, id: String): ServerPlaylist? {

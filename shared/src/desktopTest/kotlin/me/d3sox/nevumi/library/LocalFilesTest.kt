@@ -243,4 +243,20 @@ class LocalFilesTest {
                 it.metadata.trackNumber, Path.of(it.metadata.folder).fileName.toString()) })
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun rescanningASingleFileDoesNotRegisterItAsALibraryRoot() = runBlocking {
+        val directory = Files.createTempDirectory("single-file-rescan")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val music = Files.createDirectory(directory.resolve("music"))
+            val song = music.resolve("song.flac")
+            Files.copy(Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac"), song)
+            val library = MusicLibrary(store)
+            val scanner = LocalFiles(library)
+            scanner.scan(music.toString())
+            assertEquals("Northern Light", scanner.scan(song.toString(), force = true).single().metadata.title)
+            assertEquals(listOf(music.toFile().canonicalPath), library.localRoots())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
 }

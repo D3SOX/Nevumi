@@ -19,12 +19,23 @@ class ArtworkLibrary(private val directory: String) {
     private val mutableChanges = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 128,
         onBufferOverflow = BufferOverflow.DROP_OLDEST)
     internal val changes = mutableChanges.asSharedFlow()
-    suspend fun fetch(trackId: String, client: NavidromeClient, coverId: String) {
-        save(trackId, client.coverArt(coverId))
+    suspend fun fetch(trackId: String, client: NavidromeClient, coverId: String) = fetch(listOf(trackId), client, coverId)
+
+    /** Downloads a cover once and stores it for every track that shares it, such as all songs of an album. */
+    suspend fun fetch(trackIds: Collection<String>, client: NavidromeClient, coverId: String) {
+        if (trackIds.isEmpty()) return
+        val original = client.coverArt(coverId)
+        writes.withLock { withContext(Dispatchers.IO) {
+            val bytes = artworkPreview(original)
+            trackIds.toSet().forEach { store(it, bytes) }
+        } }
     }
 
     suspend fun save(trackId: String, original: ByteArray) = writes.withLock { withContext(Dispatchers.IO) {
-        val bytes = artworkPreview(original)
+        store(trackId, artworkPreview(original))
+    } }
+
+    private fun store(trackId: String, bytes: ByteArray) {
         val fs = FileSystem.SYSTEM
         val root = directory.toPath()
         fs.createDirectories(root)
@@ -32,7 +43,7 @@ class ArtworkLibrary(private val directory: String) {
         val hash = bytes.toByteString().sha256().hex()
         val destination = root / "$key-$hash.image"
         val index = root / "$key.current"
-        val previous = path(trackId)?.toPath()
+        val previous = existingPath(trackId)?.toPath()
         val temporary = root / "${Uuid.random()}.part"
         try {
             fs.write(temporary) { write(bytes) }
@@ -42,7 +53,7 @@ class ArtworkLibrary(private val directory: String) {
             if (previous != null && previous != destination) fs.delete(previous, mustExist = false)
             mutableChanges.tryEmit(trackId to destination.toString())
         } finally { fs.delete(temporary, mustExist = false) }
-    } }
+    }
 
     suspend fun paths(trackIds: List<String>): Map<String, String> = withContext(Dispatchers.IO) {
         trackIds.mapNotNull { id -> existingPath(id)?.let { id to it } }.toMap()

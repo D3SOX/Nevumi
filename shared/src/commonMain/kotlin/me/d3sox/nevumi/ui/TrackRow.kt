@@ -87,7 +87,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
             }
         }
         Surface(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.fillMaxWidth()
-            .pointerInput(track.id, threshold, state.preferences.swipeRight, state.preferences.swipeLeft) {
+            .pointerInput(track.id, threshold, state.preferences.swipeRight, state.preferences.swipeLeft, selectionMode) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var overSlop = 0f

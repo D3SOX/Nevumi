@@ -745,14 +745,19 @@ private fun audioInfoLabel(info: me.d3sox.nevumi.playback.AudioInfo) = buildList
 
 @Composable
 private fun ManualQueueTime(controller: MusicController) {
-    val remainingFlow = remember(controller) { controller.state.map { state ->
-        val tracks = state.tracks.associateBy { it.id }
-        val queued = state.queue.upNext.sumOf { tracks[it.trackId]?.metadata?.durationMs ?: 0 }
-        val current = state.queue.entries.getOrNull(state.queue.currentIndex)
-        val playing = if (current?.section == QueueSection.MANUAL)
-            ((tracks[current.trackId]?.metadata?.durationMs ?: 0) - state.playback.positionMs).coerceAtLeast(0) else 0
-        (queued + playing) / 1_000
-    }.distinctUntilChanged() }
+    val remainingFlow = remember(controller) {
+        // Playback status arrives many times per second; index the library only when it changes.
+        var indexed: Pair<List<Track>, Map<String, Track>>? = null
+        controller.state.map { state ->
+            val tracks = indexed?.takeIf { it.first === state.tracks }?.second
+                ?: state.tracks.associateBy { it.id }.also { indexed = state.tracks to it }
+            val queued = state.queue.upNext.sumOf { tracks[it.trackId]?.metadata?.durationMs ?: 0 }
+            val current = state.queue.entries.getOrNull(state.queue.currentIndex)
+            val playing = if (current?.section == QueueSection.MANUAL)
+                ((tracks[current.trackId]?.metadata?.durationMs ?: 0) - state.playback.positionMs).coerceAtLeast(0) else 0
+            (queued + playing) / 1_000
+        }.distinctUntilChanged()
+    }
     val seconds by remainingFlow.collectAsState(0)
     Text("${playbackTime(seconds * 1_000)} remaining", Modifier.semantics { contentDescription = "Manual queue time remaining" },
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
