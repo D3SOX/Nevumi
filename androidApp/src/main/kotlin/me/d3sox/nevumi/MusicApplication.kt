@@ -26,6 +26,7 @@ import me.d3sox.nevumi.artwork.ArtworkLibrary
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import me.d3sox.nevumi.sftp.SftpConnection
+import me.d3sox.nevumi.sftp.Tailscale
 import android.net.Uri
 
 class MusicApplication : Application() {
@@ -64,7 +65,7 @@ class MusicApplication : Application() {
             readLocal = { location ->
                 if (location.startsWith("content:")) requireNotNull(contentResolver.openInputStream(Uri.parse(location))) { "The local music file is unavailable" }
                 else File(location).inputStream()
-            }, changes = serverChanges, artwork = artwork)
+            }, changes = serverChanges, artwork = artwork, tailscale = Tailscale(File(noBackupFilesDir, "tailscale"), "nevumi-android"))
         val playlists = Playlists(store)
         downloadNetwork = AndroidDownloadNetwork(this)
         downloadJobs = AndroidDownloadJobs(this, MusicPreferences(store), playlists) { mutableDownloadNotifications.tryEmit(Unit) }

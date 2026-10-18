@@ -111,6 +111,7 @@ val visualizerNative = tasks.register<Exec>("buildVisualizerNative") {
     inputs.property("buildType", providers.environmentVariable("NEVUMI_NATIVE_BUILD_TYPE").orElse("Release"))
     inputs.dir(rootProject.file("native"))
     inputs.file(rootProject.file("scripts/build-visualizer.py"))
+    inputs.file(rootProject.file("scripts/build-tailscale.py"))
     outputs.dir(layout.buildDirectory.dir("native/runtime"))
     environment("JAVA_HOME", javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }.get().metadata.installationPath.asFile.absolutePath)
     commandLine("python3", rootProject.file("scripts/build-visualizer.py"), "--output", layout.buildDirectory.dir("native/runtime").get().asFile)

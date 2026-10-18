@@ -6,12 +6,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.sftp.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -32,6 +34,11 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var discard by remember { mutableStateOf<PendingServerUpload?>(null) }
+    var useTailscale by remember { mutableStateOf(saved?.tailscale == true) }
+    var tailscale by remember { mutableStateOf<TailscaleStatus?>(null) }
+    var controlUrl by remember { mutableStateOf("") }
+    var authKey by remember { mutableStateOf("") }
+    val browser = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
     LaunchedEffect(state.server) {
@@ -44,7 +51,15 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
         catch (failure: Exception) { error = failure.message ?: "The server libraries could not be read" }
         finally { loading = false }
     }
-    val valid = state.server != null && libraryId != null && host.isNotBlank() && port.toIntOrNull() in 1..65535 &&
+    LaunchedEffect(useTailscale) {
+        while (useTailscale) {
+            try { tailscale = controller.tailscaleStatus().also { if (it.controlUrl.isNotEmpty()) controlUrl = it.controlUrl } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { error = failure.message ?: "Tailscale is unavailable"; useTailscale = false }
+            delay(if (tailscale?.connected == true) 10_000 else 2_000)
+        }
+    }
+    val valid = state.server != null && libraryId != null && host.isNotBlank() && (!useTailscale || tailscale?.connected == true) && port.toIntOrNull() in 1..65535 &&
         username.isNotBlank() && directory.startsWith('/') && directory != "/" && fingerprint.startsWith("SHA256:") &&
         (if (method == "SSH private key") privateKey.isNotBlank() else password.isNotBlank())
     SettingsScreen(onDismissRequest = { if (!busy) dismiss() }, title = { Text("Server files (SFTP)") }, text = {
@@ -52,7 +67,7 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
             if (state.server == null) Text("Connect to Navidrome in Music server first.")
             state.sftp?.let { configuration ->
                 Text("SFTP connected", style = MaterialTheme.typography.titleMedium)
-                Text("${configuration.libraryName} · ${configuration.connection.host}")
+                Text("${configuration.libraryName} · ${configuration.connection.host}" + if (configuration.connection.tailscale) " · Tailscale" else "")
                 TextButton(enabled = !busy, onClick = {
                     busy = true; error = null
                     scope.launch {
@@ -84,7 +99,49 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
             Text("Edit and upload the actual music files. Use the SSH account’s absolute path to your Navidrome music directory.")
             if (loading || busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (libraries.isNotEmpty()) SettingChoice("Music library", libraryId, libraries.map { it.id as Long? to it.name }) { libraryId = it }
-            OutlinedTextField(host, { host = it }, modifier = Modifier.fillMaxWidth(), label = { Text("SFTP host") }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true, enabled = !busy)
+            SettingsToggle("Connect through Tailscale", AppIcon.TAILSCALE, "Reach the server on your tailnet without the Tailscale app",
+                useTailscale) { if (!busy) useTailscale = it }
+            if (useTailscale) tailscale?.let { status ->
+                if (status.state == "Stopped") {
+                    OutlinedTextField(controlUrl, { controlUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Control server (optional)") },
+                        leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true, enabled = !busy,
+                        supportingText = { Text("Leave empty for Tailscale, or enter your Headscale URL.") })
+                    OutlinedTextField(authKey, { authKey = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Auth key (optional)") },
+                        leadingIcon = { Icon(AppIcon.KEY.vector, null) }, singleLine = true, enabled = !busy,
+                        visualTransformation = PasswordVisualTransformation(), supportingText = { Text("Without a key, sign in through your browser.") })
+                    TextButton(enabled = !busy && (controlUrl.isBlank() || controlUrl.trim().startsWith("http")), onClick = {
+                        busy = true; error = null
+                        scope.launch {
+                            try {
+                                tailscale = controller.signInToTailscale(controlUrl.trim().trimEnd('/'), authKey.trim().takeIf { it.isNotEmpty() })
+                                authKey = ""
+                            } catch (cancelled: CancellationException) { throw cancelled }
+                            catch (failure: Exception) { error = failure.message ?: "Tailscale could not start" }
+                            finally { busy = false }
+                        }
+                    }) { Text("Sign in to Tailscale") }
+                } else {
+                    Text(when {
+                        status.connected -> "Connected to your tailnet as ${status.name ?: "Nevumi"}"
+                        status.authUrl != null -> "Sign in to add Nevumi to your tailnet."
+                        status.state == "NeedsMachineAuth" -> "Waiting for your tailnet admin to approve this device."
+                        else -> "Connecting to Tailscale…"
+                    })
+                    Row {
+                        status.authUrl?.let { url -> TextButton(onClick = { browser.openUri(url) }) { Text("Open sign-in page") } }
+                        TextButton(enabled = !busy, onClick = {
+                            busy = true; error = null
+                            scope.launch {
+                                try { controller.signOutOfTailscale(); tailscale = controller.tailscaleStatus() }
+                                catch (cancelled: CancellationException) { throw cancelled }
+                                catch (failure: Exception) { error = failure.message ?: "Tailscale could not sign out" }
+                                finally { busy = false }
+                            }
+                        }) { Text(if (status.connected) "Sign out of Tailscale" else "Cancel sign-in") }
+                    }
+                }
+            }
+            OutlinedTextField(host, { host = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if (useTailscale) "Tailscale host name or IP" else "SFTP host") }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true, enabled = !busy)
             OutlinedTextField(port, { port = it }, modifier = Modifier.fillMaxWidth(), label = { Text("SFTP port") }, leadingIcon = { Icon(AppIcon.LINK.vector, null) }, singleLine = true, enabled = !busy,
                 isError = port.toIntOrNull() !in 1..65535)
             OutlinedTextField(username, { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text("SSH username") }, leadingIcon = { Icon(AppIcon.ARTIST.vector, null) }, singleLine = true, enabled = !busy)
@@ -108,7 +165,7 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
                 try {
                     val authentication = if (method == "SSH private key") SftpAuthentication(privateKey = privateKey,
                         passphrase = passphrase.takeIf { it.isNotEmpty() }) else SftpAuthentication(password = password)
-                    controller.connectServerFiles(SftpProfile(host.trim(), port.toInt(), username.trim(), directory.trim(), fingerprint.trim()),
+                    controller.connectServerFiles(SftpProfile(host.trim(), port.toInt(), username.trim(), directory.trim(), fingerprint.trim(), useTailscale),
                         requireNotNull(libraryId), authentication)
                     privateKey = ""; passphrase = ""; password = ""
                     scroll.animateScrollTo(0)

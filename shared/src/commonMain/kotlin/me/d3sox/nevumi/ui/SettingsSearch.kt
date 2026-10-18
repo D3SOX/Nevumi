@@ -61,7 +61,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             if (controller.fileEditingAvailable) category("Files & recovery", AppIcon.UNDO, "Keep undo backups" to "retention days edit tags",
                 "Undo backup storage" to "space recovery limit")
             if (controller.serverFilesAvailable) add(SettingResult("Server files (SFTP)", "Files & recovery", AppIcon.SERVER_FILES,
-                "ssh host port username directory fingerprint key password upload editing", "Server files (SFTP)"))
+                "ssh host port username directory fingerprint key password upload editing tailscale headscale tailnet vpn", "Server files (SFTP)"))
             if (controller.pairedDevices != null) add(SettingResult("Paired devices", "Paired devices", AppIcon.DEVICES, "sync phone desktop pairing"))
             add(SettingResult("Saved queues", "Saved queues", AppIcon.QUEUE, "restore delete playback"))
             add(SettingResult("About Nevumi", "About Nevumi", AppIcon.INFO, "license agpl source code version github"))

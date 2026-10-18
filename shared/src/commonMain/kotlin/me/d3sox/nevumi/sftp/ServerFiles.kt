@@ -7,7 +7,12 @@ import okio.ByteString.Companion.encodeUtf8
 
 @Serializable
 data class SftpProfile(val host: String, val port: Int = 22, val username: String,
-    val musicDirectory: String, val hostKeySha256: String)
+    val musicDirectory: String, val hostKeySha256: String, val tailscale: Boolean = false)
+
+/** [state] is Tailscale's backend state, such as NeedsLogin or Running. */
+data class TailscaleStatus(val state: String, val authUrl: String? = null, val name: String? = null, val controlUrl: String = "") {
+    val connected: Boolean get() = state == "Running"
+}
 
 @Serializable
 class SftpAuthentication(val password: String? = null, val privateKey: String? = null,
@@ -41,4 +46,7 @@ interface ServerFiles : MusicFileEdits {
     suspend fun pendingUploads(): List<PendingServerUpload>
     suspend fun retryUpload(id: String): Track
     suspend fun discardUpload(id: String)
+    suspend fun tailscaleStatus(): TailscaleStatus
+    suspend fun signInToTailscale(controlUrl: String, authKey: String?): TailscaleStatus
+    suspend fun signOutOfTailscale()
 }

@@ -41,7 +41,7 @@ jobs:
                   if build or suffix in {'.kt', '.kts', '.java', '.gradle'}:
                       languages.add('java-kotlin')
                   if build or path.startswith('native/') or suffix in {'.c', '.cpp', '.h', '.hpp', '.cmake'} or Path(path).name == 'CMakeLists.txt' or path in {
-                      'scripts/build-visualizer.py', 'scripts/build_mpv.py'}:
+                      'scripts/build-visualizer.py', 'scripts/build-tailscale.py', 'scripts/build_mpv.py'}:
                       languages.add('c-cpp')
                   if suffix == '.py' or path == 'scripts/requirements.txt':
                       languages.add('python')
@@ -91,6 +91,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - if: matrix.build-mode == 'manual'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: native/tailscale/go.mod
+          cache-dependency-path: native/tailscale/go.sum
       - if: matrix.build-mode == 'manual'
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:

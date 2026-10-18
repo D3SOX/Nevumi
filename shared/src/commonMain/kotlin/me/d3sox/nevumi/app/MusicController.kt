@@ -486,10 +486,14 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
     suspend fun serverMusicDirectories() = requireNotNull(serverFiles) { "Server file editing is unavailable" }.libraries()
     suspend fun connectServerFiles(profile: SftpProfile, libraryId: Long, authentication: SftpAuthentication) {
-        networkAccess(profile.host)
+        if (!profile.tailscale) networkAccess(profile.host)
         requireNotNull(serverFiles) { "Server file editing is unavailable" }.connect(profile, libraryId, authentication)
         operations.withLock { refresh() }
     }
+    suspend fun tailscaleStatus() = requireNotNull(serverFiles) { "Tailscale is unavailable" }.tailscaleStatus()
+    suspend fun signInToTailscale(controlUrl: String, authKey: String?) =
+        requireNotNull(serverFiles) { "Tailscale is unavailable" }.signInToTailscale(controlUrl, authKey)
+    suspend fun signOutOfTailscale() = requireNotNull(serverFiles) { "Tailscale is unavailable" }.signOutOfTailscale()
     suspend fun disconnectServerFiles() {
         requireNotNull(serverFiles) { "Server file editing is unavailable" }.disconnect()
         operations.withLock { refresh() }

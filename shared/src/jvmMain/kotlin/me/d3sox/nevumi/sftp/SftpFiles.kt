@@ -24,8 +24,9 @@ class SftpFailure(val kind: Kind) : IOException(when (kind) {
     Kind.CONNECTION -> "Could not connect to the SFTP server"
     Kind.FILE_OPERATION -> "Could not complete the SFTP file operation"
     Kind.CONFLICT -> "A file already exists there or the server file changed"
+    Kind.TAILSCALE -> "Sign in to Tailscale in Server files (SFTP)"
 }) {
-    enum class Kind { HOST_KEY, AUTHENTICATION, CONNECTION, FILE_OPERATION, CONFLICT }
+    enum class Kind { HOST_KEY, AUTHENTICATION, CONNECTION, FILE_OPERATION, CONFLICT, TAILSCALE }
 }
 
 private object SftpCrypto {
@@ -40,7 +41,8 @@ private object SftpCrypto {
     fun initialize() {}
 }
 
-class SftpFiles(private val profile: SftpProfile, private val authentication: SftpAuthentication) {
+class SftpFiles(private val profile: SftpProfile, private val authentication: SftpAuthentication,
+    private val tailscale: Tailscale? = null) {
     fun verifyDirectory() = connected { client ->
         val directory = client.canonicalize(profile.musicDirectory)
         check(client.stat(directory).type == FileMode.Type.DIRECTORY) { "Choose the server's music directory" }
@@ -173,7 +175,10 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
                 ssh.connectTimeout = 10_000
                 ssh.timeout = 20_000
                 ssh.addHostKeyVerifier(FingerprintVerifier.getInstance(profile.hostKeySha256))
-                ssh.connect(profile.host, profile.port)
+                if (profile.tailscale) {
+                    val tunnel = checkNotNull(tailscale) { "Tailscale is unavailable" }.connect(profile.host, profile.port, 30_000)
+                    try { ssh.connectVia(tunnel.input, tunnel.output) } catch (failure: IOException) { tunnel.close(); throw failure }
+                } else ssh.connect(profile.host, profile.port)
                 stage = SftpFailure.Kind.AUTHENTICATION
                 if (authentication.privateKey != null) {
                     val finder = authentication.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }

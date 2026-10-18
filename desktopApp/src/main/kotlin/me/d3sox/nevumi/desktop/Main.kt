@@ -62,7 +62,8 @@ fun main(arguments: Array<String>) {
         scrobbling = Scrobbling(store, library, http, credentials, offline.network, connection::client),
         equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http),
         serverFiles = me.d3sox.nevumi.sftp.SftpConnection(store, library, connection::client, credentials,
-            File(directory, "server-edits").path, changes = serverChanges, artwork = artwork),
+            File(directory, "server-edits").path, changes = serverChanges, artwork = artwork,
+            tailscale = me.d3sox.nevumi.sftp.Tailscale(File(directory, "tailscale"), "nevumi-linux")),
         pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
             me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges), credentials, "Linux desktop"))
     option("--import-folder")?.let { controller.importSource(it) }

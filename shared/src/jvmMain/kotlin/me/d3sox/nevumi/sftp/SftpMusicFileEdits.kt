@@ -15,8 +15,8 @@ import org.jaudiotagger.audio.AudioFileIO
 class SftpMusicFileEdits(store: MusicStore, library: MusicLibrary, client: NavidromeClient,
     profile: SftpProfile, authentication: SftpAuthentication, backupDirectory: String,
     libraryId: Long = 1, changes: NavidromeChanges = NavidromeChanges(store, library) { client },
-    artwork: ArtworkLibrary? = null) : MusicFileEdits by LocalFileEdits(store, library, backupDirectory,
-        files = SftpFileEditAccess(profile, authentication, File(backupDirectory, ".staging"), client.serverId, libraryId),
+    artwork: ArtworkLibrary? = null, tailscale: Tailscale? = null) : MusicFileEdits by LocalFileEdits(store, library, backupDirectory,
+        files = SftpFileEditAccess(SftpFiles(profile, authentication, tailscale), profile, File(backupDirectory, ".staging"), client.serverId, libraryId),
         localSources = object : LocalSources {
             override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> {
                 client.rescan()
@@ -25,7 +25,7 @@ class SftpMusicFileEdits(store: MusicStore, library: MusicLibrary, client: Navid
                     val staging = Files.createDirectories(File(backupDirectory, ".staging").toPath())
                     val temporary = Files.createTempFile(staging, "read-artwork-", ".${song.format}")
                     try {
-                        SftpFiles(profile, authentication).download(location, temporary.toFile())
+                        SftpFiles(profile, authentication, tailscale).download(location, temporary.toFile())
                         val bytes = AudioFileIO.read(temporary.toFile()).tag?.firstArtwork?.binaryData
                         if (bytes != null) artwork.save(track.id, bytes) else artwork.remove(track.id)
                     } finally { Files.deleteIfExists(temporary) }
@@ -34,9 +34,8 @@ class SftpMusicFileEdits(store: MusicStore, library: MusicLibrary, client: Navid
             }
         })
 
-private class SftpFileEditAccess(profile: SftpProfile, authentication: SftpAuthentication, private val staging: File,
+private class SftpFileEditAccess(private val remote: SftpFiles, profile: SftpProfile, private val staging: File,
     private val serverId: String, private val libraryId: Long) : FileEditAccess {
-    private val remote = SftpFiles(profile, authentication)
     override val providerId = "sftp:" + listOf(serverId, libraryId.toString(), profile.host, profile.port.toString(),
         profile.username, profile.musicDirectory, profile.hostKeySha256).joinToString("\u0000").encodeUtf8().sha256().hex()
     override val atomicWrites = true
