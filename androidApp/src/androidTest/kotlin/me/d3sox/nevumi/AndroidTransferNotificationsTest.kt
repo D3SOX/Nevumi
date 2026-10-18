@@ -151,7 +151,8 @@ class AndroidTransferNotificationsTest {
     fun aBackgroundDownloadShowsItsProgress() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
+        if (android.os.Build.VERSION.SDK_INT >= 33)
+            instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
         val app = context.applicationContext as MusicApplication
         val controller = app.controller
         val original = MusicPreferences(app.store).load()
@@ -172,7 +173,8 @@ class AndroidTransferNotificationsTest {
             withTimeout(10_000) { controller.state.first {
                 it.downloads[remote.id]?.let { record -> record.status == DownloadStatus.DOWNLOADING && record.bytesDownloaded > 0 } == true
             } }
-            assertTrue(context.getSystemService(android.app.job.JobScheduler::class.java).allPendingJobs.none { it.isUserInitiated })
+            if (android.os.Build.VERSION.SDK_INT >= 34)
+                assertTrue(context.getSystemService(android.app.job.JobScheduler::class.java).allPendingJobs.none { it.isUserInitiated })
             withTimeout(5_000) { while (transfer() == null) delay(20) }
             server.release.countDown()
             withTimeout(10_000) { controller.state.first { it.downloads[remote.id]?.status == DownloadStatus.COMPLETE } }

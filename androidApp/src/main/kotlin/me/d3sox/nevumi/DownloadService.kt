@@ -11,35 +11,57 @@ import android.os.Build
 import me.d3sox.nevumi.downloads.DownloadStatus
 import me.d3sox.nevumi.app.AppState
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.update
 
 @OptIn(FlowPreview::class)
 class DownloadService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val running = mutableMapOf<Pair<Int, String?>, Job>()
-    private var visibleJobs = 0
+    private val visibleJobs = MutableStateFlow(0)
+    private val backgroundJobs = MutableStateFlow(0)
+    private var backgroundNotification = false
+
+    // Background jobs, such as those after a relaunch or playlist refreshes, post the notification once a song transfers.
+    // A user-initiated job owns the same notification while it runs.
+    override fun onCreate() {
+        super.onCreate()
+        val notifications = getSystemService(NotificationManager::class.java)
+        val progress = (application as MusicApplication).controller.state.map { transferProgress(it) }.distinctUntilChanged()
+        scope.launch {
+            combine(progress, visibleJobs, backgroundJobs) { update, visible, background -> update.takeIf { visible == 0 && background > 0 } to visible }
+                .conflate().collect { (update, visible) ->
+                    if (update == null) {
+                        if (backgroundNotification && visible == 0) notifications.cancel(TRANSFER_NOTIFICATION)
+                        backgroundNotification = false
+                    } else if (backgroundNotification || update.active) {
+                        backgroundNotification = true
+                        notifications.notify(TRANSFER_NOTIFICATION, transferNotification(update))
+                        delay(1_000)
+                    }
+                }
+        }
+    }
 
     override fun onStartJob(params: JobParameters): Boolean {
         val key = requestKey(params)
         val visibleTransfer = Build.VERSION.SDK_INT >= 34 && params.isUserInitiatedJob
-        if (visibleTransfer) { visibleJobs++; showTransfer(params) }
+        if (visibleTransfer) showTransfer(params)
+        val owners = if (visibleTransfer) visibleJobs else backgroundJobs
+        owners.update { it + 1 }
         val app = application as MusicApplication
         val offline = app.offline
         val task = scope.launch(start = CoroutineStart.LAZY) {
             var retry = false
-            var posted = false
-            val progress = launch {
-                val updates = app.controller.state.map { transferProgress(it) }.distinctUntilChanged().sample(1_000)
-                if (visibleTransfer) updates.collect { progress -> showTransfer(params, progress) }
-                // Background jobs, such as those after a relaunch or playlist refreshes, post the notification once a song transfers.
-                else updates.collect { progress ->
-                    if (visibleJobs > 0 || !(posted || progress.active)) return@collect
-                    posted = true
-                    getSystemService(NotificationManager::class.java).notify(TRANSFER_NOTIFICATION, transferNotification(progress))
-                }
-            }
+            val progress = if (visibleTransfer) launch {
+                app.controller.state.map { transferProgress(it) }.distinctUntilChanged().sample(1_000)
+                    .collect { progress -> showTransfer(params, progress) }
+            } else null
             try {
                 withContext(Dispatchers.IO) {
                     if (params.extras.getBoolean("refresh-playlists")) app.refreshOfflinePlaylists()
@@ -55,9 +77,8 @@ class DownloadService : JobService() {
             } catch (_: Exception) {
                 retry = true
             } finally {
-                progress.cancel()
-                if (visibleTransfer) visibleJobs--
-                else if (posted && visibleJobs == 0) getSystemService(NotificationManager::class.java).cancel(TRANSFER_NOTIFICATION)
+                progress?.cancel()
+                owners.update { it - 1 }
                 if (isActive) {
                     running.remove(key)
                     jobFinished(params, retry)
@@ -77,7 +98,11 @@ class DownloadService : JobService() {
     // A replacement can start before Android delivers the previous request's stop callback.
     private fun requestKey(params: JobParameters) = params.jobId to params.extras.getString(DOWNLOAD_SCHEDULE_ID)
 
-    override fun onDestroy() { scope.cancel(); super.onDestroy() }
+    override fun onDestroy() {
+        scope.cancel()
+        if (backgroundNotification) getSystemService(NotificationManager::class.java).cancel(TRANSFER_NOTIFICATION)
+        super.onDestroy()
+    }
 
     private data class TransferProgress(val title: String = "Nevumi", val text: String = "Downloading music", val percent: Int? = null,
         val active: Boolean = false)
