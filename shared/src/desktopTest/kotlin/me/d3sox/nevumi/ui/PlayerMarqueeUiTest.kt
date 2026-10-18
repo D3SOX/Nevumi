@@ -1,19 +1,26 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,6 +29,51 @@ import kotlin.test.*
 
 @OptIn(ExperimentalTestApi::class)
 class PlayerMarqueeUiTest {
+    @Test fun endpointsShowUnfadedTextOnTheReachedEdge() = runComposeUiTest {
+        lateinit var scrolling: PlayerMarqueeState
+        mainClock.autoAdvance = false
+        setContent {
+            val scope = rememberCoroutineScope()
+            val state = remember { PlayerMarqueeState(scope) }
+            SideEffect { scrolling = state }
+            val text = "M".repeat(32)
+            val style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 16.sp, color = Color.Black)
+            val layout = rememberTextMeasurer().measure(text, style, softWrap = false, maxLines = 1)
+            val density = LocalDensity.current
+            val em = with(density) { 16.sp.toPx() }
+            Column {
+                Box(Modifier.width(200.dp).background(Color.White).testTag("marquee")) {
+                    PlayerMarquee(text, style, marqueeState = state)
+                }
+                Canvas(Modifier.width(200.dp).height(with(density) { layout.size.height.toDp() })
+                    .background(Color.White).testTag("reference")) {
+                    val offset = (state.position * em).coerceAtMost((layout.size.width - size.width).coerceAtLeast(0f))
+                    drawText(layout, topLeft = Offset(-offset, 0f))
+                }
+            }
+        }
+        mainClock.advanceTimeBy(100)
+        fun edgeDifference(left: Boolean): Double {
+            val actual = onNodeWithTag("marquee").captureToImage().toPixelMap()
+            val reference = onNodeWithTag("reference").captureToImage().toPixelMap()
+            val columns = if (left) 0 until 12 else actual.width - 12 until actual.width
+            var total = 0.0
+            for (y in 0 until actual.height) for (x in columns) {
+                total += abs(actual[x, y].red - reference[x, y].red)
+            }
+            return total / (12 * actual.height)
+        }
+        assertEquals(0f, scrolling.position)
+        val startDifference = edgeDifference(left = true)
+        assertTrue(edgeDifference(left = false) > .02, "The overflowing right edge should still fade")
+        mainClock.advanceTimeUntil(timeoutMillis = 20_000) { scrolling.range > 0f && scrolling.position == scrolling.range }
+        val endDifference = edgeDifference(left = false)
+        assertTrue(edgeDifference(left = true) > .02, "The overflowing left edge should still fade")
+        assertTrue(startDifference < .001, "The first characters must be unfaded at the start: $startDifference")
+        assertTrue(endDifference < .001, "The last characters must be unfaded at the end: $endDifference")
+    }
+
+
     @Test fun handingTextToAnotherPlayerViewKeepsItsScrollPhase() = runComposeUiTest {
         var expanded by mutableStateOf(false)
         lateinit var shared: PlayerMarqueeState

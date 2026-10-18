@@ -98,8 +98,14 @@ internal fun PlayerMarquee(text: String, style: TextStyle, modifier: Modifier = 
         drawText(layout, topLeft = Offset(center - offset, 0f))
         if (overflow > 1f) {
             val edge = minOf(16.dp.toPx(), size.width / 4)
-            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), 0f, edge), blendMode = BlendMode.DstIn)
-            drawRect(Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), size.width - edge, size.width), blendMode = BlendMode.DstIn)
+            val leftEdge = minOf(edge, offset)
+            val rightEdge = minOf(edge, overflow - offset)
+            if (leftEdge > 0f) {
+                drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), 0f, leftEdge), blendMode = BlendMode.DstIn)
+            }
+            if (rightEdge > 0f) {
+                drawRect(Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), size.width - rightEdge, size.width), blendMode = BlendMode.DstIn)
+            }
         }
     }
 }
