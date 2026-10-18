@@ -119,8 +119,14 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             preparedEntry = null
             standby?.pause()
             applyRepeat()
-            active.loadQueue(if (nativeQueue()) tracks else listOf(tracks[startIndex]),
-                if (nativeQueue()) startIndex else 0, positionMs, play)
+            try {
+                active.loadQueue(if (nativeQueue()) tracks else listOf(tracks[startIndex]),
+                    if (nativeQueue()) startIndex else 0, positionMs, play)
+            } catch (failure: Exception) {
+                // The decoder never adopts the entry, so stop reporting it as loading and let the failure surface.
+                if (pendingLoad === pending) pendingLoad = null
+                throw failure
+            }
         }
     }
 

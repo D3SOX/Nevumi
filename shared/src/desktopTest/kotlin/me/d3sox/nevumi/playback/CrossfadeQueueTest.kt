@@ -145,4 +145,25 @@ class CrossfadeQueueTest {
             assertTrue(loaded.positionMs in 900..1_200, "Position ${loaded.positionMs}")
         } finally { engine.close() }
     }
+
+    @Test fun aFailedLoadStopsReportingTheRequestedSongAsLoading() = runBlocking {
+        val engine = CrossfadePlaybackEngine {
+            val decoder = MpvPlaybackEngine("null")
+            object : PlaybackEngine by decoder {
+                override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
+                    check(tracks[startIndex].entryId != "broken") { "The decoder rejected this song" }
+                    decoder.loadQueue(tracks, startIndex, positionMs, play)
+                }
+            }
+        }
+        try {
+            val tracks = listOf(PlayableTrack("same-song", audio, entryId = "entry-1"), PlayableTrack("same-song", audio, entryId = "broken"))
+            engine.loadQueue(tracks, 0, play = false)
+            withTimeout(3_000) { engine.status.first { it.entryId == "entry-1" && it.durationMs > 0 } }
+            engine.loadQueue(tracks, 1, play = false)
+            assertEquals("broken", engine.status.value.entryId)
+            val settled = withTimeout(3_000) { engine.status.first { it.entryId == "entry-1" } }
+            assertTrue(settled.durationMs > 0, "The decoder's real state is reported again after the failed load")
+        } finally { engine.close() }
+    }
 }
