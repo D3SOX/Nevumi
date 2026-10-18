@@ -486,7 +486,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
     suspend fun serverMusicDirectories() = requireNotNull(serverFiles) { "Server file editing is unavailable" }.libraries()
     suspend fun connectServerFiles(profile: SftpProfile, libraryId: Long, authentication: SftpAuthentication) {
-        if (!profile.tailscale) networkAccess(profile.host)
+        // Tailscale learns peer endpoints internally. A blank address asks for local network access, so peers on the LAN connect directly.
+        networkAccess(if (profile.tailscale) "" else profile.host)
         requireNotNull(serverFiles) { "Server file editing is unavailable" }.connect(profile, libraryId, authentication)
         operations.withLock { refresh() }
     }
