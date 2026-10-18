@@ -24,14 +24,17 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
     var authKey by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var pollError by remember { mutableStateOf<String?>(null) }
     val browser = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         routes = controller.tunnelRoutes()
         while (true) {
-            try { status = controller.tailscaleStatus().also { if (it.controlUrl.isNotEmpty()) controlUrl = it.controlUrl } }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { error = failure.message ?: "Tailscale is unavailable"; return@LaunchedEffect }
+            try {
+                status = controller.tailscaleStatus().also { if (it.controlUrl.isNotEmpty()) controlUrl = it.controlUrl }
+                pollError = null
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { pollError = failure.message ?: "Tailscale is unavailable" }
             delay(if (status?.connected == true) 10_000 else 2_000)
         }
     }
@@ -47,7 +50,7 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
     SettingsScreen(onDismissRequest = { if (!busy) dismiss() }, title = { Text("Tunnel") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Nevumi can join your tailnet itself, so it reaches servers there without the Tailscale app or a VPN.")
-            if (busy || status == null && error == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (busy || status == null && pollError == null) LinearProgressIndicator(Modifier.fillMaxWidth())
             status?.let { current ->
                 if (current.state == "Stopped") {
                     OutlinedTextField(controlUrl, { controlUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Control server (optional)") },
@@ -90,7 +93,7 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
                 if ((current.musicServer || current.serverFiles) && status?.state == "Stopped")
                     Text("Sign in to Tailscale to use these connections.", color = MaterialTheme.colorScheme.error)
             }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            (error ?: pollError)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }, confirmButton = { PageAction("Done", enabled = !busy, onClick = dismiss) })
 }

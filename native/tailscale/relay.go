@@ -12,8 +12,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"tailscale.com/ipn"
 )
 
 // relays maps a music server origin to its loopback relay. Guarded by lock.
@@ -30,15 +28,6 @@ func relay(origin string) (string, error) {
 	target, err := url.Parse(origin)
 	if err != nil || (target.Scheme != "http" && target.Scheme != "https") || target.Host == "" {
 		return "", errors.New("Enter the server's HTTP or HTTPS address")
-	}
-	lock.Lock()
-	existing, ok := relays[origin]
-	lock.Unlock()
-	if ok {
-		return existing.url, nil
-	}
-	if err := waitUntilRunning(30 * time.Second); err != nil {
-		return "", err
 	}
 	lock.Lock()
 	defer lock.Unlock()
@@ -59,6 +48,7 @@ func relay(origin string) (string, error) {
 	}
 	node := server
 	transport := &http.Transport{
+		// Each request waits for the node under its own deadline, so creating the relay never blocks.
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			if _, err := node.Up(ctx); err != nil {
 				return nil, errNotConnected
@@ -88,33 +78,6 @@ func relay(origin string) (string, error) {
 	go relayed.server.Serve(listener)
 	relays[origin] = relayed
 	return relayed.url, nil
-}
-
-// waitUntilRunning lets the node finish starting, so the first request through a relay doesn't hit the client's read timeout.
-// A node waiting for a browser sign-in or for approval fails right away.
-func waitUntilRunning(timeout time.Duration) error {
-	node, err := current()
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	client, err := node.LocalClient()
-	if err != nil {
-		return err
-	}
-	state, err := client.StatusWithoutPeers(ctx)
-	if err != nil {
-		return err
-	}
-	// An auth key sign-in passes through NeedsLogin without a login URL, so only a pending browser sign-in fails here.
-	if state.BackendState == ipn.NeedsLogin.String() && state.AuthURL != "" || state.BackendState == ipn.NeedsMachineAuth.String() {
-		return errNotConnected
-	}
-	if _, err := node.Up(ctx); err != nil {
-		return errNotConnected
-	}
-	return nil
 }
 
 // closeRelays stops every relay. The caller holds lock.

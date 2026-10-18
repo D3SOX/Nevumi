@@ -494,13 +494,26 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     suspend fun tailscaleStatus() = requireNotNull(tunnel) { "Tailscale is unavailable" }.status()
     suspend fun signInToTailscale(controlUrl: String, authKey: String?): me.d3sox.nevumi.tunnel.TailscaleStatus {
         if (controlUrl.isNotEmpty()) networkAccess(controlUrl)
-        return requireNotNull(tunnel) { "Tailscale is unavailable" }.signIn(controlUrl, authKey)
+        return requireNotNull(tunnel) { "Tailscale is unavailable" }.signIn(controlUrl, authKey).also { reloadStreams() }
     }
-    suspend fun signOutOfTailscale() = requireNotNull(tunnel) { "Tailscale is unavailable" }.signOut()
+    suspend fun signOutOfTailscale() {
+        requireNotNull(tunnel) { "Tailscale is unavailable" }.signOut()
+        reloadStreams()
+    }
     suspend fun tunnelRoutes() = tunnel?.routes() ?: me.d3sox.nevumi.tunnel.TunnelRoutes()
     suspend fun updateTunnelRoutes(routes: me.d3sox.nevumi.tunnel.TunnelRoutes) {
-        requireNotNull(tunnel) { "Tailscale is unavailable" }.updateRoutes(routes)
-        operations.withLock { refresh() }
+        val tunnel = requireNotNull(tunnel) { "Tailscale is unavailable" }
+        val previous = tunnel.routes()
+        if (routes.musicServer && !previous.musicServer || routes.serverFiles && !previous.serverFiles) reachAccess("", tunneled = true)
+        tunnel.updateRoutes(routes)
+        reloadStreams()
+    }
+    /** Stream URLs depend on the music server route and its relay, so the loaded queue gets new ones when either changes. */
+    private suspend fun reloadStreams() = operations.withLock {
+        if (queueLoaded) try { engine.updateQueue(playableQueue(queue.snapshot())) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { mutableState.update { it.copy(error = failure.message ?: "Playback could not switch connections") } }
+        refresh()
     }
     /** Tailscale learns peer endpoints internally. A blank address asks for local network access, so peers on the LAN connect directly. */
     private suspend fun reachAccess(address: String, tunneled: Boolean) = networkAccess(if (tunneled) "" else address)
