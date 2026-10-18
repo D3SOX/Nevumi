@@ -41,5 +41,8 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
         }
     }
 
-    private companion object { const val SINGLE_LOOKUPS = 20 }
+    internal companion object {
+        /** Up to this many missing songs are looked up individually; beyond it one catalogue download is cheaper. */
+        const val SINGLE_LOOKUPS = 20
+    }
 }
