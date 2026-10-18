@@ -50,10 +50,7 @@ class ListenBrainzClient(private val http: HttpClient, private val token: String
         result.getValue("user_name").jsonPrimitive.content
     }
 
-    suspend fun submit(listen: Listen) {
-        require(listen.qualified) { "The song has not been heard long enough to scrobble" }
-        send(listen, nowPlaying = false)
-    }
+    suspend fun submit(listen: Listen) = send(listen, nowPlaying = false)
     suspend fun nowPlaying(listen: Listen) = send(listen, nowPlaying = true)
 
     private suspend fun send(listen: Listen, nowPlaying: Boolean) {
@@ -113,7 +110,6 @@ class LastFmClient(private val http: HttpClient, private val apiKey: String, pri
 
     suspend fun submit(listen: Listen) {
         require(listen.durationMs > 30_000) { "Last.fm only scrobbles songs longer than 30 seconds" }
-        require(listen.qualified) { "The song has not been heard long enough to scrobble" }
         send(listen, nowPlaying = false)
     }
     suspend fun nowPlaying(listen: Listen) = send(listen, nowPlaying = true)

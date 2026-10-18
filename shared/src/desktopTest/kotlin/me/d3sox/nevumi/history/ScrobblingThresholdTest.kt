@@ -2,20 +2,86 @@ package me.d3sox.nevumi.history
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.headersOf
+import io.ktor.http.parseQueryString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import me.d3sox.nevumi.downloads.DownloadNetwork
 import me.d3sox.nevumi.library.*
+import me.d3sox.nevumi.playback.PlaybackStatus
 import me.d3sox.nevumi.security.SecretServiceVault
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.settings.MusicSettings
 import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
 import kotlin.test.*
+import kotlin.uuid.Uuid
 
 class ScrobblingThresholdTest {
+    @Test
+    fun listensBelowTheOldThresholdAreDeliveredAndConfirmedByBothDirectServices() = runBlocking {
+        val directory = Files.createTempDirectory("scrobbling-custom-delivery")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val vault = SecretServiceVault("me.d3sox.nevumi.tests.${Uuid.random()}")
+        val submitted = mutableListOf<ScrobblingService>()
+        val http = HttpClient(MockEngine { request ->
+            val response = when {
+                request.url.encodedPath.endsWith("validate-token") -> """{"valid":true,"user_name":"fixture"}"""
+                request.url.encodedPath.endsWith("submit-listens") -> {
+                    submitted += ScrobblingService.LISTENBRAINZ
+                    """{"status":"ok"}"""
+                }
+                else -> {
+                    val form = parseQueryString((request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString())
+                    when (form["method"]) {
+                        "auth.getToken" -> """{"token":"fixture-authorization"}"""
+                        "auth.getSession" -> """{"session":{"name":"fixture","key":"fixture-session"}}"""
+                        "track.scrobble" -> {
+                            submitted += ScrobblingService.LASTFM
+                            """{"scrobbles":{"scrobble":{"ignoredMessage":{"code":"0"}}}}"""
+                        }
+                        else -> error("Unexpected Last.fm request")
+                    }
+                }
+            }
+            respond(response, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        })
+        val library = MusicLibrary(store)
+        val scrobbling = Scrobbling(store, library, http, vault, now = { 1_000 })
+        try {
+            MusicPreferences(store).update { it.copy(scrobblePercent = 25, scrobbleMaxSeconds = 0) }
+            scrobbling.connectListenBrainz("fixture-token")
+            scrobbling.startLastFmAuthorization("fixture-key", "fixture-secret")
+            scrobbling.completeLastFmAuthorization()
+            val track = library.importTrack(TrackMetadata("Song", "Artist", durationMs = 180_000),
+                TrackSource("local", SourceKind.LOCAL, "/music/song.flac"))
+            var elapsed = 0L
+            val history = ListeningHistory(store, library, wallClock = { 2_000 }, elapsedClock = { elapsed })
+            val playing = PlaybackStatus(track.id, playing = true, durationMs = 180_000, playbackId = "play")
+            history.record(playing)
+            elapsed = 45_000
+            history.record(playing)
+            assertFalse(history.all().single().qualified)
+            scrobbling.enqueueEligible()
+            assertEquals(2, scrobbling.submissions().size)
+            scrobbling.runPending()
+            assertEquals(setOf(ScrobblingService.LISTENBRAINZ, ScrobblingService.LASTFM), submitted.toSet())
+            assertTrue(scrobbling.submissions().all { it.state == ScrobbleState.CONFIRMED })
+            scrobbling.enqueueEligible(); scrobbling.runPending()
+            assertEquals(2, submitted.size)
+        } finally {
+            scrobbling.closeAndJoin()
+            scrobbling.profiles().forEach { vault.delete("scrobbling:${it.id}") }
+            vault.delete("lastfm:authorization")
+            http.close(); store.close(); directory.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun percentageAndTimeLimitUseTheEarlierThresholdAndTheLimitCanBeDisabled() {
         val listen = Listen("listen", "track", "play", 0, TrackMetadata("Song", "Artist"), durationMs = 180_000)
