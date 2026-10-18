@@ -123,10 +123,15 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
     suspend fun deviceId(): String = store.transaction {
         store.read<String>("sync:device-id") ?: Uuid.random().toString().also { store.put("sync:device-id", "sync-settings", it) }
     }
-    /** [listensSince] limits the shared listening history to listens started at or after that time; the first sync shares everything. */
+    /**
+     * [listensSince] limits the shared history to listens that started, or arrived from another paired device, at or after that
+     * time, plus listens still in progress; the first sync shares everything.
+     */
     suspend fun snapshot(peerDeviceId: String? = null, additionalTracks: Set<String> = emptySet(), listensSince: Long? = null): SyncSnapshot = work.withLock {
         val snapshot = createSnapshot().let { full ->
-            if (listensSince == null) full else full.copy(listens = full.listens.filter { it.startedAt >= listensSince || !it.ended })
+            val shared = if (listensSince == null) full.listens
+                else full.listens.filter { it.startedAt >= listensSince || (it.importedAt ?: 0) >= listensSince || !it.ended }
+            full.copy(listens = shared.map { it.copy(importedAt = null) })
         }
         val favorites = snapshot.favorites.filter { it.revision.counter > 0 }
         val ratings = snapshot.ratings.filter { it.revision.counter > 0 }
@@ -371,7 +376,7 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
                 }
                 val previous = store.read<Listen>("listen:${listen.id}")
                 val imported = if (previous == null) listen.copy(trackId = localId, metadata = listen.metadata.copy(folder = ""),
-                    originDeviceId = listen.originDeviceId ?: snapshot.deviceId)
+                    originDeviceId = listen.originDeviceId ?: snapshot.deviceId, importedAt = kotlin.time.Clock.System.now().toEpochMilliseconds())
                 else previous.copy(listenedMs = maxOf(previous.listenedMs, listen.listenedMs),
                     playedMs = maxOf(previous.playedMs, listen.playedMs), ended = previous.ended || listen.ended)
                 store.put("listen:${listen.id}", "listens", imported)
