@@ -6,15 +6,23 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.foundation.background
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
@@ -39,7 +47,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
-import kotlinx.coroutines.launch
 import me.d3sox.nevumi.history.listeningStatistics
 import me.d3sox.nevumi.history.ListeningStatistics
 import me.d3sox.nevumi.resources.nevumi_logo
@@ -56,30 +63,26 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     var handledDestination by rememberSaveable { mutableIntStateOf(-1) }
     val incoming = destination?.takeIf { it.revision != handledDestination }
     val initial = incoming?.tab ?: initialTab ?: state.preferences.startupTab ?: state.preferences.lastLibraryTab
-    val pager = rememberPagerState(initialPage = tabs.indexOf(initial).coerceAtLeast(0)) { tabs.size }
-    LaunchedEffect(pager.settledPage, tabs) {
-        tabs.getOrNull(pager.settledPage)?.let { tab ->
-            onTabSelected(tab)
-            controller.rememberLibraryTab(tab)
+    var selectedTab by rememberSaveable { mutableStateOf(initial.takeIf { it in tabs } ?: tabs.first()) }
+    val currentIndex = tabs.indexOf(selectedTab).coerceAtLeast(0)
+    val transition = updateTransition(tabs[currentIndex], label = "Library tab")
+    val pageStates = rememberSaveableStateHolder()
+    LaunchedEffect(transition.currentState, transition.isRunning) {
+        if (!transition.isRunning) {
+            onTabSelected(transition.currentState)
+            controller.rememberLibraryTab(transition.currentState)
         }
     }
-    var previousTabs by remember { mutableStateOf(tabs) }
     LaunchedEffect(tabs) {
-        if (previousTabs != tabs) {
-            val selected = previousTabs.getOrNull(pager.currentPage)
-            pager.scrollToPage(tabs.indexOf(selected).coerceAtLeast(0))
-            previousTabs = tabs
-        }
+        if (selectedTab !in tabs) selectedTab = tabs.first()
     }
-    val currentIndex = pager.targetPage.coerceIn(0, tabs.lastIndex)
     var rearrangingPlaylists by remember(tabs[currentIndex]) { mutableStateOf(false) }
     LaunchedEffect(destination) {
         if (destination != null && destination.revision != handledDestination) {
-            selection.clear(); pager.scrollToPage(tabs.indexOf(destination.tab).coerceAtLeast(0))
+            selection.clear(); selectedTab = destination.tab
             handledDestination = destination.revision
         }
     }
-    val scope = rememberCoroutineScope()
     var sourceMenu by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var filters by remember { mutableStateOf(false) }
@@ -153,15 +156,22 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 }
             }
         }
-        HorizontalPager(pager, userScrollEnabled = false, key = { tabs[it] }, modifier = Modifier.weight(1f).fillMaxWidth().testTag("library-pager")) { index ->
-            val active = LocalNavigationActive.current && pager.currentPage == index
+        // Like Namida, slide the incoming tab over the stationary previous page, skipping intermediate tabs.
+        transition.AnimatedContent(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("library-pager"), transitionSpec = {
+            val direction = if (tabs.indexOf(targetState) > tabs.indexOf(initialState))
+                AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right
+            (slideIntoContainer(direction, tween(400, easing = CubicBezierEasing(0f, 0f, 0.58f, 1f))) togetherWith
+                ExitTransition.KeepUntilTransitionsFinished).using(null)
+        }) { tab ->
+            pageStates.SaveableStateProvider(tab.name) {
+            val active = LocalNavigationActive.current && tab == tabs[currentIndex]
             CompositionLocalProvider(LocalNavigationActive provides active,
-                LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(tabs[index]),
-                LocalLibraryFocus provides destination?.takeIf { it.tab == tabs[index] },
-                LocalLibraryScrollKey provides "library:${tabs[index].name}") {
-            val handleBack = backEnabled && pager.currentPage == index
-            Box(Modifier.fillMaxSize().then(if (pager.currentPage == index) Modifier else Modifier.clearAndSetSemantics {})) {
-            when (tabs[index]) {
+                LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(tab),
+                LocalLibraryFocus provides destination?.takeIf { it.tab == tab },
+                LocalLibraryScrollKey provides "library:${tab.name}") {
+            val handleBack = backEnabled && active
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).testTag("library-tab:${tab.name}").then(if (active) Modifier else Modifier.clearAndSetSemantics {})) {
+            when (tab) {
                 LibraryTab.HOME -> HomeScreen(state, controller, tracks, destination, handleBack, onSettings)
                 LibraryTab.SONGS -> SongList(tracks, controller, statistics = statistics, scrollSort = order)
                 LibraryTab.ALBUMS -> {
@@ -188,8 +198,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             }
         }
         }
+        }
         Spacer(Modifier.height(miniPlayerSpace))
-        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged { onNavigationHeight(it.height) }) { page -> selection.clear(); scope.launch { pager.animateScrollToPage(tabs.indexOf(page)) } }
+        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged { onNavigationHeight(it.height) }) { page -> selection.clear(); selectedTab = page }
     }
     }
     if (filters) LibraryFiltersDialog(state, controller) { filters = false }

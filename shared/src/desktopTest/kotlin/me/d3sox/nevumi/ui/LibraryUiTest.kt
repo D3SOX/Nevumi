@@ -12,11 +12,12 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import me.d3sox.nevumi.settings.MusicPreferences
 
 @OptIn(ExperimentalTestApi::class)
 class LibraryUiTest {
-    @Test fun horizontalDragsDoNotChangePagesAndNavigationDoesNotFlashIntermediateSortControls() {
+    @Test fun tabTransitionsSkipIntermediatePagesAndIgnoreHorizontalDrags() {
         val directory = Files.createTempDirectory("library-navigation-header")
         val store = openMusicStore(directory.resolve("music.db").toString())
         val preferences = MusicPreferences(store)
@@ -28,15 +29,29 @@ class LibraryUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
                 onNodeWithTag("library-pager").performTouchInput { swipeLeft() }
                 onNodeWithContentDescription("Recently added").assertIsSelected()
+                val pageBounds = onNodeWithTag("library-tab:RECENT").fetchSemanticsNode().boundsInRoot
                 mainClock.autoAdvance = false
                 onNodeWithContentDescription("Statistics").performClick()
+                mainClock.advanceTimeBy(112)
+                val entering = onNodeWithTag("library-tab:STATISTICS").fetchSemanticsNode().boundsInRoot
+                assertTrue(entering.left > pageBounds.left && entering.left < pageBounds.right)
+                assertEquals(pageBounds, onNodeWithTag("library-tab:RECENT", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
                 repeat(30) {
                     mainClock.advanceTimeBy(16)
                     onNodeWithContentDescription("Song order").assertDoesNotExist()
                     onNodeWithContentDescription("Collection order").assertDoesNotExist()
+                    onNodeWithTag("library-tab:PLAYLISTS", useUnmergedTree = true).assertDoesNotExist()
                 }
+                onNodeWithContentDescription("Recently added").performClick()
+                mainClock.advanceTimeBy(112)
+                val returning = onNodeWithTag("library-tab:RECENT").fetchSemanticsNode().boundsInRoot
+                assertTrue(returning.right > pageBounds.left && returning.right < pageBounds.right)
+                assertEquals(pageBounds, onNodeWithTag("library-tab:STATISTICS", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
+                onNodeWithContentDescription("Statistics").performClick()
                 mainClock.autoAdvance = true
                 onNodeWithContentDescription("Statistics").assertIsSelected()
+                onNodeWithTag("library-tab:STATISTICS").assertIsDisplayed()
+                onNodeWithTag("library-tab:RECENT", useUnmergedTree = true).assertDoesNotExist()
                 onNodeWithTag("library-pager").performTouchInput { swipeRight() }
                 onNodeWithContentDescription("Statistics").assertIsSelected()
             }
