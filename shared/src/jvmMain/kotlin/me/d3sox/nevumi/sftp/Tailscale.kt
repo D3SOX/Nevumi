@@ -9,11 +9,14 @@ import java.util.Objects
 
 /** JNI bridge to the bundled userspace Tailscale node (native/tailscale). */
 internal object TailscaleNative {
-    init {
+    private val loadFailure = try {
         val resources = System.getProperty("compose.application.resources.dir")
         if (resources != null) System.load(File(resources, "native/libnevumi_tailscale.so").absolutePath)
         else System.loadLibrary("nevumi_tailscale")
-    }
+        null
+    } catch (failure: LinkageError) { failure }
+
+    fun requireLoaded() { loadFailure?.let { throw IOException("Tailscale is unavailable in this build", it) } }
     external fun start(directory: String, hostname: String, controlUrl: String, authKey: String)
     external fun status(): String
     external fun signOut()
@@ -28,6 +31,7 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
     private val controlUrlFile get() = File(directory, "nevumi-control-url")
 
     @Synchronized fun status(): TailscaleStatus {
+        TailscaleNative.requireLoaded()
         resume()
         val (state, authUrl, name) = TailscaleNative.status().split('\n')
         return TailscaleStatus(state, authUrl.ifEmpty { null }, name.ifEmpty { null }, controlUrlFile.takeIf { it.isFile }?.readText().orEmpty())
@@ -37,6 +41,7 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
         require(controlUrl.isEmpty() || controlUrl.startsWith("https://") || controlUrl.startsWith("http://")) {
             "Enter the control server's full URL"
         }
+        TailscaleNative.requireLoaded()
         directory.mkdirs()
         try { TailscaleNative.start(directory.path, hostname, controlUrl, authKey.orEmpty()) }
         catch (failure: IOException) { directory.deleteRecursively(); throw failure }
@@ -45,6 +50,7 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
     }
 
     @Synchronized fun signOut() {
+        TailscaleNative.requireLoaded()
         resume()
         TailscaleNative.signOut()
         directory.deleteRecursively()
@@ -52,6 +58,7 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
 
     fun connect(host: String, port: Int, timeoutMs: Int): TailscaleConnection {
         synchronized(this) {
+            TailscaleNative.requireLoaded()
             if (!controlUrlFile.isFile) throw SftpFailure(SftpFailure.Kind.TAILSCALE)
             resume()
         }

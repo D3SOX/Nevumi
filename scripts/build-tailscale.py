@@ -51,9 +51,10 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--android-abi", choices=sorted(ANDROID))
     parser.add_argument("--ndk", type=Path)
+    parser.add_argument("--licenses", type=Path, help="where to stage dependency notices (defaults to --output on Linux)")
     args = parser.parse_args()
     if args.android_abi and not args.ndk:
         parser.error("--ndk is required for Android builds")
     build(args.output.resolve(), args.android_abi, args.ndk)
-    if not args.android_abi:
-        stage_licenses(args.output.resolve())
+    if args.licenses or not args.android_abi:
+        stage_licenses((args.licenses or args.output).resolve())

@@ -65,12 +65,13 @@ abstract class TailscaleLibraries : DefaultTask() {
     @get:Internal abstract val ndk: DirectoryProperty
     @get:Input abstract val abis: ListProperty<String>
     @get:OutputDirectory abstract val output: DirectoryProperty
+    @get:OutputDirectory abstract val licenses: DirectoryProperty
     @get:Inject abstract val exec: ExecOperations
 
     @TaskAction fun build() {
-        for (abi in abis.get()) exec.exec {
-            commandLine("python3", script.get().asFile, "--android-abi", abi, "--ndk", ndk.get().asFile,
-                "--output", output.get().dir(abi).asFile)
+        for ((index, abi) in abis.get().withIndex()) exec.exec {
+            commandLine(listOf("python3", script.get().asFile, "--android-abi", abi, "--ndk", ndk.get().asFile,
+                "--output", output.get().dir(abi).asFile) + if (index == 0) listOf("--licenses", licenses.get().asFile) else emptyList())
         }
     }
 }
@@ -81,9 +82,12 @@ val tailscaleLibraries = tasks.register<TailscaleLibraries>("tailscaleLibraries"
     ndk.set(androidComponents.sdkComponents.ndkDirectory)
     abis.set(listOf("arm64-v8a", "x86_64"))
     output.set(layout.buildDirectory.dir("generated/tailscale/jniLibs"))
+    licenses.set(layout.buildDirectory.dir("generated/tailscale/assets"))
 }
 androidComponents.onVariants { variant ->
     variant.sources.jniLibs?.addGeneratedSourceDirectory(tailscaleLibraries, TailscaleLibraries::output)
+    // The APK carries the Go dependencies' license notices, as the Linux packages do.
+    variant.sources.assets?.addGeneratedSourceDirectory(tailscaleLibraries, TailscaleLibraries::licenses)
 }
 
 dependencies {
