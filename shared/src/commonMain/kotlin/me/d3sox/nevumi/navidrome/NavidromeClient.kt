@@ -76,11 +76,18 @@ class NavidromeException(val code: Int) : Exception(when (code) {
 
 class NavidromeRequestException(message: String = "Could not complete the music server request. Check your connection and server address.", val httpStatus: Int? = null,
     /** The request never reached the server, so repeating it later is safe. */
-    val unreachable: Boolean = false) : Exception(message)
+    val unreachable: Boolean = false,
+    /** The connection itself failed (unreachable host, timeout, TLS or socket error), so every request would fail the same way. */
+    val connectionFailure: Boolean = unreachable) : Exception(message)
 
 /** Resolution and connection failures happen before any request is sent. */
 internal fun Throwable.isUnreachableHost(): Boolean = this::class.simpleName in setOf("UnknownHostException", "ConnectException",
     "NoRouteToHostException", "ConnectTimeoutException", "UnresolvedAddressException")
+
+/** Failures of the connection rather than of one request: nothing else will succeed against this server right now. */
+internal fun Throwable.isConnectionFailure(): Boolean = isUnreachableHost() || this::class.simpleName in setOf("SocketTimeoutException",
+    "HttpRequestTimeoutException", "SocketException", "SSLException", "SSLHandshakeException", "SSLPeerUnverifiedException",
+    "EOFException", "IOException", "StreamResetException", "ConnectionShutdownException")
 
 private class DownloadCallbackFailure(val failure: Exception) : Exception()
 
@@ -89,7 +96,7 @@ private suspend fun <T> serverRequest(block: suspend () -> T): T = try { block()
     catch (local: DownloadCallbackFailure) { throw local.failure }
     catch (rejected: NavidromeException) { throw rejected }
     catch (safe: NavidromeRequestException) { throw safe }
-    catch (error: Exception) { throw NavidromeRequestException(unreachable = error.isUnreachableHost()) }
+    catch (error: Exception) { throw NavidromeRequestException(unreachable = error.isUnreachableHost(), connectionFailure = error.isConnectionFailure()) }
 
 private suspend fun downloadCallback(block: suspend () -> Unit) {
     try { block() }

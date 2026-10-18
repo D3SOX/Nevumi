@@ -10,8 +10,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.EncodeDefault
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -30,14 +28,11 @@ private data class PairInvitation(val version: Int = 1, val deviceId: String, va
     override fun toString() = "PairInvitation(<private>)"
 }
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 private data class SyncRequest(val version: Int = 1, val action: String, val deviceId: String, val name: String,
     val listeningPort: Int, val secret: String? = null, val snapshot: SyncSnapshot? = null,
     val playback: PlaybackTransfer? = null, val transferId: String? = null, val positionMs: Long? = null,
-    val playWhenReady: Boolean? = null,
-    /** Listens the requester already holds from this peer start before this time; omitted on a first sync. */
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val listensSince: Long? = null) {
+    val playWhenReady: Boolean? = null) {
     override fun toString() = "SyncRequest($action, <private>)"
 }
 
@@ -224,20 +219,20 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
             listen()
         }
         val snapshot = library.snapshot(peer.deviceId, listensSince = listensSince(peer))
-        connect(peer.host, peer.port, peer.certificateSha256) { socket ->
+        // Closing the connection right after reading tells the peer its response arrived; merging happens afterwards.
+        val response = connect(peer.host, peer.port, peer.certificateSha256) { socket ->
             socket.soTimeout = MATCHING_TIMEOUT_MS
             write(socket, SyncRequest(action = "sync", deviceId = requireNotNull(ownId), name = name,
-                listeningPort = requireNotNull(server).localPort, snapshot = snapshot, listensSince = listensSince(peer)))
-            val response = read<SyncResponse>(socket)
-            validate(response)
-            require(response.deviceId == peer.deviceId && response.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
-            incoming.withLock {
-                require(state.value.peers.any { it.deviceId == peer.deviceId && it.certificateSha256 == peer.certificateSha256 }) {
-                    "This device is no longer paired"
-                }
-                library.merge(requireNotNull(response.snapshot))
-                savePeer(peer.copy(name = response.name, port = response.listeningPort, lastSyncedAt = clock()))
+                listeningPort = requireNotNull(server).localPort, snapshot = snapshot))
+            read<SyncResponse>(socket).also { validate(it) }
+        }
+        require(response.deviceId == peer.deviceId && response.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
+        incoming.withLock {
+            require(state.value.peers.any { it.deviceId == peer.deviceId && it.certificateSha256 == peer.certificateSha256 }) {
+                "This device is no longer paired"
             }
+            library.merge(requireNotNull(response.snapshot))
+            savePeer(peer.copy(name = response.name, port = response.listeningPort, lastSyncedAt = clock()))
         }
     }
 
@@ -267,9 +262,12 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
                     require(request.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
                     library.merge(requireNotNull(request.snapshot))
                     write(socket, SyncResponse(deviceId = requireNotNull(ownId), name = name, listeningPort = requireNotNull(server).localPort,
-                        // The requester states what it already received; this device's own clock only says what it sent.
-                        snapshot = library.snapshot(peer.deviceId, listensSince = request.listensSince)))
-                    savePeer(peer.copy(host = socket.inetAddress.hostAddress, port = request.listeningPort, name = request.name, lastSyncedAt = clock()))
+                        snapshot = library.snapshot(peer.deviceId, listensSince = listensSince(peer))))
+                    // The requester closes the connection once it has read the response; a lost response keeps the previous sync time,
+                    // so the next sync shares the full history again.
+                    val delivered = try { socket.inputStream.read() == -1 } catch (_: java.io.IOException) { false }
+                    savePeer(peer.copy(host = socket.inetAddress.hostAddress, port = request.listeningPort, name = request.name,
+                        lastSyncedAt = if (delivered) clock() else peer.lastSyncedAt))
                 }
                 "prepare-playback", "activate-playback", "return-playback", "cancel-playback" -> {
                     require(state.value.peers.any { it.deviceId == request.deviceId && it.certificateSha256 == pin }) { "This device is not paired" }
@@ -308,7 +306,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         lifecycle.withLock { if (state.value.peers.isEmpty() && offer.get() == null) stopListening() }
     }
 
-    // lastSyncedAt is saved only after a response was received, so the peer holds everything older than the last month.
+    // lastSyncedAt is saved only once the peer received the response, so it holds everything older than the last month.
     private fun listensSince(peer: SyncPeer): Long? = peer.lastSyncedAt?.let { it - 30L * 24 * 60 * 60 * 1_000 }
 
     private suspend fun savePeer(peer: SyncPeer) {
@@ -328,13 +326,13 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
             throw error
         } finally { mutableState.update { it.copy(busy = false) } }
     }
-    private suspend fun connect(host: String, port: Int, pin: String, block: suspend (SSLSocket) -> Unit) {
+    private suspend fun <T> connect(host: String, port: Int, pin: String, block: suspend (SSLSocket) -> T): T {
         val socket = lifecycle.withLock {
             check(!closed && server != null) { "Device sync is not listening" }
             (requireNotNull(tls).context { it == pin }.socketFactory.createSocket() as SSLSocket).also { sockets.add(it) }
         }
         try {
-            socket.use {
+            return socket.use {
                 it.enabledProtocols = it.supportedProtocols.filter { protocol -> protocol == "TLSv1.3" || protocol == "TLSv1.2" }.toTypedArray()
                 it.soTimeout = 15_000
                 it.connect(InetSocketAddress(host, port), 10_000)

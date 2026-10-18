@@ -681,12 +681,14 @@ class NavidromeChangesTest {
             assertEquals(1, changes.pendingCount(), "The deleted song's rating is dropped; the failing one is retried later")
             assertEquals(2, ratingAttempts)
             // An unreachable server would fail every entry, so the run stops after the first attempt.
-            val offline = NavidromeChanges(store, library) { NavidromeClient(HttpClient(MockEngine { respond("down", io.ktor.http.HttpStatusCode.BadGateway) }),
+            var offlineRequests = 0
+            val offline = NavidromeChanges(store, library) { NavidromeClient(HttpClient(MockEngine { offlineRequests++; throw java.net.ConnectException("Connection refused") }),
                 "https://music.example.test", ServerCredentials("fixture", "test")) }
             changes.setFavorite(gone.id, true)
             val before = starred.size
             assertFailsWith<NavidromeRequestException> { offline.synchronize() }
             assertEquals(before, starred.size)
+            assertEquals(1, offlineRequests, "An unreachable server stops the run after the first request")
             assertEquals(2, offline.pendingCount(), "Nothing is dropped while the server is unreachable")
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
