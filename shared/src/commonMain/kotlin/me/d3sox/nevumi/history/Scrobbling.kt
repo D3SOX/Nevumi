@@ -5,6 +5,8 @@ import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeException
+import me.d3sox.nevumi.navidrome.NavidromeRequestException
+import me.d3sox.nevumi.navidrome.isUnreachableHost
 import me.d3sox.nevumi.playback.PlaybackStatus
 import me.d3sox.nevumi.security.CredentialVault
 import me.d3sox.nevumi.storage.MusicStore
@@ -342,7 +344,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
             }
             throw ScrobbleException(kind, "Navidrome submission failed: code ${failure.code}")
         } catch (error: Exception) {
-            if (error::class.simpleName in setOf("UnknownHostException", "ConnectException", "NoRouteToHostException", "ConnectTimeoutException"))
+            if (error is NavidromeRequestException && error.unreachable || error.isUnreachableHost())
                 throw ScrobbleException(ScrobbleFailure.RETRYABLE, "The music server could not be reached")
             throw ScrobbleException(ScrobbleFailure.UNCERTAIN, "Navidrome did not confirm the submission")
         }

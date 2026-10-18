@@ -378,8 +378,11 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
                 val imported = if (previous == null) listen.copy(trackId = localId, metadata = listen.metadata.copy(folder = ""),
                     originDeviceId = listen.originDeviceId ?: snapshot.deviceId, importedAt = kotlin.time.Clock.System.now().toEpochMilliseconds())
                 else previous.copy(listenedMs = maxOf(previous.listenedMs, listen.listenedMs),
-                    playedMs = maxOf(previous.playedMs, listen.playedMs), ended = previous.ended || listen.ended)
-                store.put("listen:${listen.id}", "listens", imported)
+                    playedMs = maxOf(previous.playedMs, listen.playedMs), ended = previous.ended || listen.ended).let { advanced ->
+                        // Progress relayed from the origin must reach other peers too, so it counts as newly arrived.
+                        if (advanced == previous) previous else advanced.copy(importedAt = kotlin.time.Clock.System.now().toEpochMilliseconds())
+                    }
+                if (imported != previous) store.put("listen:${listen.id}", "listens", imported)
             }
             suspend fun applyPlaylist(playlist: SyncPlaylist, localTrackKeys: List<String>): Boolean {
                 val existing = store.read<Playlist>("playlist:${playlist.id}")

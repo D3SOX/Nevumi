@@ -6,6 +6,7 @@ import io.ktor.client.request.forms.submitForm
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.CancellationException
+import me.d3sox.nevumi.navidrome.isUnreachableHost
 import kotlinx.serialization.json.*
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.uuid.Uuid
@@ -15,11 +16,8 @@ enum class ScrobbleFailure { AUTHORIZATION, RETRYABLE, REJECTED, UNCERTAIN }
 class ScrobbleException(val failure: ScrobbleFailure, message: String) : Exception(message)
 
 // Failing to resolve or reach the host means the request was never sent, so it is safe to retry later.
-private val unsentFailures = setOf("UnknownHostException", "ConnectException", "NoRouteToHostException",
-    "ConnectTimeoutException", "UnresolvedAddressException")
-
 internal fun scrobbleFailure(error: Exception): ScrobbleException =
-    if (error::class.simpleName in unsentFailures) ScrobbleException(ScrobbleFailure.RETRYABLE, "The scrobbling service could not be reached")
+    if (error.isUnreachableHost()) ScrobbleException(ScrobbleFailure.RETRYABLE, "The scrobbling service could not be reached")
     else ScrobbleException(ScrobbleFailure.UNCERTAIN, "The scrobbling service did not confirm the request")
 
 private suspend fun <T> scrobbleRequest(block: suspend () -> T): T = try { block() }

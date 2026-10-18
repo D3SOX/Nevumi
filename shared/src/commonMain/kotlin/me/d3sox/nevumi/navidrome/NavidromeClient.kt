@@ -74,7 +74,13 @@ class NavidromeException(val code: Int) : Exception(when (code) {
     else -> "The music server rejected that request"
 })
 
-class NavidromeRequestException(message: String = "Could not complete the music server request. Check your connection and server address.", val httpStatus: Int? = null) : Exception(message)
+class NavidromeRequestException(message: String = "Could not complete the music server request. Check your connection and server address.", val httpStatus: Int? = null,
+    /** The request never reached the server, so repeating it later is safe. */
+    val unreachable: Boolean = false) : Exception(message)
+
+/** Resolution and connection failures happen before any request is sent. */
+internal fun Throwable.isUnreachableHost(): Boolean = this::class.simpleName in setOf("UnknownHostException", "ConnectException",
+    "NoRouteToHostException", "ConnectTimeoutException", "UnresolvedAddressException")
 
 private class DownloadCallbackFailure(val failure: Exception) : Exception()
 
@@ -83,7 +89,7 @@ private suspend fun <T> serverRequest(block: suspend () -> T): T = try { block()
     catch (local: DownloadCallbackFailure) { throw local.failure }
     catch (rejected: NavidromeException) { throw rejected }
     catch (safe: NavidromeRequestException) { throw safe }
-    catch (_: Exception) { throw NavidromeRequestException() }
+    catch (error: Exception) { throw NavidromeRequestException(unreachable = error.isUnreachableHost()) }
 
 private suspend fun downloadCallback(block: suspend () -> Unit) {
     try { block() }

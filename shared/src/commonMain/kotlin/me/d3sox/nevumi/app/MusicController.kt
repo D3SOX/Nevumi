@@ -1267,6 +1267,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 destination = step(destination); passed++
             }
             if (destination in snapshot.entries.indices) {
+                require(snapshot.entries[destination].id in playableIds) { "No upcoming song has an available audio source" }
                 queue.select(snapshot.entries[destination].id)
                 val selected = queue.snapshot()
                 loadSnapshot(selected, play = playing)
