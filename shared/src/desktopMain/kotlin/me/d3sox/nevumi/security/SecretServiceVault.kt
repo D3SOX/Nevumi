@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.security
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
@@ -22,7 +23,7 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
             val (code, _) = execute(listOf("store", "--label=Nevumi", "application", applicationId,
                 "profile", key), secret)
             check(code == 0) { "Could not save the password in the desktop credential store" }
-        } finally { invalidate(key) }
+        } finally { withContext(NonCancellable) { invalidate(key) } }
     }
     override suspend fun read(key: String): String? {
         val started = recentLock.withLock {
@@ -40,7 +41,7 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
         try {
             val (code, _) = execute(listOf("clear", "application", applicationId, "profile", key))
             check(code == 0 || code == 1) { "Could not remove the saved password" }
-        } finally { invalidate(key) }
+        } finally { withContext(NonCancellable) { invalidate(key) } }
     }
     private suspend fun execute(arguments: List<String>, input: String? = null): Pair<Int, String> = withContext(Dispatchers.IO) {
         val process = ProcessBuilder(listOf("secret-tool") + arguments).start()

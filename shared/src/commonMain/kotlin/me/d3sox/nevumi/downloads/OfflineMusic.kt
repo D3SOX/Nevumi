@@ -230,6 +230,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             .filterNot { it.trackId in excluded || library.findTrack(it.trackId)?.onDevice() == true }
         // A few songs are cheaper to look up one by one; a large batch is cheaper as one catalogue download.
         val catalogue = if (requests.size > PlaylistDownloads.SINGLE_LOOKUPS) connection.songs().associateBy { it.id } else null
+        val releases = mutableMapOf<String, String>()
         for (request in requests) {
             currentCoroutineContext().ensureActive()
             val track = library.findTrack(request.trackId) ?: continue
@@ -237,7 +238,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
             } ?: continue
             val song = if (catalogue != null) catalogue[source.location] ?: continue
-                else try { connection.song(source.location) }
+                else try { connection.song(source.location, releases) }
                 catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
             val complete = downloads.download(track.id, song)
             if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}")

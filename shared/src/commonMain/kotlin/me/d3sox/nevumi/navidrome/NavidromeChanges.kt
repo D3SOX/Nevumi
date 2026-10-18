@@ -193,7 +193,11 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         suspend fun attempt(block: suspend () -> Unit) {
             try { block() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (unreachable: NavidromeRequestException) { throw unreachable }
+            catch (request: NavidromeRequestException) {
+                // No HTTP status means the server was not reached; 401 and 403 reject the account. Other statuses are entry-specific.
+                if (request.httpStatus == null || request.httpStatus in setOf(401, 403)) throw request
+                if (failure == null) failure = request
+            }
             catch (rejected: NavidromeException) { if (rejected.code in setOf(40, 41, 50)) throw rejected; if (failure == null) failure = rejected }
             catch (error: Exception) { if (failure == null) failure = error }
         }

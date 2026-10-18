@@ -34,9 +34,10 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
         }
         // A few songs are cheaper to look up one by one; many songs are cheaper as one catalogue download.
         val catalogue = if (missing.size > SINGLE_LOOKUPS) client.songs().associateBy { it.id } else null
+        val releases = mutableMapOf<String, String>()
         for ((trackId, songId) in missing) {
             val song = if (catalogue != null) catalogue[songId] ?: continue
-                else try { client.song(songId) } catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
+                else try { client.song(songId, releases) } catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
             downloads.download(trackId, song)
         }
     }

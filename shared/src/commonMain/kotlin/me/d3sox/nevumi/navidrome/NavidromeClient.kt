@@ -130,9 +130,9 @@ class NavidromeClient(
         if (finished == null) throw NavidromeRequestException("The music server scan did not finish in time. Refresh the library later.")
     }
 
-    /** Looks up one song without downloading the catalogue. */
-    suspend fun song(id: String): ServerSong = serverRequest {
-        parseSong(request("getSong", listOf("id" to id)).getValue("song").jsonObject, mutableMapOf())
+    /** Looks up one song without downloading the catalogue; pass the same [releases] map to reuse album lookups across songs. */
+    suspend fun song(id: String, releases: MutableMap<String, String> = mutableMapOf()): ServerSong = serverRequest {
+        parseSong(request("getSong", listOf("id" to id)).getValue("song").jsonObject, releases)
     }
 
     private suspend fun playlistSummaries(): List<JsonObject> = request("getPlaylists")["playlists"]

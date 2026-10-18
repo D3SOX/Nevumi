@@ -190,9 +190,11 @@ private class HeldAudioServer(private val audio: ByteArray) : AutoCloseable {
             output.write(audio, offset + first, audio.size - offset - first); output.flush()
             return
         }
+        val song = "{\"id\":\"download\",\"title\":\"Notification download\",\"suffix\":\"flac\",\"size\":${audio.size}}"
         val body = when {
-            uri.path.endsWith("search3.view") -> if (uri.query.contains("songOffset=0"))
-                "\"searchResult3\":{\"song\":[{\"id\":\"download\",\"title\":\"Notification download\",\"suffix\":\"flac\",\"size\":${audio.size}}]}"
+            uri.path.endsWith("ping.view") -> "\"type\":\"fixture\""
+            uri.path.endsWith("getSong.view") -> "\"song\":$song"
+            uri.path.endsWith("search3.view") -> if (uri.query.contains("songOffset=0")) "\"searchResult3\":{\"song\":[$song]}"
                 else "\"searchResult3\":{}"
             uri.path.endsWith("getPlaylists.view") -> "\"playlists\":{}"
             else -> error("Unexpected fixture endpoint ${uri.path}")

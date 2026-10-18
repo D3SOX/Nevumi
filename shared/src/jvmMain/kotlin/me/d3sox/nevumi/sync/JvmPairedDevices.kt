@@ -10,6 +10,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -28,11 +30,14 @@ private data class PairInvitation(val version: Int = 1, val deviceId: String, va
     override fun toString() = "PairInvitation(<private>)"
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 private data class SyncRequest(val version: Int = 1, val action: String, val deviceId: String, val name: String,
     val listeningPort: Int, val secret: String? = null, val snapshot: SyncSnapshot? = null,
     val playback: PlaybackTransfer? = null, val transferId: String? = null, val positionMs: Long? = null,
-    val playWhenReady: Boolean? = null) {
+    val playWhenReady: Boolean? = null,
+    /** Listens the requester already holds from this peer start before this time; omitted on a first sync. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val listensSince: Long? = null) {
     override fun toString() = "SyncRequest($action, <private>)"
 }
 
@@ -59,7 +64,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
     private val slots = Semaphore(4)
     private val offer = AtomicReference<PairInvitation?>()
     private val sockets = ConcurrentHashMap.newKeySet<SSLSocket>()
-    private val wire = Json { encodeDefaults = true }
+    private val wire = Json { encodeDefaults = true; ignoreUnknownKeys = true }
     private var server: SSLServerSocket? = null
     private var acceptor: Job? = null
     private var tls: SyncTls? = null
@@ -222,7 +227,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         connect(peer.host, peer.port, peer.certificateSha256) { socket ->
             socket.soTimeout = MATCHING_TIMEOUT_MS
             write(socket, SyncRequest(action = "sync", deviceId = requireNotNull(ownId), name = name,
-                listeningPort = requireNotNull(server).localPort, snapshot = snapshot))
+                listeningPort = requireNotNull(server).localPort, snapshot = snapshot, listensSince = listensSince(peer)))
             val response = read<SyncResponse>(socket)
             validate(response)
             require(response.deviceId == peer.deviceId && response.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
@@ -262,7 +267,8 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
                     require(request.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
                     library.merge(requireNotNull(request.snapshot))
                     write(socket, SyncResponse(deviceId = requireNotNull(ownId), name = name, listeningPort = requireNotNull(server).localPort,
-                        snapshot = library.snapshot(peer.deviceId, listensSince = listensSince(peer))))
+                        // The requester states what it already received; this device's own clock only says what it sent.
+                        snapshot = library.snapshot(peer.deviceId, listensSince = request.listensSince)))
                     savePeer(peer.copy(host = socket.inetAddress.hostAddress, port = request.listeningPort, name = request.name, lastSyncedAt = clock()))
                 }
                 "prepare-playback", "activate-playback", "return-playback", "cancel-playback" -> {
@@ -302,7 +308,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         lifecycle.withLock { if (state.value.peers.isEmpty() && offer.get() == null) stopListening() }
     }
 
-    // After the first sync a peer already holds the older history; sharing the last month keeps frames small.
+    // lastSyncedAt is saved only after a response was received, so the peer holds everything older than the last month.
     private fun listensSince(peer: SyncPeer): Long? = peer.lastSyncedAt?.let { it - 30L * 24 * 60 * 60 * 1_000 }
 
     private suspend fun savePeer(peer: SyncPeer) {
