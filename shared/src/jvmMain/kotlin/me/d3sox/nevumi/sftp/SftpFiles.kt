@@ -176,7 +176,7 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
                 ssh.timeout = 20_000
                 ssh.addHostKeyVerifier(FingerprintVerifier.getInstance(profile.hostKeySha256))
                 if (profile.tailscale) {
-                    val tunnel = checkNotNull(tailscale) { "Tailscale is unavailable" }.connect(profile.host, profile.port, 30_000)
+                    val tunnel = checkNotNull(tailscale) { "Tailscale is unavailable" }.connect(profile.host, profile.port, 30_000, ssh.timeout)
                     try { ssh.connectVia(tunnel.input, tunnel.output) } catch (failure: IOException) { tunnel.close(); throw failure }
                 } else ssh.connect(profile.host, profile.port)
                 stage = SftpFailure.Kind.AUTHENTICATION

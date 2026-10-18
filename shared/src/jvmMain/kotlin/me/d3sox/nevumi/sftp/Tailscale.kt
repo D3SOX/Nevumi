@@ -20,7 +20,7 @@ internal object TailscaleNative {
     external fun start(directory: String, hostname: String, controlUrl: String, authKey: String)
     external fun status(): String
     external fun signOut()
-    external fun dial(host: String, port: Int, timeoutMs: Int): Long
+    external fun dial(host: String, port: Int, timeoutMs: Int, ioTimeoutMs: Int): Long
     external fun read(handle: Long, buffer: ByteArray, offset: Int, length: Int): Int
     external fun write(handle: Long, buffer: ByteArray, offset: Int, length: Int)
     external fun close(handle: Long)
@@ -56,13 +56,13 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
         directory.deleteRecursively()
     }
 
-    fun connect(host: String, port: Int, timeoutMs: Int): TailscaleConnection {
+    fun connect(host: String, port: Int, timeoutMs: Int, ioTimeoutMs: Int): TailscaleConnection {
         synchronized(this) {
             TailscaleNative.requireLoaded()
             if (!controlUrlFile.isFile) throw SftpFailure(SftpFailure.Kind.TAILSCALE)
             resume()
         }
-        return try { TailscaleConnection(TailscaleNative.dial(host, port, timeoutMs)) }
+        return try { TailscaleConnection(TailscaleNative.dial(host, port, timeoutMs, ioTimeoutMs)) }
         catch (failure: IOException) {
             throw if (status().state != "Running") SftpFailure(SftpFailure.Kind.TAILSCALE) else failure
         }

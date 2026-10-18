@@ -122,7 +122,23 @@ func status() (string, error) {
 	return state.BackendState + "\n" + state.AuthURL + "\n" + name, nil
 }
 
-func dial(host string, port int, timeout time.Duration) (int64, error) {
+// deadlineConn fails reads and writes that stall, like the socket timeout sshj sets on direct connections.
+type deadlineConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c deadlineConn) Read(buffer []byte) (int, error) {
+	c.SetReadDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Read(buffer)
+}
+
+func (c deadlineConn) Write(buffer []byte) (int, error) {
+	c.SetWriteDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Write(buffer)
+}
+
+func dial(host string, port int, timeout, ioTimeout time.Duration) (int64, error) {
 	node, err := current()
 	if err != nil {
 		return 0, err
@@ -137,7 +153,7 @@ func dial(host string, port int, timeout time.Duration) (int64, error) {
 		return 0, err
 	}
 	handle := nextHandle.Add(1)
-	connections.Store(handle, connection)
+	connections.Store(handle, deadlineConn{connection, ioTimeout})
 	return handle, nil
 }
 
@@ -205,8 +221,9 @@ func Java_me_d3sox_nevumi_sftp_TailscaleNative_signOut(env *C.JNIEnv, receiver C
 }
 
 //export Java_me_d3sox_nevumi_sftp_TailscaleNative_dial
-func Java_me_d3sox_nevumi_sftp_TailscaleNative_dial(env *C.JNIEnv, receiver C.jobject, host C.jstring, port, timeoutMs C.jint) C.jlong {
-	handle, err := dial(goString(env, host), int(port), time.Duration(timeoutMs)*time.Millisecond)
+func Java_me_d3sox_nevumi_sftp_TailscaleNative_dial(env *C.JNIEnv, receiver C.jobject, host C.jstring, port, timeoutMs, ioTimeoutMs C.jint) C.jlong {
+	handle, err := dial(goString(env, host), int(port), time.Duration(timeoutMs)*time.Millisecond,
+		time.Duration(ioTimeoutMs)*time.Millisecond)
 	if err != nil {
 		throw(env, err)
 		return 0
