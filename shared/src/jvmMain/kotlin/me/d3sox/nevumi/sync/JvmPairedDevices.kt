@@ -303,7 +303,11 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
             // a previous version closing its side keeps the earlier sync time, so the next sync shares the full history again.
             socket.soTimeout = MATCHING_TIMEOUT_MS
             val merged = try { socket.inputStream.read() == SYNC_MERGED } catch (_: java.io.IOException) { false }
-            incoming.withLock { savePeer(if (merged) peer.copy(lastSyncedAt = clock()) else peer) }
+            incoming.withLock {
+                // The user may have forgotten this device while the handler waited; a forgotten peer must not come back.
+                val stillPaired = state.value.peers.any { it.deviceId == peer.deviceId && it.certificateSha256 == peer.certificateSha256 }
+                if (stillPaired) savePeer(if (merged) peer.copy(lastSyncedAt = clock()) else peer)
+            }
         }
     }
 
