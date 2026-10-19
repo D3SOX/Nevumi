@@ -146,7 +146,8 @@ class PlaylistMembershipUiTest {
         var now = 0L
         val playlists = Playlists(store, clock = { now })
         val song = runBlocking {
-            library.importTrack(TrackMetadata("Song"), TrackSource("song", SourceKind.LOCAL, "/music/song.flac")).also { song ->
+            library.importTrack(TrackMetadata("Song"), TrackSource("song", SourceKind.LOCAL,
+                Files.createFile(directory.resolve("song.flac")).toString())).also { song ->
                 val alpha = listOf("Alpha", "Beta", "Gamma").map { now++; playlists.create(it, emptyList()) }.first()
                 now++; playlists.append(alpha.id, song.id)
             }
