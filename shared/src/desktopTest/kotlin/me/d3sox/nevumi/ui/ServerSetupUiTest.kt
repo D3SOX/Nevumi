@@ -3,6 +3,7 @@ package me.d3sox.nevumi.ui
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.navidrome.NavidromeConnection
 import me.d3sox.nevumi.navidrome.NavidromeChanges
@@ -108,7 +109,7 @@ class ServerSetupUiTest {
         val original = runBlocking { client.songs().first { it.metadata.title == "Northern Light" } }
         runBlocking { client.setFavorite(original.id, false) }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            connection, serverChanges = changes)
+            connection, serverChanges = changes, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             controller.connectServer(System.getenv("MUSICPLAYER_TEST_NAVIDROME_URL") ?: "http://127.0.0.1:14533",
                 "fixture", "fixture-password")

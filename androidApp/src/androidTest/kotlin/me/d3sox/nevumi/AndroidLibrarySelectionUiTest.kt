@@ -18,6 +18,7 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class AndroidLibrarySelectionUiTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test
     fun allSelectedServerSongsCanBeDownloadedOnAndroid() {

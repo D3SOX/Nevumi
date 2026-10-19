@@ -58,7 +58,7 @@ class GlobalSearchUiTest {
         val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/fixture.flac").toString()
         val song = runBlocking { library.importTrack(TrackMetadata("Signal song", "Signal artist"),
             TrackSource("search-queue", SourceKind.LOCAL, audio)) }
-        val controller = MusicController(library, queue, MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
+        val controller = MusicController(library, queue, MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runSkikoComposeUiTest(size = Size(420f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
@@ -103,7 +103,7 @@ class GlobalSearchUiTest {
             playlists.create("Arc playlist", songs.map { it.id })
             preferences.update { it.copy(startupTab = LibraryTab.HOME, libraryTabs = listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.ALBUMS, LibraryTab.PLAYLISTS)) }
         }
-        val controller = MusicController(library, queue, MpvPlaybackEngine("null"), playlists = playlists, preferences = preferences)
+        val controller = MusicController(library, queue, MpvPlaybackEngine("null"), playlists = playlists, preferences = preferences.withOptionsButtons())
         try {
             runSkikoComposeUiTest(size = Size(1000f, 900f)) {
                 setContent { MusicPlayerApp(controller) }

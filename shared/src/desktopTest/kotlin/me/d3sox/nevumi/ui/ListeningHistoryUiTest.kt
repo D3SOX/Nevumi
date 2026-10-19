@@ -201,7 +201,7 @@ class ListeningHistoryUiTest {
                 TrackSource("local", SourceKind.LOCAL, Path.of(System.getProperty("nevumi.testRoot"), ".test-environment",
                     "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac").toString()))
         }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), listeningHistory = ListeningHistory(store, library))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), listeningHistory = ListeningHistory(store, library), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

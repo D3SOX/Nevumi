@@ -3,6 +3,7 @@ package me.d3sox.nevumi.ui
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.*
@@ -56,7 +57,7 @@ class SplitQueueUiTest {
         val store = openMusicStore(directory.resolve("music.db").toString())
         val library = MusicLibrary(store)
         val tracks = runBlocking { LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music").toString()) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -490,7 +491,7 @@ class SplitQueueUiTest {
         val library = MusicLibrary(store)
         val tracks = runBlocking { LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"),
             ".test-environment", "music").toString()) }.sortedBy { it.metadata.title }
-        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }

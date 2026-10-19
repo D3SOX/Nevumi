@@ -21,6 +21,7 @@ import me.d3sox.nevumi.library.SourceKind
 @RunWith(AndroidJUnit4::class)
 class AndroidSftpEditingUiTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test
     fun theProductionAppCanUploadAnOriginalMediaStoreSongAndKeepItsCanonicalIdentity() = runBlocking {

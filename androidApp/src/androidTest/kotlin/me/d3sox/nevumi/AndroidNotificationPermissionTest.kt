@@ -22,6 +22,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AndroidNotificationPermissionTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test
     @SdkSuppress(minSdkVersion = 33)

@@ -235,9 +235,11 @@ class TrackActionsUiTest {
     }
 
     @Test
-    fun hiddenOptionsButtonsStillLeaveLongPressMenus() = withLibrary { player ->
+    fun optionsButtonsAreHiddenByDefaultAndLongPressMenusRemainAvailable() = withLibrary(showMoreButtons = false) { player ->
         setContent { MusicPlayerApp(player) }
         waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        onNodeWithContentDescription("Track options: First song").assertDoesNotExist()
+        runBlocking { player.updatePreferences { it.copy(showMoreButtons = true) }.join() }
         onNodeWithContentDescription("Track options: First song").assertIsDisplayed()
         runBlocking { player.updatePreferences { it.copy(showMoreButtons = false) }.join() }
         onNodeWithContentDescription("Track options: First song").assertDoesNotExist()
@@ -273,6 +275,7 @@ class TrackActionsUiTest {
         assertTrue(startMenu.top > middleMenu.top && middleMenu.top > endMenu.top)
         mainClock.autoAdvance = true
         onNodeWithText("Favorite").performClick()
+        waitUntil(timeoutMillis = 3_000) { player.state.value.tracks.first { it.metadata.title == "First song" }.favorite }
         onNodeWithContentDescription("Favorited", useUnmergedTree = true).assertIsDisplayed()
     }
 
@@ -480,7 +483,7 @@ class TrackActionsUiTest {
         onNodeWithContentDescription("Nevumi logo").assertIsDisplayed()
     }
 
-    private fun withLibrary(test: ComposeUiTest.(MusicController) -> Unit) {
+    private fun withLibrary(showMoreButtons: Boolean = true, test: ComposeUiTest.(MusicController) -> Unit) {
         val directory = Files.createTempDirectory("nevumi-track-actions")
         val store = openMusicStore(directory.resolve("music.db").toString())
         val library = MusicLibrary(store)
@@ -488,7 +491,9 @@ class TrackActionsUiTest {
             library.importTrack(TrackMetadata(title, "An artist", "An album", durationMs = 90_000, genres = listOf("Ambient"), folder = "/music"),
                 TrackSource(title, SourceKind.LOCAL, "/music/$title.flac"))
         } }
-        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).also { preferences ->
+            if (showMoreButtons) preferences.withOptionsButtons()
+        })
         try { runComposeUiTest { test(player) } }
         finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

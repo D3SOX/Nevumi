@@ -18,6 +18,7 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class AndroidBackNavigationTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test
     fun returningToTheEdgeBeforeCancellingKeepsSettingsStationary() {

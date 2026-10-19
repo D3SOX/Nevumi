@@ -19,6 +19,7 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class AndroidLibraryUpdatesUiTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test
     fun searchMembershipRatingsAndSplitQueueWorkWithNativeTouch() {

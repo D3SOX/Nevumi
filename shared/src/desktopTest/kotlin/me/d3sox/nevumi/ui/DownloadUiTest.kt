@@ -35,7 +35,7 @@ class DownloadUiTest {
         val playlists = Playlists(store)
         val offline = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), playlists)
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), offline = offline,
-            playlists = playlists, preferences = MusicPreferences(store))
+            playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -73,7 +73,7 @@ class DownloadUiTest {
         val available = AtomicLong(4)
         val offline = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store),
             availableSpace = { available.get() })
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), offline = offline, preferences = MusicPreferences(store))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), offline = offline, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -250,7 +250,7 @@ class DownloadUiTest {
             library.importTrack(song.metadata, TrackSource("server:${client.serverId}:${song.id}", SourceKind.SERVER, song.id))
         }
         val offline = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store))
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), offline = offline)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), offline = offline, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

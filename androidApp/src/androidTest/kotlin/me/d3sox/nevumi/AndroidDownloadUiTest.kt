@@ -23,6 +23,7 @@ import org.junit.Assert.assertEquals
 @RunWith(AndroidJUnit4::class)
 class AndroidDownloadUiTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test
     fun aServerTrackCanBeDownloadedFromItsMenuAndPlayedAsADeviceFile() {

@@ -86,7 +86,7 @@ class PlayerAppearanceUiTest {
             library.importTrack(TrackMetadata("Glow track", "Glow artist"), TrackSource("glow", SourceKind.LOCAL, audio))
         }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            artwork = artwork, preferences = preferences)
+            artwork = artwork, preferences = preferences.withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.size(360.dp, 740.dp)) { MusicPlayerApp(controller) } }
@@ -156,7 +156,7 @@ class PlayerAppearanceUiTest {
             for (x in 0..31) for (y in 0..31) image.setRGB(x, y, 0xE05040)
         }
         runBlocking { artwork.save(tracks[70].id, ByteArrayOutputStream().also { ImageIO.write(red, "png", it) }.toByteArray()) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), artwork = artwork)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), artwork = artwork, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
