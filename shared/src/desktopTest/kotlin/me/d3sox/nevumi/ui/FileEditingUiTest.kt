@@ -68,7 +68,7 @@ class FileEditingUiTest {
         runBlocking { library.importTrack(TrackMetadata("Northern Light", "Fixture Artist", "Fixture Album"),
             TrackSource("local:$audio", SourceKind.LOCAL, audio.toString())) }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
