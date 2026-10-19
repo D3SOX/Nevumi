@@ -150,13 +150,11 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
                 option("Upload to server", AppIcon.CLOUD) { uploading = true }
             lastEdit?.let { edit -> option("Undo file edit", AppIcon.UNDO) { controller.undoFileEdit(edit.id) } }
         }
-        val hasFiles = controller.localFileEditingAvailable && track.sources.any { it.kind == SourceKind.LOCAL && it.available } ||
-            controller.canEditServerTrack(track) || lastEdit != null || state.sftp != null && track.sources.any { it.kind == SourceKind.LOCAL && it.available }
         TrackActionDialog(track, state.artwork[track.id], options, { menu = false },
             artworkOrigin = openingArtwork,
             onArtworkPlaced = { artworkPlaced = true },
             artworkCornerRadius = artworkCornerRadius,
-            fileOptions = fileOptions.takeIf { hasFiles })
+            fileOptions = fileOptions.takeIf { it.isNotEmpty() })
     }
     if (sources) SongSources(track, controller) { sources = false }
     if (rating) SongRating(track, controller) { rating = false }
