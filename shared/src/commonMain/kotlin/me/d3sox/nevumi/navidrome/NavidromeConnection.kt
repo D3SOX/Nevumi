@@ -36,7 +36,7 @@ class NavidromeConnection(private val store: MusicStore, private val http: HttpC
     suspend fun connect(baseUrl: String, credentials: ServerCredentials) = access.withLock {
         val profile = ServerProfile(normalizeServerAddress(baseUrl), credentials.username)
         val client = NavidromeClient(http, profile.baseUrl, credentials)
-        client.songs()
+        client.ping()
         vault.save("navidrome", credentials.password)
         store.put("server:navidrome", "servers", profile)
         cachedProfile = profile

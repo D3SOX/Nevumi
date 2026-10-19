@@ -650,4 +650,46 @@ class NavidromeChangesTest {
             directory.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun aChangeForADeletedServerSongIsDroppedAndDoesNotBlockOtherChanges() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-sync-isolation")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val starred = mutableListOf<String>()
+        var ratingAttempts = 0
+        val http = HttpClient(MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/rest/setRating.view" -> { ratingAttempts++
+                    if (request.url.parameters["id"] == "gone") respond("""{"subsonic-response":{"status":"failed","error":{"code":70,"message":"not found"}}}""")
+                    else respond("""{"subsonic-response":{"status":"failed","error":{"code":0,"message":"busy"}}}""") }
+                "/rest/star.view" -> { starred += request.url.parameters["id"]!!; respond("""{"subsonic-response":{"status":"ok"}}""") }
+                else -> error("Unexpected request: ${request.url.encodedPath}")
+            }
+        })
+        try {
+            val library = MusicLibrary(store)
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "test"))
+            val changes = NavidromeChanges(store, library) { client }
+            val gone = changes.importSong(client, ServerSong("gone", TrackMetadata("Deleted on the server")))
+            val busy = changes.importSong(client, ServerSong("busy", TrackMetadata("Temporarily failing")))
+            val kept = changes.importSong(client, ServerSong("kept", TrackMetadata("Still there")))
+            changes.setRating(gone.id, 4)
+            changes.setRating(busy.id, 3)
+            changes.setFavorite(kept.id, true)
+            assertFailsWith<NavidromeException> { changes.synchronize() }
+            assertEquals(listOf("kept"), starred, "A failing rating must not block the favorite that follows it")
+            assertEquals(1, changes.pendingCount(), "The deleted song's rating is dropped; the failing one is retried later")
+            assertEquals(2, ratingAttempts)
+            // An unreachable server would fail every entry, so the run stops after the first attempt.
+            var offlineRequests = 0
+            val offline = NavidromeChanges(store, library) { NavidromeClient(HttpClient(MockEngine { offlineRequests++; throw java.net.ConnectException("Connection refused") }),
+                "https://music.example.test", ServerCredentials("fixture", "test")) }
+            changes.setFavorite(gone.id, true)
+            val before = starred.size
+            assertFailsWith<NavidromeRequestException> { offline.synchronize() }
+            assertEquals(before, starred.size)
+            assertEquals(1, offlineRequests, "An unreachable server stops the run after the first request")
+            assertEquals(2, offline.pendingCount(), "Nothing is dropped while the server is unreachable")
+        } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
 }

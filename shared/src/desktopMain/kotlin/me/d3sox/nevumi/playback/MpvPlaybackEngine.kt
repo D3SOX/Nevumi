@@ -221,15 +221,17 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         check(!closed)
         val working = this.tracks.toMutableList()
         val currentEntry = working.getOrNull(longProperty("playlist-pos").toInt())?.entryId
+        val replacements = tracks.associateBy { it.entryId }
         for (index in working.lastIndex downTo 0) {
-            val replacement = tracks.firstOrNull { it.entryId == working[index].entryId }
+            val replacement = replacements[working[index].entryId]
             if (replacement == null || (working[index].entryId != currentEntry && replacement.location != working[index].location)) {
                 command("playlist-remove", index.toString())
                 working.removeAt(index)
             }
         }
         tracks.forEachIndexed { destination, track ->
-            var origin = working.indexOfFirst { it.entryId == track.entryId }
+            // Entries before the destination are already in their final order.
+            var origin = (destination until working.size).firstOrNull { working[it].entryId == track.entryId } ?: -1
             if (origin < 0) {
                 command("loadfile", track.location, "append")
                 working += track

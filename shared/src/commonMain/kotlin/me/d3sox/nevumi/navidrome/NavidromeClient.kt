@@ -36,6 +36,11 @@ import kotlinx.serialization.json.put
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 data class ServerPlaylist(val id: String, val name: String, val songIds: List<String>, val changed: String,
     val owner: String, val description: String = "", val coverArt: String? = null)
@@ -69,7 +74,20 @@ class NavidromeException(val code: Int) : Exception(when (code) {
     else -> "The music server rejected that request"
 })
 
-class NavidromeRequestException(message: String = "Could not complete the music server request. Check your connection and server address.", val httpStatus: Int? = null) : Exception(message)
+class NavidromeRequestException(message: String = "Could not complete the music server request. Check your connection and server address.", val httpStatus: Int? = null,
+    /** The request never reached the server, so repeating it later is safe. */
+    val unreachable: Boolean = false,
+    /** The connection itself failed (unreachable host, timeout, TLS or socket error), so every request would fail the same way. */
+    val connectionFailure: Boolean = unreachable) : Exception(message)
+
+/** Resolution and connection failures happen before any request is sent. */
+internal fun Throwable.isUnreachableHost(): Boolean = this::class.simpleName in setOf("UnknownHostException", "ConnectException",
+    "NoRouteToHostException", "ConnectTimeoutException", "UnresolvedAddressException")
+
+/** Failures of the connection rather than of one request: nothing else will succeed against this server right now. */
+internal fun Throwable.isConnectionFailure(): Boolean = isUnreachableHost() || this::class.simpleName in setOf("SocketTimeoutException",
+    "HttpRequestTimeoutException", "SocketException", "SSLException", "SSLHandshakeException", "SSLPeerUnverifiedException",
+    "EOFException", "IOException", "StreamResetException", "ConnectionShutdownException")
 
 private class DownloadCallbackFailure(val failure: Exception) : Exception()
 
@@ -78,13 +96,15 @@ private suspend fun <T> serverRequest(block: suspend () -> T): T = try { block()
     catch (local: DownloadCallbackFailure) { throw local.failure }
     catch (rejected: NavidromeException) { throw rejected }
     catch (safe: NavidromeRequestException) { throw safe }
-    catch (_: Exception) { throw NavidromeRequestException() }
+    catch (error: Exception) { throw NavidromeRequestException(unreachable = error.isUnreachableHost(), connectionFailure = error.isConnectionFailure()) }
 
 private suspend fun downloadCallback(block: suspend () -> Unit) {
     try { block() }
     catch (cancelled: CancellationException) { throw cancelled }
     catch (error: Exception) { throw DownloadCallbackFailure(error) }
 }
+
+private const val CONCURRENT_REQUESTS = 6
 
 class NavidromeClient(
     private val http: HttpClient,
@@ -104,19 +124,30 @@ class NavidromeClient(
         }
     }
 
-    suspend fun rescan() {
-        request("startScan", listOf("fullScan" to "true"))
-        kotlinx.coroutines.withTimeout(120_000) {
+    /** Checks the address and credentials with a single request. */
+    suspend fun ping() { request("ping") }
+
+    /** Asks the server to index new or changed files; a full scan re-reads every file and is rarely needed. */
+    suspend fun rescan(fullScan: Boolean = false) {
+        request("startScan", if (fullScan) listOf("fullScan" to "true") else emptyList())
+        val finished = kotlinx.coroutines.withTimeoutOrNull(120_000) {
             while (request("getScanStatus")["scanStatus"]?.jsonObject?.get("scanning")?.jsonPrimitive?.booleanOrNull == true)
                 kotlinx.coroutines.delay(250)
         }
+        if (finished == null) throw NavidromeRequestException("The music server scan did not finish in time. Refresh the library later.")
+    }
+
+    /** Looks up one song without downloading the catalogue; pass the same [releases] map to reuse album lookups across songs. */
+    suspend fun song(id: String, releases: MutableMap<String, String> = mutableMapOf()): ServerSong = serverRequest {
+        parseSong(request("getSong", listOf("id" to id)).getValue("song").jsonObject, releases)
     }
 
     private suspend fun playlistSummaries(): List<JsonObject> = request("getPlaylists")["playlists"]
         ?.jsonObject?.get("playlist")?.jsonArray.orEmpty().map { it.jsonObject }
 
     suspend fun playlists(): List<ServerPlaylist> = serverRequest {
-        playlistSummaries().map { playlist(it.getValue("id").jsonPrimitive.content) }
+        val limit = Semaphore(CONCURRENT_REQUESTS)
+        coroutineScope { playlistSummaries().map { summary -> async { limit.withPermit { playlist(summary.getValue("id").jsonPrimitive.content) } } }.awaitAll() }
     }
 
     /** Maps each playlist ID to its last change time with a single request. */
@@ -335,7 +366,9 @@ class NavidromeClient(
         val envelope = optionalCatalogueRequest("search3", listOf("query" to "", "artistCount" to "0", "albumCount" to "0",
             "songCount" to "500", "songOffset" to offset.toString()))
         val result = envelope?.get("searchResult3")?.jsonObject.orEmpty()
-        val page = result["song"]?.jsonArray.orEmpty().map { parseSong(it.jsonObject, releases) }
+        val entries = result["song"]?.jsonArray.orEmpty().map { it.jsonObject }
+        loadReleases(entries, releases)
+        val page = entries.map { parseSong(it, releases) }
         if (page.isEmpty()) {
             if (songs.isEmpty()) songs += catalogueFallback(releases)
             break
@@ -355,14 +388,27 @@ class NavidromeClient(
     }
 
 
+    private fun recordingId(song: JsonObject) = song["musicBrainzId"]?.jsonPrimitive?.content.orEmpty().takeIf {
+        song["mediaType"]?.jsonPrimitive?.content == "song"
+    }.orEmpty()
+
+    private suspend fun albumRelease(albumId: String) =
+        request("getAlbum", listOf("id" to albumId)).getValue("album").jsonObject["musicBrainzId"]?.jsonPrimitive?.content.orEmpty()
+
+    /** Fetches the release ids of a page's albums a few at a time instead of one album per song in sequence. */
+    private suspend fun loadReleases(songs: List<JsonObject>, releases: MutableMap<String, String>) {
+        val albumIds = songs.filter { recordingId(it).isNotBlank() }
+            .mapNotNull { it["albumId"]?.jsonPrimitive?.content?.takeIf { id -> id.isNotBlank() && id !in releases } }.distinct()
+        if (albumIds.isEmpty()) return
+        val limit = Semaphore(CONCURRENT_REQUESTS)
+        coroutineScope { albumIds.map { id -> async { limit.withPermit { id to albumRelease(id) } } }.awaitAll() }
+            .forEach { (id, release) -> releases[id] = release }
+    }
+
     private suspend fun parseSong(song: JsonObject, releases: MutableMap<String, String>): ServerSong {
-            val recordingId = song["musicBrainzId"]?.jsonPrimitive?.content.orEmpty().takeIf {
-                song["mediaType"]?.jsonPrimitive?.content == "song"
-            }.orEmpty()
+            val recordingId = recordingId(song)
             val albumId = song["albumId"]?.jsonPrimitive?.content.orEmpty()
-            val releaseId = if (recordingId.isNotBlank() && albumId.isNotBlank()) releases.getOrPut(albumId) {
-                request("getAlbum", listOf("id" to albumId)).getValue("album").jsonObject["musicBrainzId"]?.jsonPrimitive?.content.orEmpty()
-            } else ""
+            val releaseId = if (recordingId.isNotBlank() && albumId.isNotBlank()) releases.getOrPut(albumId) { albumRelease(albumId) } else ""
             val genres = song["genres"]?.jsonArray.orEmpty().mapNotNull {
                 it.jsonObject["name"]?.jsonPrimitive?.content?.takeIf(String::isNotBlank)
             }.distinct().ifEmpty { song["genre"]?.jsonPrimitive?.content?.takeIf(String::isNotBlank)?.let(::listOf).orEmpty() }

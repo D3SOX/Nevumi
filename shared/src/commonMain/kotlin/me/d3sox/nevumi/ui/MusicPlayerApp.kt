@@ -71,10 +71,9 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     val libraryState by remember(controller) { derivedStateOf(structuralEqualityPolicy()) {
         state.copy(playback = PlaybackStatus(), queue = QueueSnapshot())
     } }
-    val panelState by remember(controller, playerSheet) { derivedStateOf(structuralEqualityPolicy()) {
-        state.copy(queue = state.queue.copy(positionMs = 0), playback = state.playback.copy(
-            positionMs = if (playerSheet.settledValue == PlayerPanel.PLAYING || playerSheet.targetValue == PlayerPanel.PLAYING ||
-                playerSheet.isAnimationRunning) state.playback.positionMs else 0))
+    // The position changes many times per second; the seek bar observes it on its own so the panels do not recompose.
+    val panelState by remember(controller) { derivedStateOf(structuralEqualityPolicy()) {
+        state.copy(queue = state.queue.copy(positionMs = 0), playback = state.playback.copy(positionMs = 0))
     } }
     val density = LocalDensity.current
     var navigationHeight by remember { mutableStateOf(80.dp) }

@@ -200,9 +200,9 @@ class ListeningHistoryTest {
             history.record(playing.copy(playing = false, positionMs = 19_000))
             assertEquals(4_000, history.all().single().listenedMs)
             history.record(playing.copy(positionMs = 19_000))
-            elapsed = 66_000
+            elapsed = 69_000
             history.record(playing.copy(positionMs = 1_000))
-            assertEquals(6_000, history.all().single().listenedMs)
+            assertEquals(9_000, history.all().single().listenedMs, "A running listen is checkpointed every few seconds")
             assertEquals(0, history.statistics().getValue(track.id).playCount)
             elapsed = 70_000
             history.record(playing.copy(playing = false, positionMs = 5_000))

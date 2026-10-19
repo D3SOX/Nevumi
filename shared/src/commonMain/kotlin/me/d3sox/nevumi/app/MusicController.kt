@@ -273,9 +273,16 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             }
         })
         artwork?.let { covers -> scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            covers.changes.collect { (id, path) ->
+            val updates = kotlinx.coroutines.channels.Channel<Pair<String, String?>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+            launch(start = CoroutineStart.UNDISPATCHED) { covers.changes.collect { updates.send(it) } }
+            for (first in updates) {
+                // A scan saves thousands of covers in a row; publish the ones that arrived meanwhile in one state change.
+                val batch = linkedMapOf(first)
+                while (true) batch += updates.tryReceive().getOrNull() ?: break
                 artworkUpdates.withLock {
-                    mutableState.update { it.copy(artwork = if (path == null) it.artwork - id else it.artwork + (id to path)) }
+                    mutableState.update { state -> state.copy(artwork = state.artwork.toMutableMap().apply {
+                        for ((id, path) in batch) if (path == null) remove(id) else put(id, path)
+                    }) }
                 }
             }
         } }
@@ -969,9 +976,12 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             library.importTrack(song.metadata, TrackSource("server:${client.serverId}:${song.id}", SourceKind.SERVER, song.id,
                 filePath = song.filePath, fileLibraryId = song.fileLibraryId, indexedSize = song.sizeBytes)) to song
         }
-        catalogue.forEach { (track, song) ->
-            if (artwork != null && song.coverArt != null) {
-                try { artwork.fetch(track.id, client, song.coverArt) }
+        if (artwork != null) {
+            // Songs of an album share one cover; download it once instead of once per song.
+            val covers = catalogue.groupBy({ (_, song) -> song.coverArt }, { (track, _) -> track.id })
+            for ((coverId, trackIds) in covers) {
+                if (coverId == null) continue
+                try { artwork.fetch(trackIds, client, coverId) }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { /* A missing cover must not prevent importing its music. */ }
             }
@@ -1246,10 +1256,18 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             queue.setPosition(0); engine.seek(0)
             publishSeek(0)
         } else {
-            val requested = snapshot.currentIndex + direction
-            val destination = if (snapshot.repeatMode == RepeatMode.ALL && snapshot.currentIndex >= 0 && snapshot.entries.isNotEmpty())
-                requested.mod(snapshot.entries.size) else requested
+            val wraps = snapshot.repeatMode == RepeatMode.ALL && snapshot.currentIndex >= 0 && snapshot.entries.isNotEmpty()
+            fun step(index: Int) = (index + direction).let { if (wraps) it.mod(snapshot.entries.size) else it }
+            // Pass over songs that cannot play right now, such as server songs while offline or files marked missing.
+            // Without a current entry no file access is checked here; loading the chosen song still verifies its file.
+            val playableIds = playableQueue(snapshot.copy(currentEntryId = null)).mapTo(HashSet()) { it.entryId }
+            var destination = step(snapshot.currentIndex)
+            var passed = 0
+            while (destination in snapshot.entries.indices && snapshot.entries[destination].id !in playableIds && passed < snapshot.entries.size) {
+                destination = step(destination); passed++
+            }
             if (destination in snapshot.entries.indices) {
+                require(snapshot.entries[destination].id in playableIds) { "No upcoming song has an available audio source" }
                 queue.select(snapshot.entries[destination].id)
                 val selected = queue.snapshot()
                 loadSnapshot(selected, play = playing)

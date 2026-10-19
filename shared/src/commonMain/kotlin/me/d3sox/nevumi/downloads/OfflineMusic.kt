@@ -2,6 +2,7 @@ package me.d3sox.nevumi.downloads
 
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
+import me.d3sox.nevumi.navidrome.NavidromeException
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.FileAudioAccess
 import me.d3sox.nevumi.navidrome.NavidromeClient
@@ -227,14 +228,18 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         }
         val requests = store.list<OfflineRequest>("offline-requests")
             .filterNot { it.trackId in excluded || library.findTrack(it.trackId)?.onDevice() == true }
-        val songs = if (requests.isEmpty()) emptyMap() else connection.songs().associateBy { it.id }
+        // A few songs are cheaper to look up one by one; a large batch is cheaper as one catalogue download.
+        val catalogue = if (requests.size > PlaylistDownloads.SINGLE_LOOKUPS) connection.songs().associateBy { it.id } else null
+        val releases = mutableMapOf<String, String>()
         for (request in requests) {
             currentCoroutineContext().ensureActive()
             val track = library.findTrack(request.trackId) ?: continue
             val source = track.sources.firstOrNull {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
             } ?: continue
-            val song = songs[source.location] ?: continue
+            val song = if (catalogue != null) catalogue[source.location] ?: continue
+                else try { connection.song(source.location, releases) }
+                catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
             val complete = downloads.download(track.id, song)
             if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}")
             refresh()

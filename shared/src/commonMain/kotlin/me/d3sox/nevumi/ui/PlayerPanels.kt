@@ -626,6 +626,8 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
     var seeking by remember(state.playback.entryId) { mutableStateOf<Float?>(null) }
     var seekRequest by remember(state.playback.entryId) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    val positionFlow = remember(controller) { controller.state.map { it.playback.positionMs }.distinctUntilChanged() }
+    val positionMs by positionFlow.collectAsState(controller.state.value.playback.positionMs)
     val durationMs = state.playback.durationMs.takeIf { it > 0 } ?: current.metadata.durationMs
     val duration = durationMs.coerceAtLeast(1).toFloat()
     val waveforms = LocalAudioWaveforms.current ?: rememberAudioWaveforms()
@@ -650,7 +652,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe)
         Column(Modifier.fillMaxWidth()) {
-            Slider(value = (seeking ?: state.playback.positionMs.toFloat()).coerceIn(0f, duration), valueRange = 0f..duration, colors = sliderColors,
+            Slider(value = (seeking ?: positionMs.toFloat()).coerceIn(0f, duration), valueRange = 0f..duration, colors = sliderColors,
                 enabled = durationMs > 0 && state.playback.entryId != null, onValueChange = { seekRequest++; seeking = it },
                 onValueChangeFinished = {
                     val entry = state.playback.entryId
@@ -677,7 +679,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
                     }
                 })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                val position = (seeking ?: state.playback.positionMs.toFloat()).toLong()
+                val position = (seeking ?: positionMs.toFloat()).toLong()
                 val remaining = state.preferences.showRemainingTime
                 Surface(onClick = { controller.updatePreferences { it.copy(showRemainingTime = !it.showRemainingTime) } },
                     modifier = Modifier.semantics { contentDescription = if (remaining) "Remaining time" else "Elapsed time" },
@@ -745,14 +747,19 @@ private fun audioInfoLabel(info: me.d3sox.nevumi.playback.AudioInfo) = buildList
 
 @Composable
 private fun ManualQueueTime(controller: MusicController) {
-    val remainingFlow = remember(controller) { controller.state.map { state ->
-        val tracks = state.tracks.associateBy { it.id }
-        val queued = state.queue.upNext.sumOf { tracks[it.trackId]?.metadata?.durationMs ?: 0 }
-        val current = state.queue.entries.getOrNull(state.queue.currentIndex)
-        val playing = if (current?.section == QueueSection.MANUAL)
-            ((tracks[current.trackId]?.metadata?.durationMs ?: 0) - state.playback.positionMs).coerceAtLeast(0) else 0
-        (queued + playing) / 1_000
-    }.distinctUntilChanged() }
+    val remainingFlow = remember(controller) {
+        // Playback status arrives many times per second; index the library only when it changes.
+        var indexed: Pair<List<Track>, Map<String, Track>>? = null
+        controller.state.map { state ->
+            val tracks = indexed?.takeIf { it.first === state.tracks }?.second
+                ?: state.tracks.associateBy { it.id }.also { indexed = state.tracks to it }
+            val queued = state.queue.upNext.sumOf { tracks[it.trackId]?.metadata?.durationMs ?: 0 }
+            val current = state.queue.entries.getOrNull(state.queue.currentIndex)
+            val playing = if (current?.section == QueueSection.MANUAL)
+                ((tracks[current.trackId]?.metadata?.durationMs ?: 0) - state.playback.positionMs).coerceAtLeast(0) else 0
+            (queued + playing) / 1_000
+        }.distinctUntilChanged()
+    }
     val seconds by remainingFlow.collectAsState(0)
     Text("${playbackTime(seconds * 1_000)} remaining", Modifier.semantics { contentDescription = "Manual queue time remaining" },
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -5,6 +5,8 @@ import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeException
+import me.d3sox.nevumi.navidrome.NavidromeRequestException
+import me.d3sox.nevumi.navidrome.isUnreachableHost
 import me.d3sox.nevumi.playback.PlaybackStatus
 import me.d3sox.nevumi.security.CredentialVault
 import me.d3sox.nevumi.storage.MusicStore
@@ -322,8 +324,11 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
                     ScrobbleFailure.RETRYABLE -> ScrobbleState.PENDING
                 }
                 if (state == ScrobbleState.AUTHORIZATION) unauthorized += profile.id
-                save(entry.copy(state = state, attempts = entry.attempts + 1, error = failure.message,
-                    retryAt = if (state == ScrobbleState.PENDING) now() + 30_000 else 0))
+                val attempts = entry.attempts + 1
+                // Back off from 30 s up to 30 min so an unreachable service is not polled forever at full rate.
+                val delay = (30_000L shl (attempts - 1).coerceIn(0, 6)).coerceAtMost(1_800_000)
+                save(entry.copy(state = state, attempts = attempts, error = failure.message,
+                    retryAt = if (state == ScrobbleState.PENDING) now() + delay else 0))
             }
         }
     }
@@ -338,7 +343,11 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
                 else -> ScrobbleFailure.UNCERTAIN
             }
             throw ScrobbleException(kind, "Navidrome submission failed: code ${failure.code}")
-        } catch (_: Exception) { throw ScrobbleException(ScrobbleFailure.UNCERTAIN, "Navidrome did not confirm the submission") }
+        } catch (error: Exception) {
+            if (error is NavidromeRequestException && error.unreachable || error.isUnreachableHost())
+                throw ScrobbleException(ScrobbleFailure.RETRYABLE, "The music server could not be reached")
+            throw ScrobbleException(ScrobbleFailure.UNCERTAIN, "Navidrome did not confirm the submission")
+        }
     }
 
     private suspend fun save(entry: ScrobbleSubmission) = store.put("scrobble-submission:${entry.id}", "scrobble-submissions", entry)

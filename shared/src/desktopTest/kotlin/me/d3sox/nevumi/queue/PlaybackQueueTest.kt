@@ -6,6 +6,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
 import kotlin.random.Random
 import me.d3sox.nevumi.playback.RepeatMode
 
@@ -383,6 +384,24 @@ class PlaybackQueueTest {
             queue.restoreSaved(morning.id)
             assertEquals("morning" to 19_000L, queue.snapshot().currentTrackId to queue.snapshot().positionMs)
             assertEquals(42_000, queue.saved().first { it.id == evening.id }.snapshot.positionMs)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun queueReadsStayCurrentAcrossInstancesAndTrackRemaps() = runBlocking {
+        val directory = Files.createTempDirectory("queue-read-cache")
+        val store = openMusicStore(directory.resolve("queue.db").toString())
+        try {
+            val queue = PlaybackQueue(store)
+            val other = PlaybackQueue(store)
+            queue.replace(listOf("a", "b"))
+            assertEquals(listOf("a", "b"), other.snapshot().entries.map { it.trackId })
+            other.append("c")
+            assertEquals(listOf("a", "c", "b"), queue.snapshot().entries.map { it.trackId })
+            remapQueueTracks(store, "b", "linked")
+            assertEquals(listOf("a", "c", "linked"), queue.snapshot().entries.map { it.trackId })
+            val first = queue.snapshot()
+            assertSame(first, queue.snapshot(), "An unchanged queue is decoded once")
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
 }

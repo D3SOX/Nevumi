@@ -14,10 +14,14 @@ import kotlin.time.Clock
 import kotlin.time.TimeSource
 import kotlin.uuid.Uuid
 
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
 data class Listen(val id: String, val trackId: String, val playbackId: String, val startedAt: Long,
     val metadata: TrackMetadata, val listenedMs: Long = 0, val playedMs: Long = 0, val durationMs: Long = 0, val ended: Boolean = false,
-    val originDeviceId: String? = null) {
+    val originDeviceId: String? = null,
+    /** When this device first received the listen from a paired device; local, never shared. Omitted when absent so
+     *  shared snapshots keep the wire format that previous versions accept. */
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val importedAt: Long? = null) {
     val qualified: Boolean get() = playedMs >= (if (durationMs > 0) minOf(durationMs / 2, 240_000) else 240_000).coerceAtLeast(1)
 }
 
@@ -59,7 +63,8 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
             val updated = event.copy(listenedMs = event.listenedMs + heard, playedMs = event.playedMs + (heard * speed).toLong(),
                 durationMs = current.durationMs.takeIf { it > 0 } ?: event.durationMs, ended = current.ended)
             session.listen = updated
-            if (current.ended || session.previous.playing != current.playing || updated.qualified != event.qualified || now - session.writtenAt >= 1_000) {
+            // Every write wakes every database observer, so checkpoint a running listen only every few seconds.
+            if (current.ended || session.previous.playing != current.playing || updated.qualified != event.qualified || now - session.writtenAt >= 5_000) {
                 session.listen = persist(updated)
                 session.writtenAt = now
             }
@@ -95,8 +100,15 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
         }
         sessions.clear()
     }
-    fun observe() = store.database.records().observe("listens").distinctUntilChanged().map { records ->
-        records.map { store.json.decodeFromString<Listen>(it.value) }.sortedWith(compareByDescending<Listen> { it.startedAt }.thenBy { it.id })
+    fun observe(): kotlinx.coroutines.flow.Flow<List<Listen>> {
+        // Only the running listen changes between emissions; keep the decoded history and decode changed records.
+        var decoded = emptyMap<String, Pair<String, Listen>>()
+        return store.database.records().observe("listens").distinctUntilChanged().map { records ->
+            decoded = records.associate { record ->
+                record.key to (decoded[record.key]?.takeIf { it.first == record.value } ?: (record.value to store.json.decodeFromString<Listen>(record.value)))
+            }
+            decoded.values.map { it.second }.sortedWith(compareByDescending<Listen> { it.startedAt }.thenBy { it.id })
+        }
     }
     suspend fun statistics(): Map<String, ListeningStatistics> = listeningStatistics(all())
     suspend fun report(tracks: List<Track>, period: ListeningPeriod = ListeningPeriod.ALL_TIME): ListeningReport =

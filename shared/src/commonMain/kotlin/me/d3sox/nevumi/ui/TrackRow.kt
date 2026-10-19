@@ -67,6 +67,8 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
     fun settle() {
         settling = scope.launch { animate(offset, 0f, animationSpec = spring()) { value, _ -> offset = value } }
     }
+    // Entering selection mode restarts the gesture handler; a swipe in progress must not leave the row displaced.
+    LaunchedEffect(selectionMode) { if (selectionMode && offset != 0f) settle() }
     SongActionHost(track, state, controller, contextTrackIds, contextIndex, playlistId, onSelect, contextName = contextName,
         playlistPosition = playlistPosition, shuffleContext = shuffleContext, artworkOrigin = { artworkBounds },
         hiddenAction = if (selectionMode) TrackAction.NONE else state.preferences.quickAction) { available, perform, openMenu, menuOpen ->
@@ -87,7 +89,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
             }
         }
         Surface(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.fillMaxWidth()
-            .pointerInput(track.id, threshold, state.preferences.swipeRight, state.preferences.swipeLeft) {
+            .pointerInput(track.id, threshold, state.preferences.swipeRight, state.preferences.swipeLeft, selectionMode) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var overSlop = 0f

@@ -437,6 +437,40 @@ class QueuePlaybackTest {
     }
 
     @Test
+    fun skippingPassesOverSongsWithoutAnAvailableSource() = runBlocking {
+        val directory = Files.createTempDirectory("skip-unavailable")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val tracks = LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"),
+            ".test-environment", "music").toString()).associateBy { it.metadata.title }
+        val missing = library.importTrack(TrackMetadata("Removed file"), TrackSource("local:missing", SourceKind.LOCAL,
+            directory.resolve("missing.flac").toString()))
+        library.setSourceAvailability(setOf("local:missing"), false)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        try {
+            val first = tracks.getValue("Northern Light").id
+            val last = tracks.getValue("Night Walk").id
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.playTrack(first, listOf(first, missing.id, last)).join()
+            withTimeout(3_000) { controller.state.first { it.playback.trackId == first && it.playback.playing } }
+            controller.skip(1).join()
+            val skipped = withTimeout(3_000) { controller.state.first { it.playback.trackId == last && it.playback.durationMs > 0 } }
+            assertEquals(last, skipped.queue.currentTrackId)
+            assertEquals(null, skipped.error)
+            controller.skip(-1).join()
+            val back = withTimeout(3_000) { controller.state.first { it.playback.trackId == first && it.playback.durationMs > 0 } }
+            assertEquals(first, back.queue.currentTrackId)
+            // With repeat all and nothing playable, skipping must not select an entry that cannot play.
+            library.setSourceAvailability(tracks.values.flatMap { track -> track.sources.map { it.id } }.toSet(), false)
+            controller.setQueueRepeat(me.d3sox.nevumi.playback.RepeatMode.ALL).join()
+            controller.skip(1).join()
+            val stuck = withTimeout(3_000) { controller.state.first { it.error != null } }
+            assertEquals("No upcoming song has an available audio source", stuck.error)
+            assertEquals(first, stuck.queue.currentTrackId)
+        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun evictingAFutureQueuedDownloadFallsBackToStreamingWithoutInterruptingTheCurrentTrack() = runBlocking {
         val directory = Files.createTempDirectory("queue-cache-fallback")
         val store = openMusicStore(directory.resolve("library.db").toString())

@@ -260,4 +260,28 @@ class ArtworkLibraryTest {
             assertContentEquals(png, reopened.read("server:track"))
         } finally { http.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun songsSharingACoverDownloadItOnce() = runBlocking {
+        val directory = Files.createTempDirectory("shared-artwork")
+        val image = BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB)
+        for (x in 0..15) for (y in 0..15) image.setRGB(x, y, 0x002050E0)
+        val output = ByteArrayOutputStream()
+        ImageIO.write(image, "png", output)
+        val png = output.toByteArray()
+        var requests = 0
+        val http = HttpClient(MockEngine { request ->
+            requests++
+            assertEquals("album-cover", request.url.parameters["id"])
+            respond(png, headers = headersOf(HttpHeaders.ContentType, "image/png"))
+        })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "fixture-password"))
+            val artwork = ArtworkLibrary(directory.toString())
+            artwork.fetch(listOf("server:one", "server:two", "server:one"), client, "album-cover")
+            assertEquals(1, requests)
+            assertContentEquals(png, artwork.read("server:one"))
+            assertContentEquals(png, artwork.read("server:two"))
+        } finally { http.close(); directory.toFile().deleteRecursively() }
+    }
 }

@@ -194,6 +194,8 @@ class OfflineMusicTest {
         val firstStream = AtomicBoolean(true)
         val http = HttpClient(MockEngine { request ->
             when {
+                request.url.encodedPath.endsWith("getSong.view") -> respond("""{"subsonic-response":{"status":"ok","song":{"id":"song","title":"Cancelled song","suffix":"flac","size":8}}}""",
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"))
                 request.url.encodedPath.endsWith("search3.view") -> respond(
                     if (request.url.parameters["songOffset"] == "0")
                         """{"subsonic-response":{"status":"ok","searchResult3":{"song":[{"id":"song","title":"Cancelled song","suffix":"flac","size":8}]}}}"""
@@ -262,6 +264,8 @@ class OfflineMusicTest {
         body.writeFully(audio.copyOfRange(0, 4))
         val http = HttpClient(MockEngine { request ->
             when {
+                request.url.encodedPath.endsWith("getSong.view") -> respond("""{"subsonic-response":{"status":"ok","song":{"id":"song","title":"Network song","suffix":"flac","size":8}}}""",
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"))
                 request.url.encodedPath.endsWith("search3.view") -> respond(
                     if (request.url.parameters["songOffset"] == "0")
                         """{"subsonic-response":{"status":"ok","searchResult3":{"song":[{"id":"song","title":"Network song","suffix":"flac","size":8}]}}}"""
@@ -385,6 +389,8 @@ class OfflineMusicTest {
         body.writeFully(audio.copyOfRange(0, 4))
         val http = HttpClient(MockEngine { request ->
             when {
+                request.url.encodedPath.endsWith("getSong.view") -> respond("""{"subsonic-response":{"status":"ok","song":{"id":"song","title":"Paused song","suffix":"flac","size":8}}}""",
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"))
                 request.url.encodedPath.endsWith("search3.view") -> respond(
                     if (request.url.parameters["songOffset"] == "0")
                         """{"subsonic-response":{"status":"ok","searchResult3":{"song":[{"id":"song","title":"Paused song","suffix":"flac","size":8}]}}}"""

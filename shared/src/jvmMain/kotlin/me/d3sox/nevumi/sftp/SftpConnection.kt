@@ -92,11 +92,12 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
                 files.upload(relativePath, staged, record.id)
             }
             server.rescan()
-            val song = requireNotNull(server.songs(includeFilePaths = true).singleOrNull {
+            // The refresh already downloads the catalogue; find the uploaded song in it instead of downloading it twice.
+            val catalogue = changes.refreshLibrary(server, includeFilePaths = true)
+            val song = requireNotNull(catalogue.map { it.second }.singleOrNull {
                 it.filePath == relativePath && it.fileLibraryId == configuration.libraryId
             }) { "Navidrome has not indexed the uploaded song yet. Refresh the library." }
             changes.importSong(server, song, linkTo = trackId)
-            changes.refreshLibrary(server, includeFilePaths = true)
             store.database.records().delete("server-upload:${record.id}")
             Files.deleteIfExists(File(record.stagedPath).toPath())
             requireNotNull(library.findTrack(trackId))

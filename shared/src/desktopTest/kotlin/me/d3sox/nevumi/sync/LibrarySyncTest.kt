@@ -683,4 +683,25 @@ class LibrarySyncTest {
             Unit
         } finally { firstStore.close(); secondStore.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test fun laterSyncsShareOnlyRecentOrUnfinishedListens() = runBlocking {
+        val directory = Files.createTempDirectory("incremental-listens")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val track = library.importTrack(TrackMetadata("Song"), TrackSource("server:fixture:1", SourceKind.SERVER, "1"))
+            fun listen(id: String, startedAt: Long, ended: Boolean, importedAt: Long? = null) = me.d3sox.nevumi.history.Listen(id, track.id,
+                "play-$id", startedAt, track.metadata, listenedMs = 1_000, playedMs = 1_000, durationMs = 200_000, ended = ended, importedAt = importedAt)
+            for (event in listOf(listen("old", 1_000, true), listen("running", 2_000, false), listen("new", 50_000, true),
+                    listen("from-third-device", 3_000, true, importedAt = 40_000), listen("long-known", 4_000, true, importedAt = 5_000)))
+                store.put("listen:${event.id}", "listens", event)
+            val sync = LibrarySync(store, library)
+            assertEquals(setOf("old", "running", "new", "from-third-device", "long-known"), sync.snapshot().listens.map { it.id }.toSet())
+            // A listen received from another device after the last sync is new to this peer even though it started long ago.
+            assertEquals(setOf("running", "new", "from-third-device"), sync.snapshot(listensSince = 10_000).listens.map { it.id }.toSet())
+            assertTrue(sync.snapshot().listens.all { it.importedAt == null }, "Import times stay on this device")
+            val wire = Json { encodeDefaults = true }.encodeToString(sync.snapshot())
+            assertFalse(wire.contains("importedAt"), "Shared snapshots keep the wire format previous versions accept")
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
 }
