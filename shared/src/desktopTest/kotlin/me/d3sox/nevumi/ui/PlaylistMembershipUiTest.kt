@@ -140,7 +140,7 @@ class PlaylistMembershipUiTest {
     }
 
     @Test
-    fun pickerSortsPlaylistsByTheChosenOrderAndRemembersIt() {
+    fun pickerListsPlaylistsHoldingTheSongFirstThenSortsByTheChosenOrderAndRemembersIt() {
         val directory = Files.createTempDirectory("playlist-membership-sort")
         val store = openMusicStore(directory.resolve("music.db").toString())
         val library = MusicLibrary(store)
@@ -181,7 +181,11 @@ class PlaylistMembershipUiTest {
                 onNodeWithText("Recently updated").assertIsDisplayed()
                 assertOrder("Alpha", "Gamma", "Beta")
                 choose("Recently added")
-                assertOrder("Gamma", "Beta", "Alpha")
+                assertOrder("Alpha", "Gamma", "Beta")
+                // Pending choices don't reorder the list.
+                onNodeWithContentDescription("Playlist membership: Alpha").performClick()
+                assertOrder("Alpha", "Gamma", "Beta")
+                onNodeWithContentDescription("Playlist membership: Alpha").performClick()
                 choose("Alphabetical")
                 assertOrder("Alpha", "Beta", "Gamma")
                 val beta = player.state.value.playlists.single { it.name == "Beta" }
@@ -189,17 +193,17 @@ class PlaylistMembershipUiTest {
                     origin = me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, beta.id)).join(); player.pause().join() }
                 choose("Recently played")
                 waitUntil(timeoutMillis = 3_000) { player.state.value.playlists.single { it.id == beta.id }.playedAt == now }
-                assertOrder("Beta", "Alpha", "Gamma")
+                assertOrder("Alpha", "Beta", "Gamma")
                 val ids = player.state.value.playlists.associate { it.name to it.id }
                 runBlocking { player.updatePreferences { it.copy(collectionLayouts = mapOf(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS to
                     me.d3sox.nevumi.settings.CollectionLayout(sort = me.d3sox.nevumi.settings.CollectionSort.CUSTOM,
                         order = listOf(ids.getValue("Gamma"), ids.getValue("Alpha"), ids.getValue("Beta"))))) }.join() }
                 choose("Same as Playlists tab")
-                assertOrder("Gamma", "Alpha", "Beta")
+                assertOrder("Alpha", "Gamma", "Beta")
                 onNodeWithText("Cancel").performClick()
                 open()
                 onNodeWithText("Same as Playlists tab").assertIsDisplayed()
-                assertOrder("Gamma", "Alpha", "Beta")
+                assertOrder("Alpha", "Gamma", "Beta")
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
