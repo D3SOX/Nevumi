@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -46,6 +47,9 @@ func relay(origin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	address := "http://" + listener.Addr().String() + "/" + token
+	var current atomic.Pointer[url.URL]
+	current.Store(target)
 	node := server
 	transport := &http.Transport{
 		// Each connection waits for the node with its own deadline, so creating the relay never blocks.
@@ -63,9 +67,10 @@ func relay(origin string) (string, error) {
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
 	proxy := &httputil.ReverseProxy{
-		Rewrite:       func(request *httputil.ProxyRequest) { request.SetURL(target) },
-		Transport:     transport,
-		FlushInterval: -1,
+		Rewrite:        func(request *httputil.ProxyRequest) { request.SetURL(current.Load()) },
+		ModifyResponse: func(response *http.Response) error { keepRedirectInRelay(response, &current, address); return nil },
+		Transport:      transport,
+		FlushInterval:  -1,
 	}
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		first, rest, _ := strings.Cut(strings.TrimPrefix(request.URL.Path, "/"), "/")
@@ -77,10 +82,35 @@ func relay(origin string) (string, error) {
 		request.URL.RawPath = ""
 		proxy.ServeHTTP(writer, request)
 	})
-	relayed := &relayServer{"http://" + listener.Addr().String() + "/" + token, &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}}
+	relayed := &relayServer{address, &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}}
 	go relayed.server.Serve(listener)
 	relays[origin] = relayed
 	return relayed.url, nil
+}
+
+// keepRedirectInRelay points a redirect to the server's own host back at the relay, so players don't leave the tunnel.
+// A redirect to HTTPS on the same host switches the relay to HTTPS for later requests too.
+func keepRedirectInRelay(response *http.Response, current *atomic.Pointer[url.URL], address string) {
+	location, err := response.Location()
+	origin := current.Load()
+	if err != nil || location.Hostname() != origin.Hostname() {
+		return
+	}
+	if location.Scheme != origin.Scheme || location.Host != origin.Host {
+		upgraded := *origin
+		upgraded.Scheme, upgraded.Host = location.Scheme, location.Host
+		current.Store(&upgraded)
+		origin = &upgraded
+	}
+	path := strings.TrimPrefix(location.Path, strings.TrimSuffix(origin.Path, "/"))
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	rewritten := address + path
+	if location.RawQuery != "" {
+		rewritten += "?" + location.RawQuery
+	}
+	response.Header.Set("Location", rewritten)
 }
 
 // closeRelays stops every relay. The caller holds lock.
