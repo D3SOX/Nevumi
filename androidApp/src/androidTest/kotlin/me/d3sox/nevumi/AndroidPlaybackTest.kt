@@ -24,6 +24,45 @@ import me.d3sox.nevumi.storage.openMusicStore
 @RunWith(AndroidJUnit4::class)
 class AndroidPlaybackTest {
     @Test
+    fun playNextAfterTheQueueEndsRestoresThePlayingState() = verifyPlayNextAfterEnd(gapless = false)
+
+    @Test
+    fun playNextAfterAGaplessQueueEndsRestoresThePlayingState() = verifyPlayNextAfterEnd(gapless = true)
+
+    @Test
+    fun playNextAfterACrossfadeQueueEndsRestoresThePlayingState() = verifyPlayNextAfterEnd(gapless = true, crossfadeMs = 500)
+
+    private fun verifyPlayNextAfterEnd(gapless: Boolean, crossfadeMs: Long = 0) = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val file = File(context.cacheDir, "queue-end-${UUID.randomUUID()}.flac")
+        instrumentation.context.assets.open("fixture.flac").use { input -> file.outputStream().use(input::copyTo) }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                val engine = AndroidPlaybackEngine(context, PlaybackService::class.java)
+                try {
+                    engine.setRepeat(RepeatMode.OFF)
+                    engine.setGaplessPlayback(gapless)
+                    engine.setCrossfadeDuration(crossfadeMs)
+                    val last = PlayableTrack("last", file.toURI().toString())
+                    val next = PlayableTrack("next", file.toURI().toString())
+                    engine.load(last, positionMs = 2_000)
+                    withTimeout(10_000) { engine.status.first { it.ended && !it.playWhenReady } }
+                    engine.updateQueue(listOf(last, next))
+                    val resumed = withTimeout(5_000) { engine.status.first {
+                        it.entryId == next.entryId && it.positionMs > 100
+                    } }
+                    assertEquals("Advancing audio must be reported as playing", true, resumed.playing)
+                    assertEquals("The transport must show Pause", true, resumed.playWhenReady && !resumed.ended)
+                    engine.pause()
+                    withTimeout(5_000) { engine.status.first { !it.playWhenReady && !it.playing } }
+                    Unit
+                } finally { engine.pause(); engine.setGaplessPlayback(true); engine.setCrossfadeDuration(0); engine.close() }
+            }
+        } finally { file.delete() }
+    }
+
+    @Test
     fun repeatingASongTwiceThenContinuesWithoutRepeatingTheFollowingSong() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

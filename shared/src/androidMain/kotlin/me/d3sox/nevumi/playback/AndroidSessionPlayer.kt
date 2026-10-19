@@ -236,9 +236,24 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
             awaitSelection(items[index].mediaId, previousId, revision, previousSource, selectedSource)
         }
     }
+    private suspend fun updateQueueAfterInsertion() {
+        val current = engine.status.value
+        val index = items.indexOfFirst { it.mediaId == current.entryId }
+        val resumesEndedQueue = current.ended && current.playWhenReady && index >= 0 && index < items.lastIndex
+        if (resumesEndedQueue) {
+            revision++
+            val selected = items[index + 1]
+            // Queue exhaustion releases focus and clears the session's play intent.
+            requestPlayback()
+            engine.loadQueue(tracks(), index + 1, play = wantedPlaying && !suppressed)
+            awaitSelection(selected.mediaId, current.playbackId, revision, current.sourceId,
+                selected.mediaMetadata.extras?.getString("sourceId"))
+        } else engine.updateQueue(tracks())
+    }
+
     override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> = future {
         items = items.toMutableList().apply { addAll(index, mediaItems) }
-        engine.updateQueue(tracks())
+        updateQueueAfterInsertion()
     }
     override fun handleMoveMediaItems(fromIndex: Int, toIndex: Int, newIndex: Int): ListenableFuture<*> = future {
         items = items.toMutableList().apply { val moving = subList(fromIndex, toIndex).toList(); subList(fromIndex, toIndex).clear(); addAll(newIndex, moving) }
@@ -246,7 +261,7 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
     }
     override fun handleReplaceMediaItems(fromIndex: Int, toIndex: Int, mediaItems: List<MediaItem>): ListenableFuture<*> = future {
         items = items.toMutableList().apply { subList(fromIndex, toIndex).clear(); addAll(fromIndex, mediaItems) }
-        engine.updateQueue(tracks())
+        updateQueueAfterInsertion()
     }
     override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> = future {
         items = items.toMutableList().apply { subList(fromIndex, toIndex).clear() }
