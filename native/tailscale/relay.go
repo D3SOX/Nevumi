@@ -48,8 +48,11 @@ func relay(origin string) (string, error) {
 	}
 	node := server
 	transport := &http.Transport{
-		// Each request waits for the node under its own deadline, so creating the relay never blocks.
+		// Each connection waits for the node with its own deadline, so creating the relay never blocks.
+		// The deadline covers only connection setup, not the streamed response.
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
 			if _, err := node.Up(ctx); err != nil {
 				return nil, errNotConnected
 			}
