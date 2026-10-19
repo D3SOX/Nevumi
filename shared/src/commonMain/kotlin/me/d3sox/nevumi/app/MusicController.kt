@@ -126,6 +126,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val equalizerProfiles: me.d3sox.nevumi.playback.AutoEqProfiles? = null,
     private val serverFiles: me.d3sox.nevumi.sftp.ServerFiles? = null,
     val pairedDevices: me.d3sox.nevumi.sync.PairedDevices? = null,
+    val tunnel: me.d3sox.nevumi.tunnel.Tunnel? = null,
     private val networkAccess: suspend (String) -> Unit = {}) : AutoCloseable {
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.Default)
@@ -486,10 +487,41 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
     suspend fun serverMusicDirectories() = requireNotNull(serverFiles) { "Server file editing is unavailable" }.libraries()
     suspend fun connectServerFiles(profile: SftpProfile, libraryId: Long, authentication: SftpAuthentication) {
-        networkAccess(profile.host)
+        reachAccess(profile.host, tunnel?.routes()?.serverFiles == true)
         requireNotNull(serverFiles) { "Server file editing is unavailable" }.connect(profile, libraryId, authentication)
         operations.withLock { refresh() }
     }
+    suspend fun tailscaleStatus() = requireNotNull(tunnel) { "Tailscale is unavailable" }.status()
+    suspend fun signInToTailscale(controlUrl: String, authKey: String?): me.d3sox.nevumi.tunnel.TailscaleStatus {
+        if (controlUrl.isNotEmpty()) networkAccess(controlUrl)
+        return requireNotNull(tunnel) { "Tailscale is unavailable" }.signIn(controlUrl, authKey).also { reloadStreams() }
+    }
+    suspend fun signOutOfTailscale() {
+        requireNotNull(tunnel) { "Tailscale is unavailable" }.signOut()
+        reloadStreams()
+    }
+    suspend fun tunnelRoutes() = tunnel?.routes() ?: me.d3sox.nevumi.tunnel.TunnelRoutes()
+    suspend fun updateTunnelRoutes(routes: me.d3sox.nevumi.tunnel.TunnelRoutes) {
+        val tunnel = requireNotNull(tunnel) { "Tailscale is unavailable" }
+        val previous = tunnel.routes()
+        if (routes.musicServer && !previous.musicServer || routes.serverFiles && !previous.serverFiles) reachAccess("", tunneled = true)
+        tunnel.updateRoutes(routes)
+        reloadStreams()
+    }
+    /**
+     * Stream URLs depend on the music server route and its relay, so the loaded queue gets new ones when either changes.
+     * Failures go to the app state, because the route change they follow is already saved.
+     */
+    private suspend fun reloadStreams() = operations.withLock {
+        try {
+            if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot()))
+            refresh()
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: Exception) { mutableState.update { it.copy(error = failure.message ?: "Playback could not switch connections") } }
+    }
+    /** Tailscale learns peer endpoints internally. A blank address asks for local network access, so peers on the LAN connect directly. */
+    private suspend fun reachAccess(address: String, tunneled: Boolean) = networkAccess(if (tunneled) "" else address)
+    private suspend fun musicServerAccess(address: String) = reachAccess(address, tunnel?.routes()?.musicServer == true)
     suspend fun disconnectServerFiles() {
         requireNotNull(serverFiles) { "Server file editing is unavailable" }.disconnect()
         operations.withLock { refresh() }
@@ -857,7 +889,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
     private suspend fun serverPlaylistClient(link: me.d3sox.nevumi.playlists.PlaylistServer): me.d3sox.nevumi.navidrome.NavidromeClient {
         requireNotNull(link.id) { "Wait for this playlist to sync before changing its cover" }
-        navidrome?.profile()?.let { networkAccess(it.baseUrl) }
+        navidrome?.profile()?.let { musicServerAccess(it.baseUrl) }
         return requireNotNull(navidrome?.client()?.takeIf { it.serverId == link.serverId }) { "Connect to the music server to change this playlist's cover" }
     }
     /** Uploads [cover] to the server, or removes the uploaded cover when it is null so Navidrome generates one again. */
@@ -939,7 +971,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun connectServer(address: String, username: String, password: String) = action(serialized = false) {
         mutableState.update { it.copy(loading = true, error = null) }
         val connection = requireNotNull(navidrome) { "Server setup is unavailable" }
-        networkAccess(address)
+        musicServerAccess(address)
         connection.connect(address, ServerCredentials(username, password))
         val client = requireNotNull(connection.client())
         importServer(client)
@@ -948,7 +980,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
 
     fun refreshServer() = action(serialized = false) {
         mutableState.update { it.copy(loading = true, error = null) }
-        navidrome?.profile()?.let { networkAccess(it.baseUrl) }
+        navidrome?.profile()?.let { musicServerAccess(it.baseUrl) }
         val client = requireNotNull(navidrome?.client()) { "Connect to the music server first" }
         importServer(client)
         offline?.retry()

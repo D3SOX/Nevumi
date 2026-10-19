@@ -37,7 +37,7 @@ import me.d3sox.nevumi.settings.ColorMode
 import me.d3sox.nevumi.playback.PlaybackStatus
 import me.d3sox.nevumi.queue.QueueSnapshot
 
-private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES, FILE_RECOVERY, AUDIO_EFFECTS, SFTP, PAIRED_DEVICES, SEARCH }
+private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES, FILE_RECOVERY, AUDIO_EFFECTS, SFTP, TUNNEL, PAIRED_DEVICES, SEARCH }
 
 @Composable
 fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null, artworkPicker: ArtworkPicker? = null,
@@ -144,11 +144,12 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                     AppPage.FILE_RECOVERY -> FileRecovery(state, controller, ::closePage)
                     AppPage.AUDIO_EFFECTS -> AudioEffectsScreen(state, controller, ::closePage)
                     AppPage.SFTP -> SftpSettings(state, controller, ::closePage)
+                    AppPage.TUNNEL -> TunnelSettings(controller, ::closePage)
                     AppPage.PAIRED_DEVICES -> controller.pairedDevices?.let { PairingSettings(it, state.tracks, ::closePage, state.artwork) }
                     AppPage.SETTINGS -> AppSettings(state, controller,
                         server = { openPage(AppPage.SERVER) }, downloads = { openPage(AppPage.DOWNLOADS) },
                         audioEffects = { openPage(AppPage.AUDIO_EFFECTS) },
-                        serverFiles = { openPage(AppPage.SFTP) }, pairedDevices = { openPage(AppPage.PAIRED_DEVICES) },
+                        serverFiles = { openPage(AppPage.SFTP) }, tunnel = { openPage(AppPage.TUNNEL) }, pairedDevices = { openPage(AppPage.PAIRED_DEVICES) },
                         savedQueues = { openPage(AppPage.SAVED_QUEUES) }, fileRecovery = { openPage(AppPage.FILE_RECOVERY) },
                         categoryState = settingsCategory, onAddMusic = onAddMusic, folderPicker = folders) { page = AppPage.LIBRARY }
                     AppPage.LIBRARY -> {

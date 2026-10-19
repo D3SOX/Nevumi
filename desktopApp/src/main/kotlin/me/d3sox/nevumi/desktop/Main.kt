@@ -45,7 +45,8 @@ fun main(arguments: Array<String>) {
     val library = MusicLibrary(store)
     val http = HttpClient(OkHttp)
     val credentials = SecretServiceVault()
-    val connection = NavidromeConnection(store, http, credentials)
+    val tunnel = me.d3sox.nevumi.tunnel.TailscaleTunnel(store, me.d3sox.nevumi.tunnel.Tailscale(File(directory, "tailscale"), "nevumi-linux"))
+    val connection = NavidromeConnection(store, http, credentials, tunnel::musicServerUrl)
     val artwork = ArtworkLibrary(File(directory, "artwork").path)
     val serverChanges = NavidromeChanges(store, library, artwork, connection::client)
     val playlists = Playlists(store)
@@ -62,9 +63,10 @@ fun main(arguments: Array<String>) {
         scrobbling = Scrobbling(store, library, http, credentials, offline.network, connection::client),
         equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http),
         serverFiles = me.d3sox.nevumi.sftp.SftpConnection(store, library, connection::client, credentials,
-            File(directory, "server-edits").path, changes = serverChanges, artwork = artwork),
+            File(directory, "server-edits").path, changes = serverChanges, artwork = artwork, tailscale = tunnel::serverFiles),
         pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
-            me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges), credentials, "Linux desktop"))
+            me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges), credentials, "Linux desktop"),
+        tunnel = tunnel)
     option("--import-folder")?.let { controller.importSource(it) }
     val mediaSession = try { LinuxMediaSession(controller) }
         catch (error: Exception) { System.err.println("Desktop media controls unavailable: ${error.message}"); null }

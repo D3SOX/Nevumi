@@ -5,6 +5,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.VolumeOff
+import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Album
@@ -206,6 +207,7 @@ internal enum class AppIcon(val vector: ImageVector) {
     KEY(Icons.Rounded.VpnKey),
     LOCK(Icons.Rounded.Lock),
     LINK(Icons.Rounded.Link),
+    TAILSCALE(Icons.Rounded.VpnLock),
     ASCENDING(Icons.Rounded.ArrowUpward),
     DESCENDING(Icons.Rounded.ArrowDownward),
     LIBRARY(Icons.Rounded.LibraryMusic),

@@ -26,31 +26,37 @@ internal fun normalizeServerAddress(baseUrl: String): String {
     return address.toString().trimEnd('/')
 }
 
+/** [route] maps the server address to the address requests use, such as a tunnel relay. */
 class NavidromeConnection(private val store: MusicStore, private val http: HttpClient,
-    private val vault: CredentialVault) {
+    private val vault: CredentialVault, private val route: suspend (String) -> String = { it }) {
     private val access = Mutex()
     private var cachedProfile: ServerProfile? = null
     private var cachedPassword: String? = null
+    private var cachedRequestUrl: String? = null
     private var cachedClient: NavidromeClient? = null
 
     suspend fun connect(baseUrl: String, credentials: ServerCredentials) = access.withLock {
         val profile = ServerProfile(normalizeServerAddress(baseUrl), credentials.username)
-        val client = NavidromeClient(http, profile.baseUrl, credentials)
+        val requestUrl = route(profile.baseUrl)
+        val client = NavidromeClient(http, profile.baseUrl, credentials, requestUrl)
         client.ping()
         vault.save("navidrome", credentials.password)
         store.put("server:navidrome", "servers", profile)
         cachedProfile = profile
         cachedPassword = credentials.password
+        cachedRequestUrl = requestUrl
         cachedClient = client
     }
     suspend fun profile(): ServerProfile? = store.read("server:navidrome")
     suspend fun client(): NavidromeClient? = access.withLock {
         val profile = profile() ?: return@withLock null
         val password = vault.read("navidrome") ?: error("Unlock your credential store or reconnect to your music server")
-        if (cachedProfile != profile || cachedPassword != password || cachedClient == null) {
-            cachedClient = NavidromeClient(http, profile.baseUrl, ServerCredentials(profile.username, password))
+        val requestUrl = route(profile.baseUrl)
+        if (cachedProfile != profile || cachedPassword != password || cachedRequestUrl != requestUrl || cachedClient == null) {
+            cachedClient = NavidromeClient(http, profile.baseUrl, ServerCredentials(profile.username, password), requestUrl)
             cachedProfile = profile
             cachedPassword = password
+            cachedRequestUrl = requestUrl
         }
         cachedClient
     }
@@ -60,5 +66,6 @@ class NavidromeConnection(private val store: MusicStore, private val http: HttpC
         cachedClient = null
         cachedProfile = null
         cachedPassword = null
+        cachedRequestUrl = null
     }
 }

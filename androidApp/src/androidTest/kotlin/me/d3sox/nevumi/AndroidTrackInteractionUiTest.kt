@@ -82,7 +82,7 @@ class AndroidTrackInteractionUiTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Record listening history").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithText("Appearance").assertIsDisplayed()
+        compose.onNodeWithText("Appearance").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun heldRatingStarsKeepTheirBackgroundAndOnlySaveAfterConfirmation() = withTracks(1) { app, songs ->

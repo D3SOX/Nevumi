@@ -1,3 +1,6 @@
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
@@ -54,6 +57,37 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+}
+
+abstract class TailscaleLibraries : DefaultTask() {
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE) abstract val source: DirectoryProperty
+    @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val script: RegularFileProperty
+    @get:Internal abstract val ndk: DirectoryProperty
+    @get:Input abstract val abis: ListProperty<String>
+    @get:OutputDirectory abstract val output: DirectoryProperty
+    @get:OutputDirectory abstract val licenses: DirectoryProperty
+    @get:Inject abstract val exec: ExecOperations
+
+    @TaskAction fun build() {
+        for ((index, abi) in abis.get().withIndex()) exec.exec {
+            commandLine(listOf("python3", script.get().asFile, "--android-abi", abi, "--ndk", ndk.get().asFile,
+                "--output", output.get().dir(abi).asFile) + if (index == 0) listOf("--licenses", licenses.get().asFile) else emptyList())
+        }
+    }
+}
+
+val tailscaleLibraries = tasks.register<TailscaleLibraries>("tailscaleLibraries") {
+    source.set(rootProject.layout.projectDirectory.dir("native/tailscale"))
+    script.set(rootProject.layout.projectDirectory.file("scripts/build-tailscale.py"))
+    ndk.set(androidComponents.sdkComponents.ndkDirectory)
+    abis.set(listOf("arm64-v8a", "x86_64"))
+    output.set(layout.buildDirectory.dir("generated/tailscale/jniLibs"))
+    licenses.set(layout.buildDirectory.dir("generated/tailscale/assets"))
+}
+androidComponents.onVariants { variant ->
+    variant.sources.jniLibs?.addGeneratedSourceDirectory(tailscaleLibraries, TailscaleLibraries::output)
+    // The APK carries the Go dependencies' license notices, as the Linux packages do.
+    variant.sources.assets?.addGeneratedSourceDirectory(tailscaleLibraries, TailscaleLibraries::licenses)
 }
 
 dependencies {

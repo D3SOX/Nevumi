@@ -42,6 +42,7 @@ I started it because I couldn't find a music player with all the features I want
 - Use gapless playback, crossfade, speed and pitch controls, repeat counts, an equalizer, mono audio and a sleep timer. Open common playback settings from Now playing. Browse AutoEQ headphone profiles or save your own settings as a profile.
 - Show waveforms from the actual audio. Prepare a library in the background with bounded parallel decoding and a persistent cache.
 - Edit local tags and artwork, or edit Navidrome's music files over SFTP. Find metadata through MusicBrainz.
+- Reach your music server and SFTP server on a tailnet through Nevumi's built-in Tailscale client, without the Tailscale app or a VPN. Headscale works too. Choose which connections use it in Settings › Tunnel.
 - Track listening history and scrobble through your music server, Last.fm or ListenBrainz.
 - Pair devices with a camera QR scan or a manual code. Sync playlists, favorites, ratings, listening history and saved queue contents. Playback positions stay separate on each device.
 - Choose light, dark, system or artwork-based colors, including a custom color palette. Desktop has a volume slider in the mini player, right-click menus and MPRIS media controls.
@@ -155,7 +156,7 @@ Development APKs install separately as **Nevumi dev** and use the public develop
 
 ## Build and test
 
-Install JDK 21, Android SDK platform 37.0, build tools 37.0.0, NDK 28.2.13676358 and CMake 3.22.1. Linux also needs CMake, Ninja, SDL2 and OpenGL development files, mpv and its development library, FFmpeg, libsecret and PulseAudio client tools. Desktop distributions use JDK 25 for their bundled runtime.
+Install JDK 21, Go 1.27.1 or newer, Android SDK platform 37.0, build tools 37.0.0, NDK 28.2.13676358 and CMake 3.22.1. Linux also needs CMake, Ninja, SDL2 and OpenGL development files, mpv and its development library, FFmpeg, libsecret and PulseAudio client tools. Desktop distributions use JDK 25 for their bundled runtime.
 
 Set `JAVA_HOME` to JDK 21 and `ANDROID_HOME` to your Android SDK. Gradle detects installed toolchains or reads `JAVA_HOME_21_X64` and `JAVA_HOME_25_X64`.
 
@@ -165,7 +166,7 @@ Set `JAVA_HOME` to JDK 21 and `ANDROID_HOME` to your Android SDK. Gradle detects
 ./gradlew :desktopApp:createDistributable
 ```
 
-The first native build downloads checksum-verified projectM 4.1.8 and its evaluator. Subsequent builds reuse those sources. Native dependencies remain shared libraries.
+The first native build downloads checksum-verified projectM 4.1.8 and its evaluator. Subsequent builds reuse those sources. Native dependencies remain shared libraries. The Tailscale client in `native/tailscale` builds with Go modules pinned in its `go.sum`.
 
 The acceptance suite uses disposable Navidrome, gonic, SFTP and scrobbling fixtures. CI runs desktop tests and Android instrumentation on API 31 and API 36 with 16 KB memory pages. Release checks also install the optimized APK and open MilkDrop. The fixture helpers under `scripts/` can start the same services locally. Use an emulator for instrumentation tests, which clear the app's test data.
 
@@ -212,6 +213,8 @@ bun run deploy
 ## License and credits
 
 Nevumi uses [AGPL-3.0-only](LICENSE). Namida inspired the feature requirements. Nevumi does not include its implementation or assets.
+
+The built-in Tailscale client uses [tsnet](https://tailscale.com/kb/1244/tsnet), under BSD-3-Clause, built without log uploads. Its Go dependencies' license notices ship with the Linux libraries and inside the APK.
 
 MilkDrop rendering uses [projectM](https://github.com/projectM-visualizer/projectm/tree/4967dc003e5206d7df3ff447287f7609c47d2343), under LGPL-2.1-or-later. The desktop window follows the approach used by [Spotifast](https://github.com/crmne/spotifast). Third-party license notices ship with the native libraries. Run `python scripts/package-native-sources.py --output .test-environment/release-sources` to download the exact projectM, evaluator and mpv sources and copy Nevumi's projectM patch. The source URLs and checksums are pinned in [native/CMakeLists.txt](native/CMakeLists.txt) and [scripts/build_mpv.py](scripts/build_mpv.py).
 

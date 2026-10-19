@@ -82,6 +82,8 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
             Text("Edit and upload the actual music files. Use the SSH account’s absolute path to your Navidrome music directory.")
+            if (controller.tunnel != null) Text("To reach a server on your tailnet, turn on Server files in Tunnel settings.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading || busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (libraries.isNotEmpty()) SettingChoice("Music library", libraryId, libraries.map { it.id as Long? to it.name }) { libraryId = it }
             OutlinedTextField(host, { host = it }, modifier = Modifier.fillMaxWidth(), label = { Text("SFTP host") }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true, enabled = !busy)

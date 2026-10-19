@@ -20,6 +20,10 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /native/tailscale
+    schedule:
+      interval: weekly
   - package-ecosystem: pip
     directory: /scripts
     schedule:

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Build the Linux JNI bridge and stage its shared projectM dependency."""
+"""Build the Linux JNI bridges and stage their shared dependencies."""
 import argparse
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -28,6 +29,7 @@ def build(output: Path, build_type: str):
                 target = licenses / component / document.relative_to(source)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(document, target)
+    subprocess.run([sys.executable, str(ROOT / "scripts/build-tailscale.py"), "--output", str(output)], check=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

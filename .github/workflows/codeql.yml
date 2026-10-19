@@ -41,8 +41,10 @@ jobs:
                   if build or suffix in {'.kt', '.kts', '.java', '.gradle'}:
                       languages.add('java-kotlin')
                   if build or path.startswith('native/') or suffix in {'.c', '.cpp', '.h', '.hpp', '.cmake'} or Path(path).name == 'CMakeLists.txt' or path in {
-                      'scripts/build-visualizer.py', 'scripts/build_mpv.py'}:
+                      'scripts/build-visualizer.py', 'scripts/build-tailscale.py', 'scripts/build_mpv.py'}:
                       languages.add('c-cpp')
+                  if suffix == '.go' or path.startswith('native/tailscale/') or path == 'scripts/build-tailscale.py':
+                      languages.add('go')
                   if suffix == '.py' or path == 'scripts/requirements.txt':
                       languages.add('python')
                   if suffix in {'.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx'}:
@@ -53,7 +55,7 @@ jobs:
                       return all_languages
               return languages
 
-          all_languages = {'java-kotlin', 'c-cpp', 'python', 'javascript-typescript', 'actions'}
+          all_languages = {'java-kotlin', 'c-cpp', 'go', 'python', 'javascript-typescript', 'actions'}
           event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
           if os.environ['EVENT_NAME'] == 'pull_request':
               base, head = event['pull_request']['base']['sha'], event['pull_request']['head']['sha']
@@ -67,7 +69,7 @@ jobs:
               languages = languages_for(paths)
           else:
               languages = all_languages
-          matrix = {'include': [{'language': language, 'build-mode': 'manual' if language in {'java-kotlin', 'c-cpp'} else 'none'}
+          matrix = {'include': [{'language': language, 'build-mode': 'manual' if language in {'java-kotlin', 'c-cpp', 'go'} else 'none'}
                                 for language in sorted(languages)]}
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('matrix=' + json.dumps(matrix) + '\n')
@@ -92,6 +94,11 @@ jobs:
           distribution: temurin
           java-version: '21'
       - if: matrix.build-mode == 'manual'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: native/tailscale/go.mod
+          cache-dependency-path: native/tailscale/go.sum
+      - if: matrix.build-mode == 'manual'
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           log-accepted-android-sdk-licenses: false
@@ -112,6 +119,9 @@ jobs:
         run: |
           python3 scripts/build-visualizer.py --output shared/build/native/runtime
           ./gradlew --no-daemon --no-build-cache --rerun-tasks :androidApp:externalNativeBuildDebug --console=plain
+      - name: Compile the Tailscale client
+        if: matrix.language == 'go'
+        run: python3 scripts/build-tailscale.py --output shared/build/native/runtime
       - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           category: /language:${{ matrix.language }}
