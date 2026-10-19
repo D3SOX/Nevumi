@@ -28,12 +28,13 @@ internal suspend fun AwaitPointerEventScope.awaitHorizontalSwipeStart(pointer: P
         val change = awaitPointerEvent().changes.firstOrNull { it.id == pointer } ?: return null
         if (change.isConsumed || !change.pressed) return null
         total += change.positionChange()
-        if (abs(total.y) > slop) return null
+        // Check dominance first: a batched event can cross the slop on both axes at once.
         if (abs(total.x) > slop) {
             if (abs(total.x) < abs(total.y) * HORIZONTAL_DOMINANCE) return null
             change.consume()
             return change to total.x - sign(total.x) * slop
         }
+        if (abs(total.y) > slop) return null
         // Give up once the list has claimed the pointer.
         awaitPointerEvent(PointerEventPass.Final)
         if (change.isConsumed) return null
