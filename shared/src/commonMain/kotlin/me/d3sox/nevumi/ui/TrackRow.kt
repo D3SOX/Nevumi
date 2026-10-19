@@ -3,10 +3,6 @@ package me.d3sox.nevumi.ui
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -18,8 +14,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionOnScreen
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
@@ -90,30 +84,14 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
             }
         }
         Surface(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.fillMaxWidth()
-            .pointerInput(track.id, threshold, state.preferences.swipeRight, state.preferences.swipeLeft, selectionMode) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    var overSlop = 0f
-                    val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, amount ->
-                        overSlop = amount
-                        change.consume()
-                    } ?: return@awaitEachGesture
-                    settling?.cancel()
-                    fun move(amount: Float) {
-                        val action = if (offset + amount >= 0) state.preferences.swipeRight else state.preferences.swipeLeft
-                        if (!selectionMode && actionAvailable(action)) offset += amount
-                    }
-                    move(overSlop)
-                    // Consume vertical movement too once this gesture belongs to the track.
-                    val released = drag(start.id) { change ->
-                        val amount = change.positionChange().x
-                        change.consume()
-                        move(amount)
-                    }
-                    if (released && abs(offset) >= threshold)
-                        performAction(if (offset > 0) state.preferences.swipeRight else state.preferences.swipeLeft)
-                    settle()
-                }
+            .horizontalSwipe(track.id, threshold, state.preferences.swipeRight, state.preferences.swipeLeft, selectionMode,
+                onStart = { settling?.cancel() }, onDrag = { amount ->
+                    val action = if (offset + amount >= 0) state.preferences.swipeRight else state.preferences.swipeLeft
+                    if (!selectionMode && actionAvailable(action)) offset += amount
+                }) { released ->
+                if (released && abs(offset) >= threshold)
+                    performAction(if (offset > 0) state.preferences.swipeRight else state.preferences.swipeLeft)
+                settle()
             }.semantics {
                 customActions = TrackAction.entries.filter { available(it) }.map { action ->
                     CustomAccessibilityAction(action.label(track.favorite, availableOffline)) { perform(action) }

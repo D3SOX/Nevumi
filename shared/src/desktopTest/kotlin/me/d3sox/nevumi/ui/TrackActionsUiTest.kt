@@ -141,6 +141,11 @@ class TrackActionsUiTest {
                 val beforeScroll = row.fetchSemanticsNode().boundsInRoot.top
                 row.performTouchInput { swipe(center, center.copy(y = center.y + 80f), 250) }
                 assertTrue(row.fetchSemanticsNode().boundsInRoot.top > beforeScroll + 20f, "Ordinary vertical scrolling must still work")
+                mainClock.advanceTimeBy(1_000)
+                val beforeDiagonal = row.fetchSemanticsNode().boundsInRoot.top
+                row.performTouchInput { swipe(center, center.copy(x = center.x + 100f, y = center.y + 80f), 250) }
+                assertTrue(row.fetchSemanticsNode().boundsInRoot.top > beforeDiagonal + 20f,
+                    "A diagonal scroll that drifts sideways first must scroll the list instead of swiping the track")
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
