@@ -2,6 +2,7 @@ package me.d3sox.nevumi
 
 import android.content.ContentValues
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.*
@@ -42,8 +43,9 @@ class AndroidM3uPlaylistsUiTest {
         }))
         fun clickPickerItem(text: String, titleOnly: Boolean = false) {
             var requested = false
+            var requestedAt = 0L
             try {
-            compose.waitUntil(5_000) {
+            compose.waitUntil(10_000) {
                 val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@waitUntil false
                 fun nodes(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> = listOf(node) +
                     (0 until node.childCount).mapNotNull { node.getChild(it) }.flatMap(::nodes)
@@ -57,7 +59,9 @@ class AndroidM3uPlaylistsUiTest {
                     val selected = breadcrumbs.lastOrNull() == text
                     if (selected && (text != "Downloads" || requested || !sidebarOpen)) return@waitUntil true
                 } else if (requested && root.packageName?.toString() == app.packageName) return@waitUntil true
-                if (requested) return@waitUntil false
+                // A slow DocumentsUI can drop navigation clicks, so retry one that had no effect.
+                val retryable = titleOnly || text == "Show roots"
+                if (requested && (!retryable || SystemClock.uptimeMillis() - requestedAt < 3_000)) return@waitUntil false
                 val item = visible.firstOrNull {
                     (it.text?.toString()?.equals(text, ignoreCase = true) == true || it.contentDescription?.toString() == text) &&
                         (!titleOnly || it.viewIdResourceName == "android:id/title" && !it.isEditable)
@@ -66,6 +70,7 @@ class AndroidM3uPlaylistsUiTest {
                 while (clickable != null && !clickable.isClickable) clickable = clickable.parent
                 val target = clickable ?: return@waitUntil false
                 requested = true
+                requestedAt = SystemClock.uptimeMillis()
                 target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                 false
             }
@@ -101,6 +106,7 @@ class AndroidM3uPlaylistsUiTest {
                 openDocument("$name.m3u8")
                 compose.waitUntil(10_000) { controller.state.value.playlists.any { it.name == name } }
                 assertEquals(listOf(trackId, trackId), controller.state.value.playlists.single { it.name == name }.trackIds)
+                compose.waitUntil(5_000) { compose.onAllNodesWithText("Done").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithText("Done").performClick()
                 compose.onNodeWithText(name).performClick()
                 compose.onNodeWithContentDescription("Playlist options").performClick()
