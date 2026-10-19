@@ -108,6 +108,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: development-*
@@ -122,6 +123,8 @@ jobs:
           cd development
           printf 'Development build from commit %s. Android installs as Nevumi dev. Linux packages replace Nevumi.\n' "$GITHUB_SHA" > notes.txt
           tag="development-$GITHUB_RUN_ID"
+          # Release creation needs an existing ref when newer commits change workflows.
+          git push origin "$GITHUB_SHA:refs/tags/$tag"
           assets=(./*.apk ./*.pkg.tar.zst ./*.AppImage)
           if draft=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
             if [[ "$draft" == false ]]; then
@@ -130,7 +133,7 @@ jobs:
               exit 0
             fi
           else
-            gh release create "$tag" --draft --prerelease --target "$GITHUB_SHA" \
+            gh release create "$tag" --verify-tag --draft --prerelease \
               --title "Nevumi development ${GITHUB_SHA:0:12}" --notes-file notes.txt
           fi
           gh release upload "$tag" --clobber "${assets[@]}"
