@@ -58,6 +58,38 @@ class FileEditingUiTest {
     }
 
     @Test
+    fun swipingBetweenSongAndFileActionsKeepsTheCoverVisible() {
+        val directory = Files.createTempDirectory("file-actions-swipe-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val audio = directory.resolve("song.flac")
+        Files.copy(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac"), audio)
+        runBlocking { library.importTrack(TrackMetadata("Northern Light", "Fixture Artist", "Fixture Album"),
+            TrackSource("local:$audio", SourceKind.LOCAL, audio.toString())) }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                onNodeWithContentDescription("Track options: Northern Light").performClick()
+                onNodeWithText("Play next").performTouchInput { swipe(center, center.copy(y = center.y - 600f), 300) }
+                onNodeWithText("Edit tags").assertIsDisplayed()
+                onNodeWithText("Play next").assertDoesNotExist()
+                onNodeWithTag("track-action-artwork").assertIsDisplayed()
+                onNodeWithText("Edit tags").performTouchInput { swipe(center, center.copy(y = center.y + 600f), 300) }
+                onNodeWithText("Play next").assertIsDisplayed()
+                onNodeWithText("Edit tags").assertDoesNotExist()
+                onNodeWithText("File actions").performClick()
+                onNodeWithTag("track-action-artwork").assertIsDisplayed()
+                onNodeWithContentDescription("Back to song actions").performClick()
+                onNodeWithText("Play next").assertIsDisplayed()
+                onNodeWithContentDescription("Back to song actions").assertDoesNotExist()
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun anUnappliedEditCanBeDiscardedAfterRestartWithoutChangingTheSong() {
         val directory = Files.createTempDirectory("discard-prepared-edit-ui")
         var store = openMusicStore(directory.resolve("library.db").toString())

@@ -34,7 +34,6 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     var deleting by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     var sources by remember { mutableStateOf(false) }
-    var fileActions by remember { mutableStateOf(false) }
     val navigate = LocalLibraryNavigate.current
     val origin = LocalLibraryOrigin.current
     var rating by remember { mutableStateOf(false) }
@@ -94,76 +93,70 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
         content(::available, ::perform, openMenu, menu && artworkPlaced)
     }
     if (menu) {
+        fun MutableList<TrackOption>.option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) {
+            add(TrackOption(label, icon, detail) { menu = false; click() })
+        }
         val options = buildList {
-            fun option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) {
-                add(TrackOption(label, icon, detail) { menu = false; fileActions = false; click() })
+            val primary = listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND,
+                TrackAction.FAVORITE, TrackAction.RATE, TrackAction.ADD_TO_PLAYLIST,
+                TrackAction.GO_ARTIST, TrackAction.GO_ALBUM, TrackAction.GO_ALBUM_ARTIST,
+                TrackAction.GO_GENRE, TrackAction.GO_FOLDER, TrackAction.SHOW_SOURCES,
+                TrackAction.SELECT, TrackAction.DOWNLOAD)
+            val availableOffline = track.sources.any { it.kind == SourceKind.LOCAL && it.available }
+            primary.filter { it != hiddenAction && available(it) }.forEach { action -> option(action.label(track.favorite, availableOffline), action.icon(track.favorite, track.rating,
+                state.playlists.any { track.id in it.trackIds }, availableOffline),
+                if (action == TrackAction.RATE && track.rating > 0) "${track.rating} / 5" else null) { perform(action) } }
+            if (queueEntryId != null) {
+                option("Remove from queue", AppIcon.REMOVE) { controller.removeQueueEntry(queueEntryId) }
+                val entry = state.queue.entries.firstOrNull { it.id == queueEntryId }
+                if (entry != null && state.queue.entries.indexOf(entry) > state.queue.currentIndex) {
+                    val manual = entry.section == me.d3sox.nevumi.queue.QueueSection.MANUAL
+                    option(if (manual) "Move to context" else "Move to Up next", if (manual) AppIcon.LIBRARY else AppIcon.QUEUE) {
+                        controller.moveQueueEntryToSection(queueEntryId, if (manual) me.d3sox.nevumi.queue.QueueSection.CONTEXT else me.d3sox.nevumi.queue.QueueSection.MANUAL)
+                    }
+                }
             }
-            if (!fileActions) {
-                val primary = listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND,
-                    TrackAction.FAVORITE, TrackAction.RATE, TrackAction.ADD_TO_PLAYLIST,
-                    TrackAction.GO_ARTIST, TrackAction.GO_ALBUM, TrackAction.GO_ALBUM_ARTIST,
-                    TrackAction.GO_GENRE, TrackAction.GO_FOLDER, TrackAction.SHOW_SOURCES,
-                    TrackAction.SELECT, TrackAction.DOWNLOAD)
-                val availableOffline = track.sources.any { it.kind == SourceKind.LOCAL && it.available }
-                primary.filter { it != hiddenAction && available(it) }.forEach { action -> option(action.label(track.favorite, availableOffline), action.icon(track.favorite, track.rating,
-                    state.playlists.any { track.id in it.trackIds }, availableOffline),
-                    if (action == TrackAction.RATE && track.rating > 0) "${track.rating} / 5" else null) { perform(action) } }
-                if (queueEntryId != null) {
-                    option("Remove from queue", AppIcon.REMOVE) { controller.removeQueueEntry(queueEntryId) }
-                    val entry = state.queue.entries.firstOrNull { it.id == queueEntryId }
-                    if (entry != null && state.queue.entries.indexOf(entry) > state.queue.currentIndex) {
-                        val manual = entry.section == me.d3sox.nevumi.queue.QueueSection.MANUAL
-                        option(if (manual) "Move to context" else "Move to Up next", if (manual) AppIcon.LIBRARY else AppIcon.QUEUE) {
-                            controller.moveQueueEntryToSection(queueEntryId, if (manual) me.d3sox.nevumi.queue.QueueSection.CONTEXT else me.d3sox.nevumi.queue.QueueSection.MANUAL)
-                        }
-                    }
-                }
-                val playlistIndex = playlistPosition ?: contextIndex
-                if (playlistId != null && playlistIndex != null) {
-                    option("Remove from playlist", AppIcon.REMOVE) { controller.removePlaylistTrack(playlistId, playlistIndex) }
-                }
-            } else {
-                if (controller.localFileEditingAvailable && track.sources.any { it.kind == SourceKind.LOCAL && it.available }) {
-                    option("Edit tags", AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; tagEditor = true }
-                    option("Rename file", AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; renaming = true }
-                    option("Delete local file", AppIcon.REMOVE) { fileTarget = FileEditTarget.LOCAL; deleting = true }
-                    option("Replace artwork", AppIcon.ALBUM) {
-                        scope.launch {
-                            try { artworkPicker.pick()?.let { controller.replaceArtwork(track.id, it).join() } }
-                            catch (cancelled: CancellationException) { throw cancelled }
-                            catch (error: Exception) { artworkError = error.message ?: "The selected image is unavailable" }
-                        }
-                    }
-                }
-                if (controller.canEditServerTrack(track)) {
-                    option("Edit server tags", AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; tagEditor = true }
-                    option("Rename server file", AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; renaming = true }
-                    option("Delete server file", AppIcon.REMOVE) { fileTarget = FileEditTarget.SERVER; deleting = true }
-                    option("Replace server artwork", AppIcon.ALBUM) {
-                        scope.launch {
-                            try { artworkPicker.pick()?.let { controller.replaceArtwork(track.id, it, FileEditTarget.SERVER).join() } }
-                            catch (cancelled: CancellationException) { throw cancelled }
-                            catch (error: Exception) { artworkError = error.message ?: "The selected image is unavailable" }
-                        }
-                    }
-                }
-                if (state.sftp != null && state.sftp?.serverId == state.server?.serverId && track.sources.any { it.kind == SourceKind.LOCAL && it.available })
-                    option("Upload to server", AppIcon.CLOUD) { uploading = true }
-                lastEdit?.let { edit -> option("Undo file edit", AppIcon.UNDO) { controller.undoFileEdit(edit.id) } }
+            val playlistIndex = playlistPosition ?: contextIndex
+            if (playlistId != null && playlistIndex != null) {
+                option("Remove from playlist", AppIcon.REMOVE) { controller.removePlaylistTrack(playlistId, playlistIndex) }
             }
+        }
+        val fileOptions = buildList {
+            if (controller.localFileEditingAvailable && track.sources.any { it.kind == SourceKind.LOCAL && it.available }) {
+                option("Edit tags", AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; tagEditor = true }
+                option("Rename file", AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; renaming = true }
+                option("Delete local file", AppIcon.REMOVE) { fileTarget = FileEditTarget.LOCAL; deleting = true }
+                option("Replace artwork", AppIcon.ALBUM) {
+                    scope.launch {
+                        try { artworkPicker.pick()?.let { controller.replaceArtwork(track.id, it).join() } }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (error: Exception) { artworkError = error.message ?: "The selected image is unavailable" }
+                    }
+                }
+            }
+            if (controller.canEditServerTrack(track)) {
+                option("Edit server tags", AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; tagEditor = true }
+                option("Rename server file", AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; renaming = true }
+                option("Delete server file", AppIcon.REMOVE) { fileTarget = FileEditTarget.SERVER; deleting = true }
+                option("Replace server artwork", AppIcon.ALBUM) {
+                    scope.launch {
+                        try { artworkPicker.pick()?.let { controller.replaceArtwork(track.id, it, FileEditTarget.SERVER).join() } }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (error: Exception) { artworkError = error.message ?: "The selected image is unavailable" }
+                    }
+                }
+            }
+            if (state.sftp != null && state.sftp?.serverId == state.server?.serverId && track.sources.any { it.kind == SourceKind.LOCAL && it.available })
+                option("Upload to server", AppIcon.CLOUD) { uploading = true }
+            lastEdit?.let { edit -> option("Undo file edit", AppIcon.UNDO) { controller.undoFileEdit(edit.id) } }
         }
         val hasFiles = controller.localFileEditingAvailable && track.sources.any { it.kind == SourceKind.LOCAL && it.available } ||
             controller.canEditServerTrack(track) || lastEdit != null || state.sftp != null && track.sources.any { it.kind == SourceKind.LOCAL && it.available }
-        TrackActionDialog(track, state.artwork[track.id], options, { menu = false; fileActions = false },
+        TrackActionDialog(track, state.artwork[track.id], options, { menu = false },
             artworkOrigin = openingArtwork,
             onArtworkPlaced = { artworkPlaced = true },
             artworkCornerRadius = artworkCornerRadius,
-            back = if (fileActions) { { fileActions = false } } else null,
-            footer = if (hasFiles && !fileActions) { {
-                TextButton(onClick = { fileActions = true }, modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                    Icon(AppIcon.EDIT.vector, null); Spacer(Modifier.width(8.dp)); Text("File actions")
-                }
-            } } else null)
+            fileOptions = fileOptions.takeIf { hasFiles })
     }
     if (sources) SongSources(track, controller) { sources = false }
     if (rating) SongRating(track, controller) { rating = false }
