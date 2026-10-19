@@ -53,7 +53,7 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
             state.sftp?.let { configuration ->
                 Text("SFTP connected", style = MaterialTheme.typography.titleMedium)
                 Text("${configuration.libraryName} · ${configuration.connection.host}")
-                TextButton(enabled = !busy, onClick = {
+                ActionButton("Disconnect SFTP", AppIcon.UNLINK, enabled = !busy, style = ActionStyle.DESTRUCTIVE) {
                     busy = true; error = null
                     scope.launch {
                         try { controller.disconnectServerFiles() }
@@ -61,22 +61,22 @@ internal fun SftpSettings(state: AppState, controller: MusicController, dismiss:
                         catch (failure: Exception) { error = failure.message ?: "SFTP could not be disconnected" }
                         finally { busy = false }
                     }
-                }) { Text("Disconnect SFTP") }
+                }
             }
             if (state.serverUploads.isNotEmpty()) {
                 Text("Unfinished uploads", style = MaterialTheme.typography.titleMedium)
                 state.serverUploads.forEach { upload ->
                     Text(upload.relativePath)
                     if (state.sftp?.id != upload.configurationId) Text("Reconnect to this upload’s original SFTP directory to retry it.")
-                    Row {
-                        TextButton(enabled = !busy && state.sftp?.id == upload.configurationId, onClick = {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ActionButton("Retry upload", AppIcon.REFRESH, enabled = !busy && state.sftp?.id == upload.configurationId) {
                             busy = true; error = null
                             scope.launch {
                                 try { controller.retryServerUpload(upload.id).join() }
                                 finally { busy = false }
                             }
-                        }) { Text("Retry upload") }
-                        TextButton(enabled = !busy, onClick = { discard = upload }) { Text("Discard upload") }
+                        }
+                        ActionButton("Discard upload", AppIcon.REMOVE, enabled = !busy, style = ActionStyle.DESTRUCTIVE) { discard = upload }
                     }
                 }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

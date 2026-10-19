@@ -69,7 +69,7 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
                     Text(source.location, style = MaterialTheme.typography.bodySmall)
                     if (!source.available) Text("Unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = { choosing = true }) { Text("Link another copy") }
+                ActionButton("Link another copy", AppIcon.LINK, style = ActionStyle.OUTLINED) { choosing = true }
             }
         }
     }, confirmButton = { PageAction("Done", onClick = dismiss) })

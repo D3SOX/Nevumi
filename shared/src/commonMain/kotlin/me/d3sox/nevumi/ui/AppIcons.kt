@@ -105,6 +105,16 @@ import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Redo
+import androidx.compose.material.icons.rounded.LinkOff
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.FileOpen
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.Login
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -207,6 +217,16 @@ internal enum class AppIcon(val vector: ImageVector) {
     KEY(Icons.Rounded.VpnKey),
     LOCK(Icons.Rounded.Lock),
     LINK(Icons.Rounded.Link),
+    UNLINK(Icons.Rounded.LinkOff),
+    UNLOCK(Icons.Rounded.LockOpen),
+    REFRESH(Icons.Rounded.Refresh),
+    RESET(Icons.Rounded.RestartAlt),
+    SYNC(Icons.Rounded.Sync),
+    CAMERA(Icons.Rounded.PhotoCamera),
+    IMPORT(Icons.Rounded.FileOpen),
+    OPEN_EXTERNAL(Icons.AutoMirrored.Rounded.OpenInNew),
+    SIGN_IN(Icons.AutoMirrored.Rounded.Login),
+    SIGN_OUT(Icons.AutoMirrored.Rounded.Logout),
     TAILSCALE(Icons.Rounded.VpnLock),
     ASCENDING(Icons.Rounded.ArrowUpward),
     DESCENDING(Icons.Rounded.ArrowDownward),

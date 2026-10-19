@@ -55,18 +55,18 @@ internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismis
                 Text(peer.name, style = MaterialTheme.typography.titleMedium)
                 Text(if (peer.lastSyncedAt == null) "Ready to sync" else "Library synced", style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(enabled = !state.busy, onClick = { run { devices.synchronize(peer.deviceId) } },
-                        modifier = Modifier.semantics { contentDescription = "Sync with ${peer.name}" }) { Text("Sync now") }
-                    TextButton(enabled = !state.busy, onClick = { remove = peer },
-                        modifier = Modifier.semantics { contentDescription = "Remove ${peer.name}" }) { Text("Remove") }
+                    ActionButton("Sync now", AppIcon.SYNC, Modifier.semantics { contentDescription = "Sync with ${peer.name}" },
+                        enabled = !state.busy) { run { devices.synchronize(peer.deviceId) } }
+                    ActionButton("Remove", AppIcon.REMOVE, Modifier.semantics { contentDescription = "Remove ${peer.name}" },
+                        enabled = !state.busy, style = ActionStyle.DESTRUCTIVE) { remove = peer }
                 }
             }
             SettingsLink("Songs to match", AppIcon.LINK,
                 if (unmatched.isEmpty()) "All shared songs matched" else "${countLabel(unmatched.size, "song")} need your copy") { matching = true }
             folders.forEach { request ->
-                TextButton(onClick = { folder = request }, modifier = Modifier.semantics {
+                ActionButton("Choose folder: ${request.playlistName}", AppIcon.FOLDER, Modifier.semantics {
                     contentDescription = "Choose folder for ${request.playlistName}"
-                }) { Text("Choose folder: ${request.playlistName}") }
+                }, style = ActionStyle.OUTLINED) { folder = request }
             }
             Text("Pair another device", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -79,8 +79,8 @@ internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismis
             }
             OutlinedTextField(address, { address = it }, label = { Text("This device’s network address") },
                 singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth())
-            if (state.invitation == null) TextButton(enabled = address.isNotBlank() && !state.busy,
-                onClick = { run { devices.createInvitation(address.trim()) } }) { Text("Create invitation") }
+            if (state.invitation == null) ActionButton("Create invitation", AppIcon.PLUS,
+                enabled = address.isNotBlank() && !state.busy) { run { devices.createInvitation(address.trim()) } }
             else {
                 Text("Scan this QR code or copy the invitation to your other device. It expires in five minutes.")
                 Box(Modifier.fillMaxWidth(), contentAlignment = androidx.compose.ui.Alignment.Center) {
@@ -88,7 +88,7 @@ internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismis
                 }
                 OutlinedTextField(requireNotNull(state.invitation), {}, readOnly = true, label = { Text("Your invitation") },
                     maxLines = 3, modifier = Modifier.fillMaxWidth())
-                TextButton(onClick = { run { devices.cancelInvitation() } }) { Text("Cancel invitation") }
+                ActionButton("Cancel invitation", AppIcon.CLOSE, style = ActionStyle.OUTLINED) { run { devices.cancelInvitation() } }
             }
         }
     }, confirmButton = { PageAction("Done", onClick = dismiss) })

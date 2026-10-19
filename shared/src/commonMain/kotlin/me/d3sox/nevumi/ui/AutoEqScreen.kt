@@ -62,11 +62,13 @@ internal fun AutoEqScreen(profiles: AutoEqProfiles, controller: MusicController,
                 Text("AutoEQ profiles stay on this device. Catalog refreshes and profile downloads contact GitHub.",
                     style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search headphones") }, singleLine = true)
-                Row {
-                    TextButton(onClick = { action(catalogRefresh = true) { profiles.refreshCatalog() } }, enabled = !refreshing) { Text("Refresh catalog") }
-                    TextButton(onClick = { action {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton("Refresh catalog", AppIcon.REFRESH, enabled = !refreshing, style = ActionStyle.OUTLINED) {
+                        action(catalogRefresh = true) { profiles.refreshCatalog() }
+                    }
+                    ActionButton("Import profile", AppIcon.IMPORT, enabled = !working, style = ActionStyle.OUTLINED) { action {
                         files.open()?.let { document -> select(profiles.import(document.name, document.text)) }
-                    } }, enabled = !working) { Text("Import profile") }
+                    } }
                 }
                 if (working || refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -76,11 +78,11 @@ internal fun AutoEqScreen(profiles: AutoEqProfiles, controller: MusicController,
                 Column {
                     Text(profile.name)
                     Text(profile.attribution, style = MaterialTheme.typography.bodySmall)
-                    Row {
-                        TextButton(onClick = { action { select(profile) } }, enabled = !working,
-                            modifier = Modifier.semantics { contentDescription = "Use saved profile: ${profile.name}" }) { Text("Use profile") }
-                        TextButton(onClick = { action { profiles.remove(profile.id) } }, enabled = !working,
-                            modifier = Modifier.semantics { contentDescription = "Remove saved profile: ${profile.name}" }) { Text("Remove") }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ActionButton("Use profile", AppIcon.CHECK, Modifier.semantics { contentDescription = "Use saved profile: ${profile.name}" },
+                            enabled = !working) { action { select(profile) } }
+                        ActionButton("Remove", AppIcon.REMOVE, Modifier.semantics { contentDescription = "Remove saved profile: ${profile.name}" },
+                            enabled = !working, style = ActionStyle.DESTRUCTIVE) { action { profiles.remove(profile.id) } }
                     }
                 }
             }
@@ -91,13 +93,13 @@ internal fun AutoEqScreen(profiles: AutoEqProfiles, controller: MusicController,
                 Column {
                     Text(profile.name)
                     Text(profile.attribution, style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { action { select(profiles.download(profile)) } }, enabled = !working,
-                        modifier = Modifier.semantics { contentDescription = "Download profile: ${profile.name}, ${profile.attribution}" }) {
-                        Text(if (saved.any { it.id == profile.id }) "Use saved profile" else "Download profile")
-                    }
+                    val isSaved = saved.any { it.id == profile.id }
+                    ActionButton(if (isSaved) "Use saved profile" else "Download profile", if (isSaved) AppIcon.CHECK else AppIcon.DOWNLOAD,
+                        Modifier.semantics { contentDescription = "Download profile: ${profile.name}, ${profile.attribution}" },
+                        enabled = !working) { action { select(profiles.download(profile)) } }
                 }
             }
-            item { TextButton(onClick = { license = true }) { Text("AutoEQ license") } }
+            item { ActionButton("AutoEQ license", AppIcon.LICENSE, style = ActionStyle.OUTLINED) { license = true } }
         }
     }, confirmButton = { PageAction("Done", onClick = dismiss) })
     }

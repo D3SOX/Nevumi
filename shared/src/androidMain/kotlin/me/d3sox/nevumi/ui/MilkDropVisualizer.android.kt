@@ -94,9 +94,9 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
         Surface(Modifier.fillMaxSize()) {
             Column {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = close) { Text("Close visualizer") }
-                    TextButton(onClick = { change { it.copy(automatic = !it.automatic) } }) {
-                        Text(if (settings.automatic) "Lock preset" else "Unlock preset")
+                    ActionButton("Close visualizer", AppIcon.CLOSE, style = ActionStyle.OUTLINED, onClick = close)
+                    ActionButton(if (settings.automatic) "Lock preset" else "Unlock preset", if (settings.automatic) AppIcon.LOCK else AppIcon.UNLOCK) {
+                        change { it.copy(automatic = !it.automatic) }
                     }
                 }
                 Box(Modifier.fillMaxWidth().weight(1f)) {

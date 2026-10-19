@@ -148,7 +148,7 @@ internal fun SavedQueuesScreen(state: AppState, controller: MusicController, dis
                     SavedQueueKind.SNAPSHOT -> "Fixed copies you can preview and restore into a temporary queue."
                     SavedQueueKind.RECOVERY -> "Automatic copies kept on this device."
                 }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (state.queue.selectedSavedQueueId != null) TextButton(onClick = { controller.detachSavedQueue() }) { Text("Use temporary queue") }
+                if (state.queue.selectedSavedQueueId != null) ActionButton("Use temporary queue", AppIcon.UNLINK, style = ActionStyle.OUTLINED) { controller.detachSavedQueue() }
                 if (filter == SavedQueueKind.RECOVERY) SettingsLink("Recovery snapshots", AppIcon.UNDO,
                     if (state.preferences.queueRecoveryEnabled) "On · Keeps 15 unique queues" else "Off · Enable automatic capture") { page = "recovery-settings" }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -64,7 +64,7 @@ internal fun HomeCustomization(initial: List<HomeSectionId>, controller: MusicCo
                 }
             }
         }
-    }, actions = { TextButton(onClick = { sections = HomeSectionId.entries; disabled = emptySet() }) { Text("Reset") } },
+    }, actions = { ActionButton("Reset", AppIcon.RESET, style = ActionStyle.OUTLINED) { sections = HomeSectionId.entries; disabled = emptySet() } },
         confirmButton = { PageAction("Save order", onClick = {
             controller.updatePreferences { it.copy(homeSections = sections, disabledHomeSections = disabled) }; dismiss()
         }) },
