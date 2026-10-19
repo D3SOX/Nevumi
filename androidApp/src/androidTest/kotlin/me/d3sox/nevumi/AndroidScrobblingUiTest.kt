@@ -62,7 +62,7 @@ class AndroidScrobblingUiTest {
                 compose.onNodeWithText("Service address").performScrollTo().performTextReplacement("http://127.0.0.1:14535")
                 compose.onNodeWithText("Connect").performClick()
                 compose.waitUntil(5_000) { controller.state.value.scrobbling.profiles.size == 1 }
-                compose.onNodeWithText("Connected as fixture").assertIsDisplayed()
+                compose.onNodeWithText("Connected as fixture").performScrollTo().assertIsDisplayed()
                 compose.onNodeWithContentDescription("Back").performClick()
                 compose.onNodeWithContentDescription("Back").performClick()
                 compose.onNodeWithText(song.metadata.title).performClick()
@@ -74,7 +74,7 @@ class AndroidScrobblingUiTest {
                 assertFalse(delivered.toString().contains("fixture-token"))
                 compose.onNodeWithContentDescription("Settings").performClick()
                 compose.onNodeWithText("Listening & scrobbling").performScrollTo().performClick()
-                compose.onNodeWithContentDescription("Send listens to ListenBrainz").performClick()
+                compose.onNodeWithContentDescription("Send listens to ListenBrainz").performScrollTo().performClick()
                 compose.onNode(hasText("Off") and hasAnyAncestor(isPopup())).performClick()
                 compose.waitUntil(3_000) { !controller.state.value.scrobbling.profiles.single().enabled }
                 compose.onNodeWithContentDescription("Back").performClick()
