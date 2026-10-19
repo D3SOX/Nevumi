@@ -43,7 +43,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 
 data class ServerPlaylist(val id: String, val name: String, val songIds: List<String>, val changed: String,
-    val owner: String, val description: String = "", val coverArt: String? = null)
+    val owner: String, val description: String = "", val coverArt: String? = null, val created: String = "")
 
 class ServerCredentials(val username: String, internal val password: String) {
     override fun toString(): String = "ServerCredentials(username=$username, password=[redacted])"
@@ -198,7 +198,7 @@ class NavidromeClient(
         playlist.getValue("id").jsonPrimitive.content, playlist.getValue("name").jsonPrimitive.content,
         playlist["entry"]?.jsonArray.orEmpty().map { it.jsonObject.getValue("id").jsonPrimitive.content },
         playlist["changed"]?.jsonPrimitive?.content.orEmpty(), playlist["owner"]?.jsonPrimitive?.content.orEmpty(), playlist["comment"]?.jsonPrimitive?.content.orEmpty(),
-        playlist["coverArt"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() })
+        playlist["coverArt"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }, playlist["created"]?.jsonPrimitive?.content.orEmpty())
 
     private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject = serverRequest {
         val salt = Uuid.random().toString()

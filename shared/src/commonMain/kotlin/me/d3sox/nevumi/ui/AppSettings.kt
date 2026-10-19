@@ -307,6 +307,7 @@ internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T,
     fun choiceIcon(value: T): AppIcon? = when (value) {
         is QueueAction -> value.icon()
         is me.d3sox.nevumi.playlists.PlaylistSort -> value.icon()
+        is me.d3sox.nevumi.settings.PlaylistPickerSort -> value.icon()
         is me.d3sox.nevumi.settings.TrackAction -> value.icon()
         is me.d3sox.nevumi.library.LibrarySort -> value.icon()
         is me.d3sox.nevumi.library.LibraryTab -> value.icon()
@@ -332,7 +333,7 @@ internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T,
         .semantics { contentDescription = label }, verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Box {
-            Row(Modifier.widthIn(max = 200.dp).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.widthIn(max = 240.dp).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 choiceIcon(selected)?.takeIf { distinctIcons }?.let { icon ->
                     Icon(icon.vector, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
                 }

@@ -164,8 +164,13 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 val link = PlaylistServer(connection.serverId, remote.id, remote.name, remote.songIds, remote.owner,
                     readOnly = remote.owner != connection.username, baselineDescription = remote.description, coverArt = remote.coverArt,
                     changed = remote.changed)
-                store.put("playlist:$id", "playlists", previous?.copy(name = remote.name, trackIds = ids, server = link, description = remote.description)
-                    ?: Playlist(id, remote.name, ids, server = link, description = remote.description))
+                fun time(value: String) = kotlin.time.Instant.parseOrNull(value)?.toEpochMilliseconds()
+                val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+                val updatedAt = if (previous != null && previous.name == remote.name && previous.trackIds == ids &&
+                    previous.description == remote.description) previous.updatedAt else time(remote.changed) ?: now
+                store.put("playlist:$id", "playlists", previous?.copy(name = remote.name, trackIds = ids, server = link, description = remote.description,
+                    updatedAt = updatedAt) ?: Playlist(id, remote.name, ids, server = link, description = remote.description,
+                    createdAt = time(remote.created) ?: now, updatedAt = updatedAt))
                 id to (remote.changed.isEmpty() || previous?.server?.changed != remote.changed)
             } ?: continue
             if (artwork != null) {

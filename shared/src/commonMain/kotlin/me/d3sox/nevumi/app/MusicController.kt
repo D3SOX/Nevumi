@@ -1041,7 +1041,10 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         val manualQueue = currentQueue.upNext.isNotEmpty() || currentQueue.entries.getOrNull(currentQueue.currentIndex)?.section ==
             me.d3sox.nevumi.queue.QueueSection.MANUAL
         if (preserveManualQueue && manualQueue) queue.playNow(trackId)
-        else queue.replace(tracks.map { it.id }, index, contextName, shuffle = shuffleContext, origin = origin)
+        else {
+            queue.replace(tracks.map { it.id }, index, contextName, shuffle = shuffleContext, origin = origin)
+            if (origin.tab == me.d3sox.nevumi.library.LibraryTab.PLAYLISTS) origin.collectionId?.let { playlists?.markPlayed(it) }
+        }
         loadSnapshot(queue.snapshot())
         queueLoaded = true
     }

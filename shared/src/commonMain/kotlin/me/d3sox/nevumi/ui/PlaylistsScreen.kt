@@ -32,6 +32,8 @@ import me.d3sox.nevumi.playlists.folderSegments
 import me.d3sox.nevumi.playlists.isInFolder
 import me.d3sox.nevumi.playlists.parentFolder
 import me.d3sox.nevumi.playlists.title
+import me.d3sox.nevumi.settings.CollectionLayout
+import me.d3sox.nevumi.settings.PlaylistPickerSort
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 
@@ -218,6 +220,48 @@ private const val FOLDER_PREFIX = "playlist-folder:"
 /** A playlist picker row: a folder header (keyed by its path) or a playlist (keyed by its id). */
 private class PickerRow(val key: String, val label: String, val depth: Int, val playlist: Playlist?)
 
+/** A playlist or folder in the picker; a folder takes its most recent times from the playlists inside it. */
+private class PickerNode(val item: CollectionItem, val updatedAt: Long, val createdAt: Long, val playedAt: Long,
+    val playlist: Playlist?, val children: List<PickerNode> = emptyList())
+
+internal fun PlaylistPickerSort.label() = when (this) {
+    PlaylistPickerSort.UPDATED -> "Recently updated"; PlaylistPickerSort.ADDED -> "Recently added"
+    PlaylistPickerSort.NAME -> "Alphabetical"; PlaylistPickerSort.PLAYED -> "Recently played"
+    PlaylistPickerSort.LIBRARY -> "Same as Playlists tab"
+}
+internal fun PlaylistPickerSort.icon() = when (this) {
+    PlaylistPickerSort.UPDATED -> AppIcon.EDIT; PlaylistPickerSort.ADDED -> AppIcon.RECENT; PlaylistPickerSort.NAME -> AppIcon.TITLE
+    PlaylistPickerSort.PLAYED -> AppIcon.HISTORY; PlaylistPickerSort.LIBRARY -> AppIcon.QUEUE
+}
+
+/** Orders each folder's playlists and subfolders together, then lists each subfolder's contents below its header. */
+private fun pickerRows(playlists: List<Playlist>, sort: PlaylistPickerSort, layout: CollectionLayout, recentAt: Map<String, Long>): List<PickerRow> {
+    fun segments(playlist: Playlist) = playlist.folder?.let(::folderSegments).orEmpty()
+    fun item(id: String, title: String, trackIds: List<String>) = CollectionItem(id, title, "", null, AppIcon.QUEUE,
+        songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0)
+    // Break case-only ties so "Road" and "road" stay in a stable order.
+    val comparator = when (sort) {
+        PlaylistPickerSort.UPDATED -> compareByDescending<PickerNode> { it.updatedAt }
+        PlaylistPickerSort.ADDED -> compareByDescending { it.createdAt }
+        PlaylistPickerSort.PLAYED -> compareByDescending { it.playedAt }
+        PlaylistPickerSort.NAME -> compareBy { it.item.title.lowercase() }
+        PlaylistPickerSort.LIBRARY -> compareBy(layout.comparator()) { it.item }
+    }.thenBy { it.item.title.lowercase() }.thenBy { it.item.title }
+    fun nodes(folder: List<String>, contents: List<Playlist>): List<PickerNode> {
+        val (own, nested) = contents.partition { segments(it).size == folder.size }
+        return (own.map { PickerNode(item(it.id, it.title, it.trackIds), it.updatedAt, it.createdAt, it.playedAt, it) } +
+            nested.groupBy { segments(it)[folder.size] }.map { (name, inside) ->
+                val children = nodes(folder + name, inside)
+                PickerNode(item(FOLDER_PREFIX + folderPath(folder + name), name, inside.flatMap(Playlist::trackIds).distinct()),
+                    children.maxOf { it.updatedAt }, children.maxOf { it.createdAt }, children.maxOf { it.playedAt }, null, children)
+            }).sortedWith(comparator)
+    }
+    fun rows(nodes: List<PickerNode>, depth: Int): List<PickerRow> = nodes.flatMap { node ->
+        listOf(PickerRow(node.item.id, node.item.title, depth, node.playlist)) + rows(node.children, depth + 1)
+    }
+    return rows(nodes(emptyList(), playlists), 0)
+}
+
 @Composable
 internal fun PlaylistPicker(state: AppState, controller: MusicController, trackId: String, dismiss: () -> Unit) {
     PlaylistPicker(state, controller, listOf(trackId), dismiss)
@@ -229,23 +273,11 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
     var creating by remember { mutableStateOf(false) }
     var choices by remember(trackIds) { mutableStateOf(emptyMap<String, Boolean>()) }
     var query by remember { mutableStateOf("") }
-    // Each folder's own playlists come first, then its subfolders, each introduced by a header row.
-    val rows = remember(state.playlists, query) {
-        fun segments(playlist: Playlist) = playlist.folder?.let(::folderSegments).orEmpty()
-        var previous = emptyList<String>()
-        state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }.sortedBy { it.title.lowercase() }
-            .sortedWith { a, b ->
-                val (x, y) = segments(a) to segments(b)
-                // Break case-only ties so "Road" and "road" stay separate, contiguous groups.
-                x.zip(y).firstOrNull { it.first != it.second }?.let { (c, d) -> c.compareTo(d, ignoreCase = true).takeIf { it != 0 } ?: c.compareTo(d) }
-                    ?: (x.size - y.size)
-            }.flatMap { playlist ->
-                val folders = segments(playlist)
-                val shared = folders.zip(previous).takeWhile { it.first == it.second }.size
-                previous = folders
-                (shared until folders.size).map { PickerRow(FOLDER_PREFIX + folderPath(folders.take(it + 1)), folders[it], it, null) } +
-                    PickerRow(playlist.id, playlist.title, folders.size, playlist)
-            }
+    val sort = state.preferences.playlistPickerSort
+    val layout = state.preferences.collectionLayout(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS)
+    val recentAt = remember(state.tracks) { state.tracks.associate { it.id to it.recentAt } }
+    val rows = remember(state.playlists, query, sort, layout, recentAt) {
+        pickerRows(state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }, sort, layout, recentAt)
     }
     val selected = remember(trackIds) { trackIds.distinct() }
     val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
@@ -254,6 +286,9 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)
             .testTag("playlist-membership-sheet"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Manage playlists", style = MaterialTheme.typography.titleLarge)
+            if (state.playlists.size > 1) SettingChoice("Sort by", sort, PlaylistPickerSort.entries.map { it to it.label() }, card = false) { choice ->
+                controller.updatePreferences { it.copy(playlistPickerSort = choice) }
+            }
             if (state.playlists.isNotEmpty()) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(),
                 label = { Text("Search playlists") }, singleLine = true,
                 trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, "Clear search") { query = "" } })
