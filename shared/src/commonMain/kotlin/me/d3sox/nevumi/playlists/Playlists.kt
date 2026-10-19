@@ -34,7 +34,9 @@ enum class PlaylistSort { CUSTOM, TITLE, ARTIST, ALBUM, RECENT }
 data class Playlist(val id: String, val name: String, val trackIds: List<String>, val autoDownload: Boolean = false,
     val server: PlaylistServer? = null, val pendingSync: Boolean = false, val revision: String = Uuid.random().toString(),
     val conflict: PlaylistConflict? = null, val rule: LibraryQuery? = null, val description: String = "",
-    val shuffle: Boolean = false, val sort: PlaylistSort = PlaylistSort.CUSTOM, val descending: Boolean = false)
+    val shuffle: Boolean = false, val sort: PlaylistSort = PlaylistSort.CUSTOM, val descending: Boolean = false,
+    /** Local times in epoch milliseconds; 0 when unknown, such as for playlists saved before they were recorded. */
+    val createdAt: Long = 0, val updatedAt: Long = 0, val playedAt: Long = 0)
 
 // Navidrome has no playlist folders, so names like "Folder ▸ Playlist" group playlists. Keyboards cannot type the
 // separator, so existing names with slashes or other punctuation are left alone.
@@ -71,13 +73,13 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     private val refreshEveryMs: Long = 60_000) {
     init { require(refreshEveryMs > 0) { "Playlist refresh interval must be positive" } }
     suspend fun createSmart(name: String, rule: LibraryQuery): Playlist {
-        val playlist = Playlist(Uuid.random().toString(), name.trim(), emptyList(), rule = rule)
+        val playlist = clock().let { Playlist(Uuid.random().toString(), name.trim(), emptyList(), rule = rule, createdAt = it, updatedAt = it) }
         require(playlist.name.isNotEmpty()) { "Name the playlist" }
         store.put("playlist:${playlist.id}", "playlists", playlist)
         return evaluate(listOf(playlist)).single()
     }
     suspend fun create(name: String, trackIds: List<String>): Playlist {
-        val playlist = Playlist(Uuid.random().toString(), name.trim(), trackIds)
+        val playlist = clock().let { Playlist(Uuid.random().toString(), name.trim(), trackIds, createdAt = it, updatedAt = it) }
         require(playlist.name.isNotEmpty()) { "Name the playlist" }
         store.put("playlist:${playlist.id}", "playlists", playlist)
         return playlist
@@ -90,7 +92,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     suspend fun updateRule(id: String, rule: LibraryQuery) = store.transaction {
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
         require(playlist.rule != null) { "This playlist has no rules" }
-        store.put("playlist:$id", "playlists", playlist.copy(rule = rule, trackIds = emptyList(),
+        store.put("playlist:$id", "playlists", playlist.copy(rule = rule, trackIds = emptyList(), updatedAt = clock(),
             revision = Uuid.random().toString()))
     }
     suspend fun get(id: String): Playlist? = store.read<Playlist>("playlist:$id")?.let { evaluate(listOf(it)).single() }
@@ -119,7 +121,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
         require(playlist.rule == null) { "Edit this smart playlist's rules to change its songs" }
         validateServerTracks(playlist, trackIds)
-        store.put("playlist:$id", "playlists", playlist.copy(trackIds = playlist.trackIds + trackIds,
+        store.put("playlist:$id", "playlists", playlist.copy(trackIds = playlist.trackIds + trackIds, updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
     suspend fun updateMembership(trackIds: List<String>, choices: Map<String, Boolean>) = store.transaction {
@@ -137,14 +139,14 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
         require(playlist.rule == null) { "Edit this smart playlist's rules to change its songs" }
         validateServerTracks(playlist, trackIds)
-        store.put("playlist:$id", "playlists", playlist.copy(trackIds = trackIds,
+        store.put("playlist:$id", "playlists", playlist.copy(trackIds = trackIds, updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
     suspend fun rename(id: String, name: String) = store.transaction {
         require(name.isNotBlank()) { "Name the playlist" }
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
         requireEditable(playlist)
-        store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(),
+        store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(), updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
     suspend fun setShuffle(id: String, enabled: Boolean) = store.transaction {
@@ -160,7 +162,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         require(name.isNotBlank()) { "Name the playlist" }
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
         requireEditable(playlist)
-        store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(), description = description.trim(),
+        store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(), description = description.trim(), updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
 
@@ -177,6 +179,11 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         requireEditable(playlist)
         if (playlist.server != null) store.put("playlist-removal:$id", "playlist-removals", PlaylistRemoval(playlist))
         store.database.records().delete("playlist:$id")
+    }
+    /** Records that playback started from this playlist; a playlist deleted meanwhile is ignored. */
+    suspend fun markPlayed(id: String) = store.transaction {
+        val playlist = store.read<Playlist>("playlist:$id") ?: return@transaction
+        store.put("playlist:$id", "playlists", playlist.copy(playedAt = clock()))
     }
     suspend fun setAutoDownload(id: String, enabled: Boolean) = store.transaction {
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
@@ -198,7 +205,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
             trackIds = if (keepLocal) playlist.trackIds else conflict.trackIds,
             description = if (keepLocal) playlist.description else conflict.description,
             server = link.copy(baselineName = conflict.name, baselineSongIds = conflict.songIds, baselineDescription = conflict.description),
-            pendingSync = keepLocal, conflict = null, revision = Uuid.random().toString()))
+            pendingSync = keepLocal, conflict = null, updatedAt = clock(), revision = Uuid.random().toString()))
     }
     private suspend fun validateServerTracks(playlist: Playlist, trackIds: List<String>) {
         requireEditable(playlist)

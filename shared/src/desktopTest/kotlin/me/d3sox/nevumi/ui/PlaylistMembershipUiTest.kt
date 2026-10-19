@@ -139,6 +139,71 @@ class PlaylistMembershipUiTest {
     }
 
     @Test
+    fun pickerSortsPlaylistsByTheChosenOrderAndRemembersIt() {
+        val directory = Files.createTempDirectory("playlist-membership-sort")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        var now = 0L
+        val playlists = Playlists(store, clock = { now })
+        val song = runBlocking {
+            library.importTrack(TrackMetadata("Song"), TrackSource("song", SourceKind.LOCAL,
+                Files.createFile(directory.resolve("song.flac")).toString())).also { song ->
+                val alpha = listOf("Alpha", "Beta", "Gamma").map { now++; playlists.create(it, emptyList()) }.first()
+                now++; playlists.append(alpha.id, song.id)
+            }
+        }
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists,
+            preferences = me.d3sox.nevumi.settings.MusicPreferences(store))
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                waitUntil(timeoutMillis = 3_000) { !player.state.value.loading }
+                onNodeWithContentDescription("Track options: Song").performClick()
+                onNodeWithText("Select song").performClick()
+                fun open() {
+                    onNodeWithContentDescription("Selection actions").performClick()
+                    onNodeWithText("Add to playlist").performClick()
+                }
+                fun order(vararg names: String) = names.sortedBy {
+                    onNodeWithContentDescription("Playlist membership: $it").fetchSemanticsNode().boundsInRoot.top
+                }
+                // Preferences save in the background, so the new order can take a moment to appear.
+                fun assertOrder(vararg names: String) {
+                    runCatching { waitUntil(timeoutMillis = 3_000) { order(*names) == names.toList() } }
+                    assertEquals(names.toList(), order(*names))
+                }
+                fun choose(sort: String) {
+                    onNodeWithContentDescription("Sort by").performClick()
+                    onNodeWithText(sort).performClick()
+                }
+                open()
+                onNodeWithText("Recently updated").assertIsDisplayed()
+                assertOrder("Alpha", "Gamma", "Beta")
+                choose("Recently added")
+                assertOrder("Gamma", "Beta", "Alpha")
+                choose("Alphabetical")
+                assertOrder("Alpha", "Beta", "Gamma")
+                val beta = player.state.value.playlists.single { it.name == "Beta" }
+                now++; runBlocking { player.playTrack(song.id, listOf(song.id), 0, "Beta",
+                    origin = me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, beta.id)).join(); player.pause().join() }
+                choose("Recently played")
+                waitUntil(timeoutMillis = 3_000) { player.state.value.playlists.single { it.id == beta.id }.playedAt == now }
+                assertOrder("Beta", "Alpha", "Gamma")
+                val ids = player.state.value.playlists.associate { it.name to it.id }
+                runBlocking { player.updatePreferences { it.copy(collectionLayouts = mapOf(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS to
+                    me.d3sox.nevumi.settings.CollectionLayout(sort = me.d3sox.nevumi.settings.CollectionSort.CUSTOM,
+                        order = listOf(ids.getValue("Gamma"), ids.getValue("Alpha"), ids.getValue("Beta"))))) }.join() }
+                choose("Same as Playlists tab")
+                assertOrder("Gamma", "Alpha", "Beta")
+                onNodeWithText("Cancel").performClick()
+                open()
+                onNodeWithText("Same as Playlists tab").assertIsDisplayed()
+                assertOrder("Gamma", "Alpha", "Beta")
+            }
+        } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun pickerGroupsPlaylistsByFolderAndRevertedChoicesLeaveApplyDisabled() {
         val directory = Files.createTempDirectory("playlist-membership-folders")
         val store = openMusicStore(directory.resolve("music.db").toString())

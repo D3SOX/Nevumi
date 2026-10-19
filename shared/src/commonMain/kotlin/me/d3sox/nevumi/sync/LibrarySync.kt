@@ -401,7 +401,13 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
                 }
                 val localPlaylist = Playlist(playlist.id, playlist.name, localTrackKeys,
                     autoDownload = existing?.autoDownload ?: false, rule = playlist.rule?.copy(folder = folder),
-                    description = playlist.description, shuffle = playlist.shuffle, sort = playlist.sort, descending = playlist.descending)
+                    description = playlist.description, shuffle = playlist.shuffle, sort = playlist.sort, descending = playlist.descending).let { local ->
+                        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+                        val changed = existing == null || existing.name != local.name || existing.trackIds != local.trackIds ||
+                            existing.rule != local.rule || existing.description != local.description
+                        local.copy(createdAt = existing?.createdAt ?: now, updatedAt = if (changed) now else existing?.updatedAt ?: now,
+                            playedAt = existing?.playedAt ?: 0)
+                    }
                 store.put("playlist:${playlist.id}", "playlists", localPlaylist)
                 val applied = playlist.copy(trackKeys = if (playlist.rule == null) localPlaylist.trackIds else emptyList())
                 store.put("sync:playlist:${playlist.id}", "sync-playlists", applied)

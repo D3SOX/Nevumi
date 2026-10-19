@@ -38,24 +38,26 @@ internal data class CollectionItem(val id: String, val title: String, val subtit
     val artwork: String?, val icon: AppIcon, val songCount: Int = 0, val artist: String = "", val year: Int = 0, val recentAt: Long = 0,
     val trackIds: List<String> = emptyList())
 
+internal fun CollectionLayout.comparator(): Comparator<CollectionItem> {
+    val positions = order.withIndex().associate { it.value to it.index }
+    val comparator = when (sort) {
+        CollectionSort.NAME -> compareBy<CollectionItem> { it.title.lowercase() }
+        CollectionSort.ARTIST -> compareBy { it.artist.lowercase() }
+        CollectionSort.YEAR -> compareBy { it.year }
+        CollectionSort.SONG_COUNT -> compareBy { it.songCount }
+        CollectionSort.RECENT -> compareBy { it.recentAt }
+        CollectionSort.CUSTOM -> compareBy { positions[it.id] ?: Int.MAX_VALUE }
+    }.thenBy { it.title.lowercase() }
+    return if (descending) comparator.reversed() else comparator
+}
+
 @Composable
 internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, state: AppState, controller: MusicController,
     modifier: Modifier = Modifier, total: Int = entries.size, rearranging: Boolean = false, finishRearranging: () -> Unit = {}, open: (String) -> Unit) {
     val listScroll = rememberLibraryListState(controller, "collections:${tab.name}:list")
     val gridScroll = rememberLibraryGridState(controller, "collections:${tab.name}:grid")
     val layout = state.preferences.collectionLayout(tab)
-    val sorted = remember(entries, layout.sort, layout.descending, layout.order) {
-        val positions = layout.order.withIndex().associate { it.value to it.index }
-        val comparator = when (layout.sort) {
-            CollectionSort.NAME -> compareBy<CollectionItem> { it.title.lowercase() }
-            CollectionSort.ARTIST -> compareBy { it.artist.lowercase() }
-            CollectionSort.YEAR -> compareBy { it.year }
-            CollectionSort.SONG_COUNT -> compareBy { it.songCount }
-            CollectionSort.RECENT -> compareBy { it.recentAt }
-            CollectionSort.CUSTOM -> compareBy { positions[it.id] ?: Int.MAX_VALUE }
-        }.thenBy { it.title.lowercase() }
-        entries.sortedWith(if (layout.descending) comparator.reversed() else comparator)
-    }
+    val sorted = remember(entries, layout.sort, layout.descending, layout.order) { entries.sortedWith(layout.comparator()) }
     // Library updates can replace the entries during a drag or before its order is saved, so the dragged order is kept by ID until then.
     var dragged by remember(layout.sort, layout.descending, layout.order) { mutableStateOf<List<String>?>(null) }
     val sortedEntries = remember(sorted, dragged) {

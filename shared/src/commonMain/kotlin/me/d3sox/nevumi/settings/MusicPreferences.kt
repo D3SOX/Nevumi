@@ -25,6 +25,10 @@ enum class CollectionSort { NAME, ARTIST, YEAR, SONG_COUNT, RECENT, CUSTOM }
 data class CollectionLayout(val view: CollectionView = CollectionView.GRID, val columns: Int? = null,
     val sort: CollectionSort = CollectionSort.NAME, val descending: Boolean = false, val order: List<String> = emptyList())
 
+/** How the playlist picker orders playlists; [LIBRARY] follows the Playlists tab's order. */
+@Serializable
+enum class PlaylistPickerSort { UPDATED, ADDED, NAME, PLAYED, LIBRARY }
+
 @Serializable
 data class LibraryPosition(val index: Int = 0, val offset: Int = 0)
 
@@ -82,6 +86,7 @@ data class MusicSettings(
     val disabledHomeSections: Set<HomeSectionId> = emptySet(),
     val libraryPositions: Map<String, LibraryPosition> = emptyMap(),
     val collectionLayouts: Map<LibraryTab, CollectionLayout> = emptyMap(),
+    val playlistPickerSort: PlaylistPickerSort = PlaylistPickerSort.UPDATED,
     val includeFolders: List<String> = emptyList(),
     val excludeFolders: List<String> = emptyList(),
     val undoRetentionDays: Int = 30,

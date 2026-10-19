@@ -1043,6 +1043,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         if (preserveManualQueue && manualQueue) queue.playNow(trackId)
         else queue.replace(tracks.map { it.id }, index, contextName, shuffle = shuffleContext, origin = origin)
         loadSnapshot(queue.snapshot())
+        // Only a successful load counts as a play.
+        if (origin.tab == me.d3sox.nevumi.library.LibraryTab.PLAYLISTS) origin.collectionId?.let { playlists?.markPlayed(it) }
         queueLoaded = true
     }
 
