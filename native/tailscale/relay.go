@@ -88,29 +88,44 @@ func relay(origin string) (string, error) {
 	return relayed.url, nil
 }
 
-// keepRedirectInRelay points a redirect to the server's own host back at the relay, so players don't leave the tunnel.
-// A redirect to HTTPS on the same host switches the relay to HTTPS for later requests too.
+// keepRedirectInRelay points a redirect to the server itself back at the relay, so players don't leave the tunnel.
+// Only the same port or an HTTP to HTTPS upgrade on the default ports counts as the server itself.
+// After an upgrade, later requests use HTTPS too. Other redirects pass through unchanged.
 func keepRedirectInRelay(response *http.Response, current *atomic.Pointer[url.URL], address string) {
 	location, err := response.Location()
 	origin := current.Load()
 	if err != nil || location.Hostname() != origin.Hostname() {
 		return
 	}
-	if location.Scheme != origin.Scheme || location.Host != origin.Host {
+	upgrade := origin.Scheme == "http" && location.Scheme == "https" && port(origin) == "80" && port(location) == "443"
+	if !upgrade && (location.Scheme != origin.Scheme || port(location) != port(origin)) {
+		return
+	}
+	base := strings.TrimSuffix(origin.Path, "/")
+	if location.Path != base && !strings.HasPrefix(location.Path, base+"/") {
+		return
+	}
+	if upgrade {
 		upgraded := *origin
 		upgraded.Scheme, upgraded.Host = location.Scheme, location.Host
 		current.Store(&upgraded)
-		origin = &upgraded
 	}
-	path := strings.TrimPrefix(location.Path, strings.TrimSuffix(origin.Path, "/"))
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	rewritten := address + path
+	rewritten := address + "/" + strings.TrimPrefix(strings.TrimPrefix(location.Path, base), "/")
 	if location.RawQuery != "" {
 		rewritten += "?" + location.RawQuery
 	}
 	response.Header.Set("Location", rewritten)
+}
+
+// port returns the URL's port, or the default port for its scheme.
+func port(address *url.URL) string {
+	if value := address.Port(); value != "" {
+		return value
+	}
+	if address.Scheme == "https" {
+		return "443"
+	}
+	return "80"
 }
 
 // closeRelays stops every relay. The caller holds lock.
