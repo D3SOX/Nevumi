@@ -4,14 +4,12 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
@@ -46,10 +44,8 @@ internal fun QueueSwipe(entryId: String, onRemove: () -> Unit, content: @Composa
                 Text("Remove", style = MaterialTheme.typography.labelSmall)
             }
         }
-        Box(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.pointerInput(entryId, dismissing) {
-            detectHorizontalDragGestures(onHorizontalDrag = { change, amount ->
-                if (!dismissing) { change.consume(); offset = (offset + amount).coerceAtMost(0f) }
-            }, onDragEnd = { settle(true) }, onDragCancel = { settle(false) })
-        }) { content() }
+        Box(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.horizontalSwipe(entryId, dismissing, onDrag = { amount ->
+            if (!dismissing) offset = (offset + amount).coerceAtMost(0f)
+        }, onEnd = ::settle)) { content() }
     }
 }
