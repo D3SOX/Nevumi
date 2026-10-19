@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -49,4 +50,24 @@ internal fun PageAction(label: String, icon: AppIcon = AppIcon.CHECK, enabled: B
     val button = modifier.fillMaxWidth().heightIn(min = 48.dp)
     if (secondary) OutlinedButton(onClick, button, enabled = enabled, content = content)
     else Button(onClick, button, enabled = enabled, content = content)
+}
+
+internal enum class ActionStyle { TONAL, OUTLINED, DESTRUCTIVE }
+
+@Composable
+internal fun ActionButton(label: String, icon: AppIcon, modifier: Modifier = Modifier, enabled: Boolean = true,
+    style: ActionStyle = ActionStyle.TONAL, onClick: () -> Unit) {
+    val content: @Composable RowScope.() -> Unit = {
+        Icon(icon.vector, null, Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label)
+    }
+    when (style) {
+        ActionStyle.TONAL -> FilledTonalButton(onClick, modifier, enabled = enabled, content = content)
+        ActionStyle.OUTLINED -> OutlinedButton(onClick, modifier, enabled = enabled, content = content)
+        ActionStyle.DESTRUCTIVE -> OutlinedButton(onClick, modifier, enabled = enabled,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            border = BorderStroke(1.dp, if (enabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+            content = content)
+    }
 }

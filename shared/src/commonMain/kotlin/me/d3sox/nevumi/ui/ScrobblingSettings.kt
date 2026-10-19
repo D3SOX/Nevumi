@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
@@ -24,6 +25,12 @@ internal fun ScrobblingService.label() = when (this) {
     ScrobblingService.LISTENBRAINZ -> "ListenBrainz"
     ScrobblingService.LASTFM -> "Last.fm"
     ScrobblingService.NAVIDROME -> "Music server"
+}
+
+private fun ScrobblingService.logo() = when (this) {
+    ScrobblingService.LISTENBRAINZ -> ServiceBrandIcons.listenBrainz
+    ScrobblingService.LASTFM -> ServiceBrandIcons.lastFm
+    ScrobblingService.NAVIDROME -> null
 }
 
 @Composable
@@ -53,37 +60,45 @@ internal fun ScrobblingSettingsContent(state: AppState, controller: MusicControl
                 Text("If your music server forwards plays to Last.fm or ListenBrainz, keep the matching direct connection off here.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             state.scrobbling.profiles.forEach { profile ->
-                Text(profile.service.label(), style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val logo = profile.service.logo()
+                    if (logo != null) Icon(logo, null, Modifier.size(24.dp), tint = Color.Unspecified)
+                    else Icon(AppIcon.SERVER.vector, null, Modifier.size(24.dp))
+                    Text(profile.service.label(), style = MaterialTheme.typography.titleMedium)
+                }
                 Text("Connected as ${profile.username}")
                 SettingChoice("Send listens to ${profile.service.label()}", profile.enabled, listOf(true to "On", false to "Off")) {
                     controller.setScrobblingEnabled(profile.id, it)
                 }
                 if (profile.service != ScrobblingService.NAVIDROME)
-                    TextButton(onClick = { disconnect = profile }) { Text("Disconnect ${profile.service.label()}") }
+                    ActionButton("Disconnect ${profile.service.label()}", AppIcon.UNLINK, style = ActionStyle.DESTRUCTIVE) { disconnect = profile }
             }
             for (service in listOf(ScrobblingService.LISTENBRAINZ, ScrobblingService.LASTFM)) {
                 FilledTonalButton(onClick = { connect(service) }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Icon(if (service == ScrobblingService.LISTENBRAINZ) ServiceBrandIcons.listenBrainz else ServiceBrandIcons.lastFm,
-                        null, Modifier.size(24.dp), tint = Color.Unspecified)
+                    Icon(requireNotNull(service.logo()), null, Modifier.size(24.dp), tint = Color.Unspecified)
                     Spacer(Modifier.width(12.dp))
                     Text("Connect ${service.label()}")
                 }
             }
             state.lastFmAuthorization?.let { authorization ->
                 Text("Authorize Nevumi in your browser, then return here to complete sign-in.")
-                TextButton(onClick = { try { browser.openUri(authorization.url) } catch (_: Exception) { signInError = "Could not open the authorization page in your browser." } }) {
-                    Text("Open Last.fm authorization")
-                }
-                TextButton(enabled = !signingIn, onClick = {
-                    signingIn = true; signInError = null
-                    scope.launch {
-                        try { controller.completeLastFmSignIn() }
-                        catch (cancelled: CancellationException) { throw cancelled }
-                        catch (failure: Exception) { signInError = failure.message ?: "Could not complete Last.fm sign-in" }
-                        finally { signingIn = false }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton("Open Last.fm authorization", AppIcon.OPEN_EXTERNAL, style = ActionStyle.OUTLINED) {
+                        try { browser.openUri(authorization.url) } catch (_: Exception) { signInError = "Could not open the authorization page in your browser." }
                     }
-                }) { Text("Complete sign-in") }
-                TextButton(enabled = !signingIn, onClick = { scope.launch { controller.cancelLastFmSignIn(); signInError = null } }) { Text("Cancel sign-in") }
+                    ActionButton("Complete sign-in", AppIcon.CHECK, enabled = !signingIn) {
+                        signingIn = true; signInError = null
+                        scope.launch {
+                            try { controller.completeLastFmSignIn() }
+                            catch (cancelled: CancellationException) { throw cancelled }
+                            catch (failure: Exception) { signInError = failure.message ?: "Could not complete Last.fm sign-in" }
+                            finally { signingIn = false }
+                        }
+                    }
+                    ActionButton("Cancel sign-in", AppIcon.CLOSE, enabled = !signingIn, style = ActionStyle.OUTLINED) {
+                        scope.launch { controller.cancelLastFmSignIn(); signInError = null }
+                    }
+                }
             }
             signInError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (pending.isEmpty()) Text("No pending listens")
@@ -101,11 +116,11 @@ internal fun ScrobblingSettingsContent(state: AppState, controller: MusicControl
                             else -> "Waiting to send"
                         })
                         entry.error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        if (entry.state != ScrobbleState.IN_FLIGHT) Row {
-                            TextButton(onClick = {
+                        if (entry.state != ScrobbleState.IN_FLIGHT) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ActionButton("Retry", AppIcon.REFRESH) {
                                 if (entry.state == ScrobbleState.UNCERTAIN) retry = entry else controller.retryScrobbleSubmission(entry.id)
-                            }) { Text("Retry") }
-                            TextButton(onClick = { controller.discardScrobbleSubmission(entry.id) }) { Text("Discard listen") }
+                            }
+                            ActionButton("Discard listen", AppIcon.REMOVE, style = ActionStyle.DESTRUCTIVE) { controller.discardScrobbleSubmission(entry.id) }
                         }
                     }
                 }
@@ -136,7 +151,7 @@ internal fun ConnectLastFm(controller: MusicController, dismiss: () -> Unit) {
             Text("Enter the API credentials for your Last.fm application, then authorize Nevumi in your browser.")
             Text("Leave the Callback URL field blank when creating your Last.fm API application.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { browser.openUri("https://www.last.fm/api/account/create") }) { Text("Get API credentials") }
+            ActionButton("Get API credentials", AppIcon.OPEN_EXTERNAL, style = ActionStyle.OUTLINED) { browser.openUri("https://www.last.fm/api/account/create") }
             OutlinedTextField(apiKey, { apiKey = it }, modifier = Modifier.fillMaxWidth(), enabled = !connecting, label = { Text("Application API key") }, leadingIcon = { Icon(AppIcon.KEY.vector, null) }, singleLine = true)
             OutlinedTextField(sharedSecret, { sharedSecret = it }, modifier = Modifier.fillMaxWidth(), enabled = !connecting, label = { Text("Application shared secret") }, leadingIcon = { Icon(AppIcon.LOCK.vector, null) },
                 visualTransformation = PasswordVisualTransformation(), singleLine = true)

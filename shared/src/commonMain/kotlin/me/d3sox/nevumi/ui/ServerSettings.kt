@@ -31,7 +31,7 @@ internal fun ServerSettings(state: AppState, controller: MusicController, onClos
                     Text("${server.username} on ${server.baseUrl.substringAfter("://")}", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(enabled = !state.loading, onClick = { disconnecting = true }) { Text("Disconnect") }
+                ActionButton("Disconnect", AppIcon.UNLINK, enabled = !state.loading, style = ActionStyle.DESTRUCTIVE) { disconnecting = true }
             } else {
                 Text("Connect to Navidrome or a Subsonic-compatible server.")
                 OutlinedTextField(address, { address = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Server address") }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true)

@@ -51,9 +51,9 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Nevumi can join your tailnet itself, so it reaches servers there without the Tailscale app or a VPN.")
             if (busy || status == null && pollError == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (status == null && pollError != null) TextButton(enabled = !busy, onClick = {
+            if (status == null && pollError != null) ActionButton("Reset Tailscale", AppIcon.RESET, enabled = !busy, style = ActionStyle.OUTLINED) {
                 run("Tailscale could not be reset") { controller.signOutOfTailscale(); status = controller.tailscaleStatus(); pollError = null }
-            }) { Text("Reset Tailscale") }
+            }
             status?.let { current ->
                 if (current.state == "Stopped") {
                     OutlinedTextField(controlUrl, { controlUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Control server (optional)") },
@@ -62,12 +62,12 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
                     OutlinedTextField(authKey, { authKey = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Auth key (optional)") },
                         leadingIcon = { Icon(AppIcon.KEY.vector, null) }, singleLine = true, enabled = !busy,
                         visualTransformation = PasswordVisualTransformation(), supportingText = { Text("Without a key, sign in through your browser.") })
-                    TextButton(enabled = !busy && (controlUrl.isBlank() || controlUrl.trim().startsWith("http")), onClick = {
+                    ActionButton("Sign in to Tailscale", AppIcon.SIGN_IN, enabled = !busy && (controlUrl.isBlank() || controlUrl.trim().startsWith("http"))) {
                         run("Tailscale could not start") {
                             status = controller.signInToTailscale(controlUrl.trim().trimEnd('/'), authKey.trim().takeIf { it.isNotEmpty() })
                             authKey = ""
                         }
-                    }) { Text("Sign in to Tailscale") }
+                    }
                 } else {
                     Text(when {
                         current.connected -> "Connected to your tailnet as ${current.name ?: "Nevumi"}"
@@ -75,11 +75,12 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
                         current.state == "NeedsMachineAuth" -> "Waiting for your tailnet admin to approve this device."
                         else -> "Connecting to Tailscale…"
                     })
-                    Row {
-                        current.authUrl?.let { url -> TextButton(onClick = { browser.openUri(url) }) { Text("Open sign-in page") } }
-                        TextButton(enabled = !busy, onClick = {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        current.authUrl?.let { url -> ActionButton("Open sign-in page", AppIcon.OPEN_EXTERNAL) { browser.openUri(url) } }
+                        ActionButton(if (current.connected) "Sign out of Tailscale" else "Cancel sign-in",
+                            if (current.connected) AppIcon.SIGN_OUT else AppIcon.CLOSE, enabled = !busy, style = ActionStyle.OUTLINED) {
                             run("Tailscale could not sign out") { controller.signOutOfTailscale(); status = controller.tailscaleStatus() }
-                        }) { Text(if (current.connected) "Sign out of Tailscale" else "Cancel sign-in") }
+                        }
                     }
                 }
             }

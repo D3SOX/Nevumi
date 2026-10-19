@@ -71,7 +71,7 @@ internal fun AudioEffectsScreen(state: AppState, controller: MusicController, di
                     current.copy(profileName = null, bands = current.bands.mapIndexed { i, value -> if (i == index) value.copy(gainDb = gain) else value })
                 } }
             }
-            TextButton(onClick = { update { AudioEffects(enabled = it.enabled, mono = it.mono) } }) { Text("Reset equalizer") }
+            ActionButton("Reset equalizer", AppIcon.RESET, style = ActionStyle.OUTLINED) { update { AudioEffects(enabled = it.enabled, mono = it.mono) } }
         }
     }, confirmButton = { PageAction("Done", onClick = dismiss) })
     }

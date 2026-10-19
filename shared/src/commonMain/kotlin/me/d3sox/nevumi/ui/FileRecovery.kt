@@ -24,31 +24,31 @@ internal fun FileRecovery(state: AppState, controller: MusicController, dismiss:
                 Text(track?.metadata?.title ?: "Music file", style = MaterialTheme.typography.titleMedium)
                 track?.metadata?.artist?.takeIf { it.isNotBlank() }?.let { Text(it) }
                 track?.metadata?.folder?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                if (edit.needsRecovery) TextButton(enabled = !restoring, onClick = {
+                if (edit.needsRecovery) ActionButton("Restore original file", AppIcon.UNDO, enabled = !restoring) {
                     restoring = true
                     scope.launch {
                         controller.restoreOriginalFile(edit.id).join()
                         restoring = false
                         if (controller.state.value.fileEdits.none { it.needsRecovery }) dismiss()
                     }
-                }) { Text("Restore original file") }
+                }
                 else {
                     Text("The music file is unchanged. Apply the prepared changes or discard them.")
-                    Row {
-                        TextButton(enabled = !restoring, onClick = {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ActionButton("Apply prepared edit", AppIcon.CHECK, enabled = !restoring) {
                             restoring = true
                             scope.launch {
                                 controller.applyFileEdit(edit.id).join()
                                 restoring = false
                             }
-                        }) { Text("Apply prepared edit") }
-                        TextButton(enabled = !restoring, onClick = {
+                        }
+                        ActionButton("Discard prepared edit", AppIcon.REMOVE, enabled = !restoring, style = ActionStyle.DESTRUCTIVE) {
                             restoring = true
                             scope.launch {
                                 controller.discardFileEdit(edit.id).join()
                                 restoring = false
                             }
-                        }) { Text("Discard prepared edit") }
+                        }
                     }
                 }
             }

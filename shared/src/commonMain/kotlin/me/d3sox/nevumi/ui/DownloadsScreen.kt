@@ -38,11 +38,13 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
                 LinearProgressIndicator(progress = { batch.fraction },
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Download progress" })
             }
-            TextButton(onClick = { controller.setDownloadsPaused(!paused) }) {
-                Text(if (paused) "Resume downloads" else "Pause downloads")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(if (paused) "Resume downloads" else "Pause downloads", if (paused) AppIcon.PLAY else AppIcon.PAUSE) {
+                    controller.setDownloadsPaused(!paused)
+                }
+                if (state.downloads.values.any { it.status == DownloadStatus.FAILED })
+                    ActionButton("Retry failed downloads", AppIcon.REFRESH, style = ActionStyle.OUTLINED, onClick = controller::retryDownloads)
             }
-            if (state.downloads.values.any { it.status == DownloadStatus.FAILED })
-                TextButton(onClick = controller::retryDownloads) { Text("Retry failed downloads") }
             LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 items(playlists, key = { "playlist:${it.playlist.id}" }) { progress ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -76,8 +78,8 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
                         }
                         Text("${record.bytesDownloaded} / ${record.sizeBytes} bytes", style = MaterialTheme.typography.labelSmall)
                         val removal = if (record.status == DownloadStatus.COMPLETE) "Remove download" else "Cancel download"
-                        TextButton(onClick = { controller.removeDownload(record.trackId) },
-                            modifier = Modifier.semantics { contentDescription = "$removal: $title" }) { Text(removal) }
+                        ActionButton(removal, if (record.status == DownloadStatus.COMPLETE) AppIcon.REMOVE else AppIcon.CLOSE,
+                            Modifier.semantics { contentDescription = "$removal: $title" }, style = ActionStyle.OUTLINED) { controller.removeDownload(record.trackId) }
                     }
                 }
                 if (state.downloads.isEmpty() && playlists.isEmpty()) item { Text("Download songs or enable automatic downloads on a playlist.") }

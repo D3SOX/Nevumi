@@ -55,7 +55,7 @@ internal fun PlaybackQuickSettings(state: AppState, controller: MusicController,
                 listOf(15, 30, 60, 90).forEach { minutes ->
                     OutlinedButton(onClick = { controller.setSleepTimer(minutes) }) { Text("$minutes min") }
                 }
-                if (deadline != null) TextButton(onClick = { controller.setSleepTimer(null) }) { Text("Cancel timer") }
+                if (deadline != null) ActionButton("Cancel timer", AppIcon.CLOSE, style = ActionStyle.OUTLINED) { controller.setSleepTimer(null) }
             }
         }
     }, confirmButton = { TextButton(onClick = close) { Text("Done") } })

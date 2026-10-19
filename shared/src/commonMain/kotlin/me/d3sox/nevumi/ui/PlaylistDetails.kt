@@ -168,7 +168,7 @@ internal fun EditPlaylistDialog(playlist: Playlist, state: AppState, controller:
                 }
             }, enabled = !picking, modifier = Modifier.fillMaxWidth()) { Icon(AppIcon.ARTWORK_COLORS.vector, null); Spacer(Modifier.width(8.dp)); Text("Change cover") }
             if (state.artwork["playlist:${playlist.id}"] != null || cover != null || (playlist.server != null && !removeCover))
-                TextButton(onClick = { cover = null; removeCover = true }) {
+                OutlinedButton(onClick = { cover = null; removeCover = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(AppIcon.REMOVE.vector, null); Spacer(Modifier.width(8.dp))
                 Text(if (playlist.server != null) "Use generated cover" else "Use song artwork")
             }

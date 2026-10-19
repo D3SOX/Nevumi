@@ -73,13 +73,16 @@ internal fun MilkDropControls(presets: List<MilkDropPresetInfo>, selected: Int, 
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf<Triple<String, String, () -> Int?>>(
-                    Triple("Previous", "Previous preset") { milkDropNextPreset(eligible, selected, -1) },
-                    Triple("Random", "Random preset") { milkDropRandomPreset(eligible, selected) },
-                    Triple("Next", "Next preset") { milkDropNextPreset(eligible, selected) },
-                ).forEach { (label, description, target) ->
+                listOf<Triple<String, AppIcon, () -> Int?>>(
+                    Triple("Previous", AppIcon.PREVIOUS) { milkDropNextPreset(eligible, selected, -1) },
+                    Triple("Random", AppIcon.SHUFFLE) { milkDropRandomPreset(eligible, selected) },
+                    Triple("Next", AppIcon.NEXT) { milkDropNextPreset(eligible, selected) },
+                ).forEach { (label, icon, target) ->
                     OutlinedButton(onClick = { target()?.let(select) }, enabled = eligible.isNotEmpty(),
-                        modifier = Modifier.weight(1f).semantics { contentDescription = description }) { Text(label, maxLines = 1) }
+                        modifier = Modifier.weight(1f).semantics { contentDescription = "$label preset" },
+                        contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Icon(icon.vector, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(label, maxLines = 1)
+                    }
                 }
             }
         }

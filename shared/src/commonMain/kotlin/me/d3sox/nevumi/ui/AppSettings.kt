@@ -215,7 +215,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 listOf(true to "On", false to "Off")) { enabled ->
                 controller.updatePreferences { it.copy(recordListeningHistory = enabled) }
             }
-            TextButton(onClick = { clearHistory = true }) { Text("Clear listening history") }
+            ActionButton("Clear listening history", AppIcon.REMOVE, style = ActionStyle.DESTRUCTIVE) { clearHistory = true }
                         }
                 if (controller.scrobblingAvailable) ScrobblingSettingsContent(state, controller) {
                     categoryState.value = "Connect ${it.label()}"

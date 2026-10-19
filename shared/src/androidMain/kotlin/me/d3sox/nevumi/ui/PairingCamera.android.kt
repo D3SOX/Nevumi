@@ -36,7 +36,7 @@ internal actual fun PairingCameraPreview(modifier: Modifier, onScanned: (String)
     if (!permitted) {
         Column(modifier) {
             Text("Allow camera access to scan, or use a manual invitation code.")
-            TextButton(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
+            ActionButton("Allow camera", AppIcon.CAMERA) { permission.launch(Manifest.permission.CAMERA) }
         }
         return
     }
