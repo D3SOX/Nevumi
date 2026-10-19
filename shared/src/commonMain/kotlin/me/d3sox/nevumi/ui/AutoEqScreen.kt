@@ -94,8 +94,9 @@ internal fun AutoEqScreen(profiles: AutoEqProfiles, controller: MusicController,
                     Text(profile.name)
                     Text(profile.attribution, style = MaterialTheme.typography.bodySmall)
                     val isSaved = saved.any { it.id == profile.id }
-                    ActionButton(if (isSaved) "Use saved profile" else "Download profile", if (isSaved) AppIcon.CHECK else AppIcon.DOWNLOAD,
-                        Modifier.semantics { contentDescription = "Download profile: ${profile.name}, ${profile.attribution}" },
+                    val label = if (isSaved) "Use saved profile" else "Download profile"
+                    ActionButton(label, if (isSaved) AppIcon.CHECK else AppIcon.DOWNLOAD,
+                        Modifier.semantics { contentDescription = "$label: ${profile.name}, ${profile.attribution}" },
                         enabled = !working) { action { select(profiles.download(profile)) } }
                 }
             }
