@@ -508,12 +508,16 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         tunnel.updateRoutes(routes)
         reloadStreams()
     }
-    /** Stream URLs depend on the music server route and its relay, so the loaded queue gets new ones when either changes. */
+    /**
+     * Stream URLs depend on the music server route and its relay, so the loaded queue gets new ones when either changes.
+     * Failures go to the app state, because the route change they follow is already saved.
+     */
     private suspend fun reloadStreams() = operations.withLock {
-        if (queueLoaded) try { engine.updateQueue(playableQueue(queue.snapshot())) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { mutableState.update { it.copy(error = failure.message ?: "Playback could not switch connections") } }
-        refresh()
+        try {
+            if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot()))
+            refresh()
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: Exception) { mutableState.update { it.copy(error = failure.message ?: "Playback could not switch connections") } }
     }
     /** Tailscale learns peer endpoints internally. A blank address asks for local network access, so peers on the LAN connect directly. */
     private suspend fun reachAccess(address: String, tunneled: Boolean) = networkAccess(if (tunneled) "" else address)
