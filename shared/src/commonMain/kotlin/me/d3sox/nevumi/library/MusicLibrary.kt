@@ -80,8 +80,8 @@ data class LibraryQuery(val text: String = "", val album: String? = null, val ar
 fun filterTracks(tracks: List<Track>, query: LibraryQuery, statistics: Map<String, ListeningStatistics> = emptyMap(),
     now: Long = Clock.System.now().toEpochMilliseconds()): List<Track> = tracks.filter { track ->
     val metadata = track.metadata
-    listOf(metadata.title, metadata.artist, metadata.album, metadata.albumArtist).plus(metadata.genres)
-        .any { it.contains(query.text, ignoreCase = true) } &&
+    (query.text.isEmpty() || listOf(metadata.title, metadata.artist, metadata.album, metadata.albumArtist).plus(metadata.genres)
+        .any { it.contains(query.text, ignoreCase = true) }) &&
         (query.album == null || metadata.album.equals(query.album, ignoreCase = true)) &&
         (query.artist == null || metadata.artist.equals(query.artist, ignoreCase = true)) &&
         (query.albumArtist == null || metadata.albumArtist.ifBlank { metadata.artist }.equals(query.albumArtist, ignoreCase = true)) &&
@@ -100,17 +100,31 @@ fun filterTracks(tracks: List<Track>, query: LibraryQuery, statistics: Map<Strin
         (!query.availableOnly || track.sources.any { it.available }) &&
         (query.sourceKind == null || track.sources.any { it.kind == query.sourceKind })
 }.let { matching ->
+    // Derive each sort key once per song instead of on every comparison; large libraries make that the main cost.
+    class Row(val track: Track, val title: String, val group: String, val rank: Long)
+    val rows = matching.map { track ->
+        val metadata = track.metadata
+        Row(track, if (query.sort == LibrarySort.ALBUM || query.sort == LibrarySort.RECENT) "" else metadata.title.lowercase(), when (query.sort) {
+            LibrarySort.ARTIST -> metadata.artist.lowercase()
+            LibrarySort.ALBUM -> metadata.album.lowercase()
+            else -> ""
+        }, when (query.sort) {
+            LibrarySort.RECENT -> track.recentAt
+            LibrarySort.RATING -> track.rating.toLong()
+            LibrarySort.PLAY_COUNT -> (statistics[track.id]?.playCount ?: 0).toLong()
+            LibrarySort.LAST_PLAYED -> statistics[track.id]?.lastPlayedAt ?: Long.MIN_VALUE
+            else -> 0
+        })
+    }
     val comparator = when (query.sort) {
-        LibrarySort.TITLE -> compareBy<Track> { it.metadata.title.lowercase() }
-        LibrarySort.ARTIST -> compareBy<Track> { it.metadata.artist.lowercase() }.thenBy { it.metadata.title.lowercase() }
-        LibrarySort.ALBUM -> compareBy<Track> { it.metadata.album.lowercase() }.thenBy { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }
-        LibrarySort.RECENT -> compareByDescending<Track> { it.recentAt }
-        LibrarySort.RATING -> compareByDescending<Track> { it.rating }.thenBy { it.metadata.title.lowercase() }
-        LibrarySort.PLAY_COUNT -> compareByDescending<Track> { statistics[it.id]?.playCount ?: 0 }.thenBy { it.metadata.title.lowercase() }
-        LibrarySort.LAST_PLAYED -> compareByDescending<Track> { statistics[it.id]?.lastPlayedAt ?: Long.MIN_VALUE }.thenBy { it.metadata.title.lowercase() }
-    }.thenBy { it.id }
-    matching.sortedWith(if (query.descending) comparator.reversed() else comparator).let { ordered ->
-        query.limit?.let { ordered.take(it) } ?: ordered
+        LibrarySort.TITLE -> compareBy<Row> { it.title }
+        LibrarySort.ARTIST -> compareBy<Row> { it.group }.thenBy { it.title }
+        LibrarySort.ALBUM -> compareBy<Row> { it.group }.thenBy { it.track.metadata.discNumber }.thenBy { it.track.metadata.trackNumber }
+        LibrarySort.RECENT -> compareByDescending<Row> { it.rank }
+        LibrarySort.RATING, LibrarySort.PLAY_COUNT, LibrarySort.LAST_PLAYED -> compareByDescending<Row> { it.rank }.thenBy { it.title }
+    }.thenBy { it.track.id }
+    rows.sortedWith(if (query.descending) comparator.reversed() else comparator).let { ordered ->
+        (query.limit?.let { ordered.take(it) } ?: ordered).map { it.track }
     }
 }
 

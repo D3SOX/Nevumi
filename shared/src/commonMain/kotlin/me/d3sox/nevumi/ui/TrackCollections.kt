@@ -22,7 +22,8 @@ internal data class TrackCollection(val id: String, val title: String, val track
 
 @Composable
 internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTab, state: AppState,
-    controller: MusicController, backEnabled: Boolean, destination: LibraryDestination? = null) {
+    controller: MusicController, statistics: Map<String, me.d3sox.nevumi.history.ListeningStatistics>, backEnabled: Boolean,
+    destination: LibraryDestination? = null) {
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var handledDestination by rememberSaveable { mutableIntStateOf(-1) }
     LaunchedEffect(destination) {
@@ -31,18 +32,20 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
         }
     }
     val selecting = LocalSongSelection.current?.active == true
-    AnimatedNavigation(selected, null, canGoBack = backEnabled && selected != null && !selecting,
-        onBack = { selected = null }, depth = { if (it == null) 0 else 1 }) { id ->
-        val collection = collections.firstOrNull { it.id == id }
-        if (collection == null) CollectionBrowser(collections.map { entry ->
+    val entries = rememberDerived("collections:${tab.name}", listOf(collections, state.artwork)) {
+        collections.map { entry ->
             CollectionItem(entry.id, entry.title, listOf(entry.subtitle, countLabel(entry.tracks.size, "song")).filter { it.isNotBlank() }.joinToString(" · "),
                 entry.tracks.firstNotNullOfOrNull { state.artwork[it.id] }, tab.icon(),
                 songCount = entry.tracks.size, artist = entry.tracks.firstOrNull()?.metadata?.albumArtist.orEmpty(),
                 year = entry.tracks.maxOfOrNull { it.metadata.year } ?: 0, recentAt = entry.tracks.maxOfOrNull { it.recentAt } ?: 0,
                 trackIds = entry.tracks.map { it.id })
-        }, tab, state, controller) { selected = it }
+        }
+    }
+    AnimatedNavigation(selected, null, canGoBack = backEnabled && selected != null && !selecting,
+        onBack = { selected = null }, depth = { if (it == null) 0 else 1 }) { id ->
+        val collection = collections.firstOrNull { it.id == id }
+        if (collection == null) CollectionBrowser(entries, tab, state, controller) { selected = it }
         else Column(Modifier.fillMaxSize()) {
-            val statistics = remember(state.listens) { me.d3sox.nevumi.history.listeningStatistics(state.listens) }
             CompositionLocalProvider(LocalLibraryScrollKey provides "${LocalLibraryScrollKey.current}:collection:${collection.id}",
                 LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(tab, collection.id)) {
             SongList(collection.tracks, controller, Modifier.weight(1f), statistics = statistics, scrollSort = state.preferences.songSort,

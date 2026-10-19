@@ -48,14 +48,15 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
     playlistId: String? = null, selectionMode: Boolean = false, selected: Boolean = false, onSelect: (() -> Unit)? = null,
     statistics: ListeningStatistics? = null, extraInfo: String? = null, contextName: String = "Library", playlistPosition: Int? = null,
     shuffleContext: Boolean = false) {
-    val rowState = remember(controller, track.id) {
-        controller.state.distinctUntilChanged { old, next ->
+    val appState = LocalSteadyState.current ?: controller.state
+    val rowState = remember(appState, track.id) {
+        appState.distinctUntilChanged { old, next ->
             old.preferences == next.preferences && old.artwork[track.id] == next.artwork[track.id] &&
                 old.downloads[track.id] == next.downloads[track.id] && old.fileEdits == next.fileEdits &&
                 old.playlists == next.playlists && old.server == next.server && old.sftp == next.sftp
         }
     }
-    val state by rowState.collectAsState(controller.state.value)
+    val state by rowState.collectAsState(appState.value)
     val origin = LocalLibraryOrigin.current
     var offset by remember(track.id) { mutableFloatStateOf(0f) }
     var settling by remember { mutableStateOf<Job?>(null) }

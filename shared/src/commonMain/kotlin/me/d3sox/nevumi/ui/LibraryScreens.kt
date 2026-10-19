@@ -91,11 +91,17 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     val descending = reversed != (order in setOf(LibrarySort.RECENT, LibrarySort.RATING, LibrarySort.PLAY_COUNT, LibrarySort.LAST_PLAYED))
     val sources = state.preferences.sourceFilter
     val now = rememberLibraryTime()
-    val statistics = remember(state.listens) { listeningStatistics(state.listens) }
+    val derived = remember { DerivedResults() }
+    val statistics = rememberDerived(null, emptyList(), listOf(state.listens)) { listeningStatistics(state.listens) }
     val filter = state.preferences.libraryFilter
     // Only time-window filters depend on the clock; everything else must not re-sort the library every minute.
     val filterTime = if (filter.lastPlayedWithinDays != null || filter.notPlayedWithinDays != null) now else 0L
-    val tracks = remember(state.tracks, statistics, order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders, filterTime) {
+    val ranked = order == LibrarySort.PLAY_COUNT || order == LibrarySort.LAST_PLAYED || filter.playCountFrom != null ||
+        filter.playCountTo != null || filter.lastPlayedWithinDays != null || filter.notPlayedWithinDays != null
+    // Playback adds listened time every few seconds, which never changes the order; play counts and play times can.
+    val rankedStatistics = rememberDerived(null, listOf(ranked), listOf(statistics)) { if (ranked) statistics.mapValues { (_, it) -> it.playCount to it.lastPlayedAt } else null }
+    val tracks = rememberDerived(null, listOf(state.tracks, order, reversed, sources, filter, state.preferences.includeFolders,
+        state.preferences.excludeFolders), listOf(rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         val visible = state.tracks.filter { track ->
             val localAllowed = folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
@@ -104,7 +110,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now)
     }
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
-    CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages) {
+    CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages, LocalDerivedResults provides derived) {
     Column(modifier.fillMaxWidth()) {
         if (selection.active) SongSelectionHeader(selection, controller)
         else Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 64.dp),
@@ -178,20 +184,31 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 LibraryTab.HOME -> HomeScreen(state, controller, tracks, destination, handleBack, onSettings)
                 LibraryTab.SONGS -> SongList(tracks, controller, statistics = statistics, scrollSort = order)
                 LibraryTab.ALBUMS -> {
-                    val albums = remember(tracks) { tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
+                    val albums = rememberDerived("albums", listOf(tracks)) { tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
                         .entries.sortedBy { it.key.first.lowercase() }.map { (key, songs) ->
                             TrackCollection("${key.first.length}:${key.first}${key.second}", key.first.ifBlank { "Unknown album" },
                                 songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }), key.second)
                         } }
-                    TrackCollections(albums, LibraryTab.ALBUMS, state, controller, handleBack, destination)
+                    TrackCollections(albums, LibraryTab.ALBUMS, state, controller, statistics, handleBack, destination)
                 }
-                LibraryTab.ARTISTS -> GroupedSongs(remember(tracks) { tracks.groupBy { it.metadata.artist } }, LibraryTab.ARTISTS, state, controller, handleBack, destination)
-                LibraryTab.ALBUM_ARTISTS -> GroupedSongs(remember(tracks) { tracks.groupBy { it.metadata.albumArtist.ifBlank { it.metadata.artist } } }, LibraryTab.ALBUM_ARTISTS, state, controller, handleBack, destination)
-                LibraryTab.GENRES -> GroupedSongs(remember(tracks) { tracks.flatMap { track -> track.metadata.genres.ifEmpty { listOf("") }
-                    .map { it to track } }.groupBy({ it.first }, { it.second }) }, LibraryTab.GENRES, state, controller, handleBack, destination)
-                LibraryTab.FOLDERS -> GroupedSongs(remember(tracks) { tracks.groupBy { it.metadata.folder } }, LibraryTab.FOLDERS, state, controller, handleBack, destination)
-                LibraryTab.FAVORITES -> SongList(remember(tracks) { tracks.filter { it.favorite } }, controller, statistics = statistics, scrollSort = order, contextName = "Favorites")
-                LibraryTab.RECENT -> SongList(remember(tracks) { tracks.sortedByDescending { it.recentAt } }, controller, scrollSort = LibrarySort.RECENT, contextName = "Recently added")
+                LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS -> {
+                    val collections = rememberDerived(tab.name, listOf(tracks)) {
+                        groupedCollections(tracks, tab) { track ->
+                            when (tab) {
+                                LibraryTab.ARTISTS -> listOf(track.metadata.artist)
+                                LibraryTab.ALBUM_ARTISTS -> listOf(track.metadata.albumArtist.ifBlank { track.metadata.artist })
+                                LibraryTab.GENRES -> track.metadata.genres.ifEmpty { listOf("") }
+                                else -> listOf(track.metadata.folder)
+                            }
+                        }
+                    }
+                    TrackCollections(collections, tab, state, controller, statistics, handleBack, destination)
+                }
+                LibraryTab.FAVORITES -> SongList(rememberDerived("favorites", listOf(tracks)) { tracks.filter { it.favorite } }, controller,
+                    statistics = statistics, scrollSort = order, contextName = "Favorites")
+                LibraryTab.RECENT -> SongList(rememberDerived("recent", listOf(tracks)) {
+                    tracks.map { it to it.recentAt }.sortedByDescending { it.second }.map { it.first }
+                }, controller, scrollSort = LibrarySort.RECENT, contextName = "Recently added")
                 LibraryTab.PLAYLISTS -> PlaylistsScreen(state, controller, backEnabled = handleBack, destination = destination,
                     rearranging = rearrangingPlaylists, finishRearranging = { rearrangingPlaylists = false })
                 LibraryTab.HISTORY -> ListeningHistoryScreen(state, controller, tracks)
@@ -209,12 +226,12 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     if (filters) LibraryFiltersDialog(state, controller) { filters = false }
 }
 
-@Composable
-private fun GroupedSongs(groups: Map<String, List<Track>>, tab: LibraryTab, state: AppState, controller: MusicController, backEnabled: Boolean, destination: LibraryDestination?) {
-    val collections = remember(groups) { groups.entries.sortedBy { it.key.lowercase() }.map { (key, tracks) ->
-        TrackCollection(key, key.ifBlank { "Unknown ${tab.label.lowercase().removeSuffix("s")}" }, tracks)
-    } }
-    TrackCollections(collections, tab, state, controller, backEnabled, destination)
+private fun groupedCollections(tracks: List<Track>, tab: LibraryTab, keys: (Track) -> List<String>): List<TrackCollection> {
+    val groups = linkedMapOf<String, MutableList<Track>>()
+    tracks.forEach { track -> keys(track).forEach { groups.getOrPut(it) { mutableListOf() } += track } }
+    return groups.entries.map { it.key.lowercase() to it }.sortedBy { it.first }.map { (_, group) ->
+        TrackCollection(group.key, group.key.ifBlank { "Unknown ${tab.label.lowercase().removeSuffix("s")}" }, group.value)
+    }
 }
 
 @Composable

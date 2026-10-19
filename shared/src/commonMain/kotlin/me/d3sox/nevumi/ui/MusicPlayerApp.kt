@@ -36,6 +36,14 @@ import kotlinx.coroutines.withContext
 import me.d3sox.nevumi.settings.ColorMode
 import me.d3sox.nevumi.playback.PlaybackStatus
 import me.d3sox.nevumi.queue.QueueSnapshot
+import me.d3sox.nevumi.app.AppState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+/** The app state without playback progress, shared so song rows do not each wake on every position update. */
+internal val LocalSteadyState = staticCompositionLocalOf<StateFlow<AppState>?> { null }
+
+private fun AppState.withoutProgress() = copy(queue = queue.copy(positionMs = 0), playback = playback.copy(positionMs = 0))
 
 private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES, FILE_RECOVERY, AUDIO_EFFECTS, SFTP, TUNNEL, PAIRED_DEVICES, SEARCH }
 
@@ -47,7 +55,10 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     val files = playlistFiles ?: rememberPlaylistFiles()
     val equalizerDocuments = equalizerFiles ?: rememberEqualizerFiles()
     val folders = folderPicker ?: rememberFolderPicker()
-    val state by controller.state.collectAsState()
+    // The position changes many times per second; the seek bar observes it on its own so the app does not recompose.
+    val steadyState = remember(controller) { MutableStateFlow(controller.state.value.withoutProgress()) }
+    LaunchedEffect(steadyState) { controller.state.collect { steadyState.value = it.withoutProgress() } }
+    val state by steadyState.collectAsState()
     val waveformReader = audioWaveforms ?: rememberAudioWaveforms()
     val waveforms = remember(waveformReader) { me.d3sox.nevumi.playback.PreparedAudioWaveforms(waveformReader) }
     DisposableEffect(waveforms) { onDispose { waveforms.close() } }
@@ -71,10 +82,6 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     val libraryState by remember(controller) { derivedStateOf(structuralEqualityPolicy()) {
         state.copy(playback = PlaybackStatus(), queue = QueueSnapshot())
     } }
-    // The position changes many times per second; the seek bar observes it on its own so the panels do not recompose.
-    val panelState by remember(controller) { derivedStateOf(structuralEqualityPolicy()) {
-        state.copy(queue = state.queue.copy(positionMs = 0), playback = state.playback.copy(positionMs = 0))
-    } }
     val density = LocalDensity.current
     var navigationHeight by remember { mutableStateOf(80.dp) }
     val settingsCategory = rememberSaveable { mutableStateOf<String?>(null) }
@@ -91,7 +98,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     val artworkColor by produceState<Color?>(null, cover) {
         value = if (cover == null) null else withContext(Dispatchers.Default) { cover.themeColor(Color(0xFF6750A4)) }
     }
-    CompositionLocalProvider(LocalAudioWaveforms provides waveforms, LocalArtworkPicker provides picker, LocalPlaylistFiles provides files, LocalEqualizerFiles provides equalizerDocuments,
+    CompositionLocalProvider(LocalSteadyState provides steadyState, LocalAudioWaveforms provides waveforms, LocalArtworkPicker provides picker, LocalPlaylistFiles provides files, LocalEqualizerFiles provides equalizerDocuments,
         LocalLibraryNavigate provides { tab, id -> openLibrary(tab, id) },
         LocalLibraryFocusHandled provides { libraryDestination = libraryDestination?.copy(trackId = null) },
         LocalPlayingContextNavigate provides { origin, track -> openLibrary(origin.tab, origin.collectionId, track) }) {
@@ -168,7 +175,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                 }
                 }
                 if (page == AppPage.LIBRARY || page == AppPage.SEARCH) {
-                    PlayerPanels(panelState, controller, playerSheet, if (page == AppPage.LIBRARY) navigationHeight else 0.dp,
+                    PlayerPanels(state, controller, playerSheet, if (page == AppPage.LIBRARY) navigationHeight else 0.dp,
                         onPairedDevices = { returnToSettings = false; page = AppPage.PAIRED_DEVICES },
                         onAudioEffects = { returnToSettings = false; page = AppPage.AUDIO_EFFECTS }) { returnToSettings = false; page = AppPage.SAVED_QUEUES }
                 }
