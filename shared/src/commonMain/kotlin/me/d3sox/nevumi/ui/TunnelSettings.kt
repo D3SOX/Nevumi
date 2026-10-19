@@ -51,6 +51,9 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Nevumi can join your tailnet itself, so it reaches servers there without the Tailscale app or a VPN.")
             if (busy || status == null && pollError == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (status == null && pollError != null) TextButton(enabled = !busy, onClick = {
+                run("Tailscale could not be reset") { controller.signOutOfTailscale(); status = controller.tailscaleStatus(); pollError = null }
+            }) { Text("Reset Tailscale") }
             status?.let { current ->
                 if (current.state == "Stopped") {
                     OutlinedTextField(controlUrl, { controlUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Control server (optional)") },

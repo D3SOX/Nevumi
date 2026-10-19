@@ -53,10 +53,11 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
         return status()
     }
 
+    /** Logs a running node out first. A saved node that can no longer start, such as one with corrupt state, is just deleted. */
     @Synchronized fun signOut() {
         TailscaleNative.requireLoaded()
-        resume()
-        TailscaleNative.signOut()
+        val resumed = try { resume(); true } catch (failure: IOException) { false }
+        if (resumed) TailscaleNative.signOut()
         directory.deleteRecursively()
     }
 
