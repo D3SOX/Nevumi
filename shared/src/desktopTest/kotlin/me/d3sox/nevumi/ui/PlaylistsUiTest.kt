@@ -4,6 +4,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playlists.Playlists
@@ -79,7 +80,7 @@ class PlaylistsUiTest {
             changes.importPlaylists(client)
             playlists.create("Own playlist", emptyList())
         }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -181,7 +182,7 @@ class PlaylistsUiTest {
             playlists.createSmart("Automatic favorites", LibraryQuery(favoritesOnly = true))
             songs
         }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -314,7 +315,7 @@ class PlaylistsUiTest {
             }
             playlists.create("Repeated", listOf("a", "b", "a").map(tracks::getValue))
         }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -356,7 +357,7 @@ class PlaylistsUiTest {
             val track = library.importTrack(TrackMetadata("Repeated song"), TrackSource("local", SourceKind.LOCAL, "/music/repeated.flac"))
             playlists.create("Repeated", listOf(track.id, track.id))
         }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

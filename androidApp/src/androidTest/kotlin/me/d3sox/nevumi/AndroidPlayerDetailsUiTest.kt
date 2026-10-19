@@ -23,6 +23,7 @@ import java.io.ByteArrayOutputStream
 @RunWith(AndroidJUnit4::class)
 class AndroidPlayerDetailsUiTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test fun artworkGlowStaysBehindThePlayingTitleArtistAndButtons() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

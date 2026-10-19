@@ -14,6 +14,7 @@ import java.io.File
 
 class AndroidGlobalSearchUiTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
     @Test fun searchIgnoresHomeFiltersAndOffersTrackAndCollectionMenus() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
@@ -410,7 +411,7 @@ class PlayerUiTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
         runBlocking { LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music").toString()) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -443,7 +444,7 @@ class PlayerUiTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
         runBlocking { LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music").toString()) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -871,7 +872,7 @@ class PlayerUiTest {
         val library = MusicLibrary(store)
         runBlocking { LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"),
             ".test-environment", "music").toString()) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

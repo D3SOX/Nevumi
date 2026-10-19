@@ -3,6 +3,7 @@ package me.d3sox.nevumi.ui
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.LocalFileEdits
 import me.d3sox.nevumi.library.LocalFiles
@@ -200,7 +201,7 @@ class SftpUiTest {
         val files = SftpConnection(store, library, navidrome::client, vault, directory.resolve("server-edits").toString())
         runBlocking { files.connect(SftpProfile("127.0.0.1", 14534, System.getProperty("user.name"), music.toString(),
             Files.readString(fixture.resolve("fingerprint"))), 1, SftpAuthentication(privateKey = Files.readString(fixture.resolve("client")))) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, serverFiles = files)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, serverFiles = files, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -267,7 +268,7 @@ class SftpUiTest {
                 1, SftpAuthentication(privateKey = Files.readString(fixture.resolve("client"))))
             artwork.save(library.tracks().single { it.metadata.title == "Northern Light" }.id, red)
         }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, artwork = artwork, serverFiles = files)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, artwork = artwork, serverFiles = files, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, artworkPicker = ArtworkPicker { blue }) }
@@ -333,7 +334,7 @@ class SftpUiTest {
         runBlocking { files.connect(SftpProfile("127.0.0.1", 14534, System.getProperty("user.name"), music.toString(),
             Files.readString(fixture.resolve("fingerprint"))), 1, SftpAuthentication(privateKey = Files.readString(fixture.resolve("client")))) }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome,
-            fileEdits = LocalFileEdits(store, library, directory.resolve("local-edits").toString()), serverFiles = files)
+            fileEdits = LocalFileEdits(store, library, directory.resolve("local-edits").toString()), serverFiles = files, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -390,7 +391,7 @@ class SftpUiTest {
             if (serverTrack.id != localTrack.id) library.linkTracks(localTrack.id, serverTrack.id)
         }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome,
-            fileEdits = LocalFileEdits(store, library, directory.resolve("local-edits").toString()), serverFiles = files)
+            fileEdits = LocalFileEdits(store, library, directory.resolve("local-edits").toString()), serverFiles = files, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -456,7 +457,7 @@ class SftpUiTest {
         val files = SftpConnection(store, library, navidrome::client, vault, directory.resolve("server-edits").toString())
         runBlocking { files.connect(SftpProfile("127.0.0.1", 14534, System.getProperty("user.name"), music.toString(),
             Files.readString(fixture.resolve("fingerprint"))), 1, SftpAuthentication(privateKey = Files.readString(fixture.resolve("client")))) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, serverFiles = files)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), navidrome, serverFiles = files, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

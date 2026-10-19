@@ -5,6 +5,7 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.semantics.SemanticsProperties
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playlists.Playlists
@@ -68,7 +69,7 @@ class PlaylistMembershipUiTest {
                 playlists.createSmart("All music", LibraryQuery())
             }
         }
-        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
@@ -117,7 +118,7 @@ class PlaylistMembershipUiTest {
                 playlists.create("Morning", emptyList())
             }
         }
-        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
@@ -153,7 +154,7 @@ class PlaylistMembershipUiTest {
             }
         }
         val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists,
-            preferences = me.d3sox.nevumi.settings.MusicPreferences(store))
+            preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
@@ -214,7 +215,7 @@ class PlaylistMembershipUiTest {
             playlists.create("Road ▸ Drive", emptyList())
             playlists.create("Morning", emptyList())
         }
-        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }

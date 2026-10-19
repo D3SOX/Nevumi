@@ -51,7 +51,7 @@ data class MusicSettings(
     val swipeRight: TrackAction = TrackAction.PLAY_NEXT,
     val swipeLeft: TrackAction = TrackAction.APPEND,
     val quickAction: TrackAction = TrackAction.ADD_TO_PLAYLIST,
-    val showMoreButtons: Boolean = true,
+    val showMoreButtons: Boolean = false,
     val sourcePriority: List<SourceKind> = listOf(SourceKind.LOCAL, SourceKind.DOWNLOAD, SourceKind.SERVER),
     val cacheBytes: Long = 2L * 1024 * 1024 * 1024,
     val downloadsPaused: Boolean = false,

@@ -65,7 +65,7 @@ class LibraryUiTest {
         val library = MusicLibrary(store)
         val track = runBlocking { library.importTrack(TrackMetadata("Northern Light"),
             TrackSource("local", SourceKind.LOCAL, "/music/song.flac")) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -135,7 +135,7 @@ class LibraryUiTest {
         runBlocking { listOf("Song a", "Song b").forEach { title ->
             library.importTrack(TrackMetadata(title), TrackSource(title, SourceKind.LOCAL, "/music/$title.flac"))
         } }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -161,7 +161,7 @@ class LibraryUiTest {
         val tracks = runBlocking { listOf("Playing", "Selected a", "Selected b").mapIndexed { index, title ->
             library.importTrack(TrackMetadata(title), TrackSource("local:$index", SourceKind.LOCAL, audio))
         } }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -234,7 +234,7 @@ class LibraryUiTest {
         val audio = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac").toString()
         val local = runBlocking { library.importTrack(TrackMetadata("Northern Light", "Fixture Artist", "Local album"), TrackSource("local:song", SourceKind.LOCAL, audio)) }
         val remote = runBlocking { library.importTrack(TrackMetadata("Server copy", "Fixture Artist", "Server album"), TrackSource("server:song", SourceKind.SERVER, "song")) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -367,7 +367,7 @@ class LibraryUiTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
         runBlocking { LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music").toString()) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

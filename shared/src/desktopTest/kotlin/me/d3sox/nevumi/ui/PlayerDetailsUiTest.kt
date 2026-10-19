@@ -3,6 +3,7 @@ package me.d3sox.nevumi.ui
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playlists.Playlists
@@ -57,7 +58,7 @@ class PlayerDetailsUiTest {
             for (x in 0..31) for (y in 0..31) image.setRGB(x, y, 0xE05040)
         }
         runBlocking { artwork.save(track.id, java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(red, "png", it) }.toByteArray()) }
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), artwork = artwork)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), artwork = artwork, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

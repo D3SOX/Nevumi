@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
@@ -30,7 +31,7 @@ class LibraryFastScrollUiTest {
                 TrackSource("local-$index", SourceKind.LOCAL, "/music/$index.flac", modifiedAt = 1_577_836_800_000L + index * 86_400_000L))
         } }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            preferences = me.d3sox.nevumi.settings.MusicPreferences(store))
+            preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }

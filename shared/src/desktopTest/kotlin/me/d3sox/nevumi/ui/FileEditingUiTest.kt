@@ -3,6 +3,7 @@ package me.d3sox.nevumi.ui
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
@@ -32,7 +33,7 @@ class FileEditingUiTest {
                 TrackSource("local:$audio", SourceKind.LOCAL, audio.toString()), linkTo = server.id)
         }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -131,7 +132,7 @@ class FileEditingUiTest {
         Files.copy(original, audio)
         val track = runBlocking { LocalFiles(library).scan(audio.toString()).single() }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -163,7 +164,7 @@ class FileEditingUiTest {
         Files.copy(original, audio)
         val track = runBlocking { LocalFiles(library).scan(audio.toString()).single() }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -202,7 +203,7 @@ class FileEditingUiTest {
         Files.copy(original, audio)
         val track = runBlocking { LocalFiles(library).scan(audio.toString()).single() }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -237,7 +238,7 @@ class FileEditingUiTest {
         val track = runBlocking { LocalFiles(library).scan(audio.toString()).single() }
         val image = Files.readAllBytes(Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "cover.png"))
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, artworkPicker = ArtworkPicker { image }) }
@@ -266,7 +267,7 @@ class FileEditingUiTest {
         for (name in listOf("01 Northern Light.flac", "02 Long Way Home.mp3", "03 Night Walk.wav")) Files.copy(fixtures.resolve(name), music.resolve(name))
         val tracks = runBlocking { LocalFiles(library).scan(music.toString()) }.associateBy { it.metadata.title }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -303,7 +304,7 @@ class FileEditingUiTest {
         for (name in listOf("01 Northern Light.flac", "02 Long Way Home.mp3", "03 Night Walk.wav")) Files.copy(fixtures.resolve(name), music.resolve(name))
         val tracks = runBlocking { LocalFiles(library).scan(music.toString()) }.associateBy { it.metadata.title }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
-            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()))
+            fileEdits = LocalFileEdits(store, library, directory.resolve("edits").toString()), preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
@@ -381,7 +382,7 @@ class FileEditingUiTest {
         Files.copy(original, audio)
         val track = runBlocking { LocalFiles(library).scan(audio.toString()).single() }
         val edits = LocalFileEdits(store, library, directory.resolve("edits").toString())
-        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), fileEdits = edits)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), fileEdits = edits, preferences = MusicPreferences(store).withOptionsButtons())
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
