@@ -99,9 +99,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     val ranked = order == LibrarySort.PLAY_COUNT || order == LibrarySort.LAST_PLAYED || filter.playCountFrom != null ||
         filter.playCountTo != null || filter.lastPlayedWithinDays != null || filter.notPlayedWithinDays != null
     // Playback adds listened time every few seconds, which never changes the order; play counts and play times can.
-    val rankedStatistics = remember(statistics, ranked) { if (ranked) statistics.mapValues { (_, it) -> it.playCount to it.lastPlayedAt } else null }
+    val rankedStatistics = rememberDerived(null, listOf(ranked), listOf(statistics)) { if (ranked) statistics.mapValues { (_, it) -> it.playCount to it.lastPlayedAt } else null }
     val tracks = rememberDerived(null, listOf(state.tracks, order, reversed, sources, filter, state.preferences.includeFolders,
-        state.preferences.excludeFolders, filterTime), listOf(rankedStatistics)) {
+        state.preferences.excludeFolders), listOf(rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         val visible = state.tracks.filter { track ->
             val localAllowed = folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
