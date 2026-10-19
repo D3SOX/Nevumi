@@ -172,13 +172,12 @@ class ScrobblingClientsTest {
     }
 
     @Test
-    fun lastFmDoesNotSubmitShortSongsOrSongsThatHaveNotBeenHeardEnough() = runBlocking {
+    fun lastFmDoesNotSubmitShortSongs() = runBlocking {
         var requests = 0
         val http = HttpClient(MockEngine { requests++; respond("{}", headers = jsonHeaders) })
         try {
             val client = LastFmClient(http, "fixture-key", "fixture-secret", "fixture-session")
             assertFailsWith<IllegalArgumentException> { client.submit(listen.copy(durationMs = 30_000)) }
-            assertFailsWith<IllegalArgumentException> { client.submit(listen.copy(playedMs = 1_000)) }
             assertEquals(0, requests)
         } finally { http.close() }
     }

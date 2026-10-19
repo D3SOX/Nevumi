@@ -69,6 +69,8 @@ data class MusicSettings(
     val showAudioInfo: Boolean = true,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
+    val scrobblePercent: Int = 50,
+    val scrobbleMaxSeconds: Int = 240,
     val songSort: LibrarySort = LibrarySort.TITLE,
     val songOrderReversed: Boolean = false,
     val sourceFilter: SourceKind? = null,
@@ -111,6 +113,8 @@ class MusicPreferences(private val store: MusicStore) {
         require(settings.crossfadeDurationMs in 0..12_000) { "Crossfade must be between 0 and 12 seconds" }
         require(settings.previousQueueTrackLimit in 1..100) { "Choose between 1 and 100 previous tracks" }
         require(settings.queueRecoveryIntervalMinutes in 1..60) { "Choose a recovery interval between 1 and 60 minutes" }
+        require(settings.scrobblePercent in 1..100) { "Choose a scrobbling percentage between 1 and 100" }
+        require(settings.scrobbleMaxSeconds in 0..600) { "Choose a scrobbling time limit between 0 and 600 seconds" }
         require(settings.sourcePriority.size == SourceKind.entries.size && settings.sourcePriority.toSet() == SourceKind.entries.toSet()) {
             "Choose each audio source once"
         }

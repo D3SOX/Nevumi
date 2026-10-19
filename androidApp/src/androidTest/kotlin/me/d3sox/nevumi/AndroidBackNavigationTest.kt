@@ -102,7 +102,7 @@ class AndroidBackNavigationTest {
             compose.onNodeWithText("Connect Last.fm").performClick()
             previewAndCancel()
             commit()
-            compose.onNodeWithText("No pending listens").assertIsDisplayed()
+            compose.onNodeWithText("No pending listens").performScrollTo().assertIsDisplayed()
             commit()
             compose.onNodeWithText("Playback").performClick()
             compose.onNodeWithText("Audio effects").performScrollTo().performClick()

@@ -18,6 +18,7 @@ import me.d3sox.nevumi.history.ScrobbleSubmission
 import me.d3sox.nevumi.history.ScrobblingProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 internal fun ScrobblingService.label() = when (this) {
     ScrobblingService.LISTENBRAINZ -> "ListenBrainz"
@@ -38,6 +39,16 @@ internal fun ScrobblingSettingsContent(state: AppState, controller: MusicControl
         .sortedByDescending { it.listen?.startedAt }
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Scrobbling sends recorded plays to your connected accounts. Existing history is not backfilled.")
+            SettingsSlider("Scrobble after", AppIcon.SCROBBLING, state.preferences.scrobblePercent.toFloat(),
+                1f..100f, 98, format = { "${it.roundToInt()}%" }) { percent ->
+                controller.updatePreferences { it.copy(scrobblePercent = percent.roundToInt()) }
+            }
+            SettingsSlider("Or after", AppIcon.HISTORY, state.preferences.scrobbleMaxSeconds.toFloat(),
+                0f..600f, 19, format = { if (it == 0f) "Off" else playbackTime(it.roundToInt() * 1_000L) }) { seconds ->
+                controller.updatePreferences { it.copy(scrobbleMaxSeconds = seconds.roundToInt()) }
+            }
+            Text("Send a listen when either threshold is reached. Choose Off to use only the percentage. Applies to all connected services. Last.fm requires tracks longer than 30 seconds.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (state.scrobbling.profiles.any { it.service == ScrobblingService.NAVIDROME && it.enabled })
                 Text("If your music server forwards plays to Last.fm or ListenBrainz, keep the matching direct connection off here.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -50,6 +50,9 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             category("Listening & scrobbling", AppIcon.HISTORY, "Record listening history" to "statistics recommendations",
                 "Clear listening history" to "delete statistics")
             if (controller.scrobblingAvailable) {
+                category("Listening & scrobbling", AppIcon.SCROBBLING,
+                    "Scrobble after" to "threshold percentage percent lastfm listenbrainz server",
+                    "Or after" to "scrobble scrobbling time limit threshold seconds minutes duration lastfm listenbrainz server")
                 add(SettingResult("Connect Last.fm", "Listening & scrobbling", AppIcon.SCROBBLING,
                     "lastfm authorization sign in account", "Connect Last.fm"))
                 add(SettingResult("Connect ListenBrainz", "Listening & scrobbling", AppIcon.SCROBBLING,

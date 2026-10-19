@@ -9,6 +9,8 @@ import me.d3sox.nevumi.navidrome.NavidromeRequestException
 import me.d3sox.nevumi.navidrome.isUnreachableHost
 import me.d3sox.nevumi.playback.PlaybackStatus
 import me.d3sox.nevumi.security.CredentialVault
+import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.settings.MusicSettings
 import me.d3sox.nevumi.storage.MusicStore
 import io.ktor.client.HttpClient
 import io.ktor.http.Url
@@ -50,6 +52,13 @@ data class ScrobbleSubmission(val id: String, val profileId: String, val playbac
 data class ScrobblingStatus(val profiles: List<ScrobblingProfile> = emptyList(),
     val submissions: List<ScrobbleSubmission> = emptyList(), val error: String? = null)
 
+internal fun Listen.qualifiesForScrobbling(settings: MusicSettings): Boolean {
+    val percentageMs = durationMs.takeIf { it > 0 }?.let { it * settings.scrobblePercent / 100 }
+    val maximumMs = settings.scrobbleMaxSeconds.takeIf { it > 0 }?.let { it * 1_000L }
+    val thresholdMs = listOfNotNull(percentageMs, maximumMs).minOrNull() ?: return false
+    return playedMs >= thresholdMs.coerceAtLeast(1)
+}
+
 @Serializable
 private data class LastFmCredentials(val apiKey: String, val sharedSecret: String, val sessionKey: String) {
     override fun toString() = "LastFmCredentials([redacted])"
@@ -80,7 +89,8 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         scope.launch {
             combine(store.database.records().observe("listens").distinctUntilChanged(),
                 store.database.records().observe("scrobbling-profiles").distinctUntilChanged(),
-                store.database.records().observe("servers").distinctUntilChanged(), network) { _, _, _, _ -> Unit }
+                store.database.records().observe("servers").distinctUntilChanged(), network,
+                store.database.records().observe("settings").distinctUntilChanged()) { _, _, _, _, _ -> Unit }
                 .collect { wake.trySend(Unit) }
         }
         scope.launch {
@@ -226,7 +236,8 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
     }
 
     suspend fun enqueueEligible() = sending.withLock {
-        val listens = store.list<Listen>("listens").filter { it.qualified && it.originDeviceId == null }
+        val settings = MusicPreferences(store).load()
+        val listens = store.list<Listen>("listens").filter { it.qualifiesForScrobbling(settings) && it.originDeviceId == null }
         val profiles = profiles().filter { it.enabled }
         store.transaction {
             for (profile in profiles) for (listen in listens.filter { it.startedAt >= profile.enabledSince }) {
