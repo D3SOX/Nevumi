@@ -20,24 +20,33 @@ internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, ran
     val top = report.songs.filter { it.playCount > 0 }.map { catalog.getValue(it.trackIds.single()) }.take(20)
     val rediscover = playable.filter { track -> statistics[track.id]?.let { it.playCount > 0 && it.lastPlayedAt < now - 30 * 86_400_000L } == true }
         .sortedWith(compareByDescending<Track> { statistics.getValue(it.id).playCount }.thenBy { statistics.getValue(it.id).lastPlayedAt }).take(20)
-    val added = playable.sortedWith(compareByDescending<Track> { it.recentAt }.thenBy { it.metadata.title.lowercase() }).take(20)
-    val albums = playable.groupBy { albumCollectionId(it.metadata) }.mapValues { (id, songs) ->
-        val first = songs.first().metadata
-        TrackCollection(id, first.album.ifBlank { "Unknown album" },
-            songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }),
-            first.albumArtist.ifBlank { first.artist })
+    val added = playable.map { Triple(it, it.recentAt, it.metadata.title.lowercase()) }
+        .sortedWith(compareByDescending<Triple<Track, Long, String>> { it.second }.thenBy { it.third }).take(20).map { it.first }
+    val albumSongs = playable.groupBy { albumCollectionId(it.metadata) }
+    val artistSongs = playable.groupBy { it.metadata.artist }
+    // Only a few albums and artists are shown, so build their collections on demand.
+    val albums = mutableMapOf<String, TrackCollection>()
+    fun album(track: Track): TrackCollection? {
+        val id = albumCollectionId(track.metadata)
+        val songs = albumSongs[id] ?: return null
+        return albums.getOrPut(id) {
+            val first = songs.first().metadata
+            TrackCollection(id, first.album.ifBlank { "Unknown album" },
+                songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }),
+                first.albumArtist.ifBlank { first.artist })
+        }
     }
-    val artists = playable.groupBy { it.metadata.artist }.mapValues { (artist, songs) ->
-        TrackCollection(artist, artist.ifBlank { "Unknown artist" }, songs)
+    fun artist(track: Track) = track.metadata.artist.let { artist ->
+        artistSongs[artist]?.let { TrackCollection(artist, artist.ifBlank { "Unknown artist" }, it) }
     }
-    val recentAlbums = recent.mapNotNull { albums[albumCollectionId(it.metadata)] }.distinctBy { it.id }.take(12)
-    val recentArtists = recent.mapNotNull { artists[it.metadata.artist] }.distinctBy { it.id }.take(12)
+    val recentAlbums = recent.mapNotNull(::album).distinctBy { it.id }.take(12)
+    val recentArtists = recent.distinctBy { it.metadata.artist }.mapNotNull(::artist).take(12)
     val topAlbums = report.albums.filter { it.playCount > 0 }.mapNotNull { rank ->
-        rank.trackIds.firstOrNull()?.let(catalog::get)?.let { albums[albumCollectionId(it.metadata)] }
+        rank.trackIds.firstOrNull()?.let(catalog::get)?.let(::album)
     }.distinctBy { it.id }.take(12)
     val topArtists = report.artists.filter { it.playCount > 0 }.mapNotNull { rank ->
-        rank.trackIds.firstOrNull()?.let(catalog::get)?.let { artists[it.metadata.artist] }
-    }.distinctBy { it.id }.take(12)
+        rank.trackIds.firstOrNull()?.let(catalog::get)
+    }.distinctBy { it.metadata.artist }.mapNotNull(::artist).take(12)
     val discovery = playable.filter { (statistics[it.id]?.playCount ?: 0) == 0 }.shuffled(Random(randomSeed)).take(50)
     val recommendations = listeningRecommendations(events, playable, limit = 50, now = now).map { it.track }
     val favorites = playable.filter { it.favorite }.shuffled(Random(randomSeed)).take(50)
