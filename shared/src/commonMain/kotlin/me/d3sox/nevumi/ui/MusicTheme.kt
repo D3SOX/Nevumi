@@ -3,9 +3,11 @@ package me.d3sox.nevumi.ui
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
 import com.materialkolor.dynamiccolor.ColorSpec
@@ -39,10 +41,23 @@ internal fun MusicTheme(settings: MusicSettings, artworkColor: Color?, content: 
             style = PaletteStyle.Expressive, specVersion = ColorSpec.SpecVersion.SPEC_2025)
         val accented = generated.copy(secondary = generated.primary, onSecondary = generated.onPrimary,
             secondaryContainer = generated.primaryContainer, onSecondaryContainer = generated.onPrimaryContainer)
-        if (dark && settings.amoledBlack) accented.copy(background = Color.Black, surface = Color.Black,
-            surfaceContainerLowest = Color.Black) else accented
+        accented.withAmoledBlack(dark && settings.amoledBlack)
     }
     MaterialTheme(colorScheme = scheme, content = content)
+}
+
+internal fun ColorScheme.withAmoledBlack(enabled: Boolean): ColorScheme {
+    if (!enabled) return this
+    // Some system palettes supply black cards on a gray surface. Keep that gray
+    // for containers when making the canvas black, with a fallback for all-black palettes.
+    val cardFloor = listOf(background, surface).maxBy { it.luminance() }
+        .takeIf { it.luminance() > 0f } ?: darkColorScheme().surfaceContainerLow
+    fun visibleContainer(color: Color) = if (color.luminance() < cardFloor.luminance()) cardFloor else color
+    return copy(background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black,
+        surfaceContainerLow = visibleContainer(surfaceContainerLow),
+        surfaceContainer = visibleContainer(surfaceContainer),
+        surfaceContainerHigh = visibleContainer(surfaceContainerHigh),
+        surfaceContainerHighest = visibleContainer(surfaceContainerHighest))
 }
 
 @Composable
