@@ -4,7 +4,6 @@ import android.Manifest
 import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -66,14 +65,8 @@ class AndroidFileConsentTest {
                 try {
                     withTimeout(5_000) { requested.await() }
                     withTimeout(5_000) {
-                        fun allow(node: AccessibilityNodeInfo?): Boolean {
-                            if (node == null) return false
-                            // System images expose this label as either "Allow" or "ALLOW".
-                            if (node.text?.toString()?.equals("Allow", ignoreCase = true) == true && node.isClickable)
-                                return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            return (0 until node.childCount).any { allow(node.getChild(it)) }
-                        }
-                        while (!allow(instrumentation.uiAutomation.rootInActiveWindow)) delay(50)
+                        // System images expose this label as either "Allow" or "ALLOW".
+                        instrumentation.uiAutomation.clickSystemDialogButton { it.text?.toString()?.equals("Allow", ignoreCase = true) == true }
                     }
                     val result = withTimeout(10_000) { editing.await() }
                     assertTrue("An external file change must stop the pending edit", result.isFailure)

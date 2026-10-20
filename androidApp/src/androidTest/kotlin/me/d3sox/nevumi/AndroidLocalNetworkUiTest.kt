@@ -1,6 +1,5 @@
 package me.d3sox.nevumi
 
-import android.view.accessibility.AccessibilityNodeInfo
 import android.content.Intent
 import android.view.WindowManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -45,15 +44,7 @@ class AndroidLocalNetworkUiTest {
             assertNull(app.controller.state.value.error)
             val connected = async { app.controller.connectServerFiles(profile, 1, authentication) }
             try {
-                withTimeout(5_000) {
-                    fun allow(node: AccessibilityNodeInfo?): Boolean {
-                        if (node == null) return false
-                        if (node.viewIdResourceName?.endsWith(":id/permission_allow_button") == true)
-                            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        return (0 until node.childCount).any { allow(node.getChild(it)) }
-                    }
-                    while (!allow(instrumentation.uiAutomation.rootInActiveWindow)) delay(50)
-                }
+                withTimeout(5_000) { instrumentation.uiAutomation.clickSystemDialogButton { it.viewIdResourceName?.endsWith(":id/permission_allow_button") == true } }
                 withTimeout(10_000) { connected.await() }
                 assertNotNull(app.controller.state.value.sftp)
             } finally { connected.cancel() }
@@ -71,15 +62,10 @@ class AndroidLocalNetworkUiTest {
             val invitation = async { devices.createInvitation("10.0.2.15") }
             try {
                 withTimeout(5_000) {
-                    fun allow(node: AccessibilityNodeInfo?): Boolean {
-                        if (node == null) return false
-                        if (node.viewIdResourceName?.endsWith(":id/permission_allow_button") == true) {
-                            assertNull(devices.state.value.listeningPort)
-                            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        }
-                        return (0 until node.childCount).any { allow(node.getChild(it)) }
+                    instrumentation.uiAutomation.clickSystemDialogButton {
+                        (it.viewIdResourceName?.endsWith(":id/permission_allow_button") == true)
+                            .also { allow -> if (allow) assertNull(devices.state.value.listeningPort) }
                     }
-                    while (!allow(instrumentation.uiAutomation.rootInActiveWindow)) delay(50)
                 }
                 assertNotNull(withTimeout(10_000) { invitation.await() })
                 assertNotNull(devices.state.value.listeningPort)
@@ -98,15 +84,7 @@ class AndroidLocalNetworkUiTest {
         withActivity {
             withTimeout(5_000) { while (app.controller.state.value.loading) delay(50) }
             app.controller.connectServer("http://10.0.2.2:14533", "fixture", "fixture-password")
-            withTimeout(5_000) {
-                fun allow(node: AccessibilityNodeInfo?): Boolean {
-                    if (node == null) return false
-                    if (node.viewIdResourceName?.endsWith(":id/permission_allow_button") == true)
-                        return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    return (0 until node.childCount).any { allow(node.getChild(it)) }
-                }
-                while (!allow(instrumentation.uiAutomation.rootInActiveWindow)) delay(50)
-            }
+            withTimeout(5_000) { instrumentation.uiAutomation.clickSystemDialogButton { it.viewIdResourceName?.endsWith(":id/permission_allow_button") == true } }
             withTimeout(10_000) { while (app.controller.state.value.tracks.size != 3) delay(50) }
             assertNull(app.controller.state.value.error)
         }

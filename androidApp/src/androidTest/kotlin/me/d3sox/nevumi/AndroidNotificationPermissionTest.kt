@@ -2,7 +2,6 @@ package me.d3sox.nevumi
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -49,17 +48,7 @@ class AndroidNotificationPermissionTest {
                 compose.onNodeWithText("Download").performScrollTo().performClick()
                 compose.waitForIdle()
                 runBlocking {
-                    withTimeout(5_000) {
-                        while (true) {
-                            val allow = instrumentation.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByText("Allow")
-                                ?.firstOrNull { it.text?.toString() == "Allow" && it.isClickable }
-                            if (allow != null) {
-                                check(allow.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-                                break
-                            }
-                            delay(20)
-                        }
-                    }
+                    withTimeout(5_000) { instrumentation.uiAutomation.clickSystemDialogButton { it.text?.toString() == "Allow" } }
                     withTimeout(5_000) {
                         while (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) delay(20)
                     }
