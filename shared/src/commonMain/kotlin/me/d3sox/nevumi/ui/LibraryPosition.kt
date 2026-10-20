@@ -9,14 +9,17 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.settings.LibraryPosition
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 
 internal val LocalLibraryScrollKey = staticCompositionLocalOf { "library" }
 
 @Composable
 internal fun rememberLibraryListState(controller: MusicController, suffix: String): LazyListState {
     val key = "${LocalLibraryScrollKey.current}:$suffix"
-    val appState by controller.state.collectAsState()
-    val enabled = appState.preferences.rememberScrollPositions
+    val enabledFlow = remember(controller) {
+        controller.state.map { it.preferences.rememberScrollPositions }.distinctUntilChanged()
+    }
+    val enabled by enabledFlow.collectAsState(controller.state.value.preferences.rememberScrollPositions)
     val initial = remember(key, enabled) { if (enabled) controller.state.value.preferences.libraryPositions[key] ?: LibraryPosition() else LibraryPosition() }
     val state = key(key, enabled) {
         if (enabled) rememberLazyListState(initial.index, initial.offset) else remember { LazyListState() }
@@ -28,8 +31,10 @@ internal fun rememberLibraryListState(controller: MusicController, suffix: Strin
 @Composable
 internal fun rememberLibraryGridState(controller: MusicController, suffix: String): LazyGridState {
     val key = "${LocalLibraryScrollKey.current}:$suffix"
-    val appState by controller.state.collectAsState()
-    val enabled = appState.preferences.rememberScrollPositions
+    val enabledFlow = remember(controller) {
+        controller.state.map { it.preferences.rememberScrollPositions }.distinctUntilChanged()
+    }
+    val enabled by enabledFlow.collectAsState(controller.state.value.preferences.rememberScrollPositions)
     val initial = remember(key, enabled) { if (enabled) controller.state.value.preferences.libraryPositions[key] ?: LibraryPosition() else LibraryPosition() }
     val state = key(key, enabled) {
         if (enabled) rememberLazyGridState(initial.index, initial.offset) else remember { LazyGridState() }
