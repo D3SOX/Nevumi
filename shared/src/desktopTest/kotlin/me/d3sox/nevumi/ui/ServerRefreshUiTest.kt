@@ -93,39 +93,40 @@ class ServerRefreshUiTest {
     }
 
     @Test
-    fun refreshFeedbackFitsSmallScreensAndLandscapeWithLargeTextAndReducedMotion() {
+    fun refreshFeedbackFitsSmallScreensAndLandscapeWithNormalAndLargeTextAndReducedMotion() {
         val directory = Files.createTempDirectory("nevumi-refresh-layout")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"))
         try {
-            for ((width, height, theme) in listOf(Triple(375, 812, ThemeMode.LIGHT), Triple(667, 375, ThemeMode.DARK), Triple(1024, 768, ThemeMode.DARK))) {
-                runSkikoComposeUiTest(size = Size(width.toFloat(), height.toFloat()),
-                    effectContext = object : MotionDurationScale { override val scaleFactor = 0f }) {
-                    val settings = MusicSettings(themeMode = theme)
-                    setContent {
-                        CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
-                            MusicTheme(settings, null) {
-                                Box(Modifier.size(width.dp, height.dp)) {
-                                    ServerSettings(AppState(loading = true, server = ServerProfile("https://music.example.test", "fixture"),
-                                        serverRefresh = ServerRefreshProgress(ServerRefreshStage.ARTWORK, 3210, 4000)), controller, {})
+            for ((width, height, theme) in listOf(Triple(375, 812, ThemeMode.LIGHT), Triple(375, 812, ThemeMode.DARK), Triple(667, 375, ThemeMode.DARK), Triple(1024, 768, ThemeMode.DARK))) {
+                for (fontScale in listOf(1f, 2f)) {
+                    runSkikoComposeUiTest(size = Size(width * 2f, height * 2f),
+                        effectContext = object : MotionDurationScale { override val scaleFactor = 0f }) {
+                        val settings = MusicSettings(themeMode = theme)
+                        setContent {
+                            CompositionLocalProvider(LocalDensity provides Density(2f, fontScale)) {
+                                MusicTheme(settings, null) {
+                                    Box(Modifier.size(width.dp, height.dp)) {
+                                        ServerSettings(AppState(loading = true, server = ServerProfile("https://music.example.test", "fixture"),
+                                            serverRefresh = ServerRefreshProgress(ServerRefreshStage.ARTWORK, 3210, 4000)), controller, {})
+                                    }
                                 }
                             }
                         }
+                        for (text in listOf("Updating artwork", "3210 of 4000 covers checked")) {
+                            onNodeWithText(text).performScrollTo().assertIsDisplayed()
+                            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                            onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                            assertTrue(layouts.isNotEmpty() && layouts.all { layout ->
+                                !layout.didOverflowHeight && layout.getLineEnd(layout.lineCount - 1) == text.length &&
+                                    (0 until layout.lineCount).all { line -> !layout.isLineEllipsized(line) &&
+                                        layout.getLineRight(line) - layout.getLineLeft(line) <= layout.size.width + 1f }
+                            }, "$text must remain fully readable at $width x $height with font scale $fontScale")
+                        }
+                        onNodeWithText("Cancel refresh").performScrollTo().assertIsDisplayed()
+                        assertTrue(onNodeWithText("Cancel refresh").fetchSemanticsNode().boundsInRoot.height >= 48f)
+                        if (fontScale == 1f) captureUiSnapshot("server-refresh-$width-$theme")
                     }
-                    captureUiSnapshot("server-refresh-$width-$theme")
-                    for (text in listOf("Updating artwork", "3210 of 4000 covers checked")) {
-                        onNodeWithText(text).performScrollTo().assertIsDisplayed()
-                        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-                        onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-                        assertTrue(layouts.isNotEmpty() && layouts.all { layout ->
-                            !layout.didOverflowHeight && layout.getLineEnd(layout.lineCount - 1) == text.length &&
-                                (0 until layout.lineCount).all { line -> !layout.isLineEllipsized(line) &&
-                                    layout.getLineRight(line) - layout.getLineLeft(line) <= layout.size.width + 1f }
-                        }, "$text must remain fully readable at $width x $height")
-                    }
-                    onNodeWithText("Cancel refresh").performScrollTo().assertIsDisplayed()
-                    assertTrue(onNodeWithText("Cancel refresh").fetchSemanticsNode().boundsInRoot.height >= 48f)
-                    captureUiSnapshot("server-refresh-$width-$theme")
                 }
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
