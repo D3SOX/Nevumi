@@ -80,6 +80,7 @@ data class MusicSettings(
     val sourceFilter: SourceKind? = null,
     val libraryFilter: LibraryQuery = LibraryQuery(),
     val libraryTabs: List<LibraryTab> = listOf(LibraryTab.HOME) + LibraryTab.entries.filter { it != LibraryTab.HOME && it != LibraryTab.ALBUM_ARTISTS },
+    val bottomNavigationTabs: Set<LibraryTab>? = null,
     val startupTab: LibraryTab? = null,
     val lastLibraryTab: LibraryTab = LibraryTab.SONGS,
     val homeSections: List<HomeSectionId> = HomeSectionId.entries,

@@ -220,7 +220,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         }
         }
         Spacer(Modifier.height(miniPlayerSpace))
-        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged { onNavigationHeight(it.height) }) { page -> selection.clear(); selectedTab = page }
+        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged { onNavigationHeight(it.height) }, state.preferences.bottomNavigationTabs) { page -> selection.clear(); selectedTab = page }
     }
     }
     if (filters) LibraryFiltersDialog(state, controller) { filters = false }

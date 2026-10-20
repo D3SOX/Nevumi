@@ -102,7 +102,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
         }
     }
     else if (shownCategory == "Customize Home") { HomeCustomization(settings.homeSections, controller) { customizeHome = false } }
-    else if (shownCategory == "Library tabs") { LibraryTabsDialog(settings.libraryTabs, controller) { libraryTabs = false } }
+    else if (shownCategory == "Library tabs") { LibraryTabsDialog(settings.libraryTabs, controller, settings.bottomNavigationTabs) { libraryTabs = false } }
     else if (shownCategory == "About Nevumi") { AboutNevumi { about = false } }
     else if (shownCategory == "Connect ListenBrainz") { ConnectListenBrainz(controller, back) }
     else if (shownCategory == "Connect Last.fm") { ConnectLastFm(controller, back) }

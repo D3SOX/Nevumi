@@ -97,9 +97,61 @@ class LibraryNavigationUiTest {
         onNodeWithContentDescription("History").assertIsSelected()
     }
 
-    private fun ComposeUiTest.captureNavigation(name: String) {
+    @Test fun chosenTabsLeaveUnusedSpaceAndOverflowRemainsReachable() = runComposeUiTest {
+        val chosen = setOf(LibraryTab.HOME, LibraryTab.PLAYLISTS)
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(720.dp)) { LibraryNavigation(tabs, LibraryTab.SONGS, bottomNavigationTabs = chosen) {} }
+        } }
+        onAllNodes(navigationItem).assertCountEquals(3)
+        onNodeWithText("More").assertIsSelected().performClick()
+        onNodeWithTag("library-more-pages").performScrollToNode(hasText("Songs"))
+        onNode(hasText("Songs") and hasAnyAncestor(hasTestTag("library-more-pages"))).assertIsDisplayed()
+    }
+
+    @Test fun threeEnabledChosenTabsNeedNoMoreButton() = runComposeUiTest {
+        val chosen = listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.PLAYLISTS)
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(360.dp)) { LibraryNavigation(chosen, LibraryTab.HOME, bottomNavigationTabs = chosen.toSet()) {} }
+        } }
+        onAllNodes(navigationItem).assertCountEquals(3)
+        onNodeWithText("More").assertDoesNotExist()
+        captureNavigation("navigation-three-tabs")
+    }
+
+    @Test fun chosenTabsOverflowOnSmallScreensAndReturnOnWideScreens() = runComposeUiTest {
+        var width by mutableStateOf(360.dp)
+        val chosen = tabs.take(7).toSet()
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(width)) { LibraryNavigation(tabs, tabs[6], bottomNavigationTabs = chosen) {} }
+        } }
+        onAllNodes(navigationItem).assertCountEquals(5)
+        onNodeWithText("More").assertIsSelected()
+        runOnIdle { width = 720.dp }
+        onAllNodes(navigationItem).assertCountEquals(8)
+        onNodeWithContentDescription(tabs[6].label).assertIsSelected()
+    }
+
+    @Test fun customizationMovesTabsBetweenSectionsAndEnforcesCapacity() = runComposeUiTest {
+        var saved: Set<LibraryTab>? = null
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(360.dp)) {
+                LibraryTabsEditor(tabs, null, onSave = { _, bottom -> saved = bottom }, dismiss = {})
+            }
+        } }
+        captureNavigation("library-tabs-customization", "settings-page")
+        onNodeWithContentDescription("Move Home to More").performClick()
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Home to bottom navigation"))
+        onNodeWithContentDescription("Add Home to bottom navigation").assertIsEnabled().performClick()
+        val overflowTab = tabs[4]
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add ${overflowTab.label} to bottom navigation"))
+        onNodeWithContentDescription("Add ${overflowTab.label} to bottom navigation").assertIsNotEnabled()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(tabs.take(4).toSet(), saved)
+    }
+
+    private fun ComposeUiTest.captureNavigation(name: String, tag: String = "library-navigation") {
         System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
-            val pixels = onNodeWithTag("library-navigation").captureToImage().toPixelMap()
+            val pixels = onNodeWithTag(tag).captureToImage().toPixelMap()
             val image = java.awt.image.BufferedImage(pixels.width, pixels.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
             for (y in 0 until pixels.height) for (x in 0 until pixels.width) image.setRGB(x, y, pixels[x, y].toArgb())
             val target = java.nio.file.Path.of(directory).also(java.nio.file.Files::createDirectories).resolve("$name.png")
