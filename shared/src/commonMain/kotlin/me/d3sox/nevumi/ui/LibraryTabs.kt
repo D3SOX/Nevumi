@@ -74,7 +74,7 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (title == "More" || title == "Disabled") Text(
                             if (title == "More") "Open these tabs from More in the bottom navigation."
-                            else "Hidden from navigation. Check a tab to move it to More.",
+                            else "Hidden from navigation. Check a tab to enable it.",
                             Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -86,19 +86,25 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Icon(tab.icon().vector, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Checkbox(tab in tabs, enabled = tabs.size > 1 || tab !in tabs, onCheckedChange = { visible ->
-                                        bottomTabs = if (visible) (bottomTabs ?: primary.toSet()) - tab else bottomTabs?.minus(tab)
+                                        bottomTabs = bottomTabs?.minus(tab)
                                         tabs = if (visible) tabs + tab else tabs - tab
                                     }, modifier = Modifier.semantics { contentDescription = "Show ${tab.label}" })
                                     Text(tab.label, Modifier.weight(1f))
                                     val candidateTabs = if (tab in tabs) tabs else tabs + tab
-                                    val candidateBottom = (bottomTabs ?: primary.toSet()) + tab
+                                    val configuredBottom = bottomTabs ?: primary.toSet()
+                                    val isConfigured = tab in configuredBottom
+                                    val candidateBottom = configuredBottom + tab
                                     val canAdd = sizing.primary(candidateTabs, candidateBottom, width).size == candidateBottom.size
                                     IconButton(onClick = {
-                                        bottomTabs = if (tab in primary) (bottomTabs ?: primary.toSet()) - tab else candidateBottom
+                                        bottomTabs = if (isConfigured) configuredBottom - tab else candidateBottom
                                         if (tab !in tabs) tabs = tabs + tab
-                                    }, enabled = tab in primary || canAdd) {
-                                        Icon(if (tab in primary) AppIcon.MINUS.vector else AppIcon.PLUS.vector,
-                                            if (tab in primary) "Move ${tab.label} to More" else "Add ${tab.label} to bottom navigation")
+                                    }, enabled = isConfigured || canAdd) {
+                                        Icon(if (isConfigured) AppIcon.MINUS.vector else AppIcon.PLUS.vector,
+                                            when {
+                                                tab in primary -> "Move ${tab.label} to More"
+                                                isConfigured -> "Remove ${tab.label} from bottom navigation"
+                                                else -> "Add ${tab.label} to bottom navigation"
+                                            })
                                     }
                                     if (tab in tabs) {
                                         Box(Modifier.size(48.dp).draggableHandle().semantics {
