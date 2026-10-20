@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
+import androidx.compose.runtime.saveable.SaveableStateRegistry
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -50,28 +52,34 @@ class LibraryMaintenanceUiTest {
         }
     }
 
-    @Test fun disabledScrollMemoryStartsListsAndGridsAtTheTopWithoutSaving() = withLibrary { controller, _ ->
+    @Test fun scrollMemoryRestoresRecreatedListsAndGridsOnlyWhenEnabled() = withLibrary { controller, _ ->
         runComposeUiTest {
             var mounted by mutableStateOf(true)
+            var registry by mutableStateOf(SaveableStateRegistry(null) { true })
             lateinit var list: LazyListState
             lateinit var grid: LazyGridState
             setContent {
-                if (mounted) Column {
-                    list = rememberLibraryListState(controller, "test-list")
-                    grid = rememberLibraryGridState(controller, "test-grid")
-                    LazyColumn(Modifier.height(100.dp), state = list) {
-                        items(40) { Text("Song $it", Modifier.height(48.dp)) }
-                    }
-                    LazyVerticalGrid(GridCells.Fixed(2), Modifier.height(100.dp), state = grid) {
-                        items(40) { Text("Album $it", Modifier.height(48.dp)) }
+                if (mounted) CompositionLocalProvider(LocalSaveableStateRegistry provides registry) {
+                    Column {
+                        list = rememberLibraryListState(controller, "test-list")
+                        grid = rememberLibraryGridState(controller, "test-grid")
+                        LazyColumn(Modifier.height(100.dp), state = list) {
+                            items(40) { Text("Song $it", Modifier.height(48.dp)) }
+                        }
+                        LazyVerticalGrid(GridCells.Fixed(2), Modifier.height(100.dp), state = grid) {
+                            items(40) { Text("Album $it", Modifier.height(48.dp)) }
+                        }
                     }
                 }
             }
             runBlocking { list.scrollToItem(15); grid.scrollToItem(20) }
             waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.libraryPositions.values.map { it.index }.containsAll(listOf(15, 20)) }
+            val saved = runOnIdle { registry.performSave() }
             runOnIdle { mounted = false }
             waitForIdle()
-            runOnIdle { mounted = true }
+            // Recreation must restore the latest UI state even when persistence is behind.
+            runBlocking { controller.updatePreferences { it.copy(libraryPositions = emptyMap()) }.join() }
+            runOnIdle { registry = SaveableStateRegistry(saved) { true }; mounted = true }
             waitForIdle()
             assertEquals(15, list.firstVisibleItemIndex)
             assertEquals(20, grid.firstVisibleItemIndex)
@@ -80,9 +88,10 @@ class LibraryMaintenanceUiTest {
             assertEquals(0, list.firstVisibleItemIndex)
             assertEquals(0, grid.firstVisibleItemIndex)
             runBlocking { list.scrollToItem(12); grid.scrollToItem(18) }
+            val disabledSaved = runOnIdle { registry.performSave() }
             runOnIdle { mounted = false }
             waitForIdle()
-            runOnIdle { mounted = true }
+            runOnIdle { registry = SaveableStateRegistry(disabledSaved) { true }; mounted = true }
             waitForIdle()
             assertEquals(0, list.firstVisibleItemIndex)
             assertEquals(0, grid.firstVisibleItemIndex)

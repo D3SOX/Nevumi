@@ -1,7 +1,9 @@
 package me.d3sox.nevumi.ui
 
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.*
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.settings.LibraryPosition
@@ -16,7 +18,9 @@ internal fun rememberLibraryListState(controller: MusicController, suffix: Strin
     val appState by controller.state.collectAsState()
     val enabled = appState.preferences.rememberScrollPositions
     val initial = remember(key, enabled) { if (enabled) controller.state.value.preferences.libraryPositions[key] ?: LibraryPosition() else LibraryPosition() }
-    val state = remember(key, enabled) { LazyListState(initial.index, initial.offset) }
+    val state = key(key, enabled) {
+        if (enabled) rememberLazyListState(initial.index, initial.offset) else remember { LazyListState() }
+    }
     if (enabled) RememberPosition(controller, key, { state.isScrollInProgress }) { LibraryPosition(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }
     return state
 }
@@ -27,7 +31,9 @@ internal fun rememberLibraryGridState(controller: MusicController, suffix: Strin
     val appState by controller.state.collectAsState()
     val enabled = appState.preferences.rememberScrollPositions
     val initial = remember(key, enabled) { if (enabled) controller.state.value.preferences.libraryPositions[key] ?: LibraryPosition() else LibraryPosition() }
-    val state = remember(key, enabled) { LazyGridState(initial.index, initial.offset) }
+    val state = key(key, enabled) {
+        if (enabled) rememberLazyGridState(initial.index, initial.offset) else remember { LazyGridState() }
+    }
     if (enabled) RememberPosition(controller, key, { state.isScrollInProgress }) { LibraryPosition(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }
     return state
 }
