@@ -131,8 +131,9 @@ internal fun TrackActionDialog(track: Track, artwork: String?, options: List<Tra
                 Column(Modifier.heightIn(max = maxHeight * .85f).testTag("track-actions")) {
                     Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // Follows the header as the centered dialog resizes between action pages.
                         if (from != null) Spacer(Modifier.size(48.dp).onGloballyPositioned {
-                            if (targetArtwork == null) targetArtwork = Rect(it.positionOnScreen() - Offset(0f, lift * (1f - progress.value)),
+                            targetArtwork = Rect(it.positionOnScreen() - Offset(0f, lift * (1f - progress.value)),
                                 Size(it.size.width.toFloat(), it.size.height.toFloat()))
                         })
                         else CollectionArtwork(artwork, track.metadata.title, AppIcon.MUSIC, Modifier.size(48.dp).testTag("track-action-artwork"))
