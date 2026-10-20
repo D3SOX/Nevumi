@@ -149,6 +149,33 @@ class LibraryNavigationUiTest {
         assertEquals(tabs.take(4).toSet(), saved)
     }
 
+    @Test fun disablingAnOverflowTabPreservesAutomaticSizingAfterSave() = runSkikoComposeUiTest(size = Size(2400f, 900f)) {
+        var editing by mutableStateOf(true)
+        var savedTabs by mutableStateOf(tabs)
+        var savedBottomTabs by mutableStateOf<Set<LibraryTab>?>(null)
+        var width by mutableStateOf(360.dp)
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(width)) {
+                if (editing) LibraryTabsEditor(savedTabs, savedBottomTabs, onSave = { enabled, bottom ->
+                    savedTabs = enabled
+                    savedBottomTabs = bottom
+                    editing = false
+                }, dismiss = {})
+                else LibraryNavigation(savedTabs, LibraryTab.HOME, bottomNavigationTabs = savedBottomTabs) {}
+            }
+        } }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Show Recommendations"))
+        onNodeWithContentDescription("Show Recommendations").performClick()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(null, savedBottomTabs)
+        onAllNodes(navigationItem).assertCountEquals(5)
+        runOnIdle { width = 2400.dp }
+        onAllNodes(navigationItem).assertCountEquals(tabs.size - 1)
+        onNodeWithText("More").assertDoesNotExist()
+        onNodeWithContentDescription("Recommendations").assertDoesNotExist()
+        onNodeWithContentDescription("Folders").assertIsDisplayed()
+    }
+
     private fun ComposeUiTest.captureNavigation(name: String, tag: String = "library-navigation") {
         System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
             val pixels = onNodeWithTag(tag).captureToImage().toPixelMap()

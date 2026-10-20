@@ -86,7 +86,7 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Icon(tab.icon().vector, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Checkbox(tab in tabs, enabled = tabs.size > 1 || tab !in tabs, onCheckedChange = { visible ->
-                                        bottomTabs = (bottomTabs ?: primary.toSet()) - tab
+                                        bottomTabs = if (visible) (bottomTabs ?: primary.toSet()) - tab else bottomTabs?.minus(tab)
                                         tabs = if (visible) tabs + tab else tabs - tab
                                     }, modifier = Modifier.semantics { contentDescription = "Show ${tab.label}" })
                                     Text(tab.label, Modifier.weight(1f))
