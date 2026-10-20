@@ -215,8 +215,8 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 listOf(true to "On", false to "Off")) { enabled ->
                 controller.updatePreferences { it.copy(recordListeningHistory = enabled) }
             }
-            ActionButton("Clear listening history", AppIcon.REMOVE, style = ActionStyle.DESTRUCTIVE) { clearHistory = true }
                         }
+            ActionButton("Clear listening history", AppIcon.REMOVE, style = ActionStyle.DESTRUCTIVE) { clearHistory = true }
                 if (controller.scrobblingAvailable) ScrobblingSettingsContent(state, controller) {
                     categoryState.value = "Connect ${it.label()}"
                 }
@@ -233,11 +233,12 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                     1_073_741_824L to "1 GiB", 5_368_709_120L to "5 GiB")) { bytes ->
                     controller.updatePreferences { it.copy(undoBackupBytes = bytes) }
                 }
-                Text("Older backups expire. The newest edit and unfinished recovery can exceed the storage target.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
                 if (controller.serverFilesAvailable) SettingsLink("Server files (SFTP)", AppIcon.SERVER_FILES, "Optional file editing and uploads", serverFiles)
                         }
+            if (controller.fileEditingAvailable)
+                Text("Older backups expire. The newest edit and unfinished recovery can exceed the storage target.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
             if (category == "Local music") {
                 Text("Scan the music already stored on your device. Files stay in their current folders.",
