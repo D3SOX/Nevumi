@@ -1013,7 +1013,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             val covers = catalogue.groupBy({ (_, song) -> song.coverArt }, { (track, _) -> track.id })
             for ((coverId, trackIds) in covers) {
                 if (coverId == null) continue
-                try { artwork.fetch(trackIds, client, coverId) }
+                try { artwork.fetchChanged(trackIds, client, coverId) }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { /* A missing cover must not prevent importing its music. */ }
             }

@@ -31,14 +31,36 @@ class ArtworkLibrary(private val directory: String) {
         } }
     }
 
+    /**
+     * Like [fetch], but skips tracks that already hold this server cover. Navidrome cover IDs change with the image,
+     * so a library refresh only downloads new or changed covers and an interrupted refresh resumes where it stopped.
+     */
+    suspend fun fetchChanged(trackIds: Collection<String>, client: NavidromeClient, coverId: String) {
+        val missing = withContext(Dispatchers.IO) {
+            trackIds.toSet().filter { id -> existingPath(id) == null || coverIdFile(id).let {
+                FileSystem.SYSTEM.metadataOrNull(it) == null || FileSystem.SYSTEM.read(it) { readUtf8() } != coverId
+            } }
+        }
+        if (missing.isEmpty()) return
+        val original = client.coverArt(coverId)
+        writes.withLock { withContext(Dispatchers.IO) {
+            val bytes = artworkPreview(original)
+            missing.forEach { store(it, bytes); FileSystem.SYSTEM.write(coverIdFile(it)) { writeUtf8(coverId) } }
+        } }
+    }
+
     suspend fun save(trackId: String, original: ByteArray) = writes.withLock { withContext(Dispatchers.IO) {
         store(trackId, artworkPreview(original))
     } }
+
+    private fun coverIdFile(trackId: String) = directory.toPath() / "${trackId.encodeUtf8().sha256().hex()}.cover"
 
     private fun store(trackId: String, bytes: ByteArray) {
         val fs = FileSystem.SYSTEM
         val root = directory.toPath()
         fs.createDirectories(root)
+        // Any other image replaces the server cover, so the next refresh downloads it again.
+        fs.delete(coverIdFile(trackId), mustExist = false)
         val key = trackId.encodeUtf8().sha256().hex()
         val hash = bytes.toByteString().sha256().hex()
         val destination = root / "$key-$hash.image"
@@ -79,6 +101,7 @@ class ArtworkLibrary(private val directory: String) {
 
     suspend fun remove(trackId: String) = writes.withLock { withContext(Dispatchers.IO) {
         val previous = path(trackId)?.toPath()
+        FileSystem.SYSTEM.delete(coverIdFile(trackId), mustExist = false)
         FileSystem.SYSTEM.delete(directory.toPath() / "${trackId.encodeUtf8().sha256().hex()}.current", mustExist = false)
         if (previous != null) FileSystem.SYSTEM.delete(previous, mustExist = false)
         mutableChanges.tryEmit(trackId to null)
