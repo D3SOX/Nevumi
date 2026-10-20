@@ -1,6 +1,7 @@
 package me.d3sox.nevumi
 
 import android.view.KeyEvent
+import android.view.WindowInsets
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -15,6 +16,35 @@ import java.io.File
 class AndroidGlobalSearchUiTest {
     @get:Rule val compose = createEmptyComposeRule()
     @get:Rule val optionsButtons = ShowOptionsButtonsRule()
+
+    @Test fun closingSearchWithKeyboardOpenKeepsNavigationBoundsStable() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+            compose.openLibraryPage("Home")
+            val bounds = compose.onNodeWithTag("app-navigation").fetchSemanticsNode().boundsInRoot
+            compose.onNodeWithContentDescription("Search").performClick()
+            compose.waitUntil(5_000) {
+                var visible = false
+                scenario.onActivity { visible = it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()) }
+                visible
+            }
+            compose.waitForIdle()
+            assertEquals("The keyboard must not resize the page transition viewport", bounds,
+                compose.onNodeWithTag("app-navigation").fetchSemanticsNode().boundsInRoot)
+            compose.onNodeWithContentDescription("Close search").performClick()
+            compose.onNodeWithTag("home-page").assertIsDisplayed()
+            compose.waitUntil(5_000) {
+                assertEquals("Dismissing the keyboard must not move the page transition viewport", bounds,
+                    compose.onNodeWithTag("app-navigation").fetchSemanticsNode().boundsInRoot)
+                var visible = true
+                scenario.onActivity { visible = it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()) }
+                !visible
+            }
+            compose.onNodeWithTag("app-navigation").assertExists()
+            assertEquals(bounds, compose.onNodeWithTag("app-navigation").fetchSemanticsNode().boundsInRoot)
+        }
+    }
 
     @Test fun searchIgnoresHomeFiltersAndOffersTrackAndCollectionMenus() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
