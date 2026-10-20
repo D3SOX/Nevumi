@@ -84,6 +84,7 @@ data class MusicSettings(
     val lastLibraryTab: LibraryTab = LibraryTab.SONGS,
     val homeSections: List<HomeSectionId> = HomeSectionId.entries,
     val disabledHomeSections: Set<HomeSectionId> = emptySet(),
+    val rememberScrollPositions: Boolean = true,
     val libraryPositions: Map<String, LibraryPosition> = emptyMap(),
     val collectionLayouts: Map<LibraryTab, CollectionLayout> = emptyMap(),
     val playlistPickerSort: PlaylistPickerSort = PlaylistPickerSort.UPDATED,

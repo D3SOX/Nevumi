@@ -656,7 +656,9 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
     fun updatePreferences(change: (MusicSettings) -> MusicSettings) = action {
         val previous = state.value.preferences
-        val settings = requireNotNull(preferences) { "Settings are unavailable" }.update(change)
+        val settings = requireNotNull(preferences) { "Settings are unavailable" }.update { current ->
+            change(current).let { if (it.rememberScrollPositions) it else it.copy(libraryPositions = emptyMap()) }
+        }
         if (settings.recordListeningHistory != previous.recordListeningHistory)
             listeningHistory?.record(engine.status.value, enabled = settings.recordListeningHistory)
         mutableState.update { it.copy(preferences = settings) }
@@ -679,10 +681,10 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
 
     fun rememberLibraryPosition(key: String, position: me.d3sox.nevumi.settings.LibraryPosition) = action(serialized = false) {
-        if (state.value.preferences.libraryPositions[key] != position) {
-            val settings = preferences?.update { it.copy(libraryPositions = it.libraryPositions + (key to position)) }
+        if (state.value.preferences.rememberScrollPositions && state.value.preferences.libraryPositions[key] != position) {
+            val settings = preferences?.update { if (it.rememberScrollPositions) it.copy(libraryPositions = it.libraryPositions + (key to position)) else it }
             mutableState.update { it.copy(preferences = it.preferences.copy(libraryPositions =
-                settings?.libraryPositions ?: (it.preferences.libraryPositions + (key to position)))) }
+                if (!it.preferences.rememberScrollPositions) emptyMap() else settings?.libraryPositions ?: (it.preferences.libraryPositions + (key to position)))) }
         }
     }
     fun clearListeningHistory() = action {
@@ -782,6 +784,21 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             if (serverChanges != null) serverChanges.setRating(trackId, rating) else library.setRating(trackId, rating)
             updateTrackFeedback(setOf(trackId)) { it.copy(rating = rating) }
         })
+    }
+    fun clearRatings() = action {
+        val before = library.tracks().filter { it.rating != 0 }.associate { it.id to it.rating }
+        if (before.isEmpty()) return@action
+        val cleared = before.mapValues { 0 }
+        applyRatings(cleared)
+        confirm("Ratings cleared", undo = { applyRatings(before) }, redo = { applyRatings(cleared) })
+    }
+    private suspend fun applyRatings(values: Map<String, Int>) {
+        values.forEach { (id, rating) ->
+            if (serverChanges != null) serverChanges.setRating(id, rating) else library.setRating(id, rating)
+        }
+        mutableState.update { state -> state.copy(tracks = state.tracks.map { track ->
+            values[track.id]?.let { track.copy(rating = it) } ?: track
+        }) }
     }
     private fun updateTrackFeedback(ids: Set<String>, change: (Track) -> Track) {
         mutableState.update { state -> state.copy(tracks = state.tracks.map { if (it.id in ids) change(it) else it }) }

@@ -17,6 +17,46 @@ import me.d3sox.nevumi.settings.MusicPreferences
 
 @OptIn(ExperimentalTestApi::class)
 class LibraryUiTest {
+    @Test fun clearingFavoritesIncludesFilteredSongsAndCanBeCancelledAndUndone() {
+        val directory = Files.createTempDirectory("clear-favorites")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val preferences = MusicPreferences(store)
+        val songs = runBlocking {
+            preferences.update { it.copy(libraryTabs = listOf(LibraryTab.FAVORITES), startupTab = LibraryTab.FAVORITES,
+                libraryFilter = LibraryQuery(genre = "Ambient")) }
+            listOf("Ambient", "Rock", "Jazz").mapIndexed { index, genre ->
+                library.importTrack(TrackMetadata("Song $index", genres = listOf(genre)),
+                    TrackSource("local:$index", SourceKind.LOCAL, "/music/$index.flac")).also {
+                    if (index < 2) library.setFavorite(it.id, true)
+                }
+            }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                onNodeWithText("Clear favorites").assertDoesNotExist()
+                onNodeWithContentDescription("Settings").performClick()
+                onNodeWithText("Library & gestures").performClick()
+                onNodeWithText("Clear favorites").performScrollTo().performClick()
+                onNodeWithText("Cancel").performClick()
+                assertEquals(2, runBlocking { library.tracks().count { it.favorite } })
+                onNodeWithText("Clear favorites").performScrollTo().performClick()
+                onNodeWithText("Clear").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.tracks.none { it.favorite } }
+                onNodeWithText("Clear favorites").assertIsNotEnabled()
+                assertEquals(3, runBlocking { library.tracks().size })
+                assertTrue(runBlocking { library.tracks().none { it.favorite } })
+                onNodeWithText("Undo").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.tracks.count { it.favorite } == 2 }
+                assertEquals(songs.take(2).map { it.id }.toSet(),
+                    runBlocking { library.tracks().filter { it.favorite }.map { it.id }.toSet() })
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun tabTransitionsSkipIntermediatePagesAndIgnoreHorizontalDrags() {
         val directory = Files.createTempDirectory("library-navigation-header")
         val store = openMusicStore(directory.resolve("music.db").toString())
