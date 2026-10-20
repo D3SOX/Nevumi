@@ -74,10 +74,15 @@ class FileEditingUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
+                fun coverOffset() = onNodeWithTag("track-action-artwork").getUnclippedBoundsInRoot().top -
+                    onNodeWithTag("track-actions").getUnclippedBoundsInRoot().top
+                waitForIdle()
+                val songActionsCover = coverOffset()
                 onNodeWithText("Play next").performTouchInput { swipe(center, center.copy(y = center.y - 600f), 300) }
                 onNodeWithText("Edit tags").assertIsDisplayed()
                 onNodeWithText("Play next").assertDoesNotExist()
                 onNodeWithTag("track-action-artwork").assertIsDisplayed()
+                assertEquals(songActionsCover.value, coverOffset().value, .5f)
                 onNodeWithText("Edit tags").performTouchInput { swipe(center, center.copy(y = center.y + 600f), 300) }
                 onNodeWithText("Play next").assertIsDisplayed()
                 onNodeWithText("Edit tags").assertDoesNotExist()
