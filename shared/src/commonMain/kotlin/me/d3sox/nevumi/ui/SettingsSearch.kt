@@ -34,6 +34,9 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             }
             add(SettingResult("Customize Home", "Library & gestures", AppIcon.HOME, "reorder home sections", "Customize Home"))
             add(SettingResult("Library tabs", "Library & gestures", AppIcon.TABS, "bottom navigation reorder pages", "Library tabs"))
+            add(SettingResult("Clear favorites", "Library & gestures", AppIcon.FAVORITE, "remove reset all favorites favourites starred songs"))
+            add(SettingResult("Clear ratings", "Library & gestures", AppIcon.RATING, "remove reset all stars ratings"))
+            add(SettingResult("Remember scroll positions", "Library & gestures", AppIcon.LIBRARY, "save restore list grid position start top"))
             category("Local music", AppIcon.FOLDER, "Scan music" to "index refresh local device files", "Include folders" to "picker local music",
                 "Exclude folders" to "picker exclusions local music")
             category("Playback", AppIcon.PLAY, "Playback speed" to "tempo", "Playback pitch" to "semitones", "Crossfade" to "transition seconds",

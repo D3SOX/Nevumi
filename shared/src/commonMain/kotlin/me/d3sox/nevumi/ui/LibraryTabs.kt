@@ -59,6 +59,8 @@ internal fun LibraryTabsDialog(initial: List<LibraryTab>, controller: MusicContr
             }
             }
         }
-    }, confirmButton = { PageAction("Save tabs", onClick = { controller.updatePreferences { it.copy(libraryTabs = tabs, startupTab = it.startupTab?.takeIf { tab -> tab in tabs }) }; dismiss() }) },
+    }, actions = { ActionButton("Reset", AppIcon.RESET, style = ActionStyle.OUTLINED) {
+        tabs = me.d3sox.nevumi.settings.MusicSettings().libraryTabs
+    } }, confirmButton = { PageAction("Save tabs", onClick = { controller.updatePreferences { it.copy(libraryTabs = tabs, startupTab = it.startupTab?.takeIf { tab -> tab in tabs }) }; dismiss() }) },
         dismissButton = { PageAction("Cancel", AppIcon.CLOSE, secondary = true, onClick = dismiss) })
 }

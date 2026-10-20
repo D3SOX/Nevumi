@@ -37,6 +37,19 @@ class SettingsSearchUiTest {
                 onNodeWithContentDescription("Search settings query").performTextReplacement("black")
                 onNodeWithText("AMOLED black").performClick()
                 onNodeWithContentDescription("AMOLED black").assertIsDisplayed()
+                onNodeWithContentDescription("Search settings").performClick()
+                onNodeWithContentDescription("Search settings query").performTextReplacement("clear favorites")
+                onNodeWithText("Clear favorites").assertIsDisplayed().performClick()
+                onNodeWithText("Library & gestures").assertIsDisplayed()
+                onNodeWithText("Clear favorites").performScrollTo().assertIsNotEnabled()
+                onNodeWithContentDescription("Search settings").performClick()
+                onNodeWithContentDescription("Search settings query").performTextReplacement("clear ratings")
+                onNodeWithText("Clear ratings").performClick()
+                onNodeWithText("Clear ratings").performScrollTo().assertIsNotEnabled()
+                onNodeWithContentDescription("Search settings").performClick()
+                onNodeWithContentDescription("Search settings query").performTextReplacement("scroll positions")
+                onNodeWithText("Remember scroll positions").performClick()
+                onNodeWithContentDescription("Remember scroll positions").performScrollTo().assertIsOn()
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

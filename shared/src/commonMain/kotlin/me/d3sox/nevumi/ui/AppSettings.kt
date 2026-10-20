@@ -60,6 +60,10 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
     var customizeHome by rememberSaveable { mutableStateOf(false) }
     var libraryTabs by rememberSaveable { mutableStateOf(false) }
     var clearHistory by remember { mutableStateOf(false) }
+    var clearingRatings by remember { mutableStateOf(false) }
+    val ratingCount = remember(state.tracks) { state.tracks.count { it.rating != 0 } }
+    var clearingFavorites by remember { mutableStateOf(false) }
+    val favoriteIds = remember(state.tracks) { state.tracks.filter { it.favorite }.map { it.id } }
     var about by rememberSaveable { mutableStateOf(false) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
@@ -143,9 +147,18 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsToggle("Show options buttons", AppIcon.MORE, "Show ⋮ on songs and collections. Long press opens the same menu.", settings.showMoreButtons) {
                 enabled -> controller.updatePreferences { it.copy(showMoreButtons = enabled) }
             }
+            SettingsToggle("Remember scroll positions", AppIcon.LIBRARY, "Reopen library lists and grids where you left off.", settings.rememberScrollPositions) {
+                enabled -> controller.updatePreferences { it.copy(rememberScrollPositions = enabled) }
+            }
                 SettingsLink("Customize Home", AppIcon.HOME, "Reorder sections on your Home page") { customizeHome = true }
                 SettingsLink("Library tabs", AppIcon.TABS, "Choose and reorder library pages") { libraryTabs = true }
                         }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton("Clear favorites", AppIcon.FAVORITE, enabled = favoriteIds.isNotEmpty(),
+                    style = ActionStyle.DESTRUCTIVE) { clearingFavorites = true }
+                ActionButton("Clear ratings", AppIcon.RATING, enabled = ratingCount > 0,
+                    style = ActionStyle.DESTRUCTIVE) { clearingRatings = true }
+            }
 }
             if (category == "Playback") {
             SettingsGroup {
@@ -296,6 +309,20 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
     })
     }
     }
+    if (clearingRatings) AlertDialog(onDismissRequest = { clearingRatings = false },
+        title = { Text("Clear all ratings?") },
+        text = { Text("Remove ratings from ${countLabel(ratingCount, "song")}, including songs hidden by filters. Your music files will stay in your library.") },
+        confirmButton = { TextButton(onClick = { controller.clearRatings(); clearingRatings = false },
+            enabled = ratingCount > 0) { Text("Clear") } },
+        dismissButton = { TextButton(onClick = { clearingRatings = false }) { Text("Cancel") } })
+    if (clearingFavorites) AlertDialog(onDismissRequest = { clearingFavorites = false },
+        title = { Text("Clear all favorites?") },
+        text = { Text("Remove all ${countLabel(favoriteIds.size, "song")} from favorites, including songs hidden by filters. Your music files will stay in your library.") },
+        confirmButton = {
+            TextButton(onClick = { controller.setFavorite(favoriteIds, false); clearingFavorites = false },
+                enabled = favoriteIds.isNotEmpty()) { Text("Clear") }
+        },
+        dismissButton = { TextButton(onClick = { clearingFavorites = false }) { Text("Cancel") } })
     if (clearHistory) AlertDialog(onDismissRequest = { clearHistory = false }, title = { Text("Clear listening history?") },
         text = { Text("This removes this device’s listening history and statistics.") },
         confirmButton = { TextButton(onClick = { controller.clearListeningHistory(); clearHistory = false }) { Text("Clear history") } },
