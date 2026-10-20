@@ -176,6 +176,25 @@ class LibraryNavigationUiTest {
         onNodeWithContentDescription("Folders").assertIsDisplayed()
     }
 
+    @Test fun addingATabPreservesConfiguredTabsThatOverflowOnNarrowScreens() = runComposeUiTest {
+        val enabled = listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.RECOMMENDATIONS, LibraryTab.ALBUMS, LibraryTab.ARTISTS)
+        val configured = enabled.take(4).toSet()
+        var width by mutableStateOf(360.dp)
+        var saved: Set<LibraryTab>? = null
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(width)) {
+                LibraryTabsEditor(enabled, configured, onSave = { _, bottom -> saved = bottom }, dismiss = {})
+            }
+        } }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Artists to bottom navigation"))
+        onNodeWithContentDescription("Add Artists to bottom navigation").assertIsNotEnabled()
+        runOnIdle { width = 720.dp }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Artists to bottom navigation"))
+        onNodeWithContentDescription("Add Artists to bottom navigation").assertIsEnabled().performClick()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(configured + LibraryTab.ARTISTS, saved)
+    }
+
     private fun ComposeUiTest.captureNavigation(name: String, tag: String = "library-navigation") {
         System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
             val pixels = onNodeWithTag(tag).captureToImage().toPixelMap()

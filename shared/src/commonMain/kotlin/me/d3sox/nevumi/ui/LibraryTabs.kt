@@ -91,7 +91,7 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                     }, modifier = Modifier.semantics { contentDescription = "Show ${tab.label}" })
                                     Text(tab.label, Modifier.weight(1f))
                                     val candidateTabs = if (tab in tabs) tabs else tabs + tab
-                                    val candidateBottom = primary.toSet() + tab
+                                    val candidateBottom = (bottomTabs ?: primary.toSet()) + tab
                                     val canAdd = sizing.primary(candidateTabs, candidateBottom, width).size == candidateBottom.size
                                     IconButton(onClick = {
                                         bottomTabs = if (tab in primary) (bottomTabs ?: primary.toSet()) - tab else candidateBottom
