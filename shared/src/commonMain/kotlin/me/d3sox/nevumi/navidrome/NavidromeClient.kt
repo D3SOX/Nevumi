@@ -319,8 +319,10 @@ class NavidromeClient(
         Unit
     }
 
+    suspend fun isNavidrome(): Boolean = request("ping")["type"]?.jsonPrimitive?.content == "navidrome"
+
     suspend fun musicFiles(): List<NavidromeMusicFile> = serverRequest {
-        if (request("ping")["type"]?.jsonPrimitive?.content != "navidrome")
+        if (!isNavidrome())
             throw NavidromeRequestException("Remote file editing requires Navidrome's file catalogue. Other Subsonic servers support streaming and library actions.")
         nativeAccess.withLock {
             http.config { followRedirects = false }.use { nativeHttp ->

@@ -1011,9 +1011,11 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         if (artwork != null) {
             // Songs of an album share one cover; download it once instead of once per song.
             val covers = catalogue.groupBy({ (_, song) -> song.coverArt }, { (track, _) -> track.id })
+            // Navidrome changes a cover's ID with its image; other Subsonic servers may keep it, so their covers are downloaded every time.
+            val versioned = try { client.isNavidrome() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { false }
             for ((coverId, trackIds) in covers) {
                 if (coverId == null) continue
-                try { artwork.fetch(trackIds, client, coverId) }
+                try { if (versioned) artwork.fetchChanged(trackIds, client, coverId) else artwork.fetch(trackIds, client, coverId) }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { /* A missing cover must not prevent importing its music. */ }
             }

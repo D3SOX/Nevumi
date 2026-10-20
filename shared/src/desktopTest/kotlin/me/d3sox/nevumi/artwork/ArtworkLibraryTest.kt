@@ -126,9 +126,13 @@ class ArtworkLibraryTest {
         val output = ByteArrayOutputStream()
         ImageIO.write(image, "png", output)
         val png = output.toByteArray()
+        var coverRequests = 0
         val http = HttpClient(MockEngine { request ->
-            if (request.url.encodedPath == "/rest/getCoverArt.view")
+            if (request.url.encodedPath == "/rest/getCoverArt.view") {
+                coverRequests++
                 respond(png, headers = headersOf(HttpHeaders.ContentType, "image/png"))
+            } else if (request.url.encodedPath == "/rest/ping.view")
+                respond("""{"subsonic-response":{"status":"ok","type":"navidrome"}}""", headers = headersOf(HttpHeaders.ContentType, "application/json"))
             else {
                 val songs = if (request.url.parameters["songOffset"] == "0")
                     """[{"id":"song-a","title":"Server Cover","coverArt":"album-cover"}]""" else "[]"
@@ -144,6 +148,8 @@ class ArtworkLibraryTest {
         try {
             withTimeout(3_000) { controller.state.first { !it.loading } }
             controller.connectServer("https://music.example.test", "fixture", "fixture-password").join()
+            controller.refreshServer().join()
+            assertEquals(1, coverRequests, "A refresh must not download a Navidrome cover the library already holds")
             val track = library.tracks().single()
             http.close()
             assertContentEquals(png, ArtworkLibrary(directory.resolve("artwork").toString()).read(track.id))
@@ -282,6 +288,36 @@ class ArtworkLibraryTest {
             assertEquals(1, requests)
             assertContentEquals(png, artwork.read("server:one"))
             assertContentEquals(png, artwork.read("server:two"))
+        } finally { http.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aLibraryRefreshDownloadsOnlyNewOrChangedServerCovers() = runBlocking {
+        val directory = Files.createTempDirectory("changed-artwork")
+        fun png(rgb: Int) = ByteArrayOutputStream().also { output ->
+            ImageIO.write(BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB).apply { for (x in 0..15) for (y in 0..15) setRGB(x, y, rgb) }, "png", output)
+        }.toByteArray()
+        val requests = mutableListOf<String>()
+        val http = HttpClient(MockEngine { request ->
+            val id = requireNotNull(request.url.parameters["id"])
+            requests += id
+            respond(png(if (id == "al-1_b") 0xFF0000 else 0x0000FF), headers = headersOf(HttpHeaders.ContentType, "image/png"))
+        })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "fixture-password"))
+            val artwork = ArtworkLibrary(directory.toString())
+            artwork.fetchChanged(listOf("one", "two"), client, "al-1_a")
+            ArtworkLibrary(directory.toString()).fetchChanged(listOf("one", "two"), client, "al-1_a")
+            assertEquals(listOf("al-1_a"), requests, "A refresh must not download covers the library already holds")
+            artwork.fetchChanged(listOf("one", "two", "three"), client, "al-1_a")
+            assertEquals(listOf("al-1_a", "al-1_a"), requests, "A new song must receive its cover")
+            assertContentEquals(png(0x0000FF), artwork.read("three"))
+            artwork.fetchChanged(listOf("one"), client, "al-1_b")
+            assertContentEquals(png(0xFF0000), artwork.read("one"), "A changed cover must replace the stored one")
+            artwork.save("two", png(0x00FF00))
+            artwork.fetchChanged(listOf("two"), client, "al-1_a")
+            assertContentEquals(png(0x0000FF), artwork.read("two"), "A refresh must restore the server cover after another image replaced it")
+            assertEquals(listOf("al-1_a", "al-1_a", "al-1_b", "al-1_a"), requests)
         } finally { http.close(); directory.toFile().deleteRecursively() }
     }
 }
