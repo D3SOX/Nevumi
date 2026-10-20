@@ -48,7 +48,11 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     val results = remember(visible, state.playlists, query) { searchLibrary(visible, state.playlists, query) }
     val songIds = remember(results.songs) { results.songs.map { it.id } }
     val opened = results.collections[openedType].orEmpty().firstOrNull { it.id == openedId }
-    if (opened != null && LocalNavigationActive.current) PlatformBackHandler { openedId = null }
+    val active = LocalNavigationActive.current
+    LaunchedEffect(active) { if (!active) selection.clear() }
+    if (active && (selection.active || opened != null)) PlatformBackHandler {
+        if (selection.active) selection.clear() else openedId = null
+    }
     CompositionLocalProvider(LocalSongSelection provides selection, LocalLibraryOrigin provides QueueOrigin(LibraryTab.SONGS),
         LocalLibraryScrollKey provides "global-search:${type.name}") {
         Column(Modifier.fillMaxSize().imePadding().testTag("library-search-page")) {

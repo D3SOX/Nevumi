@@ -158,7 +158,8 @@ class LibraryUiTest {
                 onNodeWithText("Save tabs").performClick()
                 onNodeWithContentDescription("Back").performClick()
                 onNodeWithContentDescription("Back").performClick()
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.libraryTabs.size == LibraryTab.entries.size - 1 }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.libraryTabs == listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.ARTISTS, LibraryTab.ALBUMS) +
+                    LibraryTab.entries.filter { it !in setOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.ARTISTS, LibraryTab.ALBUMS, LibraryTab.ALBUM_ARTISTS, LibraryTab.SEARCH) } }
                 onNodeWithText("Album artists").assertDoesNotExist()
                 assertEquals(listOf("Home", "Songs", "Artists", "Albums"), runBlocking { preferences.load().libraryTabs.take(4).map { it.label } })
                 onNodeWithText("Artists").performClick()

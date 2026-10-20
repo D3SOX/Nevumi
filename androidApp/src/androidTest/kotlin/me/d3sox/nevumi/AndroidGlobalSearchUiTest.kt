@@ -46,6 +46,34 @@ class AndroidGlobalSearchUiTest {
         }
     }
 
+    @Test fun backClearsSearchSelectionWithMultipleTabsAndWithSearchAlone() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
+        val controller = app.controller
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.waitUntil(5_000) { controller.state.value.libraryReady }
+            val original = controller.state.value.preferences
+            try {
+                val song = runBlocking { controller.library.importTrack(TrackMetadata("Search selection fixture"),
+                    TrackSource("search-selection", SourceKind.LOCAL, "/music/search-selection.flac")) }
+                runBlocking { controller.reload().join() }
+                for (tabs in listOf(listOf(LibraryTab.HOME, LibraryTab.SEARCH), listOf(LibraryTab.SEARCH))) {
+                    runBlocking { controller.updatePreferences { it.copy(libraryTabs = tabs) }.join() }
+                    compose.waitUntil(5_000) { controller.state.value.preferences.libraryTabs == tabs }
+                    compose.onNodeWithContentDescription("Search").performClick()
+                    compose.onNodeWithContentDescription("Search your library").performTextReplacement("Search selection fixture")
+                    compose.onNodeWithTag("search-type:SONGS").performClick()
+                    compose.onNodeWithTag("track-row:${song.id}").performTouchInput { longClick() }
+                    compose.onNodeWithText("Select song").performClick()
+                    compose.onNodeWithContentDescription("Clear selection").assertIsDisplayed()
+                    scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                    compose.onNodeWithContentDescription("Clear selection").assertDoesNotExist()
+                    compose.onNodeWithContentDescription("Search").assertIsSelected()
+                    compose.onNodeWithContentDescription("Search your library").assertTextEquals("Search selection fixture")
+                }
+            } finally { runBlocking { controller.updatePreferences { original }.join() } }
+        }
+    }
+
     @Test fun searchIgnoresHomeFiltersAndOffersTrackAndCollectionMenus() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as MusicApplication

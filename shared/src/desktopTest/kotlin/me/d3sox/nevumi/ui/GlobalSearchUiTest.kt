@@ -28,7 +28,9 @@ class GlobalSearchUiTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         val preferences = MusicPreferences(store)
         runBlocking { preferences.update { it.copy(libraryTabs = listOf(LibraryTab.HOME, LibraryTab.SEARCH, LibraryTab.SONGS)) } }
-        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
+        val library = MusicLibrary(store)
+        val song = runBlocking { library.importTrack(TrackMetadata("Signal song"), TrackSource("search-selection", SourceKind.LOCAL, "/music/signal.flac")) }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
         try {
             runSkikoComposeUiTest(size = Size(420f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
@@ -41,9 +43,13 @@ class GlobalSearchUiTest {
                 captureSearch("search-empty")
                 onNodeWithTag("library-navigation").assertIsDisplayed()
                 onNodeWithContentDescription("Search your library").performTextInput("Signal")
+                onNodeWithTag("track-row:${song.id}").performTouchInput { longClick() }
+                onNodeWithText("Select song").performClick()
+                onNodeWithContentDescription("Clear selection").assertIsDisplayed()
                 onNodeWithContentDescription("Songs").performClick()
                 onNodeWithContentDescription("Search").performClick()
                 onNodeWithContentDescription("Search your library").assertTextEquals("Signal")
+                onNodeWithContentDescription("Clear selection").assertDoesNotExist()
                 onNodeWithContentDescription("Songs").performClick()
                 onNodeWithContentDescription("Songs").assertIsSelected()
                 runOnIdle { controller.updatePreferences { it.copy(libraryTabs = listOf(LibraryTab.HOME, LibraryTab.SONGS)) } }
