@@ -216,13 +216,14 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
 }
 
 private const val FOLDER_PREFIX = "playlist-folder:"
+private const val SECTION_PREFIX = "playlist-section:"
 
-/** A playlist picker row: a folder header (keyed by its path) or a playlist (keyed by its id). */
-private class PickerRow(val key: String, val label: String, val depth: Int, val playlist: Playlist?)
+/** A playlist picker row: a section or folder header (keyed by its name or path) or a playlist (keyed by its id). */
+private class PickerRow(val key: String, val label: String, val depth: Int, val playlist: Playlist?, val section: Boolean = false)
 
-/** A playlist or folder in the picker; a folder takes its most recent times and membership from the playlists inside it. */
+/** A playlist or folder in the picker; a folder takes its most recent times from the playlists inside it. */
 private class PickerNode(val item: CollectionItem, val updatedAt: Long, val createdAt: Long, val playedAt: Long,
-    val member: Boolean, val playlist: Playlist?, val children: List<PickerNode> = emptyList())
+    val playlist: Playlist?, val children: List<PickerNode> = emptyList())
 
 internal fun PlaylistPickerSort.label() = when (this) {
     PlaylistPickerSort.UPDATED -> "Recently updated"; PlaylistPickerSort.ADDED -> "Recently added"
@@ -235,37 +236,42 @@ internal fun PlaylistPickerSort.icon() = when (this) {
 }
 
 /**
- * Orders each folder's playlists and subfolders together, those already holding any of [trackIds] first,
- * then lists each subfolder's contents below its header.
+ * Lists the playlists already holding any of [trackIds] in a flat top section with their full names, then orders
+ * each folder's other playlists and subfolders together and lists each subfolder's contents below its header.
  */
 private fun pickerRows(playlists: List<Playlist>, sort: PlaylistPickerSort, layout: CollectionLayout,
-    recentAt: Map<String, Long>, trackIds: Set<String>): List<PickerRow> {
+    recentAt: Map<String, Long>, trackIds: Set<String>, memberLabel: String): List<PickerRow> {
     fun segments(playlist: Playlist) = playlist.folder?.let(::folderSegments).orEmpty()
     fun item(id: String, title: String, trackIds: List<String>) = CollectionItem(id, title, "", null, AppIcon.QUEUE,
         songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0)
+    fun node(playlist: Playlist, title: String) = PickerNode(item(playlist.id, title, playlist.trackIds),
+        playlist.updatedAt, playlist.createdAt, playlist.playedAt, playlist)
     // Break case-only ties so "Road" and "road" stay in a stable order.
-    val comparator = compareByDescending<PickerNode> { it.member }.then(when (sort) {
+    val comparator = when (sort) {
         PlaylistPickerSort.UPDATED -> compareByDescending<PickerNode> { it.updatedAt }
         PlaylistPickerSort.ADDED -> compareByDescending { it.createdAt }
         PlaylistPickerSort.PLAYED -> compareByDescending { it.playedAt }
         PlaylistPickerSort.NAME -> compareBy { it.item.title.lowercase() }
         PlaylistPickerSort.LIBRARY -> compareBy(layout.comparator()) { it.item }
-    }).thenBy { it.item.title.lowercase() }.thenBy { it.item.title }
+    }.thenBy { it.item.title.lowercase() }.thenBy { it.item.title }
     fun nodes(folder: List<String>, contents: List<Playlist>): List<PickerNode> {
         val (own, nested) = contents.partition { segments(it).size == folder.size }
-        return (own.map { PickerNode(item(it.id, it.title, it.trackIds), it.updatedAt, it.createdAt, it.playedAt,
-            it.trackIds.any(trackIds::contains), it) } +
+        return (own.map { node(it, it.title) } +
             nested.groupBy { segments(it)[folder.size] }.map { (name, inside) ->
                 val children = nodes(folder + name, inside)
                 PickerNode(item(FOLDER_PREFIX + folderPath(folder + name), name, inside.flatMap(Playlist::trackIds).distinct()),
-                    children.maxOf { it.updatedAt }, children.maxOf { it.createdAt }, children.maxOf { it.playedAt },
-                    children.any { it.member }, null, children)
+                    children.maxOf { it.updatedAt }, children.maxOf { it.createdAt }, children.maxOf { it.playedAt }, null, children)
             }).sortedWith(comparator)
     }
     fun rows(nodes: List<PickerNode>, depth: Int): List<PickerRow> = nodes.flatMap { node ->
         listOf(PickerRow(node.item.id, node.item.title, depth, node.playlist)) + rows(node.children, depth + 1)
     }
-    return rows(nodes(emptyList(), playlists), 0)
+    val (members, others) = playlists.partition { it.trackIds.any(trackIds::contains) }
+    if (members.isEmpty()) return rows(nodes(emptyList(), others), 0)
+    return listOf(PickerRow(SECTION_PREFIX + "members", memberLabel, 0, null, section = true)) +
+        rows(members.map { node(it, it.name) }.sortedWith(comparator), 0) +
+        (if (others.isEmpty()) emptyList() else listOf(PickerRow(SECTION_PREFIX + "others", "Other playlists", 0, null, section = true))) +
+        rows(nodes(emptyList(), others), 0)
 }
 
 @Composable
@@ -285,7 +291,8 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
     val selected = remember(trackIds) { trackIds.distinct() }
     // Membership comes from saved playlists, not pending choices, so rows stay put while toggling.
     val rows = remember(state.playlists, query, sort, layout, recentAt, selected) {
-        pickerRows(state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }, sort, layout, recentAt, selected.toSet())
+        pickerRows(state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }, sort, layout, recentAt,
+            selected.toSet(), if (selected.size == 1) "Contains this song" else "Contains selected songs")
     }
     val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
     ModalBottomSheet(onDismissRequest = dismiss, containerColor = MaterialTheme.colorScheme.surface,
@@ -301,6 +308,8 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
                 trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, "Clear search") { query = "" } })
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
                 items(rows, key = { it.key }) { row ->
+                    if (row.section) return@items Text(row.label, Modifier.fillMaxWidth().padding(top = 8.dp),
+                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     val indent = Modifier.padding(start = 16.dp * row.depth)
                     val playlist = row.playlist ?: return@items Row(indent.fillMaxWidth().padding(top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -328,7 +337,7 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
                         CollectionArtwork(playlist.artworkPath(state), playlist.name, AppIcon.QUEUE,
                             Modifier.size(48.dp).semantics { contentDescription = "Playlist artwork: ${playlist.name}" })
                         Column(Modifier.weight(1f)) {
-                            Text(playlist.title, style = MaterialTheme.typography.titleSmall)
+                            Text(row.label, style = MaterialTheme.typography.titleSmall)
                             Text(when {
                                 playlist.rule != null -> "Smart playlist"
                                 playlist.server?.readOnly == true -> "Read-only"

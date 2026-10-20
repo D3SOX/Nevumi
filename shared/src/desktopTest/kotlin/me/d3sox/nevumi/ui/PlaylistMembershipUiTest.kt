@@ -140,7 +140,7 @@ class PlaylistMembershipUiTest {
     }
 
     @Test
-    fun pickerListsPlaylistsHoldingTheSongFirstThenSortsByTheChosenOrderAndRemembersIt() {
+    fun pickerListsPlaylistsHoldingTheSongInATopSectionThenSortsByTheChosenOrderAndRemembersIt() {
         val directory = Files.createTempDirectory("playlist-membership-sort")
         val store = openMusicStore(directory.resolve("music.db").toString())
         val library = MusicLibrary(store)
@@ -240,6 +240,45 @@ class PlaylistMembershipUiTest {
                 onNodeWithText("Apply").assertIsEnabled()
                 onNodeWithContentDescription("Playlist membership: Road ▸ Drive").performClick()
                 onNodeWithText("Apply").assertIsNotEnabled()
+            }
+        } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun pickerListsPlaylistsHoldingTheSongTogetherAboveFoldersUntilApplied() {
+        val directory = Files.createTempDirectory("playlist-membership-section")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        runBlocking {
+            val song = library.importTrack(TrackMetadata("Song"), TrackSource("song", SourceKind.LOCAL, "/music/song.flac"))
+            playlists.create("Road ▸ Drive", listOf(song.id))
+            playlists.create("Road ▸ Night", emptyList())
+            playlists.create("Evening", emptyList())
+            playlists.create("Morning", listOf(song.id))
+        }
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                waitUntil(timeoutMillis = 3_000) { !player.state.value.loading }
+                onNodeWithContentDescription("Track options: Song").performClick()
+                onNodeWithText("Select song").performClick()
+                onNodeWithContentDescription("Selection actions").performClick()
+                onNodeWithText("Add to playlist").performClick()
+                onNodeWithContentDescription("Sort by").performClick()
+                onNodeWithText("Alphabetical").performClick()
+                fun top(text: String) = onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+                fun assertOrder() {
+                    val order = listOf("Contains this song", "Morning", "Road ▸ Drive", "Other playlists", "Evening", "Road", "Night")
+                    runCatching { waitUntil(timeoutMillis = 3_000) { order.sortedBy(::top) == order } }
+                    assertEquals(order, order.sortedBy(::top))
+                }
+                assertOrder()
+                // Pending choices don't move playlists between sections.
+                onNodeWithContentDescription("Playlist membership: Road ▸ Drive").performClick()
+                onNodeWithContentDescription("Playlist membership: Evening").performClick()
+                assertOrder()
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
