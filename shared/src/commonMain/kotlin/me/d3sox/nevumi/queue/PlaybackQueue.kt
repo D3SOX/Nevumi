@@ -1,7 +1,6 @@
 package me.d3sox.nevumi.queue
 
 import me.d3sox.nevumi.storage.MusicStore
-import me.d3sox.nevumi.storage.StoredRecord
 import kotlin.concurrent.Volatile
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
@@ -86,7 +85,7 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         val selected = snapshot.selectedSavedQueueId?.let { store.read<SavedQueue>("saved-queue:$it") }?.takeIf { it.kind == SavedQueueKind.LIVE }
         val live = if (selected == null) snapshot.copy(selectedSavedQueueId = null) else snapshot
         val json = store.json.encodeToString(live)
-        store.database.records().put(StoredRecord(key, "queues", json))
+        store.database.records().put(key, "queues", json)
         decoded = json to live
         if (selected != null) store.put("saved-queue:${selected.id}", "saved-queues",
             selected.copy(snapshot = live.copy(selectedSavedQueueId = null)))

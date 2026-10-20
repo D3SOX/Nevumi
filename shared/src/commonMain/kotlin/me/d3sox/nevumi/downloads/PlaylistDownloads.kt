@@ -15,12 +15,12 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
     private val sourceAccessible: (String) -> Boolean = FileAudioAccess::available) {
     suspend fun synchronize(excluded: Set<String> = emptySet()) {
         val collections = playlists.all()
+        // This already pins every song of a downloaded playlist, so the loop below only finds songs to download.
         downloads.replacePlaylistPins(collections, excluded)
         val missing = linkedMapOf<String, String>()
         for (playlist in collections.filter { it.autoDownload }) {
             for (trackId in playlist.trackIds.distinct().filterNot { it in excluded }) {
                 val track = library.findTrack(trackId) ?: continue
-                downloads.pin(trackId, "playlist:${playlist.id}")
                 val accessible = track.sources.map { source ->
                     if (source.kind == SourceKind.SERVER) source
                     else source.copy(available = source.available && withContext(Dispatchers.IO) { sourceAccessible(source.location) })

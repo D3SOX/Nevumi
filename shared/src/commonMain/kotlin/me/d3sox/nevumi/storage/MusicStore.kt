@@ -9,7 +9,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.RoomDatabaseConstructor
-import androidx.room.Upsert
 import androidx.room.immediateTransaction
 import androidx.room.useWriterConnection
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +19,10 @@ data class StoredRecord(@PrimaryKey val key: String, val kind: String, val value
 
 @Dao
 interface RecordDao {
-    @Upsert suspend fun put(record: StoredRecord)
+    // Rewriting an identical record would still notify every observer of the table, so unchanged values are skipped.
+    @Query("INSERT INTO records (`key`, kind, value) VALUES (:key, :kind, :value) ON CONFLICT(`key`) DO UPDATE " +
+        "SET kind = excluded.kind, value = excluded.value WHERE kind != excluded.kind OR value != excluded.value")
+    suspend fun put(key: String, kind: String, value: String)
     @Query("SELECT value FROM records WHERE `key` = :key") suspend fun read(key: String): String?
     @Query("SELECT * FROM records WHERE kind = :kind ORDER BY `key`")
     suspend fun list(kind: String): List<StoredRecord>
@@ -46,7 +48,7 @@ class MusicStore internal constructor(internal val database: MusicDatabase) {
     internal suspend inline fun <reified T> read(key: String): T? =
         database.records().read(key)?.let { json.decodeFromString<T>(it) }
     internal suspend inline fun <reified T> put(key: String, kind: String, value: T) {
-        database.records().put(StoredRecord(key, kind, json.encodeToString(value)))
+        database.records().put(key, kind, json.encodeToString(value))
     }
     internal suspend inline fun <reified T> list(kind: String): List<T> =
         database.records().list(kind).map { json.decodeFromString<T>(it.value) }
