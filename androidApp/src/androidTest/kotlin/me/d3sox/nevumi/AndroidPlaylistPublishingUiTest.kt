@@ -37,6 +37,12 @@ class AndroidPlaylistPublishingUiTest {
                     controller.createPlaylist(name, listOf(tracks[0].id, tracks[1].id, tracks[0].id)).join()
                 }
                 playlistId = controller.state.value.playlists.single { it.name == name }.id
+                compose.waitUntil(5_000) {
+                    compose.onAllNodesWithText("Library refreshed").fetchSemanticsNodes().isNotEmpty()
+                }
+                compose.onNodeWithText("Library refreshed").assertIsDisplayed()
+                compose.onNodeWithText("Dismiss").performClick()
+                compose.onNodeWithText("Library refreshed").assertDoesNotExist()
                 compose.openLibraryPage("Playlists")
                 compose.onNodeWithText(name).performClick()
                 compose.onNodeWithContentDescription("Playlist options").performClick()
@@ -54,7 +60,7 @@ class AndroidPlaylistPublishingUiTest {
                     assertEquals(3, remote.songIds.size)
                     assertEquals(remote.songIds[0], remote.songIds[2])
                 } finally { http.close() }
-                compose.onNodeWithText("Server playlist").assertIsDisplayed()
+                compose.onNodeWithText("Server playlist").performScrollTo().assertIsDisplayed()
             }
         } finally {
             val http = HttpClient(OkHttp)

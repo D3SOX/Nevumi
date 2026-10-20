@@ -51,6 +51,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import me.d3sox.nevumi.navidrome.NavidromeConnection
 import me.d3sox.nevumi.navidrome.ServerCredentials
 import me.d3sox.nevumi.navidrome.ServerProfile
+import me.d3sox.nevumi.navidrome.ServerRefreshProgress
+import me.d3sox.nevumi.navidrome.ServerRefreshStage
+import me.d3sox.nevumi.navidrome.NavidromeRequestException
+import me.d3sox.nevumi.navidrome.serverUnavailable
 import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.LocalSources
@@ -101,6 +105,7 @@ data class AppState(
     val scrobbling: ScrobblingStatus = ScrobblingStatus(),
     val lastFmAuthorization: LastFmAuthorization? = null,
     val localScan: me.d3sox.nevumi.library.LocalScanProgress? = null,
+    val serverRefresh: ServerRefreshProgress? = null,
     val lastLocalScanCount: Int? = null,
     val sleepTimerEndsAt: Long? = null,
 )
@@ -143,6 +148,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private data class TransportIntent(val revision: Long = 0, val play: Boolean = false)
     private val transportIntent = MutableStateFlow(TransportIntent())
     private val imports = Mutex()
+    private val serverImports = Mutex()
+    private val serverRefreshJob = MutableStateFlow<kotlinx.coroutines.Job?>(null)
     private val shutdown = Mutex()
     private var shutdownFinished = false
     private var queueLoaded = false
@@ -409,7 +416,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 refreshLibrary()
             }
             refreshDetails(loading = false)
-            mutableState.update { it.copy(loading = false, error = recoveryError ?: it.error) }
+            mutableState.update { it.copy(loading = it.serverRefresh?.running == true, error = recoveryError ?: it.error) }
         }
         localSources?.let { sources -> scope.launch {
             sources.pendingRefreshLocations().forEach { importSource(it).join() }
@@ -463,7 +470,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         val tracks = library.tracks()
         val snapshot = queue.snapshot()
         val settings = preferences?.load() ?: MusicSettings()
-        mutableState.update { it.copy(tracks = tracks, queue = snapshot, preferences = settings, loading = false, libraryReady = true) }
+        mutableState.update { it.copy(tracks = tracks, queue = snapshot, preferences = settings,
+            loading = it.serverRefresh?.running == true, libraryReady = true) }
     }
 
     suspend fun refresh(loading: Boolean = false) {
@@ -482,7 +490,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         val uploads = serverFiles?.pendingUploads().orEmpty()
         artworkUpdates.withLock {
             val covers = artwork?.paths(tracks.map { it.id } + collections.flatMap { listOf("playlist:${it.id}", "server-playlist-cover:${it.id}") }).orEmpty()
-            mutableState.update { it.copy(savedQueues = savedQueues, loading = loading, server = profile,
+            mutableState.update { it.copy(savedQueues = savedQueues, loading = loading || it.serverRefresh?.running == true, server = profile,
                 playlists = collections, artwork = covers, fileEdits = editHistory, listens = listens,
                 sftp = sftp, serverUploads = uploads) }
         }
@@ -987,27 +995,58 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         }
     }
 
-    fun connectServer(address: String, username: String, password: String) = action(serialized = false) {
-        mutableState.update { it.copy(loading = true, error = null) }
+    fun connectServer(address: String, username: String, password: String) = serverRefreshAction {
         val connection = requireNotNull(navidrome) { "Server setup is unavailable" }
         musicServerAccess(address)
         connection.connect(address, ServerCredentials(username, password))
         val client = requireNotNull(connection.client())
         importServer(client)
-        operations.withLock { refresh() }
     }
 
-    fun refreshServer() = action(serialized = false) {
-        mutableState.update { it.copy(loading = true, error = null) }
+    fun refreshServer() = serverRefreshAction {
         navidrome?.profile()?.let { musicServerAccess(it.baseUrl) }
         val client = requireNotNull(navidrome?.client()) { "Connect to the music server first" }
-        importServer(client)
+        val count = importServer(client)
         offline?.retry()
-        operations.withLock { refresh() }
+        count
+    }
+
+    fun cancelServerRefresh() { serverRefreshJob.value?.cancel() }
+
+    fun dismissServerRefresh() {
+        mutableState.update { if (it.serverRefresh?.running == true) it else it.copy(serverRefresh = null) }
+    }
+
+    private fun serverRefreshAction(block: suspend () -> Int) = action(serialized = false) {
+        if (!serverImports.tryLock()) return@action
+        serverRefreshJob.value = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
+        mutableState.update { it.copy(loading = true, error = null, serverRefresh = ServerRefreshProgress(ServerRefreshStage.CONNECTING)) }
+        var result = ServerRefreshProgress(ServerRefreshStage.CANCELLED)
+        try {
+            val count = block()
+            operations.withLock { refresh() }
+            result = ServerRefreshProgress(ServerRefreshStage.COMPLETE, processed = count)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            val partial = when (state.value.serverRefresh?.stage) {
+                ServerRefreshStage.PLAYLISTS -> "Songs are saved. Playlists could not finish. "
+                ServerRefreshStage.ARTWORK -> "Songs are saved. Artwork could not finish. "
+                ServerRefreshStage.MATCHING -> "Songs are saved. Matching could not finish. "
+                else -> ""
+            }
+            result = ServerRefreshProgress(ServerRefreshStage.FAILED, message = partial + (error.message ?: "Refresh failed. Try again later."))
+        } finally {
+            mutableState.update { it.copy(loading = false, serverRefresh = result) }
+            serverRefreshJob.value = null
+            serverImports.unlock()
+            // Cancellation must not wait for an unrelated operation holding the UI lock.
+            if (result.stage != ServerRefreshStage.COMPLETE) action { refresh() }
+        }
     }
 
     fun disconnectServer() = action(serialized = false) {
-        mutableState.update { it.copy(loading = true, error = null) }
+        mutableState.update { it.copy(loading = true, error = null, serverRefresh = null) }
         val connection = requireNotNull(navidrome) { "Server setup is unavailable" }
         val profile = connection.profile() ?: return@action operations.withLock { refresh() }
         if (serverFiles?.configuration()?.serverId == profile.serverId) serverFiles.disconnect()
@@ -1021,19 +1060,31 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         }
     }
 
-    private suspend fun importServer(client: me.d3sox.nevumi.navidrome.NavidromeClient) {
+    private suspend fun importServer(client: me.d3sox.nevumi.navidrome.NavidromeClient): Int {
+        val progress: (ServerRefreshProgress) -> Unit = { value -> mutableState.update { it.copy(serverRefresh = value) } }
         val paths = serverFiles?.configuration()?.serverId == client.serverId
-        val catalogue = serverChanges?.refreshLibrary(client, includeFilePaths = paths) ?: client.songs(includeFilePaths = paths).map { song ->
-            library.importTrack(song.metadata, TrackSource("server:${client.serverId}:${song.id}", SourceKind.SERVER, song.id,
-                filePath = song.filePath, fileLibraryId = song.fileLibraryId, indexedSize = song.sizeBytes)) to song
-        }
+        val catalogue = serverChanges?.refreshLibrary(client, includeFilePaths = paths, onProgress = progress)
+            ?: client.songs(includeFilePaths = paths, onProgress = progress).let { songs ->
+                progress(ServerRefreshProgress(ServerRefreshStage.IMPORTING, total = songs.size))
+                songs.mapIndexed { index, song ->
+                    library.importTrack(song.metadata, TrackSource("server:${client.serverId}:${song.id}", SourceKind.SERVER, song.id,
+                        filePath = song.filePath, fileLibraryId = song.fileLibraryId, indexedSize = song.sizeBytes)).also {
+                        progress(ServerRefreshProgress(ServerRefreshStage.IMPORTING, index + 1, songs.size))
+                    } to song
+                }
+            }
         if (artwork != null) {
+            progress(ServerRefreshProgress(ServerRefreshStage.ARTWORK))
             // Songs of an album share one cover; download it once instead of once per song.
             val covers = catalogue.mapNotNull { (track, song) -> song.coverArt?.let { it to track.id } }.groupBy({ it.first }, { it.second })
             // Navidrome changes a cover's ID with its image; other Subsonic servers may keep it, so their covers are downloaded every time.
-            val versioned = try { client.isNavidrome() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { false }
+            val versioned = try { client.isNavidrome() }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: NavidromeRequestException) { if (error.serverUnavailable) throw error else false }
+                catch (_: Exception) { false }
             // Songs without a cover come first, so they show one long before a large library finishes refreshing.
             val present = artwork.paths(covers.values.flatten()).keys
+            progress(ServerRefreshProgress(ServerRefreshStage.ARTWORK, total = covers.size))
             val pending = Channel<Pair<String, List<String>>>(Channel.UNLIMITED)
             covers.entries.sortedBy { (_, trackIds) -> trackIds.all { it in present } }.forEach { pending.trySend(it.key to it.value) }
             pending.close()
@@ -1041,11 +1092,15 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 for ((coverId, trackIds) in pending) {
                     try { if (versioned) artwork.fetchChanged(trackIds, client, coverId) else artwork.fetch(trackIds, client, coverId) }
                     catch (cancelled: CancellationException) { throw cancelled }
+                    catch (error: NavidromeRequestException) { if (error.serverUnavailable) throw error }
                     catch (_: Exception) { /* A missing cover must not prevent importing its music. */ }
+                    mutableState.update { state -> state.copy(serverRefresh = state.serverRefresh?.let { it.copy(processed = it.processed + 1) }) }
                 }
             } } }
         }
+        progress(ServerRefreshProgress(ServerRefreshStage.MATCHING))
         linkSameFiles()
+        return catalogue.size
     }
 
     fun playTrack(trackId: String, contextTrackIds: List<String>? = null, contextIndex: Int? = null, contextName: String = "Library", shuffleContext: Boolean = false,
@@ -1467,7 +1522,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private fun action(serialized: Boolean = true, block: suspend () -> Unit) = scope.launch {
         try { if (serialized) operations.withLock { block() } else block() }
         catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: Exception) { mutableState.update { it.copy(error = error.message ?: "Operation failed", loading = false) } }
+        catch (error: Exception) { mutableState.update { it.copy(error = error.message ?: "Operation failed", loading = it.serverRefresh?.running == true) } }
     }
 
     private suspend fun publishSeek(positionMs: Long) {

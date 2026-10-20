@@ -40,11 +40,11 @@ class AndroidSmartPlaylistsUiTest {
             compose.onNodeWithText("Search text").performTextInput("Northern Light")
             compose.onNodeWithText("Create").performClick()
             compose.waitUntil(5_000) { controller.state.value.playlists.any { it.name == "Smart offline songs" } }
-            compose.onNodeWithText("Smart offline songs").performClick()
-            compose.onNodeWithContentDescription("Automatically download playlist").performClick()
+            compose.onNodeWithText("Smart offline songs").performScrollTo().performClick()
+            compose.onNodeWithContentDescription("Automatically download playlist").performScrollTo().performClick()
             compose.waitUntil(10_000) { controller.state.value.downloads[northern.id]?.status == DownloadStatus.COMPLETE }
-            compose.onNodeWithContentDescription("Playlist options").performClick()
-                compose.onNodeWithText("Edit rules").performClick()
+            compose.onNodeWithContentDescription("Playlist options").performScrollTo().performClick()
+            compose.onNodeWithText("Edit rules").performClick()
             compose.onNodeWithText("Search text").performTextReplacement("Night Walk")
             compose.onNodeWithText("Save").performClick()
             compose.waitUntil(10_000) { controller.state.value.downloads[night.id]?.status == DownloadStatus.COMPLETE }
@@ -53,6 +53,8 @@ class AndroidSmartPlaylistsUiTest {
             assertTrue(playlist.autoDownload)
             val file = File(requireNotNull(controller.state.value.downloads[night.id]?.path))
             assertTrue(file.length() > 0)
+            compose.onNode(hasScrollToIndexAction() and hasAnyAncestor(hasTestTag("library-pager")))
+                .performScrollToNode(hasTestTag("track-row:${night.id}"))
             compose.onNodeWithText("Night Walk").assertIsDisplayed()
         }
     }

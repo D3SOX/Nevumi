@@ -41,6 +41,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class ServerPlaylist(val id: String, val name: String, val songIds: List<String>, val changed: String,
     val owner: String, val description: String = "", val coverArt: String? = null, val created: String = "")
@@ -112,12 +113,23 @@ class NavidromeClient(
     baseUrl: String,
     private val credentials: ServerCredentials,
     requestUrl: String = baseUrl,
+    private val requestTimeoutMillis: Long = 30_000,
 ) {
     private val baseUrl = normalizeServerAddress(requestUrl)
     val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username).serverId
     val username: String get() = credentials.username
     private val nativeAccess = Mutex()
     private var nativeToken: String? = null
+
+    private suspend fun <T : Any> timedRequest(block: suspend () -> T): T =
+        withTimeoutOrNull(requestTimeoutMillis) { block() }
+            ?: throw NavidromeRequestException("The music server took too long to respond. Try again later.", connectionFailure = true)
+
+    private fun checkResponse(response: HttpResponse) {
+        if (response.status.value !in 200..299) throw NavidromeRequestException(
+            if (response.status.value == 429) "The music server is busy (HTTP 429). Try refreshing later."
+            else "Music server request failed: HTTP ${response.status.value}", response.status.value)
+    }
 
     suspend fun musicDirectories(): List<NavidromeMusicDirectory> = serverRequest {
         request("getMusicFolders")["musicFolders"]?.jsonObject?.get("musicFolder")?.jsonArray.orEmpty().map { item ->
@@ -200,7 +212,7 @@ class NavidromeClient(
         playlist["changed"]?.jsonPrimitive?.content.orEmpty(), playlist["owner"]?.jsonPrimitive?.content.orEmpty(), playlist["comment"]?.jsonPrimitive?.content.orEmpty(),
         playlist["coverArt"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }, playlist["created"]?.jsonPrimitive?.content.orEmpty())
 
-    private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject = serverRequest {
+    private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject = serverRequest { timedRequest {
         val salt = Uuid.random().toString()
         val response = http.get("${baseUrl.trimEnd('/')}/rest/$endpoint.view") {
             parameter("u", credentials.username)
@@ -211,21 +223,21 @@ class NavidromeClient(
             parameter("f", "json")
             parameters.forEach { (key, value) -> url.parameters.append(key, value) }
         }
-        if (response.status.value !in 200..299) throw NavidromeRequestException("Music server request failed: HTTP ${response.status.value}", response.status.value)
+        checkResponse(response)
         val envelope = Json.parseToJsonElement(response.bodyAsText()).jsonObject.getValue("subsonic-response").jsonObject
         if (envelope["status"]?.jsonPrimitive?.content != "ok") {
             val error = envelope["error"]?.jsonObject
             throw NavidromeException(error?.get("code")?.jsonPrimitive?.intOrNull ?: 0)
         }
         envelope
-    }
+    } }
 
     suspend fun setFavorite(songId: String, favorite: Boolean) {
         request(if (favorite) "star" else "unstar", listOf("id" to songId))
     }
 
     /** Downloads a cover scaled to [size] pixels, or the original image when [size] is null. */
-    suspend fun coverArt(coverId: String, size: Int? = 1024): ByteArray = serverRequest {
+    suspend fun coverArt(coverId: String, size: Int? = 1024): ByteArray = serverRequest { timedRequest {
         val salt = Uuid.random().toString()
         http.prepareGet("${baseUrl.trimEnd('/')}/rest/getCoverArt.view") {
             parameter("u", credentials.username)
@@ -237,7 +249,8 @@ class NavidromeClient(
             parameter("id", coverId)
             size?.let { parameter("size", it.toString()) }
         }.execute { response ->
-            check(response.status.value in 200..299 && response.headers[HttpHeaders.ContentType]?.startsWith("image/") == true) {
+            checkResponse(response)
+            check(response.headers[HttpHeaders.ContentType]?.startsWith("image/") == true) {
                 "Server returned no artwork"
             }
             val bytes = okio.Buffer()
@@ -251,7 +264,7 @@ class NavidromeClient(
             }
             bytes.readByteArray()
         }
-    }
+    } }
 
     fun streamUrl(songId: String): String {
         val salt = Uuid.random().toString()
@@ -321,7 +334,8 @@ class NavidromeClient(
 
     suspend fun isNavidrome(): Boolean = request("ping")["type"]?.jsonPrimitive?.content == "navidrome"
 
-    suspend fun musicFiles(): List<NavidromeMusicFile> = serverRequest {
+    suspend fun musicFiles(onProgress: (ServerRefreshProgress) -> Unit = {}): List<NavidromeMusicFile> = serverRequest {
+        onProgress(ServerRefreshProgress(ServerRefreshStage.FILES))
         if (!isNavidrome())
             throw NavidromeRequestException("Remote file editing requires Navidrome's file catalogue. Other Subsonic servers support streaming and library actions.")
         nativeAccess.withLock {
@@ -338,14 +352,17 @@ class NavidromeClient(
                             parameter("_sort", "id"); parameter("_order", "ASC")
                         }
                     }
-                    var response = page()
-                    if (response.status.value == 401) {
+                    val body = timedRequest {
+                        var response = page()
+                        if (response.status.value == 401) {
+                            response.bodyAsText()
+                            nativeToken = null
+                            response = page()
+                        }
+                        if (response.status.value !in 200..299) throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}")
                         response.bodyAsText()
-                        nativeToken = null
-                        response = page()
                     }
-                    if (response.status.value !in 200..299) throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}")
-                    val entries = Json.parseToJsonElement(response.bodyAsText()).jsonArray.map { item ->
+                    val entries = Json.parseToJsonElement(body).jsonArray.map { item ->
                         val song = item.jsonObject
                         NavidromeMusicFile(song.getValue("id").jsonPrimitive.content, song.getValue("path").jsonPrimitive.content,
                             requireNotNull(song["libraryId"]?.jsonPrimitive?.longOrNull), song["libraryName"]?.jsonPrimitive?.content.orEmpty())
@@ -354,6 +371,7 @@ class NavidromeClient(
                     val fresh = entries.filter { seen.add(it.songId) }
                     check(fresh.isNotEmpty()) { "Navidrome returned a repeated file catalogue page" }
                     files += fresh
+                    onProgress(ServerRefreshProgress(ServerRefreshStage.FILES, files.size))
                     offset += entries.size
                 }
                 files
@@ -361,29 +379,31 @@ class NavidromeClient(
         }
     }
 
-    suspend fun songs(includeFilePaths: Boolean = false): List<ServerSong> = serverRequest {
+    suspend fun songs(includeFilePaths: Boolean = false, onProgress: (ServerRefreshProgress) -> Unit = {}): List<ServerSong> = serverRequest {
+        onProgress(ServerRefreshProgress(ServerRefreshStage.SONGS))
         val songs = mutableListOf<ServerSong>()
         val seen = mutableSetOf<String>()
         val releases = mutableMapOf<String, String>()
         var offset = 0
         while (true) {
-        val envelope = optionalCatalogueRequest("search3", listOf("query" to "", "artistCount" to "0", "albumCount" to "0",
-            "songCount" to "500", "songOffset" to offset.toString()))
-        val result = envelope?.get("searchResult3")?.jsonObject.orEmpty()
-        val entries = result["song"]?.jsonArray.orEmpty().map { it.jsonObject }
-        loadReleases(entries, releases)
-        val page = entries.map { parseSong(it, releases) }
-        if (page.isEmpty()) {
-            if (songs.isEmpty()) songs += catalogueFallback(releases)
-            break
-        }
-        val fresh = page.filter { seen.add(it.id) }
-        check(fresh.isNotEmpty()) { "Server returned a repeated catalogue page" }
-        songs += fresh
-        offset += page.size
+            val envelope = optionalCatalogueRequest("search3", listOf("query" to "", "artistCount" to "0", "albumCount" to "0",
+                "songCount" to "500", "songOffset" to offset.toString()))
+            val result = envelope?.get("searchResult3")?.jsonObject.orEmpty()
+            val entries = result["song"]?.jsonArray.orEmpty().map { it.jsonObject }
+            loadReleases(entries, releases)
+            val page = entries.map { parseSong(it, releases) }
+            if (page.isEmpty()) {
+                if (songs.isEmpty()) songs += catalogueFallback(releases, onProgress)
+                break
+            }
+            val fresh = page.filter { seen.add(it.id) }
+            check(fresh.isNotEmpty()) { "Server returned a repeated catalogue page" }
+            songs += fresh
+            onProgress(ServerRefreshProgress(ServerRefreshStage.SONGS, songs.size))
+            offset += page.size
         }
         if (!includeFilePaths) songs else {
-            val files = musicFiles().associateBy { it.songId }
+            val files = musicFiles(onProgress).associateBy { it.songId }
             songs.map { song ->
                 val file = requireNotNull(files[song.id]) { "Navidrome did not provide this song's music file" }
                 song.copy(filePath = file.path, fileLibraryId = file.libraryId)
@@ -446,7 +466,7 @@ class NavidromeClient(
         catch (error: NavidromeException) { if (error.code in setOf(0, 10, 70)) null else throw error }
         catch (error: NavidromeRequestException) { if (error.httpStatus in setOf(404, 501)) null else throw error }
 
-    private suspend fun catalogueFallback(releases: MutableMap<String, String>): List<ServerSong> {
+    private suspend fun catalogueFallback(releases: MutableMap<String, String>, onProgress: (ServerRefreshProgress) -> Unit): List<ServerSong> {
         val songs = linkedMapOf<String, ServerSong>()
         val albums = mutableSetOf<String>()
         var offset = 0
@@ -464,6 +484,7 @@ class NavidromeClient(
                     val song = parseSong(entry.jsonObject, releases)
                     songs[song.id] = song
                 }
+                onProgress(ServerRefreshProgress(ServerRefreshStage.SONGS, songs.size))
             }
             offset += page.size
         }
@@ -480,6 +501,7 @@ class NavidromeClient(
                     songs[song.id] = song
                 }
             }
+            onProgress(ServerRefreshProgress(ServerRefreshStage.SONGS, songs.size))
         }
         for (index in indexes["index"]?.jsonArray.orEmpty())
             index.jsonObject["artist"]?.jsonArray.orEmpty().forEach { addDirectory(it.jsonObject) }
