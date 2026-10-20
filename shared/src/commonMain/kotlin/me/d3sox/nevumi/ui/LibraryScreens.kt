@@ -76,6 +76,11 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     LaunchedEffect(tabs) {
         if (selectedTab !in tabs) selectedTab = tabs.first()
     }
+    var searchReturnTab by rememberSaveable { mutableStateOf(tabs.firstOrNull { it != LibraryTab.SEARCH }) }
+    fun closeSearch() {
+        selectedTab = searchReturnTab?.takeIf { it in tabs } ?: tabs.first()
+    }
+    if (tabs[currentIndex] == LibraryTab.SEARCH && backEnabled && tabs.size > 1) PlatformBackHandler { closeSearch() }
     var rearrangingPlaylists by remember(tabs[currentIndex]) { mutableStateOf(false) }
     LaunchedEffect(destination) {
         if (destination != null && destination.revision != handledDestination) {
@@ -113,7 +118,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages, LocalDerivedResults provides derived) {
     Column(modifier.fillMaxWidth()) {
         if (selection.active) SongSelectionHeader(selection, controller)
-        else Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 64.dp),
+        else if (tabs[currentIndex] != LibraryTab.SEARCH) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 64.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.foundation.Image(org.jetbrains.compose.resources.painterResource(me.d3sox.nevumi.resources.Res.drawable.nevumi_logo),
@@ -121,7 +126,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 Text(if (tabs[currentIndex] == LibraryTab.HOME) "Home" else countLabel(tracks.size, "song"), style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            AppIconButton(AppIcon.SEARCH, "Search", onClick = onSearch)
+            if (LibraryTab.SEARCH !in tabs) AppIconButton(AppIcon.SEARCH, "Search", onClick = onSearch)
             val currentTab = tabs[currentIndex]
             val activeSongLists = songPages.activeLists[currentTab] ?: 0
             val sortable = currentTab in setOf(LibraryTab.SONGS, LibraryTab.FAVORITES) ||
@@ -181,6 +186,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             val handleBack = backEnabled && active
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).testTag("library-tab:${tab.name}").then(if (active) Modifier else Modifier.clearAndSetSemantics {})) {
             when (tab) {
+                LibraryTab.SEARCH -> LibrarySearchScreen(state, controller, 0.dp, dismiss = null, onSettings = onSettings)
                 LibraryTab.HOME -> HomeScreen(state, controller, tracks, destination, handleBack, onSettings)
                 LibraryTab.SONGS -> SongList(tracks, controller, statistics = statistics, scrollSort = order)
                 LibraryTab.ALBUMS -> {
@@ -220,7 +226,10 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         }
         }
         Spacer(Modifier.height(miniPlayerSpace))
-        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged { onNavigationHeight(it.height) }, state.preferences.bottomNavigationTabs) { page -> selection.clear(); selectedTab = page }
+        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged { onNavigationHeight(it.height) }, state.preferences.bottomNavigationTabs) { page ->
+            if (selectedTab != LibraryTab.SEARCH) searchReturnTab = selectedTab
+            selection.clear(); selectedTab = page
+        }
     }
     }
     if (filters) LibraryFiltersDialog(state, controller) { filters = false }

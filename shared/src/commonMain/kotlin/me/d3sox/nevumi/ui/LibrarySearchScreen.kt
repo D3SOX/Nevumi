@@ -1,5 +1,7 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -27,7 +29,7 @@ import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.queue.QueueOrigin
 
 @Composable
-internal fun LibrarySearchScreen(state: AppState, controller: MusicController, bottomSpace: Dp, dismiss: () -> Unit) {
+internal fun LibrarySearchScreen(state: AppState, controller: MusicController, bottomSpace: Dp, dismiss: (() -> Unit)?, onSettings: (() -> Unit)? = null) {
     var search by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     val query = search.text
     var type by rememberSaveable { mutableStateOf(SearchType.ALL) }
@@ -51,12 +53,13 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
         LocalLibraryScrollKey provides "global-search:${type.name}") {
         Column(Modifier.fillMaxSize().imePadding().testTag("library-search-page")) {
             if (selection.active) SongSelectionHeader(selection, controller)
-            else Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppIconButton(AppIcon.BACK, "Close search") { stopTyping(); if (opened != null) openedId = null else dismiss() }
+            else Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = if (opened == null && dismiss == null) 16.dp else 0.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (opened != null || dismiss != null) AppIconButton(AppIcon.BACK, "Close search") { stopTyping(); if (opened != null) openedId = null else dismiss?.invoke() }
                 TextField(search, { if (it.text != query) openedId = null; search = it }, placeholder = { Text("Search your library") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { stopTyping() }),
                     trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, "Clear search") { search = TextFieldValue(); openedId = null } },
                     modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = "Search your library" })
+                if (onSettings != null) AppIconButton(AppIcon.SETTINGS, "Settings") { stopTyping(); onSettings() }
                 LaunchedEffect(Unit) { focus.requestFocus() }
             }
             if (opened == null) LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -70,7 +73,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     LocalLibraryScrollKey provides "search-detail:${openedType?.name}:${opened.id}") {
                     SongList(opened.tracks, controller, playlistId = opened.id.takeIf { openedType == SearchType.PLAYLISTS }, contextName = opened.title,
                         header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) { openedId = null } })
-                } else if (query.isBlank()) Text("Search songs, albums, artists, playlists, genres and folders.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else if (query.isBlank()) SearchPrompt(Modifier.align(Alignment.Center))
                 else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search")
                 else {
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL } else listOf(type)
@@ -110,5 +113,24 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
             }
             Spacer(Modifier.height(bottomSpace))
         }
+    }
+}
+
+@Composable
+private fun SearchPrompt(modifier: Modifier = Modifier) {
+    Column(modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Box(Modifier.size(96.dp)) {
+            Box(Modifier.size(80.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                contentAlignment = Alignment.Center) {
+                Icon(AppIcon.MUSIC.vector, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            Box(Modifier.align(Alignment.BottomEnd).size(48.dp).background(MaterialTheme.colorScheme.surface, CircleShape),
+                contentAlignment = Alignment.Center) {
+                Icon(AppIcon.SEARCH.vector, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Text("Enter a search term", style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }

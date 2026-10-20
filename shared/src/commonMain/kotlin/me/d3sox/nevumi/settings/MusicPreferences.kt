@@ -79,7 +79,7 @@ data class MusicSettings(
     val songOrderReversed: Boolean = false,
     val sourceFilter: SourceKind? = null,
     val libraryFilter: LibraryQuery = LibraryQuery(),
-    val libraryTabs: List<LibraryTab> = listOf(LibraryTab.HOME) + LibraryTab.entries.filter { it != LibraryTab.HOME && it != LibraryTab.ALBUM_ARTISTS },
+    val libraryTabs: List<LibraryTab> = listOf(LibraryTab.HOME) + LibraryTab.entries.filter { it != LibraryTab.HOME && it != LibraryTab.ALBUM_ARTISTS && it != LibraryTab.SEARCH },
     val bottomNavigationTabs: Set<LibraryTab>? = null,
     val startupTab: LibraryTab? = null,
     val lastLibraryTab: LibraryTab = LibraryTab.SONGS,
