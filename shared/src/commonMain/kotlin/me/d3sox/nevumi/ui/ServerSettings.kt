@@ -10,6 +10,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.navidrome.ServerRefreshStage
 
 @Composable
 internal fun ServerSettings(state: AppState, controller: MusicController, onClose: () -> Unit) {
@@ -19,19 +20,19 @@ internal fun ServerSettings(state: AppState, controller: MusicController, onClos
     var submitted by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(state.server == null) }
     var disconnecting by remember { mutableStateOf(false) }
-    LaunchedEffect(state.loading, state.server, state.error) {
-        if (submitted && !state.loading && state.error == null && state.server != null) onClose()
+    LaunchedEffect(state.serverRefresh, state.server) {
+        if (submitted && state.serverRefresh?.stage == ServerRefreshStage.COMPLETE && state.server != null) onClose()
     }
     val server = state.server.takeUnless { editing }
     SettingsScreen(onDismissRequest = onClose, title = { Text("Music server") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (server != null) SettingsCard(AppIcon.SERVER) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Connected", style = MaterialTheme.typography.titleMedium)
                     Text("${server.username} on ${server.baseUrl.substringAfter("://")}", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ActionButton("Disconnect", AppIcon.UNLINK, enabled = !state.loading, style = ActionStyle.DESTRUCTIVE) { disconnecting = true }
                 }
-                ActionButton("Disconnect", AppIcon.UNLINK, enabled = !state.loading, style = ActionStyle.DESTRUCTIVE) { disconnecting = true }
             } else {
                 Text("Connect to Navidrome or a Subsonic-compatible server.")
                 OutlinedTextField(address, { address = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Server address") }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true)
@@ -39,12 +40,13 @@ internal fun ServerSettings(state: AppState, controller: MusicController, onClos
                 OutlinedTextField(password, { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Password") }, leadingIcon = { Icon(AppIcon.LOCK.vector, null) }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation())
             }
-            if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            val refresh = state.serverRefresh
+            if (refresh != null) ServerRefreshStatus(refresh, controller::cancelServerRefresh, controller::dismissServerRefresh)
+            else if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }, confirmButton = {
         if (server != null) PageAction("Refresh library", AppIcon.LIBRARY, enabled = !state.loading, onClick = {
-            submitted = true
             controller.refreshServer()
         }) else PageAction("Connect", AppIcon.CLOUD, enabled = !state.loading, onClick = {
             submitted = true

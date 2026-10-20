@@ -97,20 +97,31 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         }
     }
 
-    suspend fun refreshLibrary(connection: NavidromeClient, includeFilePaths: Boolean = false): List<Pair<Track, ServerSong>> = synchronization.withLock {
-        val catalogue = connection.songs(includeFilePaths)
-        // Short transactions let playback checkpoints and user actions write between batches of a large import.
-        val imported = catalogue.chunked(200).flatMap { batch -> store.transaction { batch.map { song -> importSong(connection, song) to song } } }
-        val songs = store.transaction {
-            val present = catalogue.map { "server:${connection.serverId}:${it.id}" }.toSet()
-            val absent = library.tracks().flatMap { track -> track.sources.filter {
-                it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:") && it.id !in present
-            }.map { it.id } }.toSet()
-            library.setSourceAvailability(absent, false)
-            imported
+    suspend fun refreshLibrary(connection: NavidromeClient, includeFilePaths: Boolean = false,
+        onProgress: (ServerRefreshProgress) -> Unit = {}): List<Pair<Track, ServerSong>> {
+        onProgress(ServerRefreshProgress(ServerRefreshStage.WAITING))
+        return synchronization.withLock {
+            val catalogue = connection.songs(includeFilePaths, onProgress)
+            onProgress(ServerRefreshProgress(ServerRefreshStage.IMPORTING, total = catalogue.size))
+            // Short transactions let playback checkpoints and user actions write between batches of a large import.
+            var processed = 0
+            val imported = catalogue.chunked(200).flatMap { batch ->
+                store.transaction { batch.map { song -> importSong(connection, song) to song } }.also {
+                    processed += batch.size
+                    onProgress(ServerRefreshProgress(ServerRefreshStage.IMPORTING, processed, catalogue.size))
+                }
+            }
+            val songs = store.transaction {
+                val present = catalogue.map { "server:${connection.serverId}:${it.id}" }.toSet()
+                val absent = library.tracks().flatMap { track -> track.sources.filter {
+                    it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:") && it.id !in present
+                }.map { it.id } }.toSet()
+                library.setSourceAvailability(absent, false)
+                imported
+            }
+            importPlaylists(connection, onProgress = onProgress)
+            songs
         }
-        importPlaylists(connection)
-        songs
     }
 
     suspend fun importSong(connection: NavidromeClient, song: ServerSong, linkTo: String? = null): Track = store.transaction {
@@ -139,7 +150,9 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
      * Imports the server's playlists. With [changedOnly], only playlists whose change time moved are downloaded,
      * and those containing songs missing from the library wait for the next library refresh.
      */
-    suspend fun importPlaylists(connection: NavidromeClient, changedOnly: Boolean = false) {
+    suspend fun importPlaylists(connection: NavidromeClient, changedOnly: Boolean = false,
+        onProgress: (ServerRefreshProgress) -> Unit = {}) {
+        onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS))
         val tracks = library.tracks()
         val mapping = tracks.flatMap { track -> track.sources.filter {
             it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
@@ -150,7 +163,8 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
             // Servers that omit change times get every playlist downloaded again.
             connection.playlistVersions().filter { (id, changed) -> changed.isEmpty() || known[id] != changed }.keys.map { connection.playlist(it) }
         }
-        for (remote in remotes) {
+        onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS, total = remotes.size))
+        for ((index, remote) in remotes.withIndex()) {
             val imported = store.transaction {
                 val id = store.list<Playlist>("playlists").firstOrNull {
                     it.server?.serverId == connection.serverId && (it.server.id == remote.id ||
@@ -173,21 +187,23 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                     createdAt = previous.createdAt.takeIf { it != 0L } ?: time(remote.created) ?: now, updatedAt = updatedAt) ?: Playlist(id, remote.name, ids, server = link, description = remote.description,
                     createdAt = time(remote.created) ?: now, updatedAt = updatedAt))
                 id to (remote.changed.isEmpty() || previous?.server?.changed != remote.changed)
-            } ?: continue
-            if (artwork != null) {
+            }
+            if (artwork != null && imported != null) {
                 val (id, changed) = imported
                 val key = "server-playlist-cover:$id"
                 // Navidrome keeps a playlist's cover ID when its image changes, so its change time decides when to download again.
                 try { if (remote.coverArt == null) artwork.remove(key) else if (changed || artwork.path(key) == null) artwork.fetch(key, connection, remote.coverArt) }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) {
+                catch (error: Exception) {
                     // A missing cover must not prevent importing the playlist; forget its change time so the next pull retries it.
                     store.transaction {
                         val current = Playlists(store).get(id)
                         current?.server?.let { store.put("playlist:$id", "playlists", current.copy(server = it.copy(changed = ""))) }
                     }
+                    if (!changedOnly && error is NavidromeRequestException && error.serverUnavailable) throw error
                 }
             }
+            onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS, index + 1, remotes.size))
         }
     }
 

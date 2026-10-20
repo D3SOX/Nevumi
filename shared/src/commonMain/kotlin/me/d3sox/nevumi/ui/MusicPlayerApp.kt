@@ -161,7 +161,10 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                         categoryState = settingsCategory, onAddMusic = onAddMusic, folderPicker = folders) { page = AppPage.LIBRARY }
                     AppPage.LIBRARY -> {
                         Column(Modifier.fillMaxSize().then(if (hasPlayer && playerSheet.targetValue != PlayerPanel.MINI) Modifier.clearAndSetSemantics {} else Modifier)) {
-                            if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                            val refresh = state.serverRefresh
+                            if (refresh != null) ServerRefreshStatus(refresh, controller::cancelServerRefresh, controller::dismissServerRefresh,
+                                Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                            else if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                             if (state.libraryReady) LibraryScreens(libraryState, controller, Modifier.weight(1f), destination = libraryDestination,
                                 backEnabled = LocalNavigationActive.current && (!hasPlayer || playerSheet.targetValue == PlayerPanel.MINI),
                                 miniPlayerSpace = if (hasPlayer) 96.dp else 0.dp,

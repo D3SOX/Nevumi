@@ -8,6 +8,15 @@ import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.withTimeout
+import io.ktor.http.HttpStatusCode
+import io.ktor.utils.io.ByteChannel
 
 class NavidromeClientTest {
     @Test
@@ -26,9 +35,55 @@ class NavidromeClientTest {
         val http = HttpClient(engine)
         try {
             val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test"))
-
+            val progress = mutableListOf<ServerRefreshProgress>()
             assertEquals(setOf("Northern Light", "Long Way Home", "Night Walk"),
-                client.songs().map { it.metadata.title }.toSet())
+                client.songs(onProgress = progress::add).map { it.metadata.title }.toSet())
+            assertEquals(listOf(0, 1, 2, 3), progress.map { it.processed })
+            assertTrue(progress.all { it.stage == ServerRefreshStage.SONGS && it.total == null })
+        } finally { http.close() }
+    }
+
+    @Test
+    fun stalledMetadataAndArtworkBodiesHaveARequestDeadline() = runBlocking {
+        val body = ByteChannel()
+        val http = HttpClient(MockEngine { request ->
+            if (request.url.encodedPath.endsWith("getCoverArt.view"))
+                respond(body, headers = headersOf(HttpHeaders.ContentType, "image/png"))
+            else awaitCancellation()
+        })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test"), requestTimeoutMillis = 50)
+            withTimeout(3_000) {
+                val metadata = assertFailsWith<NavidromeRequestException> { client.songs() }
+                assertTrue(metadata.connectionFailure)
+                assertTrue(metadata.message.orEmpty().contains("too long"))
+                val artwork = assertFailsWith<NavidromeRequestException> { client.coverArt("cover") }
+                assertTrue(artwork.connectionFailure)
+            }
+        } finally { http.close(); body.cancel(null) }
+    }
+
+    @Test
+    fun cancellingARequestRemainsCancellation() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val http = HttpClient(MockEngine { entered.complete(Unit); awaitCancellation() })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test"))
+            val request = async { client.ping() }
+            withTimeout(3_000) { entered.await(); request.cancelAndJoin() }
+            assertTrue(request.isCancelled)
+        } finally { http.close() }
+    }
+
+    @Test
+    fun overloadedArtworkRequestsKeepTheirHttpStatus() = runBlocking {
+        val http = HttpClient(MockEngine { respond("busy", HttpStatusCode.TooManyRequests) })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test"))
+            val failure = assertFailsWith<NavidromeRequestException> { client.coverArt("cover") }
+            assertEquals(429, failure.httpStatus)
+            assertTrue(failure.serverUnavailable)
+            assertTrue(failure.message.orEmpty().contains("busy"))
         } finally { http.close() }
     }
 }
