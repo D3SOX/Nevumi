@@ -54,7 +54,7 @@ class AndroidPlaylistPublishingUiTest {
                     assertEquals(3, remote.songIds.size)
                     assertEquals(remote.songIds[0], remote.songIds[2])
                 } finally { http.close() }
-                compose.onNodeWithText("Server playlist").assertIsDisplayed()
+                compose.onNodeWithText("Server playlist").performScrollTo().assertIsDisplayed()
             }
         } finally {
             val http = HttpClient(OkHttp)
