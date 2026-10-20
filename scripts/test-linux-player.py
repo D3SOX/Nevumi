@@ -158,7 +158,8 @@ public class TlsProbe {
                         ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x900x24", "-nolisten", "tcp"],
                         stdout=subprocess.PIPE, stderr=log, text=True,
                     )
-                    display_name = ":" + first_line(display)
+                    # A cold Xvfb start on CI runners can take longer than the other services.
+                    display_name = ":" + first_line(display, timeout=30)
                     address = "unix:path=" + str(directory / "bus")
                     bus_configuration = directory / "bus.conf"
                     bus_configuration.write_text(
