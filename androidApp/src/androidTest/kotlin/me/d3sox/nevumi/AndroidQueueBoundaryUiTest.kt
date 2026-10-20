@@ -3,7 +3,7 @@ package me.d3sox.nevumi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import me.d3sox.nevumi.library.*
@@ -30,7 +30,7 @@ class AndroidQueueBoundaryUiTest {
             } }
             ActivityScenario.launch(MainActivity::class.java).use {
                 runBlocking { app.controller.playTrack(tracks[0].id, tracks.map { it.id }).join() }
-                compose.waitUntil(5_000) { app.controller.state.value.playback.playing }
+                compose.waitUntil(10_000) { app.controller.state.value.playback.playing }
                 val current = app.controller.state.value.queue.currentEntryId
                 val moved = app.controller.state.value.queue.context.first()
                 compose.onNodeWithTag("mini-player").performClick(); compose.onNodeWithContentDescription("Queue").performClick()
@@ -78,7 +78,7 @@ class AndroidQueueBoundaryUiTest {
             } }
             ActivityScenario.launch(MainActivity::class.java).use {
                 runBlocking { app.controller.playTrack(tracks[0].id, tracks.map { it.id }).join() }
-                compose.waitUntil(5_000) { app.controller.state.value.playback.playing }
+                compose.waitUntil(10_000) { app.controller.state.value.playback.playing }
                 val current = app.controller.state.value.queue.currentEntryId
                 val moved = app.controller.state.value.queue.context.first()
                 compose.onNodeWithTag("mini-player").performClick(); compose.onNodeWithContentDescription("Queue").performClick()

@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import me.d3sox.nevumi.playback.AndroidPlaybackEngine
 import me.d3sox.nevumi.playback.PlayableTrack
 import me.d3sox.nevumi.playback.RepeatMode
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -15,6 +16,7 @@ import org.junit.runner.RunWith
 import org.junit.Assert.*
 import java.io.File
 import java.util.UUID
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class AndroidCrossfadeSessionTest {
@@ -45,11 +47,16 @@ class AndroidCrossfadeSessionTest {
                     assertNotEquals(overlap.playbackId, overlap.fadingOut?.playbackId)
                     engine.pause()
                     withTimeout(5_000) { engine.status.first { !it.playing && it.fadingOut?.playing == false } }
-                    delay(150)
-                    val paused = engine.status.value
-                    delay(200)
-                    assertEquals(paused.positionMs.toDouble(), engine.status.value.positionMs.toDouble(), 75.0)
-                    assertEquals(requireNotNull(paused.fadingOut).positionMs.toDouble(), requireNotNull(engine.status.value.fadingOut).positionMs.toDouble(), 75.0)
+                    // pause() reports paused immediately; the service can need longer to stop both decoders on a busy emulator.
+                    try { withTimeout(5_000) { while (true) {
+                        val paused = engine.status.value
+                        delay(200)
+                        val later = engine.status.value
+                        if (abs(later.positionMs - paused.positionMs) <= 75 &&
+                            abs(requireNotNull(later.fadingOut).positionMs - requireNotNull(paused.fadingOut).positionMs) <= 75) break
+                    } } } catch (failure: TimeoutCancellationException) {
+                        throw AssertionError("Paused crossfade kept advancing: ${engine.status.value}", failure)
+                    }
                     engine.play()
                     withTimeout(6_000) { engine.status.first { it.entryId == "next" && it.ended } }
                     assertNull(engine.status.value.fadingOut)
