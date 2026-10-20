@@ -1029,7 +1029,12 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            val partial = if (state.value.serverRefresh?.stage == ServerRefreshStage.ARTWORK) "Songs are saved. Artwork could not finish. " else ""
+            val partial = when (state.value.serverRefresh?.stage) {
+                ServerRefreshStage.PLAYLISTS -> "Songs are saved. Playlists could not finish. "
+                ServerRefreshStage.ARTWORK -> "Songs are saved. Artwork could not finish. "
+                ServerRefreshStage.MATCHING -> "Songs are saved. Matching could not finish. "
+                else -> ""
+            }
             result = ServerRefreshProgress(ServerRefreshStage.FAILED, message = partial + (error.message ?: "Refresh failed. Try again later."))
         } finally {
             mutableState.update { it.copy(loading = false, serverRefresh = result) }

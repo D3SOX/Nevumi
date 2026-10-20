@@ -88,7 +88,12 @@ class ServerRefreshTest {
     }
 
     @Test
-    fun serverOverloadStopsTheArtworkBatchKeepsImportedSongsAndAllowsRetry() = runBlocking {
+    fun serverOverloadStopsTheArtworkBatchKeepsImportedSongsAndAllowsRetry() = verifyCoverOverload(false)
+
+    @Test
+    fun serverOverloadDuringPlaylistImportReportsSavedSongsAndAllowsRetry() = verifyCoverOverload(true)
+
+    private fun verifyCoverOverload(playlistCover: Boolean) = runBlocking {
         val directory = Files.createTempDirectory("nevumi-refresh-overload")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val overloaded = AtomicBoolean(true)
@@ -107,7 +112,10 @@ class ServerRefreshTest {
                     } else ""
                     respond("""{"subsonic-response":{"status":"ok","searchResult3":{"song":[$songs]}}}""")
                 }
-                "/rest/getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{}}}""")
+                "/rest/getPlaylists.view" -> respond(if (playlistCover)
+                    """{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"mix","name":"Mix"}]}}}"""
+                    else """{"subsonic-response":{"status":"ok","playlists":{}}}""")
+                "/rest/getPlaylist.view" -> respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"mix","name":"Mix","owner":"fixture","coverArt":"mix-cover","entry":[{"id":"1"}]}}}""")
                 "/rest/getCoverArt.view" -> {
                     requests.incrementAndGet()
                     if (overloaded.get()) {
@@ -134,8 +142,9 @@ class ServerRefreshTest {
             withTimeout(3_000) { controller.state.first { it.libraryReady } }
             val refresh = controller.refreshServer()
             withTimeout(5_000) { entered.await() }
-            assertEquals(ServerRefreshStage.ARTWORK, controller.state.value.serverRefresh?.stage)
-            assertEquals(30, controller.state.value.serverRefresh?.total)
+            assertEquals(if (playlistCover) ServerRefreshStage.PLAYLISTS else ServerRefreshStage.ARTWORK,
+                controller.state.value.serverRefresh?.stage)
+            assertEquals(if (playlistCover) 1 else 30, controller.state.value.serverRefresh?.total)
             // An unrelated UI refresh must not clear the busy state of the server import.
             controller.refresh()
             assertTrue(controller.state.value.loading)
@@ -143,16 +152,22 @@ class ServerRefreshTest {
             release.complete(Unit)
             withTimeout(5_000) { refresh.join() }
             assertTrue(requests.get() <= CONCURRENT_REQUESTS, "An overloaded server must not receive the remaining cover requests")
-            assertEquals(30, controller.state.value.tracks.size)
+            withTimeout(3_000) { controller.state.first { it.tracks.size == 30 } }
+            assertEquals(30, library.tracks().size)
             assertFalse(controller.state.value.loading)
             assertEquals(ServerRefreshStage.FAILED, controller.state.value.serverRefresh?.stage)
-            assertTrue(controller.state.value.serverRefresh?.message.orEmpty().contains("Songs are saved"))
+            assertTrue(controller.state.value.serverRefresh?.message.orEmpty().contains(
+                if (playlistCover) "Songs are saved. Playlists could not finish." else "Songs are saved. Artwork could not finish."))
             assertTrue(controller.state.value.serverRefresh?.message.orEmpty().contains("429"))
             overloaded.set(false)
             withTimeout(5_000) { controller.refreshServer().join() }
             assertEquals(ServerRefreshStage.COMPLETE, controller.state.value.serverRefresh?.stage)
             assertEquals(30, controller.state.value.serverRefresh?.processed)
             assertEquals(30, controller.state.value.artwork.size)
+            if (playlistCover) {
+                val playlist = Playlists(store).all().single()
+                assertNotNull(artwork.path("server-playlist-cover:${playlist.id}"))
+            }
             assertFalse(controller.state.value.loading)
             controller.dismissServerRefresh()
             assertNull(controller.state.value.serverRefresh)
