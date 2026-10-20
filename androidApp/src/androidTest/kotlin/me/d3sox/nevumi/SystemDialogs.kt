@@ -3,6 +3,8 @@ package me.d3sox.nevumi
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertFalse
 
@@ -20,14 +22,17 @@ internal fun waitOnNotRespondingDialog(root: AccessibilityNodeInfo): Boolean {
 
 /**
  * Clicks the first clickable node matching [matches] in a system dialog. Slow emulators can show a permission dialog
- * without moving input focus to it, so this searches every interactive window instead of only the active one.
+ * without moving input focus to it, so this searches every application window. Skip the app tree and system bars
+ * so querying unrelated UI cannot consume the time allowed for the dialog.
  */
 internal suspend fun UiAutomation.clickSystemDialogButton(matches: (AccessibilityNodeInfo) -> Boolean) {
     serviceInfo = serviceInfo.apply { flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
+    val appPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
     fun click(node: AccessibilityNodeInfo?): Boolean {
-        if (node == null) return false
+        if (node == null || node.packageName?.toString() == appPackage) return false
         if (node.isClickable && matches(node)) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         return (0 until node.childCount).any { click(node.getChild(it)) }
     }
-    while (!(windows.map { it.root } + rootInActiveWindow).any(::click)) delay(50)
+    while (!windows.any { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && click(it.root) } &&
+        !click(rootInActiveWindow)) delay(50)
 }

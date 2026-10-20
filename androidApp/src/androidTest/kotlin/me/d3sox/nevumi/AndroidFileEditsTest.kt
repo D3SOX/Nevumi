@@ -13,6 +13,7 @@ import me.d3sox.nevumi.storage.openMusicStore
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -20,6 +21,11 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class AndroidFileEditsTest {
+    @Before
+    fun waitForMediaStore() {
+        InstrumentationRegistry.getInstrumentation().awaitMediaStoreIdle()
+    }
+
     @Test
     fun aRetainedBackupRestoresMusicEvenAfterAndroidRemovesTheTrashedFile() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
