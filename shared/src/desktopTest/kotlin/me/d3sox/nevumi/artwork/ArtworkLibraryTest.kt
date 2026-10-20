@@ -126,9 +126,13 @@ class ArtworkLibraryTest {
         val output = ByteArrayOutputStream()
         ImageIO.write(image, "png", output)
         val png = output.toByteArray()
+        var coverRequests = 0
         val http = HttpClient(MockEngine { request ->
-            if (request.url.encodedPath == "/rest/getCoverArt.view")
+            if (request.url.encodedPath == "/rest/getCoverArt.view") {
+                coverRequests++
                 respond(png, headers = headersOf(HttpHeaders.ContentType, "image/png"))
+            } else if (request.url.encodedPath == "/rest/ping.view")
+                respond("""{"subsonic-response":{"status":"ok","type":"navidrome"}}""", headers = headersOf(HttpHeaders.ContentType, "application/json"))
             else {
                 val songs = if (request.url.parameters["songOffset"] == "0")
                     """[{"id":"song-a","title":"Server Cover","coverArt":"album-cover"}]""" else "[]"
@@ -144,6 +148,8 @@ class ArtworkLibraryTest {
         try {
             withTimeout(3_000) { controller.state.first { !it.loading } }
             controller.connectServer("https://music.example.test", "fixture", "fixture-password").join()
+            controller.refreshServer().join()
+            assertEquals(1, coverRequests, "A refresh must not download a Navidrome cover the library already holds")
             val track = library.tracks().single()
             http.close()
             assertContentEquals(png, ArtworkLibrary(directory.resolve("artwork").toString()).read(track.id))

@@ -32,8 +32,8 @@ class ArtworkLibrary(private val directory: String) {
     }
 
     /**
-     * Like [fetch], but skips tracks that already hold this server cover. Navidrome cover IDs change with the image,
-     * so a library refresh only downloads new or changed covers and an interrupted refresh resumes where it stopped.
+     * Like [fetch], but skips tracks that already hold this server cover. Use it only where cover IDs change with the image,
+     * as on Navidrome, so a library refresh downloads new or changed covers and an interrupted refresh resumes where it stopped.
      */
     suspend fun fetchChanged(trackIds: Collection<String>, client: NavidromeClient, coverId: String) {
         val missing = withContext(Dispatchers.IO) {
