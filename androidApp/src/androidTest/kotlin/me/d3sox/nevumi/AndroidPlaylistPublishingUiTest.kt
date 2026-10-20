@@ -37,6 +37,9 @@ class AndroidPlaylistPublishingUiTest {
                     controller.createPlaylist(name, listOf(tracks[0].id, tracks[1].id, tracks[0].id)).join()
                 }
                 playlistId = controller.state.value.playlists.single { it.name == name }.id
+                compose.onNodeWithText("Library refreshed").assertIsDisplayed()
+                compose.onNodeWithText("Dismiss").performClick()
+                compose.onNodeWithText("Library refreshed").assertDoesNotExist()
                 compose.openLibraryPage("Playlists")
                 compose.onNodeWithText(name).performClick()
                 compose.onNodeWithContentDescription("Playlist options").performClick()
