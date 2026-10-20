@@ -53,7 +53,9 @@ class AndroidSmartPlaylistsUiTest {
             assertTrue(playlist.autoDownload)
             val file = File(requireNotNull(controller.state.value.downloads[night.id]?.path))
             assertTrue(file.length() > 0)
-            compose.onNodeWithText("Night Walk").performScrollTo().assertIsDisplayed()
+            compose.onNode(hasScrollToIndexAction() and hasAnyAncestor(hasTestTag("library-pager")))
+                .performScrollToNode(hasTestTag("track-row:${night.id}"))
+            compose.onNodeWithText("Night Walk").assertIsDisplayed()
         }
     }
 }
