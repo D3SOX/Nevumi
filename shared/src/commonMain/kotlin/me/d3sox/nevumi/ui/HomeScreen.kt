@@ -30,6 +30,7 @@ import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.queue.QueueOrigin
 import kotlin.random.Random
 import me.d3sox.nevumi.settings.HomeSectionId
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun HomeScreen(state: AppState, controller: MusicController, tracks: List<Track>,
@@ -209,11 +210,12 @@ private fun HomeSongs(title: String, songs: List<Track>, state: AppState, contro
 
 @Composable
 private fun HomeCollections(title: String, collections: List<TrackCollection>, tab: LibraryTab, state: AppState, controller: MusicController, navigate: (LibraryTab, String?) -> Unit) {
+    val tabLabel = stringResource(tab.label)
     HomeSection(title, { navigate(tab, null) }) {
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(collections, key = { it.id }) { collection ->
                 HomeCollectionCard(collection.title, if (tab == LibraryTab.ALBUMS) collection.subtitle else countLabel(collection.tracks.size, "song"),
-                    collection.tracks, state, controller, tab, collection.id, tab.icon(), "Open ${tab.label.lowercase().removeSuffix("s")}: ${collection.title}") {
+                    collection.tracks, state, controller, tab, collection.id, tab.icon(), "Open ${tabLabel.lowercase().removeSuffix("s")}: ${collection.title}") {
                     navigate(tab, collection.id)
                 }
             }

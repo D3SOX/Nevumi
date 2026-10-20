@@ -27,6 +27,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.queue.QueueOrigin
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun LibrarySearchScreen(state: AppState, controller: MusicController, bottomSpace: Dp, dismiss: (() -> Unit)?, onSettings: (() -> Unit)? = null) {
@@ -70,7 +71,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
             }
             if (opened == null) LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(SearchType.entries.filter { it != SearchType.SOUNDCLOUD || state.soundCloud != null }, key = { it }) { category ->
-                    FilterChip(type == category, { type = category; selection.clear(); stopTyping() }, label = { Text(category.label) },
+                    FilterChip(type == category, { type = category; selection.clear(); stopTyping() }, label = { Text(stringResource(category.label)) },
                         modifier = Modifier.testTag("search-type:${category.name}"))
                 }
             }
@@ -94,7 +95,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                             val total = if (category == SearchType.SONGS) results.songs.size else collections.size
                             if (total > 0) item(key = "heading:${category.name}") {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("${category.label} · $total", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                                    Text("${stringResource(category.label)} · $total", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                                     if (type == SearchType.ALL) TextButton(onClick = { type = category; stopTyping() }) { Text("See all") }
                                 }
                             }
@@ -103,17 +104,18 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                                     onSelect = { selection.toggle(song.id, songIds) }, contextName = "Search")
                             } else items(if (type == SearchType.ALL) collections.take(10) else collections, key = { "${category.name}:${it.id}" }) { collection ->
                                 val tab = requireNotNull(category.tab)
+                                val categoryLabel = stringResource(category.label)
                                 val entry = CollectionItem(collection.id, collection.title, collection.subtitle,
                                     collection.tracks.firstNotNullOfOrNull { state.artwork[it.id] }, tab.icon(), collection.tracks.size,
                                     trackIds = collection.tracks.map { it.id })
                                 val open = { openedType = category; openedId = collection.id; stopTyping() }
                                 CollectionActionHost(entry, tab, state, controller, open) { menu ->
                                 ListItem(modifier = Modifier.combinedClickable(onClick = open, onLongClick = menu)
-                                    .semantics { contentDescription = "Open ${category.label.lowercase().removeSuffix("s")}: ${collection.title}" },
+                                    .semantics { contentDescription = "Open ${categoryLabel.lowercase().removeSuffix("s")}: ${collection.title}" },
                                     headlineContent = { Text(collection.title) },
                                     supportingContent = { Text(listOf(collection.subtitle, countLabel(collection.tracks.size, "song")).filter { it.isNotBlank() }.joinToString(" · ")) },
                                     leadingContent = { CollectionArtwork(entry.artwork, collection.title, tab.icon(), Modifier.size(48.dp)) },
-                                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${category.label.removeSuffix("s")} options: ${collection.title}", onClick = menu) })
+                                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${categoryLabel.removeSuffix("s")} options: ${collection.title}", onClick = menu) })
                                 }
                             }
                         }

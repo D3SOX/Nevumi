@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun LibraryTabsDialog(initial: List<LibraryTab>, controller: MusicController,
@@ -85,6 +86,7 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     items(section, key = { it.name }) { tab ->
+                        val tabLabel = stringResource(tab.label)
                         val boundary = remember(tab, scroll) { DragBoundary({ slot(tab) ?: 0f },
                             { edge(tab, last = false) ?: Float.NEGATIVE_INFINITY }, { edge(tab, last = true) ?: Float.POSITIVE_INFINITY }) }
                         // Other sections can't be move targets, even when auto-scroll picks the nearest row.
@@ -98,8 +100,8 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                     Checkbox(tab in tabs, enabled = tabs.size > 1 || tab !in tabs, onCheckedChange = { visible ->
                                         bottomTabs = bottomTabs?.minus(tab)
                                         tabs = if (visible) tabs + tab else tabs - tab
-                                    }, modifier = Modifier.semantics { contentDescription = "Show ${tab.label}" })
-                                    Text(tab.label, Modifier.weight(1f))
+                                    }, modifier = Modifier.semantics { contentDescription = "Show $tabLabel" })
+                                    Text(tabLabel, Modifier.weight(1f))
                                     val candidateTabs = if (tab in tabs) tabs else tabs + tab
                                     val configuredBottom = bottomTabs ?: primary.toSet()
                                     val isConfigured = tab in configuredBottom
@@ -111,15 +113,15 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                     }, enabled = isConfigured || canAdd) {
                                         Icon(if (isConfigured) AppIcon.MINUS.vector else AppIcon.PLUS.vector,
                                             when {
-                                                tab in primary -> "Move ${tab.label} to More"
-                                                isConfigured -> "Remove ${tab.label} from bottom navigation"
-                                                else -> "Add ${tab.label} to bottom navigation"
+                                                tab in primary -> "Move $tabLabel to More"
+                                                isConfigured -> "Remove $tabLabel from bottom navigation"
+                                                else -> "Add $tabLabel to bottom navigation"
                                             })
                                     }
                                     if (tab in tabs) {
                                         Box(Modifier.size(48.dp).draggableHandle(dragGestureDetector = boundary,
                                             onDragStarted = { draggingTab = tab }, onDragStopped = { draggingTab = null }).semantics {
-                                            contentDescription = "Reorder tab: ${tab.label}"
+                                            contentDescription = "Reorder tab: $tabLabel"
                                             customActions = listOf(CustomAccessibilityAction("Move up") { move(tab, -1) },
                                                 CustomAccessibilityAction("Move down") { move(tab, 1) })
                                         }, contentAlignment = Alignment.Center) { Icon(AppIcon.DRAG.vector, null) }

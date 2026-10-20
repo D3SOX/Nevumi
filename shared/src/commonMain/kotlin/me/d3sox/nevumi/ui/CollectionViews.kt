@@ -33,6 +33,7 @@ import me.d3sox.nevumi.settings.CollectionSort
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import org.jetbrains.compose.resources.stringResource
 
 internal data class CollectionItem(val id: String, val title: String, val subtitle: String,
     val artwork: String?, val icon: AppIcon, val songCount: Int = 0, val artist: String = "", val year: Int = 0, val recentAt: Long = 0,
@@ -54,6 +55,7 @@ internal fun CollectionLayout.comparator(): Comparator<CollectionItem> {
 @Composable
 internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, state: AppState, controller: MusicController,
     modifier: Modifier = Modifier, total: Int = entries.size, rearranging: Boolean = false, finishRearranging: () -> Unit = {}, open: (String) -> Unit) {
+    val tabLabel = stringResource(tab.label)
     val listScroll = rememberLibraryListState(controller, "collections:${tab.name}:list")
     val gridScroll = rememberLibraryGridState(controller, "collections:${tab.name}:grid")
     val layout = state.preferences.collectionLayout(tab)
@@ -108,7 +110,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
         if (navigationActive && rearranging && it.key == Key.Escape && it.type == KeyEventType.KeyUp) { finishRearranging(); true } else false
     }) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(countLabel(total, tab.label.lowercase().removeSuffix("s"), tab.label.lowercase()), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
+            Text(countLabel(total, tabLabel.lowercase().removeSuffix("s"), tabLabel.lowercase()), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (rearranging) AppIconButton(AppIcon.CHECK, "Finish rearranging", onClick = finishRearranging)
             else Box {
@@ -154,7 +156,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                     headlineContent = { Text(entry.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     leadingContent = { CollectionArtwork(entry.artwork, entry.title, entry.icon, Modifier.size(48.dp)) },
                     supportingContent = { Text(entry.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${tab.label.removeSuffix("s")} options: ${entry.title}", onClick = menu) })
+                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${tabLabel.removeSuffix("s")} options: ${entry.title}", onClick = menu) })
                 }
             }
         } else LazyVerticalGrid(gridCells, Modifier.fillMaxSize(), state = gridScroll,
@@ -167,7 +169,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                         CollectionArtwork(entry.artwork, entry.title, entry.icon, Modifier.fillMaxWidth().aspectRatio(1f))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(entry.title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${tab.label.removeSuffix("s")} options: ${entry.title}", onClick = menu)
+                            if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${tabLabel.removeSuffix("s")} options: ${entry.title}", onClick = menu)
                         }
                         Text(entry.subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 2,
                             overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -184,9 +186,9 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
             CollectionSort.RECENT -> if (entry.recentAt == 0L) "No songs" else formatScrollDate(entry.recentAt)
             CollectionSort.CUSTOM -> "${index + 1}"
         } }
-        if (rearranging) LibraryScrollbar(rearrangeScroll, entries.size, "Scroll ${tab.label.lowercase()}", label = ::indicator)
-        else if (layout.view == CollectionView.LIST) LibraryScrollbar(listScroll, entries.size, "Scroll ${tab.label.lowercase()}", label = ::indicator)
-        else LibraryScrollbar(gridScroll, entries.size, "Scroll ${tab.label.lowercase()}", label = ::indicator)
+        if (rearranging) LibraryScrollbar(rearrangeScroll, entries.size, "Scroll ${tabLabel.lowercase()}", label = ::indicator)
+        else if (layout.view == CollectionView.LIST) LibraryScrollbar(listScroll, entries.size, "Scroll ${tabLabel.lowercase()}", label = ::indicator)
+        else LibraryScrollbar(gridScroll, entries.size, "Scroll ${tabLabel.lowercase()}", label = ::indicator)
         }
     }
 }

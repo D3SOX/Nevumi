@@ -10,6 +10,7 @@ import me.d3sox.nevumi.queue.QueueExportScope
 import me.d3sox.nevumi.queue.QueueSnapshot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun QueueExportDialog(snapshot: QueueSnapshot, title: String, controller: MusicController, dismiss: () -> Unit) {
@@ -40,7 +41,7 @@ internal fun QueueExportDialog(snapshot: QueueSnapshot, title: String, controlle
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it; error = null }, label = { Text("Playlist name") }, singleLine = true, enabled = !busy,
                 modifier = Modifier.fillMaxWidth())
-            SettingChoice("Include", selection, QueueExportScope.entries.map { it to it.label }, card = false) { selection = it; error = null }
+            SettingChoice("Include", selection, QueueExportScope.entries.map { it to stringResource(it.label) }, card = false) { selection = it; error = null }
             Text("${countLabel(ids.size, "song")} · Original order and repeated songs are preserved.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

@@ -21,6 +21,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.queue.*
 import me.d3sox.nevumi.settings.QueueRecoveryMode
+import org.jetbrains.compose.resources.stringResource
 
 internal fun SavedQueueKind.label() = when (this) {
     SavedQueueKind.LIVE -> "Live queues"
@@ -224,7 +225,7 @@ private fun QueueRecoverySettings(state: AppState, controller: MusicController, 
                 controller.updatePreferences { it.copy(queueRecoveryEnabled = enabled) }
             }
             if (settings.queueRecoveryEnabled) {
-                SettingChoice("Capture", settings.queueRecoveryMode, QueueRecoveryMode.entries.map { it to it.label }) { mode ->
+                SettingChoice("Capture", settings.queueRecoveryMode, QueueRecoveryMode.entries.map { it to stringResource(it.label) }) { mode ->
                     controller.updatePreferences { it.copy(queueRecoveryMode = mode) }
                 }
                 if (settings.queueRecoveryMode == QueueRecoveryMode.TIMER) SettingChoice("Every", settings.queueRecoveryIntervalMinutes,

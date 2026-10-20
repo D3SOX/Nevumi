@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.log2
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.stringResource
 
 internal fun QueueAction.label(): String = when (this) {
     QueueAction.PLAY_NEXT -> "Play next"
@@ -137,7 +138,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             if (category == "Library & gestures") {
             SettingsGroup {
             SettingChoice("On launch", settings.startupTab,
-                listOf(null to "Last opened page") + settings.libraryTabs.map { it to it.label }) { tab ->
+                listOf(null to "Last opened page") + settings.libraryTabs.map { it to stringResource(it.label) }) { tab ->
                 controller.updatePreferences { it.copy(startupTab = tab) }
             }
             SettingChoice("Swipe right", settings.swipeRight, trackActions) { action ->

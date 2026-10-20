@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.rememberTextMeasurer
 import me.d3sox.nevumi.library.LibraryTab
+import org.jetbrains.compose.resources.stringResource
 
 internal class LibraryNavigationSizing(private val widths: Map<LibraryTab, Float>, private val moreWidth: Float) {
     fun primary(tabs: List<LibraryTab>, preferred: Set<LibraryTab>?, width: Int): List<LibraryTab> {
@@ -37,12 +38,11 @@ internal fun rememberLibraryNavigationSizing(): LibraryNavigationSizing {
     val padding = with(LocalDensity.current) { 8.dp.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium
-    return remember(measurer, labelStyle, minimumWidth, padding) {
+    val labels = LibraryTab.entries.associateWith { if (it == LibraryTab.RECENT) "Recent" else stringResource(it.label) }
+    return remember(labels, measurer, labelStyle, minimumWidth, padding) {
         fun itemWidth(label: String) = maxOf(minimumWidth,
             label.split(' ').maxOf { measurer.measure(it, labelStyle).size.width } + padding)
-        LibraryNavigationSizing(LibraryTab.entries.associateWith {
-            itemWidth(if (it == LibraryTab.RECENT) "Recent" else it.label)
-        }, itemWidth("More"))
+        LibraryNavigationSizing(labels.mapValues { itemWidth(it.value) }, itemWidth("More"))
     }
 }
 
@@ -63,9 +63,10 @@ internal fun LibraryNavigation(tabs: List<LibraryTab>, current: LibraryTab, modi
     )
     NavigationBar(modifier.fillMaxWidth().onSizeChanged { width = it.width }.testTag("library-navigation"), windowInsets = WindowInsets(0)) {
         primary.forEach { page -> key(page) {
+            val pageLabel = stringResource(page.label)
             NavigationBarItem(selected = current == page, onClick = { select(page) }, colors = itemColors,
-                modifier = Modifier.semantics { contentDescription = page.label },
-                icon = { Icon(page.icon().vector, null) }, label = { Text(if (page == LibraryTab.RECENT) "Recent" else page.label, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) })
+                modifier = Modifier.semantics { contentDescription = pageLabel },
+                icon = { Icon(page.icon().vector, null) }, label = { Text(if (page == LibraryTab.RECENT) "Recent" else pageLabel, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) })
         } }
         if (overflow.isNotEmpty()) NavigationBarItem(selected = current !in primary, onClick = { more = true }, colors = itemColors,
             icon = { Icon(AppIcon.MORE_PAGES.vector, null) }, label = { Text("More") })
@@ -75,7 +76,7 @@ internal fun LibraryNavigation(tabs: List<LibraryTab>, current: LibraryTab, modi
             items(overflow, key = { it }) { page ->
                 ListItem(modifier = Modifier.clickable { more = false; select(page) }.semantics { selected = page == current },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = { Text(page.label) }, leadingContent = { Icon(page.icon().vector, null) },
+                    headlineContent = { Text(stringResource(page.label)) }, leadingContent = { Icon(page.icon().vector, null) },
                     trailingContent = { if (page == current) Icon(AppIcon.CHECK.vector, null) })
             }
         }

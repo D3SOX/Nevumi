@@ -21,6 +21,7 @@ import me.d3sox.nevumi.queue.QueueAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state: AppState, controller: MusicController, back: () -> Unit) {
@@ -45,7 +46,7 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
         Text(collection.title, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         if (collection.subtitle.isNotBlank()) Text(collection.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("${tab.label.removeSuffix("s")} · ${countLabel(ids.size, "song")} · ${playbackTime(collection.tracks.sumOf { it.metadata.durationMs })}",
+        Text("${stringResource(tab.label).removeSuffix("s")} · ${countLabel(ids.size, "song")} · ${playbackTime(collection.tracks.sumOf { it.metadata.durationMs })}",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box {

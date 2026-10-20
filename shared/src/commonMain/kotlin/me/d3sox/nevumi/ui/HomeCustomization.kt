@@ -16,6 +16,7 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.settings.HomeSectionId
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun HomeCustomization(initial: List<HomeSectionId>, controller: MusicController, dismiss: () -> Unit) {
@@ -36,25 +37,26 @@ internal fun HomeCustomization(initial: List<HomeSectionId>, controller: MusicCo
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(sections, key = { it.name }) { section ->
                     ReorderableItem(reorderable, section.name) { _ ->
+                        val sectionLabel = stringResource(section.label)
                         Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
                             Column {
                             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(section.icon().vector, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
-                                Text(section.label, Modifier.weight(1f).padding(horizontal = 12.dp))
+                                Text(sectionLabel, Modifier.weight(1f).padding(horizontal = 12.dp))
                                 Switch(section !in disabled, { enabled ->
                                     disabled = if (enabled) disabled - section else disabled + section
-                                }, Modifier.semantics { contentDescription = "Show ${section.label}" })
+                                }, Modifier.semantics { contentDescription = "Show $sectionLabel" })
                             }
                             Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                AppIconButton(AppIcon.UP, "Move ${section.label} up", enabled = sections.first() != section) {
+                                AppIconButton(AppIcon.UP, "Move $sectionLabel up", enabled = sections.first() != section) {
                                     move(sections.indexOf(section), sections.indexOf(section) - 1)
                                 }
-                                AppIconButton(AppIcon.DOWN, "Move ${section.label} down", enabled = sections.last() != section) {
+                                AppIconButton(AppIcon.DOWN, "Move $sectionLabel down", enabled = sections.last() != section) {
                                     move(sections.indexOf(section), sections.indexOf(section) + 1)
                                 }
                                 Box(Modifier.size(48.dp).draggableHandle().testTag("home-reorder:${section.name}")
-                                    .semantics { contentDescription = "Reorder Home section: ${section.label}" }, contentAlignment = Alignment.Center) {
+                                    .semantics { contentDescription = "Reorder Home section: $sectionLabel" }, contentAlignment = Alignment.Center) {
                                     Icon(AppIcon.DRAG.vector, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
+import org.jetbrains.compose.resources.getString
 
 @OptIn(ExperimentalTestApi::class)
 class PlayingOriginUiTest {
@@ -39,7 +40,7 @@ class PlayingOriginUiTest {
                     onNodeWithTag("mini-player").performClick()
                     onNodeWithContentDescription("Playing context").performClick()
                     onNodeWithTag("track-row:${songs[25].id}").assertIsDisplayed()
-                    kotlin.test.assertEquals(page, controller.state.value.preferences.lastLibraryTab.label)
+                    kotlin.test.assertEquals(page, runBlocking { getString(controller.state.value.preferences.lastLibraryTab.label) })
                     onNode(hasScrollAction()).performScrollToIndex(1)
                     onNodeWithTag("track-row:${songs[0].id}").assertIsDisplayed()
                     openLibraryPage("Recently added")

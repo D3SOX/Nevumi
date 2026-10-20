@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import me.d3sox.nevumi.settings.MusicPreferences
+import org.jetbrains.compose.resources.getString
 
 @OptIn(ExperimentalTestApi::class)
 class LibraryUiTest {
@@ -161,7 +162,7 @@ class LibraryUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.libraryTabs == listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.ARTISTS, LibraryTab.ALBUMS) +
                     LibraryTab.entries.filter { it !in setOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.ARTISTS, LibraryTab.ALBUMS, LibraryTab.ALBUM_ARTISTS, LibraryTab.SEARCH) } }
                 onNodeWithText("Album artists").assertDoesNotExist()
-                assertEquals(listOf("Home", "Songs", "Artists", "Albums"), runBlocking { preferences.load().libraryTabs.take(4).map { it.label } })
+                assertEquals(listOf("Home", "Songs", "Artists", "Albums"), runBlocking { preferences.load().libraryTabs.take(4).map { getString(it.label) } })
                 onNodeWithText("Artists").performClick()
                 onNodeWithText("Artists").assertIsSelected()
             }

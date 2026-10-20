@@ -51,6 +51,7 @@ import androidx.compose.ui.text.input.ImeAction
 import me.d3sox.nevumi.history.listeningStatistics
 import me.d3sox.nevumi.history.ListeningStatistics
 import me.d3sox.nevumi.resources.nevumi_logo
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun LibraryScreens(state: AppState, controller: MusicController, modifier: Modifier = Modifier,
@@ -209,8 +210,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                     TrackCollections(albums, LibraryTab.ALBUMS, state, controller, statistics, handleBack, destination)
                 }
                 LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS -> {
+                    val unknownName = "Unknown ${stringResource(tab.label).lowercase().removeSuffix("s")}"
                     val collections = rememberDerived(tab.name, trackChoices, listOf(tracks)) {
-                        groupedCollections(tracks, tab) { track ->
+                        groupedCollections(tracks, unknownName) { track ->
                             when (tab) {
                                 LibraryTab.ARTISTS -> listOf(track.metadata.artist)
                                 LibraryTab.ALBUM_ARTISTS -> listOf(track.metadata.albumArtist.ifBlank { track.metadata.artist })
@@ -249,11 +251,11 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     if (filters) LibraryFiltersDialog(state, controller) { filters = false }
 }
 
-private fun groupedCollections(tracks: List<Track>, tab: LibraryTab, keys: (Track) -> List<String>): List<TrackCollection> {
+private fun groupedCollections(tracks: List<Track>, unknownName: String, keys: (Track) -> List<String>): List<TrackCollection> {
     val groups = linkedMapOf<String, MutableList<Track>>()
     tracks.forEach { track -> keys(track).forEach { groups.getOrPut(it) { mutableListOf() } += track } }
     return groups.entries.map { it.key.lowercase() to it }.sortedBy { it.first }.map { (_, group) ->
-        TrackCollection(group.key, group.key.ifBlank { "Unknown ${tab.label.lowercase().removeSuffix("s")}" }, group.value)
+        TrackCollection(group.key, group.key.ifBlank { unknownName }, group.value)
     }
 }
 
