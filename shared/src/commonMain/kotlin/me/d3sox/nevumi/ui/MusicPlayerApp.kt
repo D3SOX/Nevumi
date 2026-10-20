@@ -176,6 +176,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                     }
                 }
                 }
+                Box(Modifier.fillMaxSize().imePadding()) {
                 if (page == AppPage.LIBRARY || page == AppPage.SEARCH) {
                     PlayerPanels(state, controller, playerSheet, if (page == AppPage.LIBRARY) navigationHeight else 0.dp,
                         onPairedDevices = { returnToSettings = false; page = AppPage.PAIRED_DEVICES },
@@ -202,6 +203,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                         toast.placeRelative((constraints.maxWidth - toast.width) / 2, (bottom + (64.dp.toPx() - bottom) * topProgress).roundToInt())
                     }
                 }.testTag("action-snackbar").padding(horizontal = 16.dp)) { data -> ActionSnackbar(data, ::openNotice) }
+                }
             }
         }
         }
