@@ -28,6 +28,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
@@ -1010,15 +1012,21 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         }
         if (artwork != null) {
             // Songs of an album share one cover; download it once instead of once per song.
-            val covers = catalogue.groupBy({ (_, song) -> song.coverArt }, { (track, _) -> track.id })
+            val covers = catalogue.mapNotNull { (track, song) -> song.coverArt?.let { it to track.id } }.groupBy({ it.first }, { it.second })
             // Navidrome changes a cover's ID with its image; other Subsonic servers may keep it, so their covers are downloaded every time.
             val versioned = try { client.isNavidrome() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { false }
-            for ((coverId, trackIds) in covers) {
-                if (coverId == null) continue
-                try { if (versioned) artwork.fetchChanged(trackIds, client, coverId) else artwork.fetch(trackIds, client, coverId) }
-                catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { /* A missing cover must not prevent importing its music. */ }
-            }
+            // Songs without a cover come first, so they show one long before a large library finishes refreshing.
+            val present = artwork.paths(covers.values.flatten()).keys
+            val pending = Channel<Pair<String, List<String>>>(Channel.UNLIMITED)
+            covers.entries.sortedBy { (_, trackIds) -> trackIds.all { it in present } }.forEach { pending.trySend(it.key to it.value) }
+            pending.close()
+            coroutineScope { repeat(me.d3sox.nevumi.navidrome.CONCURRENT_REQUESTS) { launch {
+                for ((coverId, trackIds) in pending) {
+                    try { if (versioned) artwork.fetchChanged(trackIds, client, coverId) else artwork.fetch(trackIds, client, coverId) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { /* A missing cover must not prevent importing its music. */ }
+                }
+            } } }
         }
         linkSameFiles()
     }

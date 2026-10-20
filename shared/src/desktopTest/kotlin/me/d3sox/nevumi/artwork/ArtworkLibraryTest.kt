@@ -157,6 +157,38 @@ class ArtworkLibraryTest {
     }
 
     @Test
+    fun aRefreshDownloadsMissingCoversBeforeRefreshingExistingOnes() = runBlocking {
+        val directory = Files.createTempDirectory("missing-artwork-first")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val png = ByteArrayOutputStream().also { ImageIO.write(BufferedImage(8, 8, BufferedImage.TYPE_INT_RGB), "png", it) }.toByteArray()
+        val requests = java.util.Collections.synchronizedList(mutableListOf<String>())
+        // More covers than parallel downloads, so the last song's cover would wait for a free download if it kept its catalogue place.
+        val songs = (1..8).joinToString(",") { """{"id":"song-$it","title":"Song $it","coverArt":"cover-$it"}""" }
+        val http = HttpClient(MockEngine { request ->
+            if (request.url.encodedPath == "/rest/getCoverArt.view") {
+                requests += requireNotNull(request.url.parameters["id"])
+                kotlinx.coroutines.delay(50)
+                respond(png, headers = headersOf(HttpHeaders.ContentType, "image/png"))
+            } else respond("""{"subsonic-response":{"status":"ok","searchResult3":{"song":${if (request.url.parameters["songOffset"] == "0") "[$songs]" else "[]"}}}}""",
+                headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        })
+        val vault = SecretServiceVault("me.d3sox.nevumi.tests.${Uuid.random()}")
+        val library = MusicLibrary(store)
+        val artwork = ArtworkLibrary(directory.resolve("artwork").toString())
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
+            NavidromeConnection(store, http, vault), artwork = artwork)
+        try {
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.connectServer("https://music.example.test", "fixture", "fixture-password").join()
+            artwork.remove(library.tracks().single { it.metadata.title == "Song 8" }.id)
+            requests.clear()
+            controller.refreshServer().join()
+            kotlin.test.assertTrue("cover-8" in requests.take(6), "The missing cover must not wait behind covers the library already holds: $requests")
+            assertEquals(8, requests.size)
+        } finally { controller.close(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun aNavidromePlaylistShowsItsServerCoverAndUploadsCustomCoversToTheServer() = runBlocking {
         val directory = Files.createTempDirectory("server-playlist-artwork")
         val store = openMusicStore(directory.resolve("library.db").toString())

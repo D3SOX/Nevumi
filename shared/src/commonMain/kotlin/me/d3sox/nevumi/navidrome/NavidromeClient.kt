@@ -104,7 +104,7 @@ private suspend fun downloadCallback(block: suspend () -> Unit) {
     catch (error: Exception) { throw DownloadCallbackFailure(error) }
 }
 
-private const val CONCURRENT_REQUESTS = 6
+internal const val CONCURRENT_REQUESTS = 6
 
 /** Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server. */
 class NavidromeClient(
