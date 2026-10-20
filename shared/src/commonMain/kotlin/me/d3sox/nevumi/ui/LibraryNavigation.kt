@@ -55,8 +55,7 @@ internal fun LibraryNavigation(tabs: List<LibraryTab>, current: LibraryTab, modi
         if (overflow.isNotEmpty()) NavigationBarItem(selected = current !in primary, onClick = { more = true }, colors = itemColors,
             icon = { Icon(AppIcon.MORE_PAGES.vector, null) }, label = { Text("More") })
     }
-    if (more && overflow.isNotEmpty()) ModalBottomSheet(onDismissRequest = { more = false }, containerColor = MaterialTheme.colorScheme.surface,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    if (more && overflow.isNotEmpty()) AppBottomSheet(onDismissRequest = { more = false }) {
         LazyColumn(Modifier.fillMaxWidth().testTag("library-more-pages")) {
             items(overflow, key = { it }) { page ->
                 ListItem(modifier = Modifier.clickable { more = false; select(page) }.semantics { selected = page == current },

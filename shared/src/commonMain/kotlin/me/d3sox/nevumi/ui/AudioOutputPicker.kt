@@ -15,8 +15,7 @@ internal fun AudioOutputPicker(controller: MusicController, dismiss: () -> Unit,
     val state = devices?.state?.collectAsState()?.value
     val systemOutput = rememberSystemAudioOutput()
     var failed by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = dismiss, containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.onSurfaceVariant) }) {
+    AppBottomSheet(onDismissRequest = dismiss) {
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Audio output", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
             AppIconButton(AppIcon.CLOSE, "Close audio output", onClick = dismiss)
