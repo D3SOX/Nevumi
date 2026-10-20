@@ -101,11 +101,15 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
                     desiredParameters.compareAndSet(parameters, null)
                 val intention = pendingPlayback.get()?.play
                 val repeat = pendingRepeat.get()
-                mutableStatus.value = playback.copy(playWhenReady = intention ?: playback.playWhenReady,
-                    playing = playback.playing && intention != false,
-                    repeatMode = repeat?.mode ?: playback.repeatMode,
-                    repeatPlays = if (repeat != null) repeat.plays else playback.repeatPlays,
-                    fadingOut = playback.fadingOut?.let { if (intention == false) it.copy(playing = false, playWhenReady = false) else it })
+                // A load can start off the main thread while this reply is being decoded.
+                mutableStatus.update { current ->
+                    if (loadRevision.get() != revision || repeatRevision.get() != repeatVersion) current
+                    else playback.copy(playWhenReady = intention ?: playback.playWhenReady,
+                        playing = playback.playing && intention != false,
+                        repeatMode = repeat?.mode ?: playback.repeatMode,
+                        repeatPlays = if (repeat != null) repeat.plays else playback.repeatPlays,
+                        fadingOut = playback.fadingOut?.let { if (intention == false) it.copy(playing = false, playWhenReady = false) else it })
+                }
             } catch (_: Exception) {
                 mutableStatus.update { it.copy(error = "Could not read audio playback state") }
             }
