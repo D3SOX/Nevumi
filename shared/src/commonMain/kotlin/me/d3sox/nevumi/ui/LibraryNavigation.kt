@@ -18,28 +18,43 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.rememberTextMeasurer
 import me.d3sox.nevumi.library.LibraryTab
 
-@OptIn(ExperimentalMaterial3Api::class)
+internal class LibraryNavigationSizing(private val widths: Map<LibraryTab, Float>, private val moreWidth: Float) {
+    fun primary(tabs: List<LibraryTab>, preferred: Set<LibraryTab>?, width: Int): List<LibraryTab> {
+        val candidates = tabs.filter { preferred == null || it in preferred }
+        val count = (candidates.size downTo 0).firstOrNull { count ->
+            val overflow = count < tabs.size
+            val itemWidth = maxOf(candidates.take(count).maxOfOrNull { widths.getValue(it) } ?: 0f,
+                if (overflow) moreWidth else 0f)
+            width >= (count + if (overflow) 1 else 0) * itemWidth
+        } ?: 0
+        return candidates.take(count)
+    }
+}
+
 @Composable
-internal fun LibraryNavigation(tabs: List<LibraryTab>, current: LibraryTab, modifier: Modifier = Modifier, select: (LibraryTab) -> Unit) {
-    var more by remember { mutableStateOf(false) }
-    var width by remember { mutableIntStateOf(0) }
+internal fun rememberLibraryNavigationSizing(): LibraryNavigationSizing {
     val minimumWidth = with(LocalDensity.current) { (72.dp * fontScale.coerceAtLeast(1f)).toPx() }
     val padding = with(LocalDensity.current) { 8.dp.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium
-    val itemWidths = remember(tabs, measurer, labelStyle, minimumWidth, padding) {
-        tabs.map { page ->
-            val label = if (page == LibraryTab.RECENT) "Recent" else page.label
-            maxOf(minimumWidth, label.split(' ').maxOf { measurer.measure(it, labelStyle).size.width } + padding)
-        }
+    return remember(measurer, labelStyle, minimumWidth, padding) {
+        fun itemWidth(label: String) = maxOf(minimumWidth,
+            label.split(' ').maxOf { measurer.measure(it, labelStyle).size.width } + padding)
+        LibraryNavigationSizing(LibraryTab.entries.associateWith {
+            itemWidth(if (it == LibraryTab.RECENT) "Recent" else it.label)
+        }, itemWidth("More"))
     }
-    val capacity = ((width / minimumWidth).toInt().coerceAtMost(tabs.size).coerceAtLeast(2) downTo 2)
-        .firstOrNull { count ->
-            val directCount = if (tabs.size <= count) tabs.size else count - 1
-            width >= count * (itemWidths.take(directCount).maxOrNull() ?: minimumWidth)
-        } ?: 2
-    val primary = if (tabs.size <= capacity) tabs else tabs.take(capacity - 1)
-    val overflow = tabs.drop(primary.size)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun LibraryNavigation(tabs: List<LibraryTab>, current: LibraryTab, modifier: Modifier = Modifier,
+    bottomNavigationTabs: Set<LibraryTab>? = null, select: (LibraryTab) -> Unit) {
+    var more by remember { mutableStateOf(false) }
+    var width by remember { mutableIntStateOf(0) }
+    val sizing = rememberLibraryNavigationSizing()
+    val primary = sizing.primary(tabs, bottomNavigationTabs, width)
+    val overflow = tabs.filterNot { it in primary }
     LaunchedEffect(overflow.isEmpty()) { if (overflow.isEmpty()) more = false }
     val itemColors = NavigationBarItemDefaults.colors(
         indicatorColor = MaterialTheme.colorScheme.primaryContainer,

@@ -97,9 +97,150 @@ class LibraryNavigationUiTest {
         onNodeWithContentDescription("History").assertIsSelected()
     }
 
-    private fun ComposeUiTest.captureNavigation(name: String) {
+    @Test fun chosenTabsLeaveUnusedSpaceAndOverflowRemainsReachable() = runComposeUiTest {
+        val chosen = setOf(LibraryTab.HOME, LibraryTab.PLAYLISTS)
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(720.dp)) { LibraryNavigation(tabs, LibraryTab.SONGS, bottomNavigationTabs = chosen) {} }
+        } }
+        onAllNodes(navigationItem).assertCountEquals(3)
+        onNodeWithText("More").assertIsSelected().performClick()
+        onNodeWithTag("library-more-pages").performScrollToNode(hasText("Songs"))
+        onNode(hasText("Songs") and hasAnyAncestor(hasTestTag("library-more-pages"))).assertIsDisplayed()
+    }
+
+    @Test fun threeEnabledChosenTabsNeedNoMoreButton() = runComposeUiTest {
+        val chosen = listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.PLAYLISTS)
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(360.dp)) { LibraryNavigation(chosen, LibraryTab.HOME, bottomNavigationTabs = chosen.toSet()) {} }
+        } }
+        onAllNodes(navigationItem).assertCountEquals(3)
+        onNodeWithText("More").assertDoesNotExist()
+        captureNavigation("navigation-three-tabs")
+    }
+
+    @Test fun chosenTabsOverflowOnSmallScreensAndReturnOnWideScreens() = runComposeUiTest {
+        var width by mutableStateOf(360.dp)
+        val chosen = tabs.take(7).toSet()
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(width)) { LibraryNavigation(tabs, tabs[6], bottomNavigationTabs = chosen) {} }
+        } }
+        onAllNodes(navigationItem).assertCountEquals(5)
+        onNodeWithText("More").assertIsSelected()
+        runOnIdle { width = 720.dp }
+        onAllNodes(navigationItem).assertCountEquals(8)
+        onNodeWithContentDescription(tabs[6].label).assertIsSelected()
+    }
+
+    @Test fun customizationMovesTabsBetweenSectionsAndEnforcesCapacity() = runComposeUiTest {
+        var saved: Set<LibraryTab>? = null
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(360.dp)) {
+                LibraryTabsEditor(tabs, null, onSave = { _, bottom -> saved = bottom }, dismiss = {})
+            }
+        } }
+        captureNavigation("library-tabs-customization", "settings-page")
+        onNodeWithContentDescription("Move Home to More").performClick()
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Home to bottom navigation"))
+        onNodeWithContentDescription("Add Home to bottom navigation").assertIsEnabled().performClick()
+        val overflowTab = tabs[4]
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add ${overflowTab.label} to bottom navigation"))
+        onNodeWithContentDescription("Add ${overflowTab.label} to bottom navigation").assertIsNotEnabled()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(tabs.take(4).toSet(), saved)
+    }
+
+    @Test fun disablingAnOverflowTabPreservesAutomaticSizingAfterSave() = runSkikoComposeUiTest(size = Size(2400f, 900f)) {
+        var editing by mutableStateOf(true)
+        var savedTabs by mutableStateOf(tabs)
+        var savedBottomTabs by mutableStateOf<Set<LibraryTab>?>(null)
+        var width by mutableStateOf(360.dp)
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(width)) {
+                if (editing) LibraryTabsEditor(savedTabs, savedBottomTabs, onSave = { enabled, bottom ->
+                    savedTabs = enabled
+                    savedBottomTabs = bottom
+                    editing = false
+                }, dismiss = {})
+                else LibraryNavigation(savedTabs, LibraryTab.HOME, bottomNavigationTabs = savedBottomTabs) {}
+            }
+        } }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Show Recommendations"))
+        onNodeWithContentDescription("Show Recommendations").performClick()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(null, savedBottomTabs)
+        onAllNodes(navigationItem).assertCountEquals(5)
+        runOnIdle { width = 2400.dp }
+        onAllNodes(navigationItem).assertCountEquals(tabs.size - 1)
+        onNodeWithText("More").assertDoesNotExist()
+        onNodeWithContentDescription("Recommendations").assertDoesNotExist()
+        onNodeWithContentDescription("Folders").assertIsDisplayed()
+    }
+
+    @Test fun addingATabPreservesConfiguredTabsThatOverflowOnNarrowScreens() = runComposeUiTest {
+        val enabled = listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.RECOMMENDATIONS, LibraryTab.ALBUMS, LibraryTab.ARTISTS)
+        val configured = enabled.take(4).toSet()
+        var width by mutableStateOf(360.dp)
+        var saved: Set<LibraryTab>? = null
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(width)) {
+                LibraryTabsEditor(enabled, configured, onSave = { _, bottom -> saved = bottom }, dismiss = {})
+            }
+        } }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Artists to bottom navigation"))
+        onNodeWithContentDescription("Add Artists to bottom navigation").assertIsNotEnabled()
+        runOnIdle { width = 720.dp }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Artists to bottom navigation"))
+        onNodeWithContentDescription("Add Artists to bottom navigation").assertIsEnabled().performClick()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(configured + LibraryTab.ARTISTS, saved)
+    }
+
+    @Test fun reenablingATabKeepsAutomaticSizing() = runSkikoComposeUiTest(size = Size(2400f, 900f)) {
+        var width by mutableStateOf(360.dp)
+        var savedTabs = emptyList<LibraryTab>()
+        var savedBottom: Set<LibraryTab>? = emptySet()
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(width)) {
+                LibraryTabsEditor(tabs - LibraryTab.RECOMMENDATIONS, null, onSave = { enabled, bottom ->
+                    savedTabs = enabled
+                    savedBottom = bottom
+                }, dismiss = {})
+            }
+        } }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Show Recommendations"))
+        onNodeWithContentDescription("Show Recommendations").performClick()
+        runOnIdle { width = 2400.dp }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Move Recommendations to More"))
+        onNodeWithContentDescription("Move Recommendations to More").assertIsEnabled()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(tabs.toSet(), savedTabs.toSet())
+        assertEquals(null, savedBottom)
+    }
+
+    @Test fun configuredOverflowTabsCanBeRemovedWithoutDisablingOrReorderingThem() = runComposeUiTest {
+        val enabled = listOf(LibraryTab.HOME, LibraryTab.SONGS, LibraryTab.RECOMMENDATIONS, LibraryTab.ALBUMS, LibraryTab.ARTISTS)
+        val configured = enabled.take(4).toSet()
+        var savedTabs = emptyList<LibraryTab>()
+        var savedBottom: Set<LibraryTab>? = null
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(360.dp)) {
+                LibraryTabsEditor(enabled, configured, onSave = { tabs, bottom ->
+                    savedTabs = tabs
+                    savedBottom = bottom
+                }, dismiss = {})
+            }
+        } }
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Remove Recommendations from bottom navigation"))
+        onNodeWithContentDescription("Remove Recommendations from bottom navigation").assertIsEnabled().performClick()
+        onNodeWithContentDescription("Show Recommendations").assertIsOn()
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(enabled, savedTabs)
+        assertEquals(configured - LibraryTab.RECOMMENDATIONS, savedBottom)
+    }
+
+    private fun ComposeUiTest.captureNavigation(name: String, tag: String = "library-navigation") {
         System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
-            val pixels = onNodeWithTag("library-navigation").captureToImage().toPixelMap()
+            val pixels = onNodeWithTag(tag).captureToImage().toPixelMap()
             val image = java.awt.image.BufferedImage(pixels.width, pixels.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
             for (y in 0 until pixels.height) for (x in 0 until pixels.width) image.setRGB(x, y, pixels[x, y].toArgb())
             val target = java.nio.file.Path.of(directory).also(java.nio.file.Files::createDirectories).resolve("$name.png")
