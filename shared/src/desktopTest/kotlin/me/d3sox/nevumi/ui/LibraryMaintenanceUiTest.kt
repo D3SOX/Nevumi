@@ -105,7 +105,8 @@ class LibraryMaintenanceUiTest {
 
     @Test fun resettingTabsIsADraftUntilSaved() = withLibrary { controller, _ ->
         val custom = listOf(LibraryTab.FAVORITES, LibraryTab.SONGS)
-        runBlocking { controller.updatePreferences { it.copy(libraryTabs = custom) }.join() }
+        val bottomTabs = setOf(LibraryTab.FAVORITES)
+        runBlocking { controller.updatePreferences { it.copy(libraryTabs = custom, bottomNavigationTabs = bottomTabs) }.join() }
         runComposeUiTest {
             setContent { MusicPlayerApp(controller) }
             waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
@@ -116,12 +117,15 @@ class LibraryMaintenanceUiTest {
             onNode(hasScrollToIndexAction()).performScrollToIndex(0)
             onNodeWithContentDescription("Show Home").assertIsOn()
             assertEquals(custom, controller.state.value.preferences.libraryTabs)
+            assertEquals(bottomTabs, controller.state.value.preferences.bottomNavigationTabs)
             onNodeWithText("Cancel").performClick()
             assertEquals(custom, controller.state.value.preferences.libraryTabs)
+            assertEquals(bottomTabs, controller.state.value.preferences.bottomNavigationTabs)
             onNodeWithText("Library tabs").performScrollTo().performClick()
             onNodeWithText("Reset").performClick()
             onNodeWithText("Save tabs").performClick()
             waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.libraryTabs == MusicSettings().libraryTabs }
+            assertEquals(null, controller.state.value.preferences.bottomNavigationTabs)
         }
     }
 
