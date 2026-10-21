@@ -295,8 +295,7 @@ internal fun PlaylistPicker(state: AppState, controller: MusicController, trackI
             selected.toSet(), if (selected.size == 1) "Contains this song" else "Contains selected songs")
     }
     val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
-    ModalBottomSheet(onDismissRequest = dismiss, containerColor = MaterialTheme.colorScheme.surface,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    AppBottomSheet(onDismissRequest = dismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)
             .testTag("playlist-membership-sheet"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Manage playlists", style = MaterialTheme.typography.titleLarge)
