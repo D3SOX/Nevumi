@@ -135,7 +135,9 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         fun openPage(next: AppPage) { returnToSettings = true; page = next }
         Surface(Modifier.fillMaxSize().testTag("app-window")) {
             TrackMenuHost {
-            Box(Modifier.safeDrawingPadding().fillMaxSize()) {
+            // Screens handle IME padding themselves so keyboard dismissal cannot resize page transitions.
+            Box(Modifier.windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+                .fillMaxSize().testTag("app-navigation")) {
                 AnimatedNavigation(page, if (page == AppPage.SETTINGS || !returnToSettings) AppPage.LIBRARY else AppPage.SETTINGS,
                     canGoBack = page != AppPage.LIBRARY, onBack = { if (page == AppPage.SETTINGS) page = AppPage.LIBRARY else closePage() },
                     depth = { when (it) { AppPage.LIBRARY -> 0; AppPage.SETTINGS -> 1; else -> 2 } }) { destination ->
@@ -177,6 +179,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                     }
                 }
                 }
+                Box(Modifier.fillMaxSize().imePadding()) {
                 if (page == AppPage.LIBRARY || page == AppPage.SEARCH) {
                     PlayerPanels(state, controller, playerSheet, if (page == AppPage.LIBRARY) navigationHeight else 0.dp,
                         onPairedDevices = { returnToSettings = false; page = AppPage.PAIRED_DEVICES },
@@ -203,6 +206,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                         toast.placeRelative((constraints.maxWidth - toast.width) / 2, (bottom + (64.dp.toPx() - bottom) * topProgress).roundToInt())
                     }
                 }.testTag("action-snackbar").padding(horizontal = 16.dp)) { data -> ActionSnackbar(data, ::openNotice) }
+                }
             }
         }
         }
