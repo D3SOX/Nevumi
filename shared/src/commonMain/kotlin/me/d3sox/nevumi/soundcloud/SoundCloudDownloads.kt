@@ -243,7 +243,9 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         val musicServerId = musicServerFor(profile, destination)
         var started = false
         val job = edits.withLock {
-            store.list<SoundCloudJob>("soundcloud-jobs").firstOrNull { it.track.url == track.url && it.destination == destination && !it.finished }
+            store.list<SoundCloudJob>("soundcloud-jobs").firstOrNull {
+                it.track.url == track.url && it.destination == destination && it.baseUrl == profile.baseUrl && it.musicServerId == musicServerId && !it.finished
+            }
                 // Asking again to keep the song offline adds that to the running download.
                 ?.let { running -> if (keepOffline && !running.keepOffline) running.copy(keepOffline = true).also { save(it) } else running }
                 ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, musicServerId, SoundCloudJobState.STARTING, keepOffline,
@@ -278,10 +280,13 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     private suspend fun create(job: SoundCloudJob): SoundCloudJob {
         try {
             val created = client(job).createJob(job.track.url, job.format, job.destination)
-            val next = job.copy(remoteId = created.jobId, state = if (created.needsGateLink) SoundCloudJobState.NEEDS_LINK else SoundCloudJobState.WORKING,
-                message = if (created.needsGateLink) "No download link found" else created.warning ?: "Starting", percent = 0,
-                attention = false, fileName = null, location = null, trackId = null, excludedFolder = null)
-            save(next)
+            val next = edits.withLock {
+                // Keep a keep-offline request made while sc-gate-dl was creating the job.
+                val keepOffline = store.read<SoundCloudJob>("soundcloud-job:${job.id}")?.keepOffline ?: job.keepOffline
+                job.copy(remoteId = created.jobId, state = if (created.needsGateLink) SoundCloudJobState.NEEDS_LINK else SoundCloudJobState.WORKING,
+                    message = if (created.needsGateLink) "No download link found" else created.warning ?: "Starting", percent = 0,
+                    attention = false, fileName = null, location = null, trackId = null, excludedFolder = null, keepOffline = keepOffline).also { save(it) }
+            }
             if (next.active) schedule()
             return next
         } catch (cancelled: CancellationException) {

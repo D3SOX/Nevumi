@@ -59,7 +59,8 @@ internal fun SoundCloudSettings(state: AppState, controller: MusicController, di
                             }
                         }
                         ActionButton("Disconnect", AppIcon.UNLINK, enabled = !busy, style = ActionStyle.DESTRUCTIVE) {
-                            controller.disconnectSoundCloud(); editing = true
+                            // A connection made before the deletion finished would be removed by it.
+                            run("Could not disconnect sc-gate-dl") { controller.disconnectSoundCloud().join(); editing = true }
                         }
                     }
                 }
