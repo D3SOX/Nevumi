@@ -128,6 +128,10 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             if (settings.colors == ColorMode.CUSTOM) CustomColorPicker(settings.customColor) { color ->
                 controller.updatePreferences { it.copy(customColor = color) }
             }
+            SettingsSlider("Title scroll speed", AppIcon.TEXT_SCROLL, settings.marqueeSpeed.toFloat(), 0.5f..3f, 9,
+                { value -> "${(value * 100).roundToInt() / 100.0}×" }) { value ->
+                controller.updatePreferences { it.copy(marqueeSpeed = (value * 4).roundToInt() / 4.0) }
+            }
                         }
 }
             if (category == "Library & gestures") {

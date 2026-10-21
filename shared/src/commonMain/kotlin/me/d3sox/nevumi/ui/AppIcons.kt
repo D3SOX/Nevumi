@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.SwipeRight
 import androidx.compose.material.icons.rounded.SwipeLeft
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Tab
+import androidx.compose.material.icons.rounded.TextRotationNone
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.SwapVert
@@ -196,6 +197,7 @@ internal enum class AppIcon(val vector: ImageVector) {
     SPEED(Icons.Rounded.Speed),
     CROSSFADE(Icons.Rounded.CompareArrows),
     PITCH(Icons.Rounded.Tune),
+    TEXT_SCROLL(Icons.Rounded.TextRotationNone),
     STORAGE(Icons.Rounded.Storage),
     WIFI(Icons.Rounded.Wifi),
     NETWORK(Icons.Rounded.Public),
