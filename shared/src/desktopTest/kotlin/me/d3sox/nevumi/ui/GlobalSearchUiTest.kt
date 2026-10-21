@@ -23,6 +23,45 @@ import kotlin.test.*
 
 @OptIn(ExperimentalTestApi::class)
 class GlobalSearchUiTest {
+    @Test fun searchCanMoveToNavigationAndReturnToTheHeader() {
+        val directory = Files.createTempDirectory("search-navigation-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val preferences = MusicPreferences(store)
+        runBlocking { preferences.update { it.copy(libraryTabs = listOf(LibraryTab.HOME, LibraryTab.SEARCH, LibraryTab.SONGS)) } }
+        val library = MusicLibrary(store)
+        val song = runBlocking { library.importTrack(TrackMetadata("Signal song"), TrackSource("search-selection", SourceKind.LOCAL, "/music/signal.flac")) }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
+        try {
+            runSkikoComposeUiTest(size = Size(420f, 900f)) {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                onAllNodesWithContentDescription("Search").assertCountEquals(1)
+                onNodeWithContentDescription("Search").assert(hasAnyAncestor(hasTestTag("library-navigation"))).performClick()
+                onNodeWithContentDescription("Search").assertIsSelected()
+                onNodeWithText("Enter a search term").assertIsDisplayed()
+                onNodeWithContentDescription("Close search").assertDoesNotExist()
+                captureSearch("search-empty")
+                onNodeWithTag("library-navigation").assertIsDisplayed()
+                onNodeWithContentDescription("Search your library").performTextInput("Signal")
+                onNodeWithTag("track-row:${song.id}").performTouchInput { longClick() }
+                onNodeWithText("Select song").performClick()
+                onNodeWithContentDescription("Clear selection").assertIsDisplayed()
+                onNodeWithContentDescription("Songs").performClick()
+                onNodeWithContentDescription("Search").performClick()
+                onNodeWithContentDescription("Search your library").assertTextEquals("Signal")
+                onNodeWithContentDescription("Clear selection").assertDoesNotExist()
+                onNodeWithContentDescription("Songs").performClick()
+                onNodeWithContentDescription("Songs").assertIsSelected()
+                runOnIdle { controller.updatePreferences { it.copy(libraryTabs = listOf(LibraryTab.HOME, LibraryTab.SONGS)) } }
+                waitUntil { onAllNodes(hasContentDescription("Search") and hasAnyAncestor(hasTestTag("library-navigation"))).fetchSemanticsNodes().isEmpty() }
+                onNodeWithContentDescription("Search").performClick()
+                onNodeWithTag("library-search-page").assertIsDisplayed()
+                onNodeWithContentDescription("Close search").performClick()
+                onNodeWithContentDescription("Songs").assertIsSelected()
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun restoringSearchKeepsTheCursorAtTheEndOfTheQuery() {
         val directory = Files.createTempDirectory("search-cursor-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())
@@ -36,7 +75,9 @@ class GlobalSearchUiTest {
                 }
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
                 onNodeWithContentDescription("Search").performClick()
+                onNodeWithText("Enter a search term").assertIsDisplayed()
                 onNodeWithContentDescription("Search your library").performTextInput("Signal")
+                onNodeWithText("Enter a search term").assertDoesNotExist()
                 runOnIdle { visible = false }
                 waitForIdle()
                 runOnIdle { visible = true }
@@ -122,13 +163,7 @@ class GlobalSearchUiTest {
                 onNodeWithContentDescription("Close search").performClick()
                 onNodeWithTag("search-type:PLAYLISTS").performClick()
                 onNodeWithTag("search-type:PLAYLISTS").assertIsSelected()
-                System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
-                    val pixels = onNodeWithTag("app-window").captureToImage().toPixelMap()
-                    val image = java.awt.image.BufferedImage(pixels.width, pixels.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
-                    for (y in 0 until pixels.height) for (x in 0 until pixels.width) image.setRGB(x, y, pixels[x, y].toArgb())
-                    val output = Path.of(directory).also(Files::createDirectories).resolve("global-search.png")
-                    javax.imageio.ImageIO.write(image, "png", output.toFile())
-                }
+                captureSearch("global-search")
                 onNodeWithContentDescription("Playlist options: Arc playlist").performClick()
                 onNodeWithText("Edit playlist").performClick()
                 onNodeWithContentDescription("Playlist title").performTextReplacement("Arc renamed")
@@ -146,5 +181,15 @@ class GlobalSearchUiTest {
                 assertNull(controller.state.value.error)
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    private fun ComposeUiTest.captureSearch(name: String) {
+        System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
+            val pixels = onNodeWithTag("app-window").captureToImage().toPixelMap()
+            val image = java.awt.image.BufferedImage(pixels.width, pixels.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+            for (y in 0 until pixels.height) for (x in 0 until pixels.width) image.setRGB(x, y, pixels[x, y].toArgb())
+            val output = Path.of(directory).also(Files::createDirectories).resolve("$name.png")
+            javax.imageio.ImageIO.write(image, "png", output.toFile())
+        }
     }
 }

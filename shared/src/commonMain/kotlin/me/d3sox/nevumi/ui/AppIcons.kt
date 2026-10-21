@@ -246,6 +246,7 @@ internal fun me.d3sox.nevumi.queue.QueueAction.icon() = when (this) {
 }
 
 internal fun me.d3sox.nevumi.library.LibraryTab.icon() = when (this) {
+    me.d3sox.nevumi.library.LibraryTab.SEARCH -> AppIcon.SEARCH
     me.d3sox.nevumi.library.LibraryTab.HOME -> AppIcon.HOME
     me.d3sox.nevumi.library.LibraryTab.SONGS -> AppIcon.MUSIC
     me.d3sox.nevumi.library.LibraryTab.ALBUMS -> AppIcon.ALBUM
