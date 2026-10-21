@@ -264,6 +264,37 @@ class SoundCloudDownloadsTest {
         } finally { downloads.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test
+    fun aRestartedServerDownloadGoesToTheServersConnectedNowAndKeepsAnOfflineRequest() = runBlocking {
+        val directory = Files.createTempDirectory("soundcloud-restart")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val http = HttpClient(MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/capabilities" -> respond("""{"search":true,"libraryDestination":true}""", headers = json)
+                "/api/job" -> respond("""{"jobId":"${request.url.host}","started":true,"needsHypedditUrl":false}""", headers = json)
+                "/api/job/first.test/cancel" -> respond("""{"success":true}""", headers = json)
+                else -> if (request.url.encodedPath.startsWith("/api/job/")) respond(status("downloading", 40), headers = json)
+                    else respond("""{"error":"Unexpected request"}""", HttpStatusCode.NotFound, json)
+            }
+        })
+        val credentials = ServerCredentials("fixture", "fixture-password")
+        var music = NavidromeClient(http, "http://music-one.test", credentials)
+        val downloads = SoundCloudDownloads(store, http, server = { music }, pollMillis = 10)
+        try {
+            downloads.connect("http://first.test", ScGateFormat.MP3_320, SoundCloudDestination.SERVER)
+            val job = downloads.download(track, ScGateDestination.LIBRARY)
+            assertTrue(downloads.download(track, ScGateDestination.LIBRARY, keepOffline = true).keepOffline)
+            downloads.cancel(job.id)
+            downloads.connect("http://second.test", ScGateFormat.MP3_320, SoundCloudDestination.SERVER)
+            music = NavidromeClient(http, "http://music-two.test", credentials)
+            downloads.retry(job.id)
+            val restarted = assertNotNull(downloads.jobs.first { it?.singleOrNull()?.remoteId == "second.test" }).single()
+            assertEquals("http://second.test", restarted.baseUrl)
+            assertEquals(music.serverId, restarted.musicServerId)
+            assertTrue(restarted.keepOffline)
+        } finally { downloads.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
     /** Saves [track] to a mocked music server of [type]; returns the imported song and whether Navidrome's own API was used. */
     private suspend fun importFromServer(type: String): Pair<Track, Boolean> = coroutineScope {
         val subsonic = { body: String -> """{"subsonic-response":{"status":"ok","version":"1.16.1","type":"$type"$body}}""" }

@@ -240,13 +240,12 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     /** Starts a download, or returns the one already running for the same song and destination. */
     suspend fun download(track: SoundCloudTrack, destination: ScGateDestination, keepOffline: Boolean = false): SoundCloudJob {
         val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads in Settings first" }
-        if (destination == ScGateDestination.CLIENT) check(deviceDownloads) { "Downloads to this device are unavailable" }
-        else check(profile.libraryDestination) { "Your sc-gate-dl server has no music library folder" }
-        val musicServerId = if (destination == ScGateDestination.LIBRARY)
-            requireNotNull(server()) { "Connect to your music server first" }.serverId else null
+        val musicServerId = musicServerFor(profile, destination)
         var started = false
         val job = edits.withLock {
             store.list<SoundCloudJob>("soundcloud-jobs").firstOrNull { it.track.url == track.url && it.destination == destination && !it.finished }
+                // Asking again to keep the song offline adds that to the running download.
+                ?.let { running -> if (keepOffline && !running.keepOffline) running.copy(keepOffline = true).also { save(it) } else running }
                 ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, musicServerId, SoundCloudJobState.STARTING, keepOffline,
                     message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds()).also {
                     creating.update { ids -> ids + it.id }
@@ -257,11 +256,20 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         return if (started) create(job) else job
     }
 
+    /** Checks that [destination] is available and returns the music server a library download goes into. */
+    private suspend fun musicServerFor(profile: SoundCloudProfile, destination: ScGateDestination): String? =
+        if (destination == ScGateDestination.CLIENT) { check(deviceDownloads) { "Downloads to this device are unavailable" }; null }
+        else {
+            check(profile.libraryDestination) { "Your sc-gate-dl server has no music library folder" }
+            requireNotNull(server()) { "Connect to your music server first" }.serverId
+        }
+
     /** Restarts [job] as a new server job when nobody changed it meanwhile. */
     private suspend fun restart(job: SoundCloudJob) {
         // A new server job goes to the server configured now, which may differ from the one that lost or canceled it.
         val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads in Settings first" }
-        val restarted = job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null, baseUrl = profile.baseUrl)
+        val restarted = job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null, baseUrl = profile.baseUrl,
+            musicServerId = musicServerFor(profile, job.destination))
         creating.update { it + job.id }
         if (replace(job, restarted)) create(restarted) else creating.update { it - job.id }
     }
