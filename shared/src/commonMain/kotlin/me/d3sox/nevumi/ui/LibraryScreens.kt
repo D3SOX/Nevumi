@@ -89,6 +89,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             handledDestination = destination.revision
         }
     }
+    // The keyboard covers the navigation, so pages that pad for the keyboard must not leave room for it too.
+    var navigationHeight by remember { mutableStateOf(0.dp) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
     var sourceMenu by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var filters by remember { mutableStateOf(false) }
@@ -172,7 +175,8 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             }
         }
         // Like Namida, slide the incoming tab over the stationary previous page, skipping intermediate tabs.
-        transition.AnimatedContent(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("library-pager"), transitionSpec = {
+        transition.AnimatedContent(Modifier.weight(1f).fillMaxWidth().clipToBounds()
+            .consumeWindowInsets(PaddingValues(bottom = navigationHeight)).testTag("library-pager"), transitionSpec = {
             val direction = if (tabs.indexOf(targetState) > tabs.indexOf(initialState))
                 AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right
             (slideIntoContainer(direction, tween(400, easing = CubicBezierEasing(0f, 0f, 0.58f, 1f))) togetherWith
@@ -227,7 +231,10 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         }
         }
         Spacer(Modifier.height(miniPlayerSpace))
-        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged { onNavigationHeight(it.height) }, state.preferences.bottomNavigationTabs) { page ->
+        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged {
+            navigationHeight = with(density) { it.height.toDp() }
+            onNavigationHeight(it.height)
+        }, state.preferences.bottomNavigationTabs) { page ->
             if (selectedTab != LibraryTab.SEARCH) searchReturnTab = selectedTab
             selection.clear(); selectedTab = page
         }
