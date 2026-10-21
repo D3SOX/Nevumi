@@ -24,6 +24,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
         </activity>
         <service android:name=".PlaybackService" android:exported="true"
             android:foregroundServiceType="mediaPlayback">
@@ -37,5 +40,18 @@
         <service android:name=".SoundCloudDownloadService" android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
         <receiver android:name=".DownloadActionReceiver" android:exported="false" />
+        <receiver android:name=".NowPlayingWidgetReceiver" android:exported="true" android:label="@string/now_playing_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/now_playing_widget" />
+        </receiver>
+        <service android:name=".NowPlayingTileService" android:exported="true" android:icon="@drawable/ic_launcher_monochrome"
+            android:label="@string/app_name" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+        </service>
     </application>
 </manifest>

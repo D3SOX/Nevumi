@@ -35,6 +35,8 @@ import me.d3sox.nevumi.soundcloud.SoundCloudDownloads
 class MusicApplication : Application() {
     lateinit var controller: MusicController
         private set
+    lateinit var widgetUpdates: NowPlayingWidgetUpdates
+        private set
     lateinit var store: MusicStore
         private set
     lateinit var offline: OfflineMusic
@@ -93,6 +95,7 @@ class MusicApplication : Application() {
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges, AndroidAudioAccess(this)::contentId), credentials, "Android phone",
                 networkAccess = localNetworkRequests::request),
             tunnel = tunnel, networkAccess = localNetworkRequests::request, soundCloud = soundCloud)
+        widgetUpdates = NowPlayingWidgetUpdates(this, controller).apply { resume() }
     }
 
     suspend fun refreshOfflinePlaylists() {
