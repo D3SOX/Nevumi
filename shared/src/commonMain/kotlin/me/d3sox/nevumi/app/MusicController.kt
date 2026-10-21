@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.app
 
 import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.LocalFolderRules
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ListeningHistory
 import me.d3sox.nevumi.history.Scrobbling
@@ -612,10 +613,13 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     /** Adds the folder a finished download was saved to, so the song joins the library. */
     fun addSoundCloudFolder(id: String) = action(serialized = false) {
         val folder = requireNotNull(state.value.soundCloudJobs.firstOrNull { it.id == id }?.excludedFolder) { "The download is no longer listed" }
-        val current = state.value.preferences
-        // Without include folders every folder is allowed, and adding one would hide the rest of the library.
-        updateLocalFolders(if (current.includeFolders.isEmpty()) emptyList() else current.includeFolders + folder,
-            current.excludeFolders - folder).join()
+        val rules = LocalFolderRules(state.value.preferences.includeFolders, state.value.preferences.excludeFolders)
+        // Lifting an excluded parent would add everything else in it too, so leave that choice to Local music settings.
+        rules.excludedParent(folder)?.let { parent ->
+            error("Your excluded folder $parent also hides $folder. Remove that exclusion in Settings › Local music to add your downloads.")
+        }
+        val allowed = rules.allowing(folder)
+        updateLocalFolders(allowed.included, allowed.excluded).join()
         soundCloudService().importSaved(id)
     }
     suspend fun disconnectServerFiles() {
