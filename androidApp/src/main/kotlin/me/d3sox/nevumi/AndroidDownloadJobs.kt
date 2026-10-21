@@ -81,7 +81,7 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
             val foregroundTransfer = Build.VERSION.SDK_INT >= 34 && userInitiated
             if (Build.VERSION.SDK_INT >= 34) builder.setUserInitiated(foregroundTransfer)
             val pending = scheduler.getPendingJob(SOUNDCLOUD_JOB)
-            if (pending != null && (!foregroundTransfer || pending.isUserInitiated)) return@withLock
+            if (pending != null && (Build.VERSION.SDK_INT < 34 || !userInitiated || pending.isUserInitiated)) return@withLock
             if (scheduler.schedule(builder.build()) == JobScheduler.RESULT_FAILURE && foregroundTransfer)
                 scheduler.schedule(builder.setUserInitiated(false).build())
         } }
