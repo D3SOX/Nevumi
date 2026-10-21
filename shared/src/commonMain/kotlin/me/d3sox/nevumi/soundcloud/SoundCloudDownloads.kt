@@ -314,7 +314,8 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         if (job.fileName != null && job.state == SoundCloudJobState.FAILED) {
             val next = if (job.destination == ScGateDestination.LIBRARY || job.location != null) SoundCloudJobState.IMPORTING else SoundCloudJobState.TRANSFERRING
             replace(job, job.copy(state = next, message = "Retrying"))
-        } else if (remoteId == null || job.state == SoundCloudJobState.LOST) {
+        // A canceled job may have stopped before it had a download link, which sc-gate-dl cannot resume.
+        } else if (remoteId == null || job.state == SoundCloudJobState.LOST || job.state == SoundCloudJobState.CANCELLED) {
             restart(job)
             return
         } else {

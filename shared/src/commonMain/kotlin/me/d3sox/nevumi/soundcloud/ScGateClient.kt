@@ -68,6 +68,8 @@ class ScGateException(message: String, val status: Int? = null) : Exception(mess
 private suspend fun <T> scGateRequest(block: suspend () -> T): T = try { block() }
     catch (cancelled: CancellationException) { throw cancelled }
     catch (rejected: ScGateException) { throw rejected }
+    // kotlinx.serialization reports malformed or unexpected JSON as IllegalArgumentException.
+    catch (_: IllegalArgumentException) { throw ScGateException("sc-gate-dl sent a response Nevumi could not read. Update sc-gate-dl.") }
     catch (_: Exception) { throw ScGateException("Could not reach sc-gate-dl. Check its address and your connection.") }
 
 /** Talks to an sc-gate-dl server; requests go to [requestUrl], such as a tunnel relay. */
@@ -86,13 +88,13 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
         val body = json(HttpMethod.Get, "/api/search", timeoutMillis = 60_000) {
             parameter("q", query.trim()); parameter("offset", offset); parameter("limit", limit)
         }
-        return SoundCloudPage((body["results"] as? JsonArray).orEmpty().map { item ->
+        return scGateRequest { SoundCloudPage((body["results"] as? JsonArray).orEmpty().map { item ->
             val result = item.jsonObject
             SoundCloudTrack(requireNotNull(result.long("id")), result.text("url").orEmpty(), result.text("title").orEmpty(),
                 result.text("artist").orEmpty(), result.text("uploader").orEmpty(), result.text("artworkUrl"),
                 result.long("durationMs") ?: 0, result.text("genre")?.takeIf { it.isNotBlank() },
                 when (result.text("source")) { "download" -> SoundCloudSource.DOWNLOAD; "gate" -> SoundCloudSource.GATE; else -> SoundCloudSource.NONE })
-        }, body["nextOffset"]?.jsonPrimitive?.intOrNull)
+        }, body["nextOffset"]?.jsonPrimitive?.intOrNull) }
     }
 
     /** A search result's cover, which sc-gate-dl fetches so this device never contacts SoundCloud. */
@@ -109,11 +111,11 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
             body.boolean("needsHypedditUrl"), body.text("soundcloudDownloadWarning"))
     }
 
-    suspend fun job(id: String): ScGateJobStatus {
+    suspend fun job(id: String): ScGateJobStatus = scGateRequest {
         val body = json(HttpMethod.Get, "/api/job/$id")
         val progress = body["progress"]?.jsonObject ?: JsonObject(emptyMap())
         val metadata = body["defaultMetadata"] as? JsonObject
-        return ScGateJobStatus(progress.text("stage").orEmpty(), progress.text("message").orEmpty(), progress["percent"]?.jsonPrimitive?.intOrNull ?: 0,
+        ScGateJobStatus(progress.text("stage").orEmpty(), progress.text("message").orEmpty(), progress["percent"]?.jsonPrimitive?.intOrNull ?: 0,
             progress.long("downloadBytes"), progress.long("totalBytes"), progress.boolean("requiresAttention"),
             (progress["bandcampAlbumTracks"] as? JsonArray).orEmpty().map {
                 BandcampChoice(it.jsonObject.text("title").orEmpty(), it.jsonObject.text("url").orEmpty())

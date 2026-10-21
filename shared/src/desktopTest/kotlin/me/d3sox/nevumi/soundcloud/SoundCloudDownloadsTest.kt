@@ -150,6 +150,34 @@ class SoundCloudDownloadsTest {
     }
 
     @Test
+    fun retryingACanceledJobStartsANewOne() = runBlocking {
+        var created = 0
+        var resumed = false
+        val fixture = fixture { request ->
+            when (request.url.encodedPath) {
+                "/api/job" -> respond("""{"jobId":"j${++created}","started":${created > 1},"needsHypedditUrl":${created == 1}}""", headers = json)
+                "/api/job/j1/cancel" -> respond("""{"success":true}""", headers = json)
+                // sc-gate-dl cannot resume a job that was canceled before it had a download link.
+                "/api/job/j1/start" -> { resumed = true; respond("""{"error":"Gate URL not set"}""", HttpStatusCode.BadRequest, json) }
+                "/api/job/j2" -> respond(status("ready", 100, outputFilename = "Artist - Night Drive.mp3"), headers = json)
+                "/api/job/j2/file" -> respond(audio, headers = headersOf(HttpHeaders.ContentType, "audio/mpeg"))
+                else -> null
+            }
+        }
+        try {
+            fixture.downloads.connect("http://sc-gate.test", ScGateFormat.MP3_320, SoundCloudDestination.ASK)
+            val job = fixture.downloads.download(track, ScGateDestination.CLIENT)
+            assertEquals(SoundCloudJobState.NEEDS_LINK, job.state)
+            fixture.downloads.cancel(job.id)
+            val completed = async(start = CoroutineStart.UNDISPATCHED) { fixture.downloads.completed.first() }
+            fixture.downloads.retry(job.id)
+            val finished = withTimeout(10_000) { completed.await() }
+            assertEquals("j2", finished.remoteId)
+            assertEquals(false, resumed)
+        } finally { fixture.close() }
+    }
+
+    @Test
     fun aSongOutsideTheIncludedFoldersJoinsTheLibraryOnceItsFolderIsAdded() = runBlocking {
         val fixture = fixture { request ->
             when (request.url.encodedPath) {

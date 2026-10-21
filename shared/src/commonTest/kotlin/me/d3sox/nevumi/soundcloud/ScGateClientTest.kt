@@ -47,6 +47,15 @@ class ScGateClientTest {
     }
 
     @Test
+    fun aMalformedResponseIsReportedAsAnScGateError() = runBlocking {
+        val http = HttpClient(MockEngine { respond("""{"results":["not an object"],"nextOffset":null}""", headers = json) })
+        try {
+            val error = assertFailsWith<ScGateException> { ScGateClient(http, "http://homelan:3000").search("night") }
+            assertTrue("could not read" in error.message.orEmpty())
+        } finally { http.close() }
+    }
+
+    @Test
     fun artworkComesThroughTheServer() = runBlocking {
         val cover = byteArrayOf(1, 2, 3)
         val http = HttpClient(MockEngine { request ->

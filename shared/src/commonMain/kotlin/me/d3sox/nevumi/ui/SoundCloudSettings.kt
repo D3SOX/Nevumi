@@ -86,6 +86,10 @@ internal fun SoundCloudSettings(state: AppState, controller: MusicController, di
         })
     }, dismissButton = {
         if (connected != null) PageAction("Change server", AppIcon.EDIT, enabled = !busy, secondary = true, onClick = { editing = true })
-        else PageAction("Cancel", AppIcon.CLOSE, enabled = !busy, secondary = true, onClick = { if (profile != null) editing = false else dismiss() })
+        else PageAction("Cancel", AppIcon.CLOSE, enabled = !busy, secondary = true, onClick = {
+            // Choices made while changing servers are only saved by connecting.
+            if (profile != null) { address = profile.baseUrl; format = profile.format; destination = profile.destination; editing = false }
+            else dismiss()
+        })
     })
 }
