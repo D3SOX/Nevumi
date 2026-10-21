@@ -5,7 +5,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
@@ -14,9 +19,18 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.downloads.DownloadStatus
 import me.d3sox.nevumi.downloads.DownloadProblem
+import me.d3sox.nevumi.soundcloud.SoundCloudJobState
 
 @Composable
 internal fun DownloadsScreen(state: AppState, controller: MusicController, dismiss: () -> Unit) {
+    var tagging by rememberSaveable { mutableStateOf<String?>(null) }
+    val taggedJob = tagging?.let { id -> state.soundCloudJobs.firstOrNull { it.id == id && it.state == SoundCloudJobState.NEEDS_TAGS } }
+    if (taggedJob != null) {
+        SoundCloudTagEditor(taggedJob, controller) { tagging = null }
+        return
+    }
+    // The tags were written or the download was canceled elsewhere, so a later wait for tags does not open the editor by itself.
+    if (tagging != null) SideEffect { tagging = null }
     val paused = state.preferences.downloadsPaused
     val playlists = state.playlistDownloads
     val batch = state.downloadBatch
@@ -59,7 +73,9 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
                 if (state.soundCloudJobs.isNotEmpty()) {
                     if (playlists.isNotEmpty()) item { HorizontalDivider() }
                     item(key = "soundcloud-heading") { Text("SoundCloud", style = MaterialTheme.typography.titleSmall) }
-                    items(state.soundCloudJobs, key = { "soundcloud:${it.id}" }) { job -> SoundCloudJobItem(job, controller) }
+                    items(state.soundCloudJobs, key = { "soundcloud:${it.id}" }) { job ->
+                        SoundCloudJobItem(job, controller, viewer = state.soundCloud?.browserViewUrl != null) { tagging = job.id }
+                    }
                 }
                 if ((playlists.isNotEmpty() || state.soundCloudJobs.isNotEmpty()) && state.downloads.isNotEmpty()) item { HorizontalDivider() }
                 items(downloads, key = { it.trackId }) { record ->

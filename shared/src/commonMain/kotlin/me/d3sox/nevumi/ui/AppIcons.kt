@@ -115,6 +115,12 @@ import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.Web
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.Sell
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -236,7 +242,13 @@ internal enum class AppIcon(val vector: ImageVector) {
     LIST(Icons.Rounded.ViewList),
     MORE_PAGES(Icons.Rounded.MoreHoriz),
     SELECT_ALL(Icons.Rounded.SelectAll),
-    SELECT_NONE(Icons.Rounded.Deselect);
+    SELECT_NONE(Icons.Rounded.Deselect),
+    BROWSER(Icons.Rounded.Web),
+    VISIBLE(Icons.Rounded.Visibility),
+    HIDDEN(Icons.Rounded.VisibilityOff),
+    COPY(Icons.Rounded.ContentCopy),
+    CLEAN_UP(Icons.Rounded.AutoFixHigh),
+    TAGS(Icons.Rounded.Sell);
 }
 
 internal fun me.d3sox.nevumi.queue.QueueAction.icon() = when (this) {

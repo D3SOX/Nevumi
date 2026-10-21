@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.soundcloud.ScGateBrowser
 import me.d3sox.nevumi.soundcloud.ScGateFormat
 import me.d3sox.nevumi.soundcloud.SoundCloudDestination
 
@@ -20,6 +21,8 @@ internal fun SoundCloudSettings(state: AppState, controller: MusicController, di
     var address by remember { mutableStateOf(profile?.baseUrl.orEmpty()) }
     var format by remember { mutableStateOf(profile?.format ?: ScGateFormat.MP3_320) }
     var destination by remember { mutableStateOf(profile?.destination ?: SoundCloudDestination.ASK) }
+    var browser by remember { mutableStateOf(profile?.browser) }
+    var reviewTags by remember { mutableStateOf(profile?.reviewTags ?: false) }
     var editing by remember { mutableStateOf(profile == null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -35,9 +38,16 @@ internal fun SoundCloudSettings(state: AppState, controller: MusicController, di
         }
     }
     val connected = profile.takeUnless { editing }
-    fun choose(nextFormat: ScGateFormat, nextDestination: SoundCloudDestination) {
-        format = nextFormat; destination = nextDestination
-        if (connected != null) controller.updateSoundCloud(nextFormat, nextDestination)
+    // Servers set up before Nevumi knew sc-gate-dl's browser modes list them once asked again.
+    LaunchedEffect(connected?.baseUrl) {
+        if (connected != null && connected.browserModes.isEmpty()) try { controller.testSoundCloud(connected.baseUrl) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Test connection reports the problem. */ }
+    }
+    fun choose(nextFormat: ScGateFormat = format, nextDestination: SoundCloudDestination = destination, nextBrowser: ScGateBrowser? = browser,
+        nextReviewTags: Boolean = reviewTags) {
+        format = nextFormat; destination = nextDestination; browser = nextBrowser; reviewTags = nextReviewTags
+        if (connected != null) controller.updateSoundCloud(nextFormat, nextDestination, nextBrowser, nextReviewTags)
     }
     SettingsScreen(onDismissRequest = { if (!busy) dismiss() }, title = { Text("SoundCloud") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -68,13 +78,24 @@ internal fun SoundCloudSettings(state: AppState, controller: MusicController, di
                 leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true, enabled = !busy,
                 supportingText = { Text("The API address, such as http://homelan:3000") })
             SettingsGroup {
-                SettingChoice("Download format", format, ScGateFormat.entries.map { it to it.label }) { choose(it, destination) }
+                SettingChoice("Download format", format, ScGateFormat.entries.map { it to it.label }) { choose(nextFormat = it) }
                 SettingChoice("When you pick a song", destination, listOf(SoundCloudDestination.ASK to "Ask every time",
                     SoundCloudDestination.SERVER to "Save to music server", SoundCloudDestination.DEVICE to "Save to this device")) {
-                    choose(format, it)
+                    choose(nextDestination = it)
                 }
+                // The modes are known once sc-gate-dl is connected.
+                connected?.browserModes?.takeIf { it.isNotEmpty() }?.let { modes ->
+                    SettingChoice("Gate browser", browser, listOf<Pair<ScGateBrowser?, String>>(null to "sc-gate-dl's default") +
+                        modes.map { it to it.label }) { choose(nextBrowser = it) }
+                }
+                SettingsToggle("Check tags before saving", AppIcon.TAGS, "Downloads wait for you to edit their tags, like in sc-gate-dl's web interface",
+                    reviewTags) { choose(nextReviewTags = it) }
             }
             if (format == ScGateFormat.FLAC) Text("FLAC keeps lossless sources lossless. A lossy source does not gain quality in a FLAC file.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (connected != null && browser == ScGateBrowser.HEADED) Text(if (connected.browserViewUrl != null)
+                "Watch sc-gate-dl's browser from a download and take over when a gate needs you."
+                else "Set BROWSER_VIEW_URL on sc-gate-dl to watch its browser from Nevumi.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             checked?.let { Text(it) }
@@ -83,13 +104,20 @@ internal fun SoundCloudSettings(state: AppState, controller: MusicController, di
     }, confirmButton = {
         if (connected != null) PageAction("Done", enabled = !busy, onClick = dismiss)
         else PageAction("Connect", AppIcon.CLOUD, enabled = !busy && address.isNotBlank(), onClick = {
-            run("sc-gate-dl is unavailable") { controller.connectSoundCloud(address, format, destination); editing = false }
+            run("sc-gate-dl is unavailable") {
+                // The new server may not offer the chosen browser mode.
+                browser = controller.connectSoundCloud(address, format, destination, browser, reviewTags).browser
+                editing = false
+            }
         })
     }, dismissButton = {
         if (connected != null) PageAction("Change server", AppIcon.EDIT, enabled = !busy, secondary = true, onClick = { editing = true })
         else PageAction("Cancel", AppIcon.CLOSE, enabled = !busy, secondary = true, onClick = {
             // Choices made while changing servers are only saved by connecting.
-            if (profile != null) { address = profile.baseUrl; format = profile.format; destination = profile.destination; editing = false }
+            if (profile != null) {
+                address = profile.baseUrl; format = profile.format; destination = profile.destination; browser = profile.browser
+                reviewTags = profile.reviewTags; editing = false
+            }
             else dismiss()
         })
     })

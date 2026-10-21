@@ -68,7 +68,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             if (controller.tunnel != null) add(SettingResult("Tunnel", "Tunnel", AppIcon.TAILSCALE,
                 "tailscale headscale tailnet vpn control server auth key sign in navidrome sftp"))
             if (controller.soundCloudAvailable) add(SettingResult("SoundCloud", "SoundCloud", AppIcon.CLOUD,
-                "sc-gate-dl search download gate hypeddit server address format mp3 flac"))
+                "sc-gate-dl search download gate hypeddit server address format mp3 flac browser headless visible novnc tags metadata"))
             if (controller.pairedDevices != null) add(SettingResult("Paired devices", "Paired devices", AppIcon.DEVICES, "sync phone desktop pairing"))
             add(SettingResult("Saved queues", "Saved queues", AppIcon.QUEUE, "restore delete playback"))
             add(SettingResult("About Nevumi", "About Nevumi", AppIcon.INFO, "license agpl source code version github"))

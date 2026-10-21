@@ -344,6 +344,11 @@ internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T,
         is ThemeMode -> when (value) { ThemeMode.SYSTEM -> AppIcon.SYSTEM_THEME; ThemeMode.LIGHT -> AppIcon.LIGHT_THEME; ThemeMode.DARK -> AppIcon.DARK_THEME }
         is ColorMode -> when (value) { ColorMode.SYSTEM -> AppIcon.SYSTEM_COLORS; ColorMode.ARTWORK -> AppIcon.ARTWORK_COLORS; ColorMode.CUSTOM -> AppIcon.THEME }
         is me.d3sox.nevumi.soundcloud.ScGateFormat -> AppIcon.MUSIC
+        is me.d3sox.nevumi.soundcloud.ScGateBrowser -> when (value) {
+            me.d3sox.nevumi.soundcloud.ScGateBrowser.HEADLESS -> AppIcon.CODE
+            me.d3sox.nevumi.soundcloud.ScGateBrowser.XVFB -> AppIcon.HIDDEN
+            me.d3sox.nevumi.soundcloud.ScGateBrowser.HEADED -> AppIcon.VISIBLE
+        }
         is me.d3sox.nevumi.soundcloud.SoundCloudDestination -> when (value) {
             me.d3sox.nevumi.soundcloud.SoundCloudDestination.ASK -> AppIcon.CONFIRM
             me.d3sox.nevumi.soundcloud.SoundCloudDestination.SERVER -> AppIcon.SERVER
@@ -357,7 +362,7 @@ internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T,
         is Long -> when (label) { "Playback cache", "Undo backup storage" -> AppIcon.STORAGE; "Music library" -> AppIcon.FOLDER; else -> null }
         is Int -> if (label == "Keep undo backups") AppIcon.YEAR else null
         is me.d3sox.nevumi.history.ListeningPeriod -> if (value.days == null) AppIcon.HISTORY else AppIcon.YEAR
-        null -> when (label) { "On launch" -> AppIcon.HISTORY; "Music sources" -> AppIcon.LIBRARY; else -> null }
+        null -> when (label) { "On launch" -> AppIcon.HISTORY; "Music sources" -> AppIcon.LIBRARY; "Gate browser" -> AppIcon.SERVER; else -> null }
         is String -> if (label == "Statistics grouping") when (value) {
             "Songs" -> AppIcon.MUSIC; "Artists" -> AppIcon.ARTIST; "Albums" -> AppIcon.ALBUM; "Genres" -> AppIcon.GENRE; else -> null
         } else if (label == "SSH authentication") { if (value == "SSH private key") AppIcon.KEY else AppIcon.LOCK } else null

@@ -4,18 +4,21 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ScGateClientTest {
@@ -78,6 +81,8 @@ class ScGateClientTest {
             assertEquals("https://soundcloud.com/a/night", body.getValue("soundcloudUrl").jsonPrimitive.content)
             assertEquals("flac", body.getValue("outputFormat").jsonPrimitive.content)
             assertEquals("library", body.getValue("destination").jsonPrimitive.content)
+            // Without a choice sc-gate-dl uses its own browser mode and finishes the job unattended.
+            assertFalse("browserMode" in body || "reviewTags" in body)
             respond("""{"jobId":"job-1","track":null,"hypedditUrl":null,"needsHypedditUrl":true,"started":false,
                 "soundcloudDownloadWarning":null,"destination":"library"}""", headers = json)
         })
@@ -104,7 +109,7 @@ class ScGateClientTest {
             val waiting = client.job("waiting")
             assertEquals("waiting_bandcamp_track", waiting.stage)
             assertEquals(listOf(BandcampChoice("One", "https://x.bandcamp.com/track/one")), waiting.bandcampTracks)
-            assertEquals("X", waiting.artist)
+            assertEquals(ScGateTags("One", "X"), waiting.tags)
             assertEquals("X - One.mp3", client.job("ready").libraryFilename)
             val missing = assertFailsWith<ScGateException> { client.job("forgotten") }
             assertEquals(404, missing.status)
@@ -119,10 +124,91 @@ class ScGateClientTest {
             respond("""{"browserModes":["headless"],"browserViewUrl":null}""", headers = json)
         })
         try {
-            assertEquals(ScGateCapabilities(search = false, libraryDestination = false), ScGateClient(http, "http://old.test").capabilities())
+            assertEquals(ScGateCapabilities(search = false, libraryDestination = false, listOf(ScGateBrowser.HEADLESS)),
+                ScGateClient(http, "http://old.test").capabilities())
             val failure = assertFailsWith<ScGateException> { ScGateClient(http, "http://down.test").capabilities() }
             assertEquals(null, failure.status)
             assertTrue(failure.message.orEmpty().contains("Could not reach sc-gate-dl"))
+        } finally { http.close() }
+    }
+
+    @Test
+    fun capabilitiesListTheBrowserModesAndTheBrowserViewer() = runBlocking {
+        val http = HttpClient(MockEngine {
+            respond("""{"browserModes":["headless","xvfb","headed","future"],"browserViewUrl":"http://{host}:6080/vnc.html?autoconnect=true",
+                "search":true,"libraryDestination":true}""", headers = json)
+        })
+        try {
+            assertEquals(ScGateCapabilities(search = true, libraryDestination = true, ScGateBrowser.entries, "http://{host}:6080/vnc.html?autoconnect=true"),
+                ScGateClient(http, "http://homelan:3000").capabilities())
+        } finally { http.close() }
+    }
+
+    @Test
+    fun aJobCanRunInAVisibleBrowserAndWaitForItsTags() = runBlocking {
+        val http = HttpClient(MockEngine { request ->
+            val body = Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
+            assertEquals("headed", body.getValue("browserMode").jsonPrimitive.content)
+            assertTrue(body.getValue("reviewTags").jsonPrimitive.boolean)
+            respond("""{"jobId":"job-1","started":true,"needsHypedditUrl":false}""", headers = json)
+        })
+        try {
+            val created = ScGateClient(http, "http://homelan:3000").createJob("https://soundcloud.com/a/night", ScGateFormat.MP3_320,
+                ScGateDestination.LIBRARY, ScGateBrowser.HEADED, reviewTags = true)
+            assertTrue(created.started)
+        } finally { http.close() }
+    }
+
+    @Test
+    fun downloadProgressIsRoundedAndAWaitingJobOffersItsTags() = runBlocking {
+        val http = HttpClient(MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/job/downloading" -> respond("""{"progress":{"stage":"downloading","message":"Downloading","percent":42.6,
+                    "downloadBytes":426,"totalBytes":1000,"browserActive":true},"browserMode":"headed"}""", headers = json)
+                else -> respond("""{"progress":{"stage":"waiting_metadata","message":"Check the tags","percent":100},
+                    "defaultMetadata":{"title":"Night [FREE DL]","artist":"A","album":"","genre":"House"},
+                    "existingMetadata":{"title":"Night","artist":"Artist A","album":"Night EP"},"hasArtwork":true,"hasExistingArtwork":true,
+                    "sourceIsLossless":false,"downloadFilename":"Night [123].m4a","outputFormat":"flac","browserMode":"headless"}""", headers = json)
+            }
+        })
+        try {
+            val client = ScGateClient(http, "http://homelan:3000")
+            val downloading = client.job("downloading")
+            assertEquals(43, downloading.percent)
+            assertTrue(downloading.browserActive)
+            assertEquals(ScGateBrowser.HEADED, downloading.browserMode)
+            val waiting = client.job("waiting")
+            assertEquals(ScGateTags("Night [FREE DL]", "A", "", "House"), waiting.tags)
+            assertEquals(ScGateTags("Night", "Artist A", "Night EP"), waiting.fileTags)
+            assertTrue(waiting.hasCover && waiting.hasFileCover && waiting.lossySource)
+            assertEquals("Night [123].m4a", waiting.downloadFilename)
+        } finally { http.close() }
+    }
+
+    @Test
+    fun checkedTagsAreSentAsJsonOrWithAChosenCoverAsAForm() = runBlocking {
+        val bodies = mutableListOf<Pair<ContentType?, String>>()
+        val http = HttpClient(MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals("/api/job/job-1/metadata", request.url.encodedPath)
+            bodies += request.body.contentType to request.body.toByteArray().decodeToString()
+            respond("""{"success":true}""", headers = json)
+        })
+        try {
+            val client = ScGateClient(http, "http://homelan:3000")
+            val tags = ScGateTags("Night", "Artist A", "Night EP", "House")
+            client.finishTags("job-1", ScGateTagChoice(tags, keepFileTags = true, artistTitleName = false, cover = byteArrayOf(1)))
+            client.finishTags("job-1", ScGateTagChoice(tags, cover = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(),
+                13, 10, 26, 10, 0)))
+            val (jsonType, jsonBody) = bodies[0]
+            assertTrue(jsonType?.match(ContentType.Application.Json) == true)
+            val sent = Json.parseToJsonElement(jsonBody).jsonObject
+            assertEquals("Night EP", sent.getValue("album").jsonPrimitive.content)
+            assertTrue(sent.getValue("preserveMetadata").jsonPrimitive.boolean)
+            assertFalse(sent.getValue("nameAsArtistTitle").jsonPrimitive.boolean)
+            val (formType, form) = bodies[1]
+            assertTrue(formType?.match(ContentType.MultiPart.FormData) == true)
+            assertTrue("name=\"title\"" in form && "Artist A" in form && "filename=\"cover.png\"" in form && "image/png" in form, form)
         } finally { http.close() }
     }
 

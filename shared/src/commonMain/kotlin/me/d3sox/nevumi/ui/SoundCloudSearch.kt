@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -150,8 +152,9 @@ internal fun SearchSoundCloudRow(query: String, open: () -> Unit) {
 internal fun SoundCloudDownloadSheet(track: SoundCloudTrack, state: AppState, controller: MusicController, dismiss: () -> Unit) {
     val browser = LocalUriHandler.current
     val server = state.soundCloud?.libraryDestination == true && state.server != null
+    var reviewTags by remember { mutableStateOf(state.soundCloud?.reviewTags == true) }
     fun download(destination: ScGateDestination, keepOffline: Boolean = false) {
-        controller.downloadFromSoundCloud(track, destination, keepOffline)
+        controller.downloadFromSoundCloud(track, destination, keepOffline, reviewTags)
         dismiss()
     }
     AppBottomSheet(onDismissRequest = dismiss) {
@@ -162,6 +165,9 @@ internal fun SoundCloudDownloadSheet(track: SoundCloudTrack, state: AppState, co
             }
             AppIconButton(AppIcon.CLOSE, "Close download options", onClick = dismiss)
         }
+        ListItem(headlineContent = { Text("Check tags before saving") }, supportingContent = { Text("Edit the tags once the file is downloaded") },
+            leadingContent = { Icon(AppIcon.TAGS.vector, null) }, trailingContent = { Switch(reviewTags, null) },
+            modifier = Modifier.toggleable(reviewTags, role = Role.Switch) { reviewTags = it })
         if (server) {
             ListItem(headlineContent = { Text("Save to music server") }, supportingContent = { Text("Add it to your library on ${state.server.baseUrl.substringAfter("://")}") },
                 leadingContent = { Icon(AppIcon.SERVER.vector, null) }, modifier = Modifier.clickable { download(ScGateDestination.LIBRARY) })
