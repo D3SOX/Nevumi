@@ -28,9 +28,10 @@ import kotlin.math.sign
 
 internal class ActionSnackbarVisuals(val notice: ActionNotice) : SnackbarVisuals {
     override val message = notice.message
-    override val actionLabel = if (notice.undo != null) { if (notice.isRedo) "Redo" else "Undo" } else notice.destination?.openLabel()
+    override val actionLabel = if (notice.undo != null) { if (notice.isRedo) "Redo" else "Undo" }
+        else if (notice.play != null) "Play" else notice.destination?.openLabel()
     override val withDismissAction = false
-    override val duration = if (notice.undo != null) SnackbarDuration.Long else SnackbarDuration.Short
+    override val duration = if (notice.undo != null || notice.play != null) SnackbarDuration.Long else SnackbarDuration.Short
 }
 
 internal fun ActionDestination.openLabel() = when (this) {

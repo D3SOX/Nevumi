@@ -54,9 +54,13 @@ fun main(arguments: Array<String>) {
         catch (error: Exception) { System.err.println("NetworkManager monitoring unavailable: ${error.message}"); null }
     val offline = OfflineMusic(store, library, connection::client, File(directory, "audio").path, playlists,
         downloadNetwork?.state ?: MutableStateFlow(DownloadNetwork()))
+    val localFiles = WatchingLocalFiles(library, artwork)
+    val soundCloud = me.d3sox.nevumi.soundcloud.SoundCloudDownloads(store, http, tunnel::scGateUrl,
+        me.d3sox.nevumi.soundcloud.DirectorySoundCloudFiles("${me.d3sox.nevumi.soundcloud.musicDirectory()}/SoundCloud"), localFiles,
+        connection::client, serverChanges, artwork, offline)
     val controller = MusicController(library, PlaybackQueue(store),
         CrossfadePlaybackEngine { MpvPlaybackEngine(option("--audio-output") ?: "auto") },
-        connection, WatchingLocalFiles(library, artwork), offline, playlists, preferences = MusicPreferences(store), artwork = artwork,
+        connection, localFiles, offline, playlists, preferences = MusicPreferences(store), artwork = artwork,
         serverChanges = serverChanges,
         fileEdits = LocalFileEdits(store, library, File(directory, "file-edits").path, localSources = LocalFiles(library, artwork)),
         listeningHistory = ListeningHistory(store, library),
@@ -66,7 +70,7 @@ fun main(arguments: Array<String>) {
             File(directory, "server-edits").path, changes = serverChanges, artwork = artwork, tailscale = tunnel::serverFiles),
         pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
             me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges), credentials, "Linux desktop"),
-        tunnel = tunnel)
+        tunnel = tunnel, soundCloud = soundCloud)
     option("--import-folder")?.let { controller.importSource(it) }
     val mediaSession = try { LinuxMediaSession(controller) }
         catch (error: Exception) { System.err.println("Desktop media controls unavailable: ${error.message}"); null }

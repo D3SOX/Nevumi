@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.app
 
 import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.LocalFolderRules
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ListeningHistory
 import me.d3sox.nevumi.history.Scrobbling
@@ -79,6 +80,7 @@ import me.d3sox.nevumi.artwork.ArtworkLibrary
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import kotlinx.coroutines.flow.debounce
 import me.d3sox.nevumi.sftp.*
+import me.d3sox.nevumi.soundcloud.*
 
 data class AppState(
     val tracks: List<Track> = emptyList(),
@@ -108,13 +110,15 @@ data class AppState(
     val serverRefresh: ServerRefreshProgress? = null,
     val lastLocalScanCount: Int? = null,
     val sleepTimerEndsAt: Long? = null,
+    val soundCloud: SoundCloudProfile? = null,
+    val soundCloudJobs: List<SoundCloudJob> = emptyList(),
 )
 
 data class PlaybackSeek(val entryId: String, val positionMs: Long)
 data class PlaybackConfirmation(val title: String, val play: () -> kotlinx.coroutines.Job)
 enum class ActionDestination { QUEUE, FAVORITES, PLAYLISTS, DOWNLOADS }
 data class ActionNotice(val message: String, val destination: ActionDestination? = null, val undo: (() -> kotlinx.coroutines.Job)? = null,
-    val isRedo: Boolean = false)
+    val isRedo: Boolean = false, val play: (() -> kotlinx.coroutines.Job)? = null)
 enum class FileEditTarget { LOCAL, SERVER }
 
 @OptIn(kotlinx.coroutines.FlowPreview::class)
@@ -134,7 +138,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private val serverFiles: me.d3sox.nevumi.sftp.ServerFiles? = null,
     val pairedDevices: me.d3sox.nevumi.sync.PairedDevices? = null,
     val tunnel: me.d3sox.nevumi.tunnel.Tunnel? = null,
-    private val networkAccess: suspend (String) -> Unit = {}) : AutoCloseable {
+    private val networkAccess: suspend (String) -> Unit = {},
+    private val soundCloud: SoundCloudDownloads? = null) : AutoCloseable {
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.Default)
     private var sleepTimer: kotlinx.coroutines.Job? = null
@@ -215,6 +220,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val serverPlaylistPublishingAvailable: Boolean get() = serverChanges != null
     val serverFilesAvailable: Boolean get() = serverFiles != null
     val scrobblingAvailable: Boolean get() = scrobbling != null
+    val soundCloudAvailable: Boolean get() = soundCloud != null
+    val soundCloudDeviceDownloads: Boolean get() = soundCloud?.deviceDownloads == true
     fun canEditServerTrack(track: Track): Boolean {
         val configuration = state.value.sftp ?: return false
         return serverFiles != null && configuration.serverId == state.value.server?.serverId && track.sources.any {
@@ -328,6 +335,36 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                     }
                     mutableState.update { it.copy(savedQueues = saved, queue = snapshot) }
                 }
+            }
+        } }
+        soundCloud?.let { service -> scope.launch {
+            service.profile.collect { profile -> mutableState.update { it.copy(soundCloud = profile) } }
+        } }
+        soundCloud?.let { service -> scope.launch {
+            var previous: Map<String, SoundCloudJobState>? = null
+            service.jobs.collect { jobs ->
+                if (jobs == null) return@collect
+                mutableState.update { it.copy(soundCloudJobs = jobs) }
+                // Jobs stored before this launch only announce later changes.
+                val before = previous
+                previous = jobs.associate { it.id to it.state }
+                if (before != null) jobs.filter { before[it.id] != it.state }.forEach { job ->
+                    when (job.state) {
+                        SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK ->
+                            mutableNotices.tryEmit(ActionNotice("“${job.track.title}” needs your choice to continue", ActionDestination.DOWNLOADS))
+                        SoundCloudJobState.FAILED, SoundCloudJobState.LOST ->
+                            mutableNotices.tryEmit(ActionNotice("“${job.track.title}” could not be downloaded", ActionDestination.DOWNLOADS))
+                        else -> Unit
+                    }
+                }
+            }
+        } }
+        soundCloud?.let { service -> scope.launch {
+            service.completed.collect { job ->
+                val trackId = job.trackId
+                mutableNotices.tryEmit(if (trackId != null) ActionNotice("Added “${job.track.title}”",
+                    play = { playTrack(trackId, listOf(trackId), 0, "SoundCloud") })
+                    else ActionNotice("Saved “${job.track.title}” outside your library folders", ActionDestination.DOWNLOADS))
             }
         } }
         serverChanges?.start()
@@ -514,7 +551,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     suspend fun updateTunnelRoutes(routes: me.d3sox.nevumi.tunnel.TunnelRoutes) {
         val tunnel = requireNotNull(tunnel) { "Tailscale is unavailable" }
         val previous = tunnel.routes()
-        if (routes.musicServer && !previous.musicServer || routes.serverFiles && !previous.serverFiles) reachAccess("", tunneled = true)
+        if (routes.musicServer && !previous.musicServer || routes.serverFiles && !previous.serverFiles || routes.scGate && !previous.scGate)
+            reachAccess("", tunneled = true)
         tunnel.updateRoutes(routes)
         reloadStreams()
     }
@@ -532,6 +570,58 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     /** Tailscale learns peer endpoints internally. A blank address asks for local network access, so peers on the LAN connect directly. */
     private suspend fun reachAccess(address: String, tunneled: Boolean) = networkAccess(if (tunneled) "" else address)
     private suspend fun musicServerAccess(address: String) = reachAccess(address, tunnel?.routes()?.musicServer == true)
+    private suspend fun scGateAccess(address: String) = reachAccess(address, tunnel?.routes()?.scGate == true)
+    private fun soundCloudService() = requireNotNull(soundCloud) { "SoundCloud downloads are unavailable" }
+    suspend fun testSoundCloud(address: String): ScGateCapabilities {
+        scGateAccess(address)
+        return soundCloudService().capabilities(address)
+    }
+    suspend fun connectSoundCloud(address: String, format: ScGateFormat, destination: SoundCloudDestination) {
+        scGateAccess(address)
+        soundCloudService().connect(address, format, destination)
+    }
+    fun updateSoundCloud(format: ScGateFormat, destination: SoundCloudDestination) = action(serialized = false) {
+        soundCloudService().update(format, destination)
+    }
+    suspend fun disconnectSoundCloud() = soundCloudService().disconnect()
+    suspend fun searchSoundCloud(query: String, offset: Int = 0): SoundCloudPage {
+        state.value.soundCloud?.let { scGateAccess(it.baseUrl) }
+        return soundCloudService().search(query, offset)
+    }
+    suspend fun soundCloudArtwork(url: String): ByteArray = soundCloudService().artwork(url)
+    /** [keepOffline] also downloads a song added to the music server for offline playback. */
+    fun downloadFromSoundCloud(track: SoundCloudTrack, destination: ScGateDestination, keepOffline: Boolean = false) = action(serialized = false) {
+        val service = soundCloudService()
+        val profile = requireNotNull(state.value.soundCloud) { "Set up SoundCloud downloads in Settings first" }
+        if (destination == ScGateDestination.LIBRARY) requireNotNull(state.value.server) { "Connect to your music server first" }
+        scGateAccess(profile.baseUrl)
+        confirm("Downloading “${track.title}”", ActionDestination.DOWNLOADS)
+        service.download(track, destination, keepOffline)
+    }
+    fun submitSoundCloudLink(id: String, link: String) = action(serialized = false) {
+        state.value.soundCloud?.let { scGateAccess(it.baseUrl) }
+        soundCloudService().submitLink(id, link)
+    }
+    fun useSoundCloudStream(id: String) = action(serialized = false) { soundCloudService().useStream(id) }
+    fun chooseSoundCloudTrack(id: String, url: String) = action(serialized = false) { soundCloudService().chooseBandcampTrack(id, url) }
+    fun cancelSoundCloudDownload(id: String) = action(serialized = false) { soundCloudService().cancel(id) }
+    fun retrySoundCloudDownload(id: String) = action(serialized = false) {
+        state.value.soundCloud?.let { scGateAccess(it.baseUrl) }
+        soundCloudService().retry(id)
+    }
+    fun dismissSoundCloudDownload(id: String) = action(serialized = false) { soundCloudService().dismiss(id) }
+    /** Adds the folder a finished download was saved to, so the song joins the library. */
+    fun addSoundCloudFolder(id: String) = action(serialized = false) {
+        val folder = requireNotNull(state.value.soundCloudJobs.firstOrNull { it.id == id }?.excludedFolder) { "The download is no longer listed" }
+        val rules = LocalFolderRules(state.value.preferences.includeFolders, state.value.preferences.excludeFolders)
+        // Lifting an excluded parent would add everything else in it too, so leave that choice to Local music settings.
+        rules.excludedParent(folder)?.let { parent ->
+            error("Your excluded folder $parent also hides $folder. Remove that exclusion in Settings › Local music to add your downloads.")
+        }
+        val allowed = rules.allowing(folder)
+        updateLocalFolders(allowed.included, allowed.excluded).join()
+        soundCloudService().importSaved(id)
+    }
     suspend fun disconnectServerFiles() {
         requireNotNull(serverFiles) { "Server file editing is unavailable" }.disconnect()
         operations.withLock { refresh() }
@@ -1529,7 +1619,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         queue.snapshot().currentEntryId?.let { mutableSeeks.emit(PlaybackSeek(it, positionMs)) }
     }
 
-    override fun close() { scope.cancel(); pairedDevices?.close(); serverChanges?.close(); offline?.close(); scrobbling?.close(); engine.close() }
+    override fun close() { scope.cancel(); pairedDevices?.close(); serverChanges?.close(); offline?.close(); scrobbling?.close(); soundCloud?.close(); engine.close() }
 
     suspend fun closeAndJoin() = withContext(NonCancellable) {
         shutdown.withLock {
@@ -1541,6 +1631,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 serverChanges?.closeAndJoin()
                 offline?.closeAndJoin()
                 scrobbling?.closeAndJoin()
+                soundCloud?.closeAndJoin()
                 supervisor.join()
                 val playback = engine.status.value
                 listeningHistory?.record(playback.copy(playing = false), enabled = state.value.preferences.recordListeningHistory)

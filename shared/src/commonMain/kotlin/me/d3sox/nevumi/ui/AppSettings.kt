@@ -34,7 +34,7 @@ internal fun QueueAction.label(): String = when (this) {
 @Composable
 internal fun AppSettings(state: AppState, controller: MusicController, server: () -> Unit, downloads: () -> Unit,
     savedQueues: () -> Unit, audioEffects: () -> Unit, serverFiles: () -> Unit, tunnel: () -> Unit, pairedDevices: () -> Unit,
-    fileRecovery: () -> Unit, categoryState: MutableState<String?>, onAddMusic: (() -> Unit)? = null, folderPicker: FolderPicker, dismiss: () -> Unit) {
+    fileRecovery: () -> Unit, soundCloud: () -> Unit = {}, categoryState: MutableState<String?>, onAddMusic: (() -> Unit)? = null, folderPicker: FolderPicker, dismiss: () -> Unit) {
     val settings = state.preferences
     val trackActions = remember { TrackAction.entries.filter { it != TrackAction.PLAY }.map { it to it.label() } }
     var category by categoryState
@@ -92,6 +92,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 "Audio effects" -> audioEffects()
                 "Server files (SFTP)" -> serverFiles()
                 "Tunnel" -> tunnel()
+                "SoundCloud" -> soundCloud()
                 "Paired devices" -> pairedDevices()
                 "Saved queues" -> savedQueues()
                 "About Nevumi" -> about = true
@@ -296,6 +297,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 SettingsLink("Downloads & cache", AppIcon.DOWNLOAD, "Offline music, network and source priority") { categoryState.value = "Downloads & cache" }
                 SettingsLink("Music server", AppIcon.SERVER, "Navidrome and Subsonic", server)
                 if (controller.tunnel != null) SettingsLink("Tunnel", AppIcon.TAILSCALE, "Reach your servers through Tailscale", tunnel)
+                if (controller.soundCloudAvailable) SettingsLink("SoundCloud", AppIcon.CLOUD, "Search and download songs through sc-gate-dl", soundCloud)
                 SettingsLink("Listening & scrobbling", AppIcon.HISTORY, "History, statistics and connected services") { categoryState.value = "Listening & scrobbling" }
                 }
                 SettingsGroup {
@@ -341,6 +343,12 @@ internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T,
         is me.d3sox.nevumi.library.LibraryTab -> value.icon()
         is ThemeMode -> when (value) { ThemeMode.SYSTEM -> AppIcon.SYSTEM_THEME; ThemeMode.LIGHT -> AppIcon.LIGHT_THEME; ThemeMode.DARK -> AppIcon.DARK_THEME }
         is ColorMode -> when (value) { ColorMode.SYSTEM -> AppIcon.SYSTEM_COLORS; ColorMode.ARTWORK -> AppIcon.ARTWORK_COLORS; ColorMode.CUSTOM -> AppIcon.THEME }
+        is me.d3sox.nevumi.soundcloud.ScGateFormat -> AppIcon.MUSIC
+        is me.d3sox.nevumi.soundcloud.SoundCloudDestination -> when (value) {
+            me.d3sox.nevumi.soundcloud.SoundCloudDestination.ASK -> AppIcon.CONFIRM
+            me.d3sox.nevumi.soundcloud.SoundCloudDestination.SERVER -> AppIcon.SERVER
+            me.d3sox.nevumi.soundcloud.SoundCloudDestination.DEVICE -> AppIcon.DEVICE
+        }
         is SourceKind -> when (value) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD }
         is List<*> -> when (value.firstOrNull()) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD; else -> null }
         is Boolean -> if (label == "Download network") { if (value) AppIcon.NETWORK else AppIcon.WIFI }

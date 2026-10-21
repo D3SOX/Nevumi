@@ -9,7 +9,7 @@ data class TailscaleStatus(val state: String, val authUrl: String? = null, val n
 
 /** Connections that go through Tailscale on this device. Not synced, because each device signs in separately. */
 @Serializable
-data class TunnelRoutes(val musicServer: Boolean = false, val serverFiles: Boolean = false)
+data class TunnelRoutes(val musicServer: Boolean = false, val serverFiles: Boolean = false, val scGate: Boolean = false)
 
 interface Tunnel {
     suspend fun status(): TailscaleStatus

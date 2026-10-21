@@ -29,6 +29,8 @@ import me.d3sox.nevumi.sftp.SftpConnection
 import me.d3sox.nevumi.tunnel.Tailscale
 import me.d3sox.nevumi.tunnel.TailscaleTunnel
 import android.net.Uri
+import me.d3sox.nevumi.soundcloud.MediaStoreSoundCloudFiles
+import me.d3sox.nevumi.soundcloud.SoundCloudDownloads
 
 class MusicApplication : Application() {
     lateinit var controller: MusicController
@@ -36,6 +38,8 @@ class MusicApplication : Application() {
     lateinit var store: MusicStore
         private set
     lateinit var offline: OfflineMusic
+        private set
+    lateinit var soundCloud: SoundCloudDownloads
         private set
     private lateinit var http: HttpClient
     private lateinit var downloadNetwork: AndroidDownloadNetwork
@@ -73,9 +77,12 @@ class MusicApplication : Application() {
         downloadJobs = AndroidDownloadJobs(this, MusicPreferences(store), playlists) { mutableDownloadNotifications.tryEmit(Unit) }
         offline = OfflineMusic(store, library, connection::client, File(filesDir, "audio").path, playlists, downloadNetwork.state,
             sourceAccessible = AndroidAudioAccess(this)::available, scheduleWork = downloadJobs::schedule)
+        val localSources = AndroidLocalSources(this, library, artwork)
+        soundCloud = SoundCloudDownloads(store, http, tunnel::scGateUrl, MediaStoreSoundCloudFiles(this), localSources,
+            connection::client, serverChanges, artwork, offline, scheduleWork = downloadJobs::scheduleSoundCloud)
         controller = MusicController(library, PlaybackQueue(store),
             AndroidPlaybackEngine(this, PlaybackService::class.java),
-            connection, AndroidLocalSources(this, library, artwork), offline, playlists, AndroidAudioAccess(this)::available,
+            connection, localSources, offline, playlists, AndroidAudioAccess(this)::available,
             MusicPreferences(store), artwork, serverChanges,
             AndroidFileEdits(this, store, library, File(filesDir, "file-edits").path, mediaWriteRequests::request, artwork),
             listeningHistory = ListeningHistory(store, library),
@@ -84,7 +91,7 @@ class MusicApplication : Application() {
             pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges, AndroidAudioAccess(this)::contentId), credentials, "Android phone",
                 networkAccess = localNetworkRequests::request),
-            tunnel = tunnel, networkAccess = localNetworkRequests::request)
+            tunnel = tunnel, networkAccess = localNetworkRequests::request, soundCloud = soundCloud)
     }
 
     suspend fun refreshOfflinePlaylists() {

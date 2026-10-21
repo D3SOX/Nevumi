@@ -6,7 +6,9 @@ import me.d3sox.nevumi.playlists.Playlist
 internal enum class SearchType(val label: String, val tab: LibraryTab?) {
     ALL("All", null), SONGS("Songs", LibraryTab.SONGS), ALBUMS("Albums", LibraryTab.ALBUMS),
     ARTISTS("Artists", LibraryTab.ARTISTS), PLAYLISTS("Playlists", LibraryTab.PLAYLISTS),
-    GENRES("Genres", LibraryTab.GENRES), FOLDERS("Folders", LibraryTab.FOLDERS)
+    GENRES("Genres", LibraryTab.GENRES), FOLDERS("Folders", LibraryTab.FOLDERS),
+    /** Searches SoundCloud through sc-gate-dl instead of the library. */
+    SOUNDCLOUD("SoundCloud", null)
 }
 
 internal data class LibrarySearchResults(val songs: List<Track>, val collections: Map<SearchType, List<TrackCollection>>) {

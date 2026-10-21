@@ -94,7 +94,9 @@ internal fun TunnelSettings(controller: MusicController, dismiss: () -> Unit) {
                 }
                 if (controller.serverFilesAvailable) SettingsToggle("Server files (SFTP)", AppIcon.SERVER_FILES, "File editing and uploads",
                     current.serverFiles) { if (!busy) change(current.copy(serverFiles = it)) }
-                if ((current.musicServer || current.serverFiles) && status?.state == "Stopped")
+                if (controller.soundCloudAvailable) SettingsToggle("SoundCloud downloads", AppIcon.CLOUD, "sc-gate-dl searches and downloads",
+                    current.scGate) { if (!busy) change(current.copy(scGate = it)) }
+                if ((current.musicServer || current.serverFiles || current.scGate) && status?.state == "Stopped")
                     Text("Sign in to Tailscale to use these connections.", color = MaterialTheme.colorScheme.error)
             }
             (error ?: pollError)?.let { Text(it, color = MaterialTheme.colorScheme.error) }

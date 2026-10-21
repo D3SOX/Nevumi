@@ -56,7 +56,12 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
                             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Playlist download progress: ${progress.playlist.name}" })
                     }
                 }
-                if (playlists.isNotEmpty() && state.downloads.isNotEmpty()) item { HorizontalDivider() }
+                if (state.soundCloudJobs.isNotEmpty()) {
+                    if (playlists.isNotEmpty()) item { HorizontalDivider() }
+                    item(key = "soundcloud-heading") { Text("SoundCloud", style = MaterialTheme.typography.titleSmall) }
+                    items(state.soundCloudJobs, key = { "soundcloud:${it.id}" }) { job -> SoundCloudJobItem(job, controller) }
+                }
+                if ((playlists.isNotEmpty() || state.soundCloudJobs.isNotEmpty()) && state.downloads.isNotEmpty()) item { HorizontalDivider() }
                 items(downloads, key = { it.trackId }) { record ->
                     val title = titles[record.trackId] ?: "Unavailable song"
                     Column {
@@ -82,7 +87,8 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
                             Modifier.semantics { contentDescription = "$removal: $title" }, style = ActionStyle.OUTLINED) { controller.removeDownload(record.trackId) }
                     }
                 }
-                if (state.downloads.isEmpty() && playlists.isEmpty()) item { Text("Download songs or enable automatic downloads on a playlist.") }
+                if (state.downloads.isEmpty() && playlists.isEmpty() && state.soundCloudJobs.isEmpty())
+                    item { Text("Download songs or enable automatic downloads on a playlist.") }
             }
         }
     }, confirmButton = { PageAction("Done", onClick = dismiss) })

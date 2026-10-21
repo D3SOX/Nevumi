@@ -23,6 +23,8 @@ python scripts/test-sftp.py serve > .test-environment/sftp.log 2>&1 &
 services+=("$!")
 python scripts/test-listenbrainz.py > .test-environment/listenbrainz.log 2>&1 &
 services+=("$!")
+python scripts/test-sc-gate.py > .test-environment/sc-gate.log 2>&1 &
+services+=("$!")
 if [[ "$mode" == desktop ]]; then
     # Hosted runners have no desktop session or unlocked credential collection.
     keyring_environment="$(printf 'nevumi-ci-only' | gnome-keyring-daemon --unlock --components=secrets)"
@@ -55,7 +57,7 @@ else
         sleep 1
     done
     [[ -f .test-environment/paired-fixture/control-port ]]
-    for port in 14533 14534 14535 14536 14537 "$(cat .test-environment/paired-fixture/port)" "$(cat .test-environment/paired-fixture/control-port)"; do
+    for port in 14533 14534 14535 14536 14537 14538 "$(cat .test-environment/paired-fixture/port)" "$(cat .test-environment/paired-fixture/control-port)"; do
         adb -s "$ANDROID_SERIAL" reverse "tcp:$port" "tcp:$port"
     done
     adb -s "$ANDROID_SERIAL" push .test-environment/sftp-fixture/client /data/local/tmp/nevumi-sftp-client
