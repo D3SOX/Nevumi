@@ -583,7 +583,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun updateSoundCloud(format: ScGateFormat, destination: SoundCloudDestination) = action(serialized = false) {
         soundCloudService().update(format, destination)
     }
-    fun disconnectSoundCloud() = action(serialized = false) { soundCloudService().disconnect() }
+    suspend fun disconnectSoundCloud() = soundCloudService().disconnect()
     suspend fun searchSoundCloud(query: String, offset: Int = 0): SoundCloudPage {
         state.value.soundCloud?.let { scGateAccess(it.baseUrl) }
         return soundCloudService().search(query, offset)
