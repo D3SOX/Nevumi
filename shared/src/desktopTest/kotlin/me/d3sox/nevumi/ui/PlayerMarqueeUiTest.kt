@@ -154,6 +154,29 @@ class PlayerMarqueeUiTest {
         assertEquals(hidden, shared.position, "Hidden text must not keep requesting frames")
     }
 
+    @Test fun theScrollSpeedSettingScalesHowFastTitlesMove() = runComposeUiTest {
+        lateinit var normal: PlayerMarqueeState
+        lateinit var fast: PlayerMarqueeState
+        mainClock.autoAdvance = false
+        setContent { MaterialTheme {
+            val scope = rememberCoroutineScope()
+            val first = remember { PlayerMarqueeState(scope) }
+            val second = remember { PlayerMarqueeState(scope) }
+            SideEffect { normal = first; fast = second }
+            val text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ".repeat(5)
+            val style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 16.sp)
+            Column {
+                Box(Modifier.width(200.dp)) { PlayerMarquee(text, style, marqueeState = first) }
+                CompositionLocalProvider(LocalMarqueeSpeed provides 2f) {
+                    Box(Modifier.width(200.dp)) { PlayerMarquee(text, style, marqueeState = second) }
+                }
+            }
+        } }
+        mainClock.advanceTimeBy(3_000)
+        assertTrue(normal.position > 0f, "The test must reach a scrolling title")
+        assertEquals(2f, fast.position / normal.position, .05f)
+    }
+
     private fun difference(first: PixelMap, second: PixelMap): Double {
         val width = minOf(128, first.width, second.width)
         val height = minOf(first.height, second.height)

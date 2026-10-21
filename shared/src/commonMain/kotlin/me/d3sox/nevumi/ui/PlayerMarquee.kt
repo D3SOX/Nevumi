@@ -23,6 +23,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** Multiplies the base scroll speed of every marquee; set from the user's settings. */
+internal val LocalMarqueeSpeed = compositionLocalOf { 1f }
+
 @Stable
 internal class PlayerMarqueeState(private val scope: CoroutineScope) {
     var position by mutableFloatStateOf(0f)
@@ -79,9 +82,9 @@ internal fun PlayerMarquee(text: String, style: TextStyle, modifier: Modifier = 
     val contentColor = if (color != Color.Unspecified) color else if (style.color != Color.Unspecified) style.color else LocalContentColor.current
     val layout = remember(text, style, contentColor, measurer) { measurer.measure(text, style.copy(color = contentColor), softWrap = false, maxLines = 1) }
     val em = with(density) { if (style.fontSize.isUnspecified) 16.sp.toPx() else style.fontSize.toPx() }
-    val velocity = with(density) { 30.dp.toPx() } / em
+    val velocity = with(density) { 30.dp.toPx() } * LocalMarqueeSpeed.current / em
     var viewport by remember { mutableIntStateOf(0) }
-    LaunchedEffect(scrolling, viewport, layout.size.width, em, active) {
+    LaunchedEffect(scrolling, viewport, layout.size.width, em, velocity, active) {
         val overflow = layout.size.width - viewport
         if (viewport > 0) scrolling.update(key, if (active && overflow > 1) overflow / em else 0f, velocity)
     }

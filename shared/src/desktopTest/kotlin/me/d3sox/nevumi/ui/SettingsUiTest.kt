@@ -210,7 +210,7 @@ class SettingsUiTest {
     }
 
     @Test
-    fun amoledAndPlayAfterSwipeSettingsSurviveAnAppRestart() {
+    fun amoledTitleScrollSpeedAndPlayAfterSwipeSettingsSurviveAnAppRestart() {
         val directory = Files.createTempDirectory("settings-ui")
         val database = directory.resolve("library.db").toString()
         var store = openMusicStore(database)
@@ -228,6 +228,8 @@ class SettingsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.themeMode == me.d3sox.nevumi.settings.ThemeMode.DARK }
                 onNodeWithContentDescription("AMOLED black").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.amoledBlack }
+                onNodeWithContentDescription("Title scroll speed").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(2f) }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.marqueeSpeed == 2.0 }
                 onNodeWithContentDescription("Back").performClick()
                 onNodeWithText("Library & gestures").performScrollTo().performClick()
                 onNodeWithText("Swipe right", useUnmergedTree = true).performMouseInput { click() }
@@ -243,6 +245,7 @@ class SettingsUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
                 assertEquals(Color.Black, onRoot().captureToImage().toPixelMap()[5, 5])
+                assertEquals(2.0, controller.state.value.preferences.marqueeSpeed)
                 onNodeWithText("Northern Light").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.togglePlayback().join(); controller.enqueue(tracks.getValue("Night Walk").id, QueueAction.APPEND).join() }

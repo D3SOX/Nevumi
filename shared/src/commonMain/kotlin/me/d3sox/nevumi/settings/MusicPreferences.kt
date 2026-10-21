@@ -48,6 +48,7 @@ data class MusicSettings(
     val amoledBlack: Boolean = false,
     val colors: ColorMode = ColorMode.SYSTEM,
     val customColor: Long = 0xFF6750A4,
+    val marqueeSpeed: Double = 1.0,
     val swipeRight: TrackAction = TrackAction.PLAY_NEXT,
     val swipeLeft: TrackAction = TrackAction.APPEND,
     val quickAction: TrackAction = TrackAction.ADD_TO_PLAYLIST,
@@ -116,6 +117,7 @@ class MusicPreferences(private val store: MusicStore) {
         require(settings.undoRetentionDays in 1..3650 && settings.undoBackupBytes >= 0) { "Choose a valid undo retention period and size" }
         require(settings.speed in 0.5..2.0) { "Playback speed must be between 0.5 and 2" }
         require(settings.pitch in 0.5..2.0) { "Playback pitch must be between 0.5 and 2" }
+        require(settings.marqueeSpeed in 0.5..3.0) { "Title scroll speed must be between 0.5 and 3" }
         settings.audioEffects.validate()
         require(settings.crossfadeDurationMs in 0..12_000) { "Crossfade must be between 0 and 12 seconds" }
         require(settings.previousQueueTrackLimit in 1..100) { "Choose between 1 and 100 previous tracks" }

@@ -25,7 +25,8 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 titles.forEach { (title, keywords) -> add(SettingResult(title, name, icon, keywords)) }
             }
             category("Appearance", AppIcon.THEME, "Theme" to "light dark follow system", "AMOLED black" to "dark background oled",
-                "Colors" to "system artwork material you dynamic")
+                "Colors" to "system artwork material you dynamic",
+                "Title scroll speed" to "marquee scrolling long song names artist text animation")
             listOf("On launch" to "startup start page last opened",
                 "Swipe right" to "gesture play next after favorite rate none", "Swipe left" to "gesture add queue none",
                 "Quick action" to "song list button favorite rate playlist play next after none",

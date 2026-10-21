@@ -99,6 +99,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         value = if (cover == null) null else withContext(Dispatchers.Default) { cover.themeColor(Color(0xFF6750A4)) }
     }
     CompositionLocalProvider(LocalSteadyState provides steadyState, LocalAudioWaveforms provides waveforms, LocalArtworkPicker provides picker, LocalPlaylistFiles provides files, LocalEqualizerFiles provides equalizerDocuments,
+        LocalMarqueeSpeed provides state.preferences.marqueeSpeed.toFloat(),
         LocalLibraryNavigate provides { tab, id -> openLibrary(tab, id) },
         LocalLibraryFocusHandled provides { libraryDestination = libraryDestination?.copy(trackId = null) },
         LocalPlayingContextNavigate provides { origin, track -> openLibrary(origin.tab, origin.collectionId, track) }) {
