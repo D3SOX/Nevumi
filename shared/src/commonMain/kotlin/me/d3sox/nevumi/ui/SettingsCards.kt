@@ -85,5 +85,7 @@ internal fun settingsIcon(label: String): AppIcon = when (label) {
     "Statistics grouping" -> AppIcon.STATISTICS
     "SSH authentication" -> AppIcon.KEY
     "Music library" -> AppIcon.FOLDER
+    "Download format" -> AppIcon.MUSIC
+    "When you pick a song" -> AppIcon.DOWNLOAD
     else -> AppIcon.SETTINGS
 }

@@ -67,7 +67,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 LaunchedEffect(Unit) { focus.requestFocus() }
             }
             if (opened == null) LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(SearchType.entries, key = { it }) { category ->
+                items(SearchType.entries.filter { it != SearchType.SOUNDCLOUD || state.soundCloud != null }, key = { it }) { category ->
                     FilterChip(type == category, { type = category; selection.clear(); stopTyping() }, label = { Text(category.label) },
                         modifier = Modifier.testTag("search-type:${category.name}"))
                 }
@@ -77,10 +77,11 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     LocalLibraryScrollKey provides "search-detail:${openedType?.name}:${opened.id}") {
                     SongList(opened.tracks, controller, playlistId = opened.id.takeIf { openedType == SearchType.PLAYLISTS }, contextName = opened.title,
                         header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) { openedId = null } })
-                } else if (query.isBlank()) SearchPrompt(Modifier.align(Alignment.Center))
+                } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller)
+                else if (query.isBlank()) SearchPrompt(Modifier.align(Alignment.Center))
                 else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search")
                 else {
-                    val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL } else listOf(type)
+                    val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD } else listOf(type)
                     val count = if (type == SearchType.ALL) results.count else results.collections[type].orEmpty().size
                     LazyColumn(Modifier.fillMaxSize().testTag("search-results")) {
                         if (count == 0) item { Text("No results for “${query.trim()}”", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -111,6 +112,9 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                                     trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${category.label.removeSuffix("s")} options: ${collection.title}", onClick = menu) })
                                 }
                             }
+                        }
+                        if (type == SearchType.ALL && state.soundCloud != null) item(key = "search-soundcloud") {
+                            SearchSoundCloudRow(query) { type = SearchType.SOUNDCLOUD; stopTyping() }
                         }
                     }
                 }

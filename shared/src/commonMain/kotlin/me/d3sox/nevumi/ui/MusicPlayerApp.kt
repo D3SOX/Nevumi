@@ -45,7 +45,7 @@ internal val LocalSteadyState = staticCompositionLocalOf<StateFlow<AppState>?> {
 
 private fun AppState.withoutProgress() = copy(queue = queue.copy(positionMs = 0), playback = playback.copy(positionMs = 0))
 
-private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES, FILE_RECOVERY, AUDIO_EFFECTS, SFTP, TUNNEL, PAIRED_DEVICES, SEARCH }
+private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES, FILE_RECOVERY, AUDIO_EFFECTS, SFTP, TUNNEL, PAIRED_DEVICES, SEARCH, SOUNDCLOUD }
 
 @Composable
 fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null, artworkPicker: ArtworkPicker? = null,
@@ -126,6 +126,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                 messages.currentSnackbarData?.dismiss()
                 if (messages.showSnackbar(ActionSnackbarVisuals(notice)) == SnackbarResult.ActionPerformed) {
                     if (notice.undo != null) notice.undo.invoke()
+                    else if (notice.play != null) notice.play.invoke()
                     else notice.destination?.let(::openNotice)
                 }
             }
@@ -154,11 +155,13 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                     AppPage.AUDIO_EFFECTS -> AudioEffectsScreen(state, controller, ::closePage)
                     AppPage.SFTP -> SftpSettings(state, controller, ::closePage)
                     AppPage.TUNNEL -> TunnelSettings(controller, ::closePage)
+                    AppPage.SOUNDCLOUD -> SoundCloudSettings(state, controller, ::closePage)
                     AppPage.PAIRED_DEVICES -> controller.pairedDevices?.let { PairingSettings(it, state.tracks, ::closePage, state.artwork) }
                     AppPage.SETTINGS -> AppSettings(state, controller,
                         server = { openPage(AppPage.SERVER) }, downloads = { openPage(AppPage.DOWNLOADS) },
                         audioEffects = { openPage(AppPage.AUDIO_EFFECTS) },
                         serverFiles = { openPage(AppPage.SFTP) }, tunnel = { openPage(AppPage.TUNNEL) }, pairedDevices = { openPage(AppPage.PAIRED_DEVICES) },
+                        soundCloud = { openPage(AppPage.SOUNDCLOUD) },
                         savedQueues = { openPage(AppPage.SAVED_QUEUES) }, fileRecovery = { openPage(AppPage.FILE_RECOVERY) },
                         categoryState = settingsCategory, onAddMusic = onAddMusic, folderPicker = folders) { page = AppPage.LIBRARY }
                     AppPage.LIBRARY -> {

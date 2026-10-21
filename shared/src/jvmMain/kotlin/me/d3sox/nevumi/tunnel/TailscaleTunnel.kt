@@ -15,6 +15,10 @@ class TailscaleTunnel(private val store: MusicStore, val tailscale: Tailscale) :
     suspend fun musicServerUrl(baseUrl: String): String =
         if (routes().musicServer) withContext(Dispatchers.IO) { tailscale.relay(baseUrl) } else baseUrl
 
+    /** The address to request sc-gate-dl at: a Tailscale relay when its route is on. */
+    suspend fun scGateUrl(baseUrl: String): String =
+        if (routes().scGate) withContext(Dispatchers.IO) { tailscale.relay(baseUrl) } else baseUrl
+
     /** The node SFTP connects through, or null for direct connections. */
     suspend fun serverFiles(): Tailscale? = tailscale.takeIf { routes().serverFiles }
 }
