@@ -295,6 +295,39 @@ class SoundCloudDownloadsTest {
         } finally { downloads.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test
+    fun anOlderSongWithTheSameTagsDoesNotCompleteAServerDownload() = runBlocking {
+        val subsonic = { body: String -> """{"subsonic-response":{"status":"ok","version":"1.16.1","type":"gonic"$body}}""" }
+        val directory = Files.createTempDirectory("soundcloud-unindexed")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        // The scan finishes without the new file, as when sc-gate-dl's folder is outside the music server's library.
+        val http = HttpClient(MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/capabilities" -> respond("""{"search":true,"libraryDestination":true}""", headers = json)
+                "/api/job" -> respond("""{"jobId":"j1","started":true,"needsHypedditUrl":false}""", headers = json)
+                "/api/job/j1" -> respond(status("ready", 100, libraryFilename = "Artist - Night Drive.mp3"), headers = json)
+                "/rest/startScan.view", "/rest/ping.view" -> respond(subsonic(""), headers = json)
+                "/rest/getScanStatus.view" -> respond(subsonic(""","scanStatus":{"scanning":false}"""), headers = json)
+                "/rest/search3.view" -> respond(subsonic(if (request.url.parameters["songOffset"] == "0")
+                    ""","searchResult3":{"song":[{"id":"old","title":"Night Drive","artist":"Artist"}]}""" else ""","searchResult3":{}"""), headers = json)
+                "/rest/getPlaylists.view" -> respond(subsonic(""","playlists":{}"""), headers = json)
+                else -> respond("""{"error":"Unexpected request"}""", HttpStatusCode.NotFound, json)
+            }
+        })
+        val navidrome = NavidromeClient(http, "http://music.test", ServerCredentials("fixture", "fixture-password"))
+        val changes = NavidromeChanges(store, library, client = { navidrome })
+        val downloads = SoundCloudDownloads(store, http, server = { navidrome }, serverChanges = changes, pollMillis = 10)
+        try {
+            changes.refreshLibrary(navidrome)
+            downloads.connect("http://sc-gate.test", ScGateFormat.MP3_320, SoundCloudDestination.SERVER)
+            downloads.download(track, ScGateDestination.LIBRARY)
+            val failed = withTimeout(10_000) { downloads.jobs.first { it?.singleOrNull()?.state == SoundCloudJobState.FAILED } }!!.single()
+            assertEquals("The music server has not indexed the song yet. Retry in a moment.", failed.message)
+            assertNull(failed.trackId)
+        } finally { downloads.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
     /** Saves [track] to a mocked music server of [type]; returns the imported song and whether Navidrome's own API was used. */
     private suspend fun importFromServer(type: String): Pair<Track, Boolean> = coroutineScope {
         val subsonic = { body: String -> """{"subsonic-response":{"status":"ok","version":"1.16.1","type":"$type"$body}}""" }

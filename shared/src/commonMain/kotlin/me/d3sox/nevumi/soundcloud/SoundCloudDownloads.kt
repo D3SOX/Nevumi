@@ -64,6 +64,8 @@ data class SoundCloudJob(
     /** Where the file was saved on this device. */
     val location: String? = null,
     val trackId: String? = null,
+    /** The music server's song for the downloaded file, saved as soon as an import finds it. */
+    val serverSongId: String? = null,
     /** The device folder the song was saved to while the local folder rules leave it out of the library. */
     val excludedFolder: String? = null,
     val createdAt: Long = 0,
@@ -439,7 +441,8 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         if (replace(job, next)) advance(next)
     }
 
-    private suspend fun import(job: SoundCloudJob) {
+    private suspend fun import(found: SoundCloudJob) {
+        var job = found
         val next = if (job.destination == ScGateDestination.LIBRARY) {
             val client = requireNotNull(server()) { "Connect to your music server to add this song" }
             check(client.serverId == job.musicServerId) { "Connect to the music server this song was saved to, then retry" }
@@ -447,19 +450,21 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             val name = requireNotNull(job.fileName)
             // Only Navidrome's own API lists real file paths. Other Subsonic servers are matched by the tags below.
             val navidrome = client.isNavidrome()
-            // The library already knows these server songs, so a match outside them is the new file, even when an older
-            // file elsewhere has the same name or tags. sc-gate-dl only reports the file name inside its library folder.
+            // The library already knows these server songs, so only a match outside them is the new file. An older file elsewhere
+            // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder.
             val owners = "source-owner:server:${client.serverId}:"
             val known = store.database.records().list("source-owners").mapNotNullTo(HashSet()) { it.key.takeIf { key -> key.startsWith(owners) } }
-            fun List<Pair<Track, ServerSong>>.newest() =
-                firstOrNull { (_, song) -> "$owners${song.id}" !in known } ?: firstOrNull()
+            fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> "$owners${song.id}" !in known }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
             // sc-gate-dl tags the file with the same title and artist the search showed.
-            val (track, song) = catalogue.filter { (_, song) -> song.filePath?.let { it == name || it.endsWith("/$name") } == true }.newest()
+            val (track, song) = job.serverSongId?.let { id -> catalogue.firstOrNull { (_, song) -> song.id == id } }
+                ?: catalogue.filter { (_, song) -> song.filePath?.let { it == name || it.endsWith("/$name") } == true }.indexed()
                 ?: catalogue.filter { (_, song) -> song.metadata.title.equals(job.track.title, ignoreCase = true) &&
-                    song.metadata.artist.equals(job.track.artist, ignoreCase = true) }.newest()
+                    song.metadata.artist.equals(job.track.artist, ignoreCase = true) }.indexed()
                 ?: throw IllegalStateException("The music server has not indexed the song yet. Retry in a moment.")
+            // A retry after an interrupted import finds the song again, although the library knows it by then.
+            if (job.serverSongId != song.id) job.copy(serverSongId = song.id).let { if (replace(job, it)) job = it }
             song.coverArt?.let { cover ->
                 try { artwork?.fetch(track.id, client, cover) }
                 catch (cancelled: CancellationException) { throw cancelled }
