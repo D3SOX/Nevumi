@@ -42,7 +42,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         if (started) return
         started = true
         for (kind in listOf("favorite-changes", "rating-changes", "servers", "playlists", "playlist-removals")) scope.launch {
-            store.database.records().observe(kind).distinctUntilChanged().collect { wake.trySend(Unit) }
+            store.database.records().observeRevision(kind).distinctUntilChanged().collect { wake.trySend(Unit) }
         }
         scope.launch {
             var pulled: TimeMark? = null
@@ -70,6 +70,12 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         track.sources.filter { it.kind == SourceKind.SERVER }.forEach { source ->
             store.put("favorite-change:${source.id}", "favorite-changes",
                 FavoriteChange(source.id, source.location, favorite))
+        }
+    }
+
+    suspend fun setFavorites(values: Map<String, Boolean>) {
+        for (batch in values.entries.chunked(100)) store.transaction {
+            batch.forEach { (id, favorite) -> setFavorite(id, favorite) }
         }
     }
 

@@ -257,6 +257,13 @@ class MusicLibrary(private val store: MusicStore) {
         store.put("track:$trackId", "tracks", track.copy(favorite = favorite))
     }
 
+    suspend fun setFavorites(values: Map<String, Boolean>) {
+        // Bound write locks while notifying observers once per batch, rather than once per song.
+        for (batch in values.entries.chunked(100)) store.transaction {
+            batch.forEach { (id, favorite) -> setFavorite(id, favorite) }
+        }
+    }
+
     suspend fun setRating(trackId: String, rating: Int) = store.transaction {
         require(rating in 0..5) { "Choose a rating from one to five stars, or zero to clear it" }
         val track = requireNotNull(findTrack(trackId)) { "Track is missing" }

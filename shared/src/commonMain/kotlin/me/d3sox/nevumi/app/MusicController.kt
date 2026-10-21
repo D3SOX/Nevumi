@@ -845,9 +845,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             undo = { applyFavorites(before) }, redo = { applyFavorites(before.mapValues { favorite }) })
     }
     private suspend fun applyFavorites(values: Map<String, Boolean>) {
-        values.forEach { (id, favorite) ->
-            if (serverChanges != null) serverChanges.setFavorite(id, favorite) else library.setFavorite(id, favorite)
-        }
+        if (serverChanges != null) serverChanges.setFavorites(values) else library.setFavorites(values)
         mutableState.update { state -> state.copy(tracks = state.tracks.map { track ->
             values[track.id]?.let { track.copy(favorite = it) } ?: track
         }) }
