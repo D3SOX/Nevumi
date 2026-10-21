@@ -452,7 +452,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             val upcoming = index > state.queue.currentIndex
                             var rowTop by remember(entry.id) { mutableFloatStateOf(0f) }
                             var artworkBounds by remember(entry.id) { mutableStateOf<Rect?>(null) }
-                            val boundary = remember(entry.id, queueScroll) { QueueDragBoundary({ rowTop }, {
+                            val boundary = remember(entry.id, queueScroll) { DragBoundary({ rowTop }, {
                                 val layout = queueScroll.layoutInfo
                                 val header = layout.visibleItemsInfo.firstOrNull { it.key == "queue:manual" }
                                 val manualIndex = rows.indexOfFirst { it.key == "queue:manual" }

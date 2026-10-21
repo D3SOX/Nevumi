@@ -6,8 +6,9 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
 import sh.calvin.reorderable.DragGestureDetector
 
-/** Keeps upcoming songs below their section heading, before reordering sees the gesture. */
-internal class QueueDragBoundary(private val rowTop: () -> Float, private val minimumTop: () -> Float) : DragGestureDetector {
+/** Keeps a dragged row between [minimumTop] and [maximumTop], before reordering sees the gesture. */
+internal class DragBoundary(private val rowTop: () -> Float, private val minimumTop: () -> Float,
+    private val maximumTop: () -> Float = { Float.POSITIVE_INFINITY }) : DragGestureDetector {
     var atBoundary = false
         private set
 
@@ -24,7 +25,7 @@ internal class QueueDragBoundary(private val rowTop: () -> Float, private val mi
             pointerTop += amount.y
             val minimum = minimumTop()
             atBoundary = pointerTop <= minimum
-            val top = pointerTop.coerceAtLeast(minimum)
+            val top = pointerTop.coerceAtMost(maximumTop()).coerceAtLeast(minimum)
             onDrag(change, Offset(amount.x, top - appliedTop))
             appliedTop = top
         })
