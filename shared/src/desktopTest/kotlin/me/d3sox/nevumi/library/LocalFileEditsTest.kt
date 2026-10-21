@@ -1035,6 +1035,34 @@ class LocalFileEditsTest {
     }
 
     @Test
+    fun id3v23TagsWithEmptyFieldsCanBeEdited() = runBlocking {
+        val directory = Files.createTempDirectory("id3v23-tags")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val audio = directory.resolve("song.mp3")
+            val writer = ProcessBuilder("ffmpeg", "-hide_banner", "-loglevel", "error", "-i",
+                Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/fixture.mp3").toString(),
+                "-c", "copy", "-id3v2_version", "3", "-metadata", "date=", "-metadata", "track=", "-metadata", "album=",
+                "-metadata", "album_artist=", audio.toString())
+                .redirectError(ProcessBuilder.Redirect.INHERIT).start()
+            check(writer.waitFor() == 0)
+            val original = Files.readAllBytes(audio)
+            val library = MusicLibrary(store)
+            val track = LocalFiles(library).scan(audio.toString()).single()
+            val edits = LocalFileEdits(store, library, directory.resolve("edits").toString())
+            val tags = edits.readTags(track.id)
+            assertEquals(listOf("", "", 0, 0), listOf(tags.album, tags.albumArtist, tags.year, tags.trackNumber))
+            val metadata = tags.copy(title = "Edited title")
+            val edit = edits.editTags(track.id, metadata)
+            assertEquals(metadata, edits.readTags(track.id))
+            val bulk = edits.editTags(listOf(track.id), TagChanges(album = "", year = 0, trackNumber = 0)).single()
+            assertEquals(metadata, edits.readTags(track.id))
+            edits.undo(bulk.id); edits.undo(edit.id)
+            assertEquals(-1L, java.util.Arrays.mismatch(original, Files.readAllBytes(audio)).toLong())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun undoRefusesToOverwriteAFileThatAnotherApplicationChanged() = runBlocking {
         val directory = Files.createTempDirectory("local-tag-conflict")
         val store = openMusicStore(directory.resolve("library.db").toString())

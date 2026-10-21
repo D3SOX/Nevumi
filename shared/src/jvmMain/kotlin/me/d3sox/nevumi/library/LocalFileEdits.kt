@@ -364,18 +364,18 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 requireNotNull(track) { "Track is missing" }
                 completed += apply(prepare(id) { tag ->
                     changes.title?.let { tag.setField(FieldKey.TITLE, it) }
-                    changes.artist?.let { tag.setField(FieldKey.ARTIST, it) }
-                    changes.album?.let { tag.setField(FieldKey.ALBUM, it) }
-                    changes.albumArtist?.let { tag.setField(FieldKey.ALBUM_ARTIST, it) }
+                    changes.artist?.let { tag.setFieldOrDelete(FieldKey.ARTIST, it) }
+                    changes.album?.let { tag.setFieldOrDelete(FieldKey.ALBUM, it) }
+                    changes.albumArtist?.let { tag.setFieldOrDelete(FieldKey.ALBUM_ARTIST, it) }
                     changes.genres?.let { genres ->
                         tag.deleteField(FieldKey.GENRE)
                         genres.forEach { tag.addField(FieldKey.GENRE, it) }
                     }
-                    changes.trackNumber?.let { tag.setField(FieldKey.TRACK, it.takeIf { it > 0 }?.toString().orEmpty()) }
+                    changes.trackNumber?.let { tag.setFieldOrDelete(FieldKey.TRACK, it.takeIf { it > 0 }?.toString().orEmpty()) }
                     changes.discNumber?.let { tag.setField(FieldKey.DISC_NO, it.toString()) }
                     changes.year?.let {
                         require(it in 0..9999) { "Year must be between 1 and 9999, or empty" }
-                        tag.setField(FieldKey.YEAR, it.takeIf { value -> value > 0 }?.toString().orEmpty())
+                        tag.setFieldOrDelete(FieldKey.YEAR, it.takeIf { value -> value > 0 }?.toString().orEmpty())
                     }
                 }.id)
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -408,16 +408,19 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
 
     suspend fun prepareTags(trackId: String, metadata: TrackMetadata): LocalFileEdit = prepare(trackId) { tag ->
         tag.setField(FieldKey.TITLE, metadata.title)
-        tag.setField(FieldKey.ARTIST, metadata.artist)
-        tag.setField(FieldKey.ALBUM, metadata.album)
-        tag.setField(FieldKey.ALBUM_ARTIST, metadata.albumArtist)
+        tag.setFieldOrDelete(FieldKey.ARTIST, metadata.artist)
+        tag.setFieldOrDelete(FieldKey.ALBUM, metadata.album)
+        tag.setFieldOrDelete(FieldKey.ALBUM_ARTIST, metadata.albumArtist)
         tag.deleteField(FieldKey.GENRE)
         metadata.genres.forEach { tag.addField(FieldKey.GENRE, it) }
-        tag.setField(FieldKey.TRACK, metadata.trackNumber.takeIf { it > 0 }?.toString().orEmpty())
+        tag.setFieldOrDelete(FieldKey.TRACK, metadata.trackNumber.takeIf { it > 0 }?.toString().orEmpty())
         tag.setField(FieldKey.DISC_NO, metadata.discNumber.toString())
         require(metadata.year in 0..9999) { "Year must be between 1 and 9999, or empty" }
-        tag.setField(FieldKey.YEAR, metadata.year.takeIf { it > 0 }?.toString().orEmpty())
+        tag.setFieldOrDelete(FieldKey.YEAR, metadata.year.takeIf { it > 0 }?.toString().orEmpty())
     }
+
+    // ID3v2.3 cannot build an empty year frame, so an empty value removes the field instead.
+    private fun Tag.setFieldOrDelete(key: FieldKey, value: String) = if (value.isEmpty()) deleteField(key) else setField(key, value)
 
     private suspend fun prepare(trackId: String, change: (Tag) -> Unit): LocalFileEdit = edits.withLock {
         withContext(Dispatchers.IO) {
