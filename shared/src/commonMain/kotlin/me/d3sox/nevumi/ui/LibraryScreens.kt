@@ -78,7 +78,8 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     }
     var searchReturnTab by rememberSaveable { mutableStateOf(tabs.firstOrNull { it != LibraryTab.SEARCH }) }
     fun closeSearch() {
-        selectedTab = searchReturnTab?.takeIf { it in tabs } ?: tabs.first()
+        selectedTab = searchReturnTab?.takeIf { it in tabs && it != LibraryTab.SEARCH }
+            ?: tabs.firstOrNull { it != LibraryTab.SEARCH } ?: tabs.first()
     }
     if (tabs[currentIndex] == LibraryTab.SEARCH && backEnabled && tabs.size > 1) PlatformBackHandler { closeSearch() }
     var rearrangingPlaylists by remember(tabs[currentIndex]) { mutableStateOf(false) }

@@ -46,6 +46,25 @@ class AndroidGlobalSearchUiTest {
         }
     }
 
+    @Test fun backLeavesSearchWhenThePreviousTabWasRemoved() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
+        val controller = app.controller
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.waitUntil(5_000) { controller.state.value.libraryReady }
+            val original = controller.state.value.preferences
+            try {
+                runBlocking { controller.updatePreferences { it.copy(libraryTabs = listOf(LibraryTab.HOME, LibraryTab.SEARCH, LibraryTab.SONGS)) }.join() }
+                compose.openLibraryPage("Home")
+                compose.onNodeWithContentDescription("Search").performClick()
+                compose.onNodeWithTag("search-type:SONGS").performClick()
+                runBlocking { controller.updatePreferences { it.copy(libraryTabs = listOf(LibraryTab.SEARCH, LibraryTab.SONGS)) }.join() }
+                compose.onNodeWithContentDescription("Home").assertDoesNotExist()
+                scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                compose.onNodeWithContentDescription("Songs").assertIsSelected()
+            } finally { runBlocking { controller.updatePreferences { original }.join() } }
+        }
+    }
+
     @Test fun backClearsSearchSelectionWithMultipleTabsAndWithSearchAlone() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
         val controller = app.controller
