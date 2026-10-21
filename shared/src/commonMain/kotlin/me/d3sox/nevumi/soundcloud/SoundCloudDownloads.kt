@@ -295,14 +295,17 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         schedule()
     }
 
+    private val cancellable = setOf(SoundCloudJobState.WORKING, SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK)
+
     suspend fun cancel(id: String) {
         val job = job(id)
-        require(job.state in setOf(SoundCloudJobState.WORKING, SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK)) {
-            "This download can no longer be canceled"
-        }
+        require(job.state in cancellable) { "This download can no longer be canceled" }
         try { client().cancel(requireNotNull(job.remoteId)) }
         catch (missing: ScGateException) { if (missing.status != 404) throw missing }
-        edits.withLock { save(job(id).copy(state = SoundCloudJobState.CANCELLED, message = "Canceled", attention = false)) }
+        // The job may have finished downloading while the request ran; leave that progress alone.
+        edits.withLock {
+            job(id).takeIf { it.state in cancellable }?.let { save(it.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled", attention = false)) }
+        }
     }
 
     /** Resumes where the job stopped: indexing or saving a finished file, restarting the server's job, or starting a new one. */
@@ -407,8 +410,10 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             val client = requireNotNull(server()) { "Connect to your music server to add this song" }
             val changes = requireNotNull(serverChanges) { "Music server changes are unavailable" }
             val name = requireNotNull(job.fileName)
+            // Only Navidrome's own API lists real file paths. Other Subsonic servers are matched by the tags below.
+            val navidrome = client.isNavidrome()
             client.rescan()
-            val catalogue = changes.refreshLibrary(client, includeFilePaths = true)
+            val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
             // sc-gate-dl tags the file with the same title and artist the search showed.
             val (track, song) = catalogue.firstOrNull { (_, song) -> song.filePath?.let { it == name || it.endsWith("/$name") } == true }
                 ?: catalogue.firstOrNull { (_, song) -> song.metadata.title.equals(job.track.title, ignoreCase = true) &&

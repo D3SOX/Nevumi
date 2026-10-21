@@ -12,12 +12,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
+import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.ServerCredentials
@@ -29,6 +31,7 @@ import java.nio.file.Path
 import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -207,10 +210,11 @@ class SoundCloudDownloadsTest {
         } finally { fixture.close() }
     }
 
-    @Test
-    fun aServerDownloadIsFoundByItsFileAfterTheMusicServerRescans() = runBlocking {
-        val subsonic = { body: String -> """{"subsonic-response":{"status":"ok","version":"1.16.1","type":"navidrome"$body}}""" }
+    /** Saves [track] to a mocked music server of [type]; returns the imported song and whether Navidrome's own API was used. */
+    private suspend fun importFromServer(type: String): Pair<Track, Boolean> = coroutineScope {
+        val subsonic = { body: String -> """{"subsonic-response":{"status":"ok","version":"1.16.1","type":"$type"$body}}""" }
         var scanned = false
+        var native = false
         val directory = Files.createTempDirectory("soundcloud-server")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
@@ -227,7 +231,7 @@ class SoundCloudDownloadsTest {
                     ""","searchResult3":{"song":[{"id":"old","title":"Old Song","artist":"Someone"},{"id":"new","title":"Night Drive","artist":"Artist"}]}"""
                     else ""","searchResult3":{}"""), headers = json)
                 path == "/rest/getPlaylists.view" -> respond(subsonic(""","playlists":{}"""), headers = json)
-                path == "/auth/login" -> respond("""{"token":"token"}""", headers = json)
+                path == "/auth/login" -> { native = true; respond("""{"token":"token"}""", headers = json) }
                 path == "/api/song" -> respond(if (request.url.parameters["_start"] == "0")
                     """[{"id":"old","path":"Spotify/Someone - Old Song.mp3","libraryId":1},{"id":"new","path":"SoundCloud/Artist - Night Drive.mp3","libraryId":1}]"""
                     else "[]", headers = json)
@@ -243,9 +247,22 @@ class SoundCloudDownloadsTest {
             downloads.download(track, ScGateDestination.LIBRARY)
             val job = withTimeout(10_000) { completed.await() }
             assertTrue(scanned)
-            val added = assertNotNull(library.findTrack(assertNotNull(job.trackId)))
-            assertEquals("Night Drive", added.metadata.title)
-            assertEquals("SoundCloud/Artist - Night Drive.mp3", added.sources.single().filePath)
+            assertNotNull(library.findTrack(assertNotNull(job.trackId))) to native
         } finally { downloads.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aServerDownloadIsFoundByItsFileAfterTheMusicServerRescans() = runBlocking {
+        val (added, native) = importFromServer("navidrome")
+        assertTrue(native)
+        assertEquals("Night Drive", added.metadata.title)
+        assertEquals("SoundCloud/Artist - Night Drive.mp3", added.sources.single().filePath)
+    }
+
+    @Test
+    fun otherSubsonicServersFindTheServerDownloadByItsTags() = runBlocking {
+        val (added, native) = importFromServer("gonic")
+        assertFalse(native)
+        assertEquals("Night Drive", added.metadata.title)
     }
 }
