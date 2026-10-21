@@ -9,6 +9,8 @@ fun openMusicStore(path: String): MusicStore {
     File(path).absoluteFile.parentFile?.mkdirs()
     return MusicStore(Room.databaseBuilder<MusicDatabase>(name = path)
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(RecordRevisionMigration)
+        .addCallback(RecordRevisionCallback)
         .setQueryCoroutineContext(Dispatchers.IO)
         .build())
 }

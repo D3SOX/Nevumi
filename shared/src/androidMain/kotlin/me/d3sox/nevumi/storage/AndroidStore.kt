@@ -9,6 +9,8 @@ fun openMusicStore(context: Context, name: String = "music-player.db"): MusicSto
     Room.databaseBuilder<MusicDatabase>(context.applicationContext,
         context.getDatabasePath(name).absolutePath)
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(RecordRevisionMigration)
+        .addCallback(RecordRevisionCallback)
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()
 )
