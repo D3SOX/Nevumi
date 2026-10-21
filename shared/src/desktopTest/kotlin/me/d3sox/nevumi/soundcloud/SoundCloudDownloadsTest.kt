@@ -16,6 +16,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
@@ -49,7 +53,7 @@ class SoundCloudDownloadsTest {
     private class Fixture(val directory: Path, val store: MusicStore, val library: MusicLibrary, val http: HttpClient,
         val downloads: SoundCloudDownloads, val requests: MutableList<String>)
 
-    private fun fixture(handle: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData?): Fixture {
+    private fun fixture(route: suspend (String) -> String = { it }, handle: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData?): Fixture {
         val directory = Files.createTempDirectory("soundcloud-downloads")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
@@ -61,7 +65,7 @@ class SoundCloudDownloadsTest {
                 else -> respond("""{"error":"Unexpected request"}""", HttpStatusCode.NotFound, json)
             }
         })
-        val downloads = SoundCloudDownloads(store, http, files = DirectorySoundCloudFiles(directory.resolve("SoundCloud").toString()),
+        val downloads = SoundCloudDownloads(store, http, route, files = DirectorySoundCloudFiles(directory.resolve("SoundCloud").toString()),
             localSources = LocalFiles(library), pollMillis = 10)
         return Fixture(directory, store, library, http, downloads, requests)
     }
@@ -95,6 +99,92 @@ class SoundCloudDownloadsTest {
             assertEquals(imported.id, job.trackId)
             assertEquals(SourceKind.LOCAL, imported.sources.single().kind)
             assertTrue("POST /api/job" in fixture.requests && "GET /api/job/j1/file" in fixture.requests)
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun aDownloadInAVisibleBrowserWaitsForItsTagsAndIsSavedWithTheCheckedOnes() = runBlocking {
+        val stage = java.util.concurrent.atomic.AtomicReference("gate")
+        var created: kotlinx.serialization.json.JsonObject? = null
+        var tagged: kotlinx.serialization.json.JsonObject? = null
+        val fixture = fixture { request ->
+            when (request.url.encodedPath) {
+                "/api/capabilities" -> respond("""{"search":true,"libraryDestination":false,"browserModes":["headless","headed"],
+                    "browserViewUrl":"http://{host}:6080/vnc.html?autoconnect=true"}""", headers = json)
+                "/api/job" -> {
+                    created = Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
+                    respond("""{"jobId":"j1","started":true,"needsHypedditUrl":false}""", headers = json)
+                }
+                "/api/job/j1" -> respond(when (stage.get()) {
+                    "gate" -> """{"progress":{"stage":"handling_gates","message":"Opening the gate","percent":30,"browserActive":true},"browserMode":"headed"}"""
+                    // Not every progress report repeats that the browser is open.
+                    "comment" -> """{"progress":{"stage":"handling_gates","message":"Commenting","percent":40},"browserMode":"headed"}"""
+                    "downloading" -> """{"progress":{"stage":"downloading","message":"Downloading","percent":57.5},"browserMode":"headed"}"""
+                    "tags" -> """{"progress":{"stage":"waiting_metadata","message":"Check the tags","percent":100},"browserMode":"headed",
+                        "defaultMetadata":{"title":"Night Drive [FREE DL]","artist":"Artist","album":"","genre":"House"},
+                        "existingMetadata":{"title":"","artist":"","album":"","genre":""},"hasArtwork":true,"hasExistingArtwork":false,
+                        "downloadFilename":"Night Drive [7].mp3"}"""
+                    else -> status("ready", 100, outputFilename = "Artist - Night Drive (Edit).mp3")
+                }, headers = json)
+                "/api/job/j1/metadata" -> {
+                    tagged = Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
+                    stage.set("ready")
+                    respond("""{"success":true}""", headers = json)
+                }
+                "/api/job/j1/file" -> respond(audio, headers = headersOf(HttpHeaders.ContentType, "audio/mpeg"))
+                else -> null
+            }
+        }
+        try {
+            fixture.downloads.connect("http://sc-gate.test", ScGateFormat.MP3_320, SoundCloudDestination.DEVICE, ScGateBrowser.HEADED, reviewTags = true)
+            val job = fixture.downloads.download(track, ScGateDestination.CLIENT)
+            assertEquals("headed", created?.getValue("browserMode")?.jsonPrimitive?.content)
+            assertEquals(true, created?.getValue("reviewTags")?.jsonPrimitive?.boolean)
+            suspend fun waitFor(check: (SoundCloudJob) -> Boolean) = withTimeout(10_000) {
+                fixture.downloads.jobs.first { jobs -> jobs?.singleOrNull()?.let(check) == true }
+            }!!.single()
+            assertTrue(waitFor { it.browser }.browser)
+            assertEquals("http://sc-gate.test:6080/vnc.html?autoconnect=true", fixture.downloads.browserView(job.id))
+            stage.set("comment")
+            assertTrue(waitFor { it.message == "Commenting" }.browser)
+            stage.set("downloading")
+            val downloading = waitFor { it.message == "Downloading" }
+            assertFalse(downloading.browser)
+            assertEquals(58, downloading.percent)
+            stage.set("tags")
+            val waiting = waitFor { it.state == SoundCloudJobState.NEEDS_TAGS }
+            val review = assertNotNull(waiting.review)
+            assertEquals(ScGateTags("Night Drive [FREE DL]", "Artist", "", "House"), review.tags)
+            // A file without tags of its own offers nothing to keep.
+            assertNull(review.fileTags)
+            assertEquals("Night Drive [7].mp3", review.fileName)
+            val completed = async(start = CoroutineStart.UNDISPATCHED) { fixture.downloads.completed.first() }
+            fixture.downloads.finishTags(job.id, ScGateTagChoice(ScGateTags("Night Drive (Edit)", "Artist", "Night EP", "House")))
+            val finished = withTimeout(10_000) { completed.await() }
+            assertEquals(SoundCloudJobState.COMPLETE, finished.state)
+            assertEquals(ScGateTags("Night Drive (Edit)", "Artist", "Night EP", "House"), finished.tags)
+            assertEquals("Night Drive (Edit)", tagged?.getValue("title")?.jsonPrimitive?.content)
+            assertEquals(true, tagged?.getValue("nameAsArtistTitle")?.jsonPrimitive?.boolean)
+            assertTrue(Files.exists(fixture.directory.resolve("SoundCloud/Artist - Night Drive (Edit).mp3")))
+        } finally { fixture.close() }
+    }
+
+    @Test
+    fun theBrowserViewerGoesThroughTheTunnelWhenSoundCloudDownloadsUseIt() = runBlocking {
+        val fixture = fixture(route = { if (it == "http://sc-gate.test:6080") "http://127.0.0.1:9/secret" else it }) { request ->
+            when (request.url.encodedPath) {
+                "/api/capabilities" -> respond("""{"search":true,"libraryDestination":false,"browserModes":["headless","headed"],
+                    "browserViewUrl":"http://{host}:6080/vnc.html?autoconnect=true&resize=scale"}""", headers = json)
+                "/api/job" -> respond("""{"jobId":"j1","started":true,"needsHypedditUrl":false}""", headers = json)
+                "/api/job/j1" -> respond(status("downloading", 40), headers = json)
+                else -> null
+            }
+        }
+        try {
+            fixture.downloads.connect("http://sc-gate.test", ScGateFormat.MP3_320, SoundCloudDestination.DEVICE)
+            assertEquals("http://{host}:6080/vnc.html?autoconnect=true&resize=scale", fixture.downloads.profile.value?.browserViewUrl)
+            val job = fixture.downloads.download(track, ScGateDestination.CLIENT)
+            assertEquals("http://127.0.0.1:9/secret/vnc.html?autoconnect=true&resize=scale", fixture.downloads.browserView(job.id))
         } finally { fixture.close() }
     }
 
@@ -328,11 +418,15 @@ class SoundCloudDownloadsTest {
         } finally { downloads.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
-    /** Saves [track] to a mocked music server of [type]; returns the imported song and whether Navidrome's own API was used. */
-    private suspend fun importFromServer(type: String): Pair<Track, Boolean> = coroutineScope {
+    /**
+     * Saves [track] to a mocked music server of [type], with [title] written after checking the tags when it is given;
+     * returns the imported song and whether Navidrome's own API was used.
+     */
+    private suspend fun importFromServer(type: String, title: String? = null): Pair<Track, Boolean> = coroutineScope {
         val subsonic = { body: String -> """{"subsonic-response":{"status":"ok","version":"1.16.1","type":"$type"$body}}""" }
         var scanned = false
         var native = false
+        var tagged = title == null
         val directory = Files.createTempDirectory("soundcloud-server")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
@@ -341,12 +435,14 @@ class SoundCloudDownloadsTest {
             when {
                 path == "/api/capabilities" -> respond("""{"search":true,"libraryDestination":true}""", headers = json)
                 path == "/api/job" -> respond("""{"jobId":"j1","started":true,"needsHypedditUrl":false}""", headers = json)
-                path == "/api/job/j1" -> respond(status("ready", 100, libraryFilename = "Artist - Night Drive.mp3"), headers = json)
+                path == "/api/job/j1" -> respond(if (tagged) status("ready", 100, libraryFilename = "Artist - ${title ?: "Night Drive"}.mp3")
+                    else status("waiting_metadata", 100), headers = json)
+                path == "/api/job/j1/metadata" -> { tagged = true; respond("""{"success":true}""", headers = json) }
                 path == "/rest/startScan.view" -> { scanned = true; respond(subsonic(""), headers = json) }
                 path == "/rest/getScanStatus.view" -> respond(subsonic(""","scanStatus":{"scanning":false}"""), headers = json)
                 path == "/rest/ping.view" -> respond(subsonic(""), headers = json)
                 path == "/rest/search3.view" -> respond(subsonic(if (scanned && request.url.parameters["songOffset"] == "0")
-                    ""","searchResult3":{"song":[{"id":"old","title":"Old Song","artist":"Someone"},{"id":"new","title":"Night Drive","artist":"Artist"}]}"""
+                    ""","searchResult3":{"song":[{"id":"old","title":"Old Song","artist":"Someone"},{"id":"new","title":"${title ?: "Night Drive"}","artist":"Artist"}]}"""
                     else ""","searchResult3":{}"""), headers = json)
                 path == "/rest/getPlaylists.view" -> respond(subsonic(""","playlists":{}"""), headers = json)
                 path == "/auth/login" -> { native = true; respond("""{"token":"token"}""", headers = json) }
@@ -362,7 +458,11 @@ class SoundCloudDownloadsTest {
         try {
             downloads.connect("http://sc-gate.test", ScGateFormat.MP3_320, SoundCloudDestination.SERVER)
             val completed = async(start = CoroutineStart.UNDISPATCHED) { downloads.completed.first() }
-            downloads.download(track, ScGateDestination.LIBRARY)
+            val started = downloads.download(track, ScGateDestination.LIBRARY, reviewTags = title != null)
+            if (title != null) {
+                withTimeout(10_000) { downloads.jobs.first { it?.singleOrNull()?.state == SoundCloudJobState.NEEDS_TAGS } }
+                downloads.finishTags(started.id, ScGateTagChoice(ScGateTags(title, "Artist")))
+            }
             val job = withTimeout(10_000) { completed.await() }
             assertTrue(scanned)
             assertNotNull(library.findTrack(assertNotNull(job.trackId))) to native
@@ -382,5 +482,12 @@ class SoundCloudDownloadsTest {
         val (added, native) = importFromServer("gonic")
         assertFalse(native)
         assertEquals("Night Drive", added.metadata.title)
+    }
+
+    @Test
+    fun otherSubsonicServersFindAServerDownloadByItsCheckedTags() = runBlocking {
+        val (added, native) = importFromServer("gonic", title = "Night Drive (Edit)")
+        assertFalse(native)
+        assertEquals("Night Drive (Edit)", added.metadata.title)
     }
 }

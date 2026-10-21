@@ -352,6 +352,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                     when (job.state) {
                         SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK ->
                             mutableNotices.tryEmit(ActionNotice("“${job.track.title}” needs your choice to continue", ActionDestination.DOWNLOADS))
+                        SoundCloudJobState.NEEDS_TAGS ->
+                            mutableNotices.tryEmit(ActionNotice("Check the tags of “${job.track.title}” to finish", ActionDestination.DOWNLOADS))
                         SoundCloudJobState.FAILED, SoundCloudJobState.LOST ->
                             mutableNotices.tryEmit(ActionNotice("“${job.track.title}” could not be downloaded", ActionDestination.DOWNLOADS))
                         else -> Unit
@@ -576,12 +578,13 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         scGateAccess(address)
         return soundCloudService().capabilities(address)
     }
-    suspend fun connectSoundCloud(address: String, format: ScGateFormat, destination: SoundCloudDestination) {
+    suspend fun connectSoundCloud(address: String, format: ScGateFormat, destination: SoundCloudDestination, browser: ScGateBrowser? = null,
+        reviewTags: Boolean = false): SoundCloudProfile {
         scGateAccess(address)
-        soundCloudService().connect(address, format, destination)
+        return soundCloudService().connect(address, format, destination, browser, reviewTags)
     }
-    fun updateSoundCloud(format: ScGateFormat, destination: SoundCloudDestination) = action(serialized = false) {
-        soundCloudService().update(format, destination)
+    fun updateSoundCloud(format: ScGateFormat, destination: SoundCloudDestination, browser: ScGateBrowser?, reviewTags: Boolean) = action(serialized = false) {
+        soundCloudService().update(format, destination, browser, reviewTags)
     }
     suspend fun disconnectSoundCloud() = soundCloudService().disconnect()
     suspend fun searchSoundCloud(query: String, offset: Int = 0): SoundCloudPage {
@@ -589,14 +592,15 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         return soundCloudService().search(query, offset)
     }
     suspend fun soundCloudArtwork(url: String): ByteArray = soundCloudService().artwork(url)
-    /** [keepOffline] also downloads a song added to the music server for offline playback. */
-    fun downloadFromSoundCloud(track: SoundCloudTrack, destination: ScGateDestination, keepOffline: Boolean = false) = action(serialized = false) {
+    /** [keepOffline] also downloads a song added to the music server for offline playback; [reviewTags] defaults to the setting. */
+    fun downloadFromSoundCloud(track: SoundCloudTrack, destination: ScGateDestination, keepOffline: Boolean = false,
+        reviewTags: Boolean? = null) = action(serialized = false) {
         val service = soundCloudService()
         val profile = requireNotNull(state.value.soundCloud) { "Set up SoundCloud downloads in Settings first" }
         if (destination == ScGateDestination.LIBRARY) requireNotNull(state.value.server) { "Connect to your music server first" }
         scGateAccess(profile.baseUrl)
         confirm("Downloading “${track.title}”", ActionDestination.DOWNLOADS)
-        service.download(track, destination, keepOffline)
+        service.download(track, destination, keepOffline, reviewTags)
     }
     fun submitSoundCloudLink(id: String, link: String) = action(serialized = false) {
         state.value.soundCloud?.let { scGateAccess(it.baseUrl) }
@@ -604,6 +608,16 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
     fun useSoundCloudStream(id: String) = action(serialized = false) { soundCloudService().useStream(id) }
     fun chooseSoundCloudTrack(id: String, url: String) = action(serialized = false) { soundCloudService().chooseBandcampTrack(id, url) }
+    suspend fun soundCloudCover(id: String, fromFile: Boolean): ByteArray = soundCloudService().cover(id, fromFile)
+    suspend fun finishSoundCloudTags(id: String, choice: ScGateTagChoice) {
+        state.value.soundCloud?.let { scGateAccess(it.baseUrl) }
+        soundCloudService().finishTags(id, choice)
+    }
+    /** The address of sc-gate-dl's browser viewer, which a browser on this device can open. */
+    suspend fun soundCloudBrowserView(id: String): String {
+        state.value.soundCloud?.let { scGateAccess(it.baseUrl) }
+        return soundCloudService().browserView(id)
+    }
     fun cancelSoundCloudDownload(id: String) = action(serialized = false) { soundCloudService().cancel(id) }
     fun retrySoundCloudDownload(id: String) = action(serialized = false) {
         state.value.soundCloud?.let { scGateAccess(it.baseUrl) }

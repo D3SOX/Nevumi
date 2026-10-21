@@ -5,19 +5,26 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.soundcloud.ScGateDestination
 import me.d3sox.nevumi.soundcloud.SoundCloudJob
 import me.d3sox.nevumi.soundcloud.SoundCloudJobState
 
-/** One SoundCloud download in the Downloads page, with the choices sc-gate-dl waits for. */
+/** One SoundCloud download in the Downloads page, with the choices sc-gate-dl waits for; [viewer] is sc-gate-dl's browser viewer. */
 @Composable
-internal fun SoundCloudJobItem(job: SoundCloudJob, controller: MusicController) {
+internal fun SoundCloudJobItem(job: SoundCloudJob, controller: MusicController, viewer: Boolean, checkTags: () -> Unit) {
     var pastingLink by remember { mutableStateOf(false) }
     var choosingTrack by remember { mutableStateOf(false) }
+    var viewerError by remember { mutableStateOf<String?>(null) }
+    val browser = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
+    val watchable = viewer && job.state == SoundCloudJobState.WORKING && job.browser
     val title = job.track.title
     Column(Modifier.semantics(mergeDescendants = false) { contentDescription = "SoundCloud download: $title" },
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -27,12 +34,15 @@ internal fun SoundCloudJobItem(job: SoundCloudJob, controller: MusicController) 
         Text(when (job.state) {
             SoundCloudJobState.NEEDS_LINK -> "sc-gate-dl found no download link. Paste a gate or download link, or save the SoundCloud stream, " +
                 "which has lower quality than a download."
+            SoundCloudJobState.NEEDS_TAGS -> "Downloaded. sc-gate-dl saves it once you check its tags."
             SoundCloudJobState.LOST, SoundCloudJobState.FAILED -> job.message.ifBlank { "The download failed" }
             else -> job.message
         }, color = if (job.state == SoundCloudJobState.FAILED || job.state == SoundCloudJobState.LOST) MaterialTheme.colorScheme.error
             else MaterialTheme.colorScheme.onSurfaceVariant)
-        if (job.attention) Text("The gate needs a manual step, such as a captcha, in sc-gate-dl's browser. Finish it in the sc-gate-dl web interface or cancel.",
+        if (job.attention) Text(if (watchable) "The gate needs a manual step, such as a captcha. Finish it in sc-gate-dl's browser or cancel."
+            else "The gate needs a manual step, such as a captcha, in sc-gate-dl's browser. Finish it in the sc-gate-dl web interface or cancel.",
             color = MaterialTheme.colorScheme.error)
+        viewerError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (job.excludedFolder != null) Text("Your local folder rules leave out ${job.excludedFolder}.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         when (job.state) {
             SoundCloudJobState.WORKING -> if (job.percent > 0) LinearProgressIndicator(progress = { job.percent / 100f },
@@ -46,13 +56,22 @@ internal fun SoundCloudJobItem(job: SoundCloudJob, controller: MusicController) 
                 JobButton("Save SoundCloud stream", title, AppIcon.DOWNLOAD) { controller.useSoundCloudStream(job.id) }
             }
             if (job.state == SoundCloudJobState.NEEDS_TRACK) JobButton("Choose song", title, AppIcon.MUSIC, ActionStyle.TONAL) { choosingTrack = true }
+            if (job.state == SoundCloudJobState.NEEDS_TAGS) JobButton("Check tags", title, AppIcon.TAGS, ActionStyle.TONAL, checkTags)
+            if (watchable) JobButton("View browser", title, AppIcon.BROWSER, if (job.attention) ActionStyle.TONAL else ActionStyle.OUTLINED) {
+                viewerError = null
+                scope.launch {
+                    try { browser.openUri(controller.soundCloudBrowserView(job.id)) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (failure: Exception) { viewerError = failure.message ?: "sc-gate-dl's browser could not be opened" }
+                }
+            }
             job.trackId?.let { trackId -> JobButton("Play", title, AppIcon.PLAY, ActionStyle.TONAL) { controller.playTrack(trackId, listOf(trackId), 0, "SoundCloud") } }
             if (job.excludedFolder != null) JobButton("Add folder to library", title, AppIcon.FOLDER, ActionStyle.TONAL) { controller.addSoundCloudFolder(job.id) }
-            if (job.state in setOf(SoundCloudJobState.WORKING, SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK))
+            if (job.state in setOf(SoundCloudJobState.WORKING, SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK, SoundCloudJobState.NEEDS_TAGS))
                 JobButton("Cancel download", title, AppIcon.CLOSE) { controller.cancelSoundCloudDownload(job.id) }
             if (job.state in setOf(SoundCloudJobState.FAILED, SoundCloudJobState.LOST, SoundCloudJobState.CANCELLED))
                 JobButton("Retry", title, AppIcon.REFRESH, ActionStyle.TONAL) { controller.retrySoundCloudDownload(job.id) }
-            if (!job.active && job.state != SoundCloudJobState.NEEDS_LINK && job.state != SoundCloudJobState.NEEDS_TRACK)
+            if (!job.active && job.state !in setOf(SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK, SoundCloudJobState.NEEDS_TAGS))
                 JobButton("Remove from list", title, AppIcon.REMOVE) { controller.dismissSoundCloudDownload(job.id) }
         }
     }

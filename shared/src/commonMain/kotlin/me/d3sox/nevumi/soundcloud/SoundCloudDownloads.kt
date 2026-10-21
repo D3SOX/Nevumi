@@ -1,6 +1,8 @@
 package me.d3sox.nevumi.soundcloud
 
 import io.ktor.client.HttpClient
+import io.ktor.http.Url
+import io.ktor.http.hostWithPortIfSpecified
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -36,10 +38,30 @@ enum class SoundCloudDestination { ASK, SERVER, DEVICE }
 data class SoundCloudProfile(val baseUrl: String, val format: ScGateFormat = ScGateFormat.MP3_320,
     val destination: SoundCloudDestination = SoundCloudDestination.ASK,
     /** sc-gate-dl can save into the music server's library folder. */
-    val libraryDestination: Boolean = false)
+    val libraryDestination: Boolean = false,
+    /** How sc-gate-dl runs the browser for download gates, or null for its own default. */
+    val browser: ScGateBrowser? = null,
+    /** New downloads wait until their tags are checked. */
+    val reviewTags: Boolean = false,
+    /** The browser modes sc-gate-dl offers. */
+    val browserModes: List<ScGateBrowser> = emptyList(),
+    /** sc-gate-dl's viewer for its visible browser, such as noVNC, where `{host}` stands for sc-gate-dl's host. */
+    val browserViewUrl: String? = null) {
+    internal fun with(capabilities: ScGateCapabilities) = copy(libraryDestination = capabilities.libraryDestination,
+        browserModes = capabilities.browserModes, browserViewUrl = capabilities.browserViewUrl,
+        browser = browser?.takeIf { it in capabilities.browserModes })
+}
+
+/** What sc-gate-dl offers for the tags of a downloaded file; [fileTags] and [fileCover] come from the file itself. */
+@Serializable
+data class SoundCloudTagReview(val tags: ScGateTags, val fileTags: ScGateTags? = null, val cover: Boolean = false, val fileCover: Boolean = false,
+    /** A FLAC download whose source was lossy. */
+    val lossySource: Boolean = false,
+    /** The downloaded file's name on the server. */
+    val fileName: String? = null)
 
 @Serializable
-enum class SoundCloudJobState { STARTING, WORKING, NEEDS_LINK, NEEDS_TRACK, TRANSFERRING, IMPORTING, COMPLETE, FAILED, LOST, CANCELLED }
+enum class SoundCloudJobState { STARTING, WORKING, NEEDS_LINK, NEEDS_TRACK, NEEDS_TAGS, TRANSFERRING, IMPORTING, COMPLETE, FAILED, LOST, CANCELLED }
 
 @Serializable
 data class SoundCloudJob(
@@ -69,6 +91,14 @@ data class SoundCloudJob(
     /** The device folder the song was saved to while the local folder rules leave it out of the library. */
     val excludedFolder: String? = null,
     val createdAt: Long = 0,
+    /** sc-gate-dl waits with the downloaded file until its tags are checked. */
+    val reviewTags: Boolean = false,
+    /** What sc-gate-dl offers while the job is [SoundCloudJobState.NEEDS_TAGS]. */
+    val review: SoundCloudTagReview? = null,
+    /** The tags written into the file, when they were checked. */
+    val tags: ScGateTags? = null,
+    /** sc-gate-dl's visible gate browser is open, so its browser viewer shows it. */
+    val browser: Boolean = false,
 ) {
     val active: Boolean get() = state in setOf(SoundCloudJobState.STARTING, SoundCloudJobState.WORKING,
         SoundCloudJobState.TRANSFERRING, SoundCloudJobState.IMPORTING)
@@ -198,16 +228,26 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
 
     private suspend fun client(job: SoundCloudJob) = ScGateClient(http, job.baseUrl, route(job.baseUrl))
 
+    /** Also updates the connected server's profile, which may have gained a library folder or a browser viewer since it was set up. */
     suspend fun capabilities(baseUrl: String): ScGateCapabilities {
         val address = normalizeServerAddress(baseUrl)
         val capabilities = ScGateClient(http, address, route(address)).capabilities()
         if (!capabilities.search) throw ScGateException("Update sc-gate-dl to search SoundCloud from Nevumi")
+        profiles.withLock {
+            store.read<SoundCloudProfile>("soundcloud:profile")?.takeIf { it.baseUrl == address }?.let { profile ->
+                profile.with(capabilities).takeIf { it != profile }?.let {
+                    store.put("soundcloud:profile", "soundcloud-settings", it.also { updated -> mutableProfile.value = updated })
+                }
+                capabilitiesChecked = true
+            }
+        }
         return capabilities
     }
 
-    suspend fun connect(baseUrl: String, format: ScGateFormat, destination: SoundCloudDestination): SoundCloudProfile {
+    suspend fun connect(baseUrl: String, format: ScGateFormat, destination: SoundCloudDestination, browser: ScGateBrowser? = null,
+        reviewTags: Boolean = false): SoundCloudProfile {
         val address = normalizeServerAddress(baseUrl)
-        val profile = SoundCloudProfile(address, format, destination, capabilities(address).libraryDestination)
+        val profile = SoundCloudProfile(address, format, destination, browser = browser, reviewTags = reviewTags).with(capabilities(address))
         profiles.withLock {
             store.put("soundcloud:profile", "soundcloud-settings", profile)
             capabilitiesChecked = true
@@ -217,9 +257,10 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     }
 
     /** Does nothing after Disconnect, which may finish first when both are chosen quickly. */
-    suspend fun update(format: ScGateFormat, destination: SoundCloudDestination) = profiles.withLock {
+    suspend fun update(format: ScGateFormat, destination: SoundCloudDestination, browser: ScGateBrowser?, reviewTags: Boolean) = profiles.withLock {
         val profile = store.read<SoundCloudProfile>("soundcloud:profile") ?: return@withLock
-        store.put("soundcloud:profile", "soundcloud-settings", profile.copy(format = format, destination = destination).also { mutableProfile.value = it })
+        store.put("soundcloud:profile", "soundcloud-settings", profile.copy(format = format, destination = destination,
+            browser = browser?.takeIf { it in profile.browserModes }, reviewTags = reviewTags).also { mutableProfile.value = it })
     }
 
     suspend fun disconnect() = profiles.withLock {
@@ -229,25 +270,14 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
 
     suspend fun search(query: String, offset: Int = 0): SoundCloudPage {
         val client = client()
-        // The server may have gained a library folder since it was set up.
-        if (!capabilitiesChecked) {
-            val capabilities = client.capabilities()
-            if (!capabilities.search) throw ScGateException("Update sc-gate-dl to search SoundCloud from Nevumi")
-            profiles.withLock {
-                store.read<SoundCloudProfile>("soundcloud:profile")?.takeIf { it.libraryDestination != capabilities.libraryDestination }?.let {
-                    store.put("soundcloud:profile", "soundcloud-settings", it.copy(libraryDestination = capabilities.libraryDestination)
-                        .also { updated -> mutableProfile.value = updated })
-                }
-            }
-            capabilitiesChecked = true
-        }
+        if (!capabilitiesChecked) capabilities(client.baseUrl)
         return client.search(query, offset)
     }
 
     suspend fun artwork(url: String): ByteArray = client().artwork(url)
 
-    /** Starts a download, or returns the one already running for the same song and destination. */
-    suspend fun download(track: SoundCloudTrack, destination: ScGateDestination, keepOffline: Boolean = false): SoundCloudJob {
+    /** Starts a download, or returns the one already running for the same song and destination. [reviewTags] defaults to the setting. */
+    suspend fun download(track: SoundCloudTrack, destination: ScGateDestination, keepOffline: Boolean = false, reviewTags: Boolean? = null): SoundCloudJob {
         val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads in Settings first" }
         val musicServerId = musicServerFor(profile, destination)
         var started = false
@@ -258,7 +288,8 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
                 // Asking again to keep the song offline adds that to the running download.
                 ?.let { running -> if (keepOffline && !running.keepOffline) running.copy(keepOffline = true).also { save(it) } else running }
                 ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, musicServerId, SoundCloudJobState.STARTING, keepOffline,
-                    message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds()).also {
+                    message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds(),
+                    reviewTags = reviewTags ?: profile.reviewTags).also {
                     creating.update { ids -> ids + it.id }
                     save(it)
                     started = true
@@ -292,11 +323,13 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             change(job.copy(keepOffline = store.read<SoundCloudJob>("soundcloud-job:${job.id}")?.keepOffline ?: job.keepOffline)).also { save(it) }
         }
         try {
-            val created = client(job).createJob(job.track.url, job.format, job.destination)
+            // The browser mode was chosen for the server in Settings, which may have changed since the job started.
+            val browser = store.read<SoundCloudProfile>("soundcloud:profile")?.takeIf { it.baseUrl == job.baseUrl }?.browser
+            val created = client(job).createJob(job.track.url, job.format, job.destination, browser, job.reviewTags)
             val next = finish {
                 it.copy(remoteId = created.jobId, state = if (created.needsGateLink) SoundCloudJobState.NEEDS_LINK else SoundCloudJobState.WORKING,
                     message = if (created.needsGateLink) "No download link found" else created.warning ?: "Starting", percent = 0,
-                    attention = false, fileName = null, location = null, trackId = null, excludedFolder = null)
+                    attention = false, fileName = null, location = null, trackId = null, excludedFolder = null, review = null, tags = null, browser = false)
             }
             if (next.active) schedule()
             return next
@@ -331,7 +364,37 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         schedule()
     }
 
-    private val cancellable = setOf(SoundCloudJobState.WORKING, SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK)
+    /** A cover for the tags of [id]: the one sc-gate-dl found, or with [fromFile] the downloaded file's own. */
+    suspend fun cover(id: String, fromFile: Boolean): ByteArray {
+        val job = job(id)
+        return client(job).cover(requireNotNull(job.remoteId), fromFile)
+    }
+
+    /** Writes the checked tags; sc-gate-dl then saves the file like any other download. */
+    suspend fun finishTags(id: String, choice: ScGateTagChoice) {
+        val job = job(id)
+        require(job.state == SoundCloudJobState.NEEDS_TAGS) { "This download is not waiting for its tags" }
+        client(job).finishTags(requireNotNull(job.remoteId), choice)
+        val written = if (choice.keepFileTags) job.review?.fileTags ?: choice.tags else choice.tags
+        replace(job, job.copy(state = SoundCloudJobState.WORKING, message = "Writing tags", review = null, tags = written))
+        schedule()
+    }
+
+    /** The address of sc-gate-dl's browser viewer for [id], through the tunnel when sc-gate-dl is reached through it. */
+    suspend fun browserView(id: String): String {
+        val job = job(id)
+        val viewer = requireNotNull(client(job).capabilities().browserViewUrl) { "Set BROWSER_VIEW_URL on sc-gate-dl to watch its browser" }
+        val host = Url(job.baseUrl).host.let { if (':' in it) "[$it]" else it }
+        val address = Url(viewer.replace("{host}", host))
+        val origin = "${address.protocol.name}://${address.hostWithPortIfSpecified}"
+        val routed = route(origin)
+        if (routed == origin) return address.toString()
+        // noVNC finds its WebSocket next to its page, so the relay's path prefix carries over.
+        return routed.trimEnd('/') + address.encodedPathAndQuery + address.encodedFragment.takeIf { it.isNotEmpty() }?.let { "#$it" }.orEmpty()
+    }
+
+    private val cancellable = setOf(SoundCloudJobState.WORKING, SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK,
+        SoundCloudJobState.NEEDS_TAGS)
 
     suspend fun cancel(id: String) {
         val job = job(id)
@@ -340,7 +403,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         catch (missing: ScGateException) { if (missing.status != 404) throw missing }
         // The job may have finished downloading while the request ran; leave that progress alone.
         edits.withLock {
-            job(id).takeIf { it.state in cancellable }?.let { save(it.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled", attention = false)) }
+            job(id).takeIf { it.state in cancellable }?.let { save(it.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled", attention = false, browser = false)) }
         }
     }
 
@@ -415,19 +478,24 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     private suspend fun poll(job: SoundCloudJob) {
         val status = client(job).job(requireNotNull(job.remoteId))
         val next = when (status.stage) {
-            "waiting_hypeddit" -> job.copy(state = SoundCloudJobState.NEEDS_LINK, message = "No download link found", attention = false)
+            "waiting_hypeddit" -> job.copy(state = SoundCloudJobState.NEEDS_LINK, message = "No download link found", attention = false, browser = false)
             "waiting_bandcamp_track" -> job.copy(state = SoundCloudJobState.NEEDS_TRACK, message = "Choose the song on the Bandcamp album",
-                bandcampTracks = status.bandcampTracks, attention = false)
+                bandcampTracks = status.bandcampTracks, attention = false, browser = false)
+            "waiting_metadata" -> job.copy(state = SoundCloudJobState.NEEDS_TAGS, message = "Check the tags to finish", percent = 100, attention = false,
+                browser = false, review = SoundCloudTagReview(status.tags ?: ScGateTags(job.track.title, job.track.artist), status.fileTags?.takeUnless { it.blank },
+                    status.hasCover, status.hasFileCover, status.lossySource, status.downloadFilename ?: status.outputFilename))
             "error" -> job.copy(state = SoundCloudJobState.FAILED, message = status.error ?: status.message.ifBlank { "sc-gate-dl could not download this song" },
-                attention = false)
-            "cancelled" -> job.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled on sc-gate-dl", attention = false)
+                attention = false, browser = false)
+            "cancelled" -> job.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled on sc-gate-dl", attention = false, browser = false)
             "ready" -> if (job.destination == ScGateDestination.LIBRARY)
-                job.copy(state = SoundCloudJobState.IMPORTING, message = "Adding to your music server", percent = 100, attention = false,
+                job.copy(state = SoundCloudJobState.IMPORTING, message = "Adding to your music server", percent = 100, attention = false, browser = false,
                     fileName = downloadFileName(requireNotNull(status.libraryFilename) { "sc-gate-dl did not report where it saved the song" }))
-            else job.copy(state = SoundCloudJobState.TRANSFERRING, message = "Saving to this device", percent = 100, attention = false,
+            else job.copy(state = SoundCloudJobState.TRANSFERRING, message = "Saving to this device", percent = 100, attention = false, browser = false,
                 fileName = downloadFileName(requireNotNull(status.outputFilename) { "sc-gate-dl did not report the finished file" }))
+            // Only a visible browser can be watched. Some progress reports leave out that it is open, and it closes once the file downloads.
             else -> job.copy(message = status.message.ifBlank { "Downloading" }, percent = status.percent.coerceIn(0, 100),
-                attention = status.requiresAttention)
+                attention = status.requiresAttention, browser = status.browserMode == ScGateBrowser.HEADED &&
+                    (status.browserActive || job.browser && status.stage !in setOf("downloading", "processing_audio")))
         }
         if (replace(job, next) && next.state != SoundCloudJobState.WORKING) advance(next)
     }
@@ -457,11 +525,13 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> "$owners${song.id}" !in known }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
-            // sc-gate-dl tags the file with the same title and artist the search showed.
+            // sc-gate-dl tags the file with the same title and artist the search showed, unless they were checked.
+            val title = job.tags?.title ?: job.track.title
+            val artist = job.tags?.artist ?: job.track.artist
             val (track, song) = job.serverSongId?.let { id -> catalogue.firstOrNull { (_, song) -> song.id == id } }
                 ?: catalogue.filter { (_, song) -> song.filePath?.let { it == name || it.endsWith("/$name") } == true }.indexed()
-                ?: catalogue.filter { (_, song) -> song.metadata.title.equals(job.track.title, ignoreCase = true) &&
-                    song.metadata.artist.equals(job.track.artist, ignoreCase = true) }.indexed()
+                ?: catalogue.filter { (_, song) -> song.metadata.title.equals(title, ignoreCase = true) &&
+                    song.metadata.artist.equals(artist, ignoreCase = true) }.indexed()
                 ?: throw IllegalStateException("The music server has not indexed the song yet. Retry in a moment.")
             // A retry after an interrupted import finds the song again, although the library knows it by then.
             if (job.serverSongId != song.id) job.copy(serverSongId = song.id).let { if (replace(job, it)) job = it }
