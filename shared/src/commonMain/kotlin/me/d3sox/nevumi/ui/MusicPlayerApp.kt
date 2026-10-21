@@ -183,9 +183,11 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                     }
                 }
                 }
-                Box(Modifier.fillMaxSize().imePadding()) {
+                val playerNavigationHeight = if (page == AppPage.LIBRARY) navigationHeight else 0.dp
+                // The keyboard covers the library navigation, so the mini player only rises once the keyboard is taller.
+                Box(Modifier.fillMaxSize().consumeWindowInsets(PaddingValues(bottom = playerNavigationHeight)).imePadding()) {
                 if (page == AppPage.LIBRARY || page == AppPage.SEARCH) {
-                    PlayerPanels(state, controller, playerSheet, if (page == AppPage.LIBRARY) navigationHeight else 0.dp,
+                    PlayerPanels(state, controller, playerSheet, playerNavigationHeight,
                         onPairedDevices = { returnToSettings = false; page = AppPage.PAIRED_DEVICES },
                         onAudioEffects = { returnToSettings = false; page = AppPage.AUDIO_EFFECTS }) { returnToSettings = false; page = AppPage.SAVED_QUEUES }
                 }
