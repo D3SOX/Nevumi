@@ -10,6 +10,9 @@ class ScGateTagTextTest {
         assertEquals("Artist - Track", withoutPromoText("[PREMIERE]: Artist - Track"))
         assertEquals("Night Drive", withoutPromoText("Night Drive [FREE DL]"))
         assertEquals("Night Drive", withoutPromoText("Night Drive - Free Download"))
+        assertEquals("Night Drive", withoutPromoText("Night DriveFreeDL"))
+        assertEquals("Shout Now", withoutPromoText("Shout Now"))
+        assertEquals("Nonexclusive", withoutPromoText("Nonexclusive"))
         assertEquals("Night Drive (Edit)", withoutPromoText("Night Drive (Edit)"))
     }
 

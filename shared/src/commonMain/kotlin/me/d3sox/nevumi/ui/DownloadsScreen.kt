@@ -74,7 +74,9 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
                     if (playlists.isNotEmpty()) item { HorizontalDivider() }
                     item(key = "soundcloud-heading") { Text("SoundCloud", style = MaterialTheme.typography.titleSmall) }
                     items(state.soundCloudJobs, key = { "soundcloud:${it.id}" }) { job ->
-                        SoundCloudJobItem(job, controller, viewer = state.soundCloud?.browserViewUrl != null) { tagging = job.id }
+                        // Settings only know the viewer of the server they use now, which may not be the one running this job.
+                        val viewer = state.soundCloud?.let { it.baseUrl == job.baseUrl && it.browserViewUrl != null } == true
+                        SoundCloudJobItem(job, controller, viewer) { tagging = job.id }
                     }
                 }
                 if ((playlists.isNotEmpty() || state.soundCloudJobs.isNotEmpty()) && state.downloads.isNotEmpty()) item { HorizontalDivider() }

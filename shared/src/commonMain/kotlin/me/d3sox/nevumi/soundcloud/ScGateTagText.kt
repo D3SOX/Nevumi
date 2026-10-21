@@ -1,12 +1,14 @@
 package me.d3sox.nevumi.soundcloud
 
-// The same cleanup and file names as sc-gate-dl's web interface, so both offer the same tags for a download.
+// Cleanup and file names like sc-gate-dl's web interface, so both offer the same tags for a download.
 
 /** Promo text often glued onto SoundCloud and gate titles. */
-private const val PROMO = """free\s*d(?:own)?l(?:oad)?s?|free[\s._-]*dl|freedl|out\s*now|premiere|exclusive"""
+private const val FREE_DOWNLOAD = """free\s*d(?:own)?l(?:oad)?s?|free[\s._-]*dl|freedl"""
+private const val PROMO = """$FREE_DOWNLOAD|out\s*now|premiere|exclusive"""
 private val bracketedPromo = Regex("""\s*[\[({]\s*(?:$PROMO)\s*[\])}]\s*(?:[-–—|/:·•]+\s*)?""", RegexOption.IGNORE_CASE)
 private val trailingPromo = Regex("""(?:\s*[-–—|/·•*]+\s*|\s+)(?:$PROMO)(?:\s*\*+)?\s*$""", RegexOption.IGNORE_CASE)
-private val gluedPromo = Regex("""(?:$PROMO)\s*$""", RegexOption.IGNORE_CASE)
+// Only free-download markers, because words such as "Shout Now" or "Nonexclusive" end like other promo text.
+private val gluedPromo = Regex("""(?:$FREE_DOWNLOAD)\s*$""", RegexOption.IGNORE_CASE)
 private val leadingPromo = Regex("""^\s*(?:$PROMO)(?:\s*[-–—|/·•]+\s*|\s+)""", RegexOption.IGNORE_CASE)
 private val edgeSeparators = Regex("""^[\s\-–—|/·•]+|[\s\-–—|/·•]+$""")
 private val spaces = Regex("""\s{2,}""")
