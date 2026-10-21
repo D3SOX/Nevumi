@@ -15,8 +15,10 @@ import kotlinx.serialization.Serializable
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.library.LocalSources
+import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.navidrome.NavidromeClient
+import me.d3sox.nevumi.navidrome.ServerSong
 import me.d3sox.nevumi.navidrome.normalizeServerAddress
 import me.d3sox.nevumi.storage.MusicStore
 import okio.BufferedSink
@@ -47,6 +49,8 @@ data class SoundCloudJob(
     val format: ScGateFormat,
     /** The sc-gate-dl server that knows [remoteId], which stays the same when Settings switch to another server. */
     val baseUrl: String,
+    /** The music server whose library a [ScGateDestination.LIBRARY] download goes into. */
+    val musicServerId: String? = null,
     val state: SoundCloudJobState,
     val keepOffline: Boolean = false,
     val remoteId: String? = null,
@@ -238,10 +242,12 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads in Settings first" }
         if (destination == ScGateDestination.CLIENT) check(deviceDownloads) { "Downloads to this device are unavailable" }
         else check(profile.libraryDestination) { "Your sc-gate-dl server has no music library folder" }
+        val musicServerId = if (destination == ScGateDestination.LIBRARY)
+            requireNotNull(server()) { "Connect to your music server first" }.serverId else null
         var started = false
         val job = edits.withLock {
             store.list<SoundCloudJob>("soundcloud-jobs").firstOrNull { it.track.url == track.url && it.destination == destination && !it.finished }
-                ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, SoundCloudJobState.STARTING, keepOffline,
+                ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, musicServerId, SoundCloudJobState.STARTING, keepOffline,
                     message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds()).also {
                     creating.update { ids -> ids + it.id }
                     save(it)
@@ -414,23 +420,23 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     private suspend fun import(job: SoundCloudJob) {
         val next = if (job.destination == ScGateDestination.LIBRARY) {
             val client = requireNotNull(server()) { "Connect to your music server to add this song" }
+            check(client.serverId == job.musicServerId) { "Connect to the music server this song was saved to, then retry" }
             val changes = requireNotNull(serverChanges) { "Music server changes are unavailable" }
             val name = requireNotNull(job.fileName)
             // Only Navidrome's own API lists real file paths. Other Subsonic servers are matched by the tags below.
             val navidrome = client.isNavidrome()
-            // The library already knows these server songs, so a tag match outside them is the new file.
+            // The library already knows these server songs, so a match outside them is the new file, even when an older
+            // file elsewhere has the same name or tags. sc-gate-dl only reports the file name inside its library folder.
             val owners = "source-owner:server:${client.serverId}:"
-            val known = if (navidrome) emptySet() else store.database.records().list("source-owners").mapNotNullTo(HashSet()) {
-                it.key.takeIf { key -> key.startsWith(owners) }
-            }
+            val known = store.database.records().list("source-owners").mapNotNullTo(HashSet()) { it.key.takeIf { key -> key.startsWith(owners) } }
+            fun List<Pair<Track, ServerSong>>.newest() =
+                firstOrNull { (_, song) -> "$owners${song.id}" !in known } ?: firstOrNull()
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
             // sc-gate-dl tags the file with the same title and artist the search showed.
-            val (track, song) = catalogue.firstOrNull { (_, song) -> song.filePath?.let { it == name || it.endsWith("/$name") } == true }
+            val (track, song) = catalogue.filter { (_, song) -> song.filePath?.let { it == name || it.endsWith("/$name") } == true }.newest()
                 ?: catalogue.filter { (_, song) -> song.metadata.title.equals(job.track.title, ignoreCase = true) &&
-                    song.metadata.artist.equals(job.track.artist, ignoreCase = true) }.let { tagged ->
-                    tagged.firstOrNull { (_, song) -> "$owners${song.id}" !in known } ?: tagged.firstOrNull()
-                }
+                    song.metadata.artist.equals(job.track.artist, ignoreCase = true) }.newest()
                 ?: throw IllegalStateException("The music server has not indexed the song yet. Retry in a moment.")
             song.coverArt?.let { cover ->
                 try { artwork?.fetch(track.id, client, cover) }
