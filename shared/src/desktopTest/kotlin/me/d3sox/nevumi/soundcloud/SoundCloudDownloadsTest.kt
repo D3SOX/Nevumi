@@ -153,6 +153,31 @@ class SoundCloudDownloadsTest {
     }
 
     @Test
+    fun aJobKeepsUsingTheServerThatStartedItAfterSettingsSwitchServers() = runBlocking {
+        val hosts = Collections.synchronizedSet(mutableSetOf<String>())
+        val ready = java.util.concurrent.atomic.AtomicBoolean(false)
+        val fixture = fixture { request ->
+            if (request.url.encodedPath.startsWith("/api/job")) hosts += request.url.host
+            when (request.url.encodedPath) {
+                "/api/job" -> respond("""{"jobId":"j1","started":true,"needsHypedditUrl":false}""", headers = json)
+                "/api/job/j1" -> respond(if (ready.get()) status("ready", 100, outputFilename = "Artist - Night Drive.mp3") else status("downloading", 40),
+                    headers = json)
+                "/api/job/j1/file" -> respond(audio, headers = headersOf(HttpHeaders.ContentType, "audio/mpeg"))
+                else -> null
+            }
+        }
+        try {
+            fixture.downloads.connect("http://first.test", ScGateFormat.MP3_320, SoundCloudDestination.ASK)
+            val completed = async(start = CoroutineStart.UNDISPATCHED) { fixture.downloads.completed.first() }
+            fixture.downloads.download(track, ScGateDestination.CLIENT)
+            fixture.downloads.connect("http://second.test", ScGateFormat.MP3_320, SoundCloudDestination.ASK)
+            ready.set(true)
+            assertEquals(SoundCloudJobState.COMPLETE, withTimeout(10_000) { completed.await() }.state)
+            assertEquals(setOf("first.test"), hosts)
+        } finally { fixture.close() }
+    }
+
+    @Test
     fun retryingACanceledJobStartsANewOne() = runBlocking {
         var created = 0
         var resumed = false

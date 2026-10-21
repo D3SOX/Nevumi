@@ -45,6 +45,8 @@ data class SoundCloudJob(
     val track: SoundCloudTrack,
     val destination: ScGateDestination,
     val format: ScGateFormat,
+    /** The sc-gate-dl server that knows [remoteId], which stays the same when Settings switch to another server. */
+    val baseUrl: String,
     val state: SoundCloudJobState,
     val keepOffline: Boolean = false,
     val remoteId: String? = null,
@@ -186,6 +188,8 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         return ScGateClient(http, profile.baseUrl, route(profile.baseUrl))
     }
 
+    private suspend fun client(job: SoundCloudJob) = ScGateClient(http, job.baseUrl, route(job.baseUrl))
+
     suspend fun capabilities(baseUrl: String): ScGateCapabilities {
         val address = normalizeServerAddress(baseUrl)
         val capabilities = ScGateClient(http, address, route(address)).capabilities()
@@ -237,7 +241,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         var started = false
         val job = edits.withLock {
             store.list<SoundCloudJob>("soundcloud-jobs").firstOrNull { it.track.url == track.url && it.destination == destination && !it.finished }
-                ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, SoundCloudJobState.STARTING, keepOffline,
+                ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, SoundCloudJobState.STARTING, keepOffline,
                     message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds()).also {
                     creating.update { ids -> ids + it.id }
                     save(it)
@@ -249,7 +253,9 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
 
     /** Restarts [job] as a new server job when nobody changed it meanwhile. */
     private suspend fun restart(job: SoundCloudJob) {
-        val restarted = job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null)
+        // A new server job goes to the server configured now, which may differ from the one that lost or canceled it.
+        val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads in Settings first" }
+        val restarted = job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null, baseUrl = profile.baseUrl)
         creating.update { it + job.id }
         if (replace(job, restarted)) create(restarted) else creating.update { it - job.id }
     }
@@ -257,7 +263,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     /** Asks sc-gate-dl to create the job saved as [job]; the caller has marked it as [creating]. */
     private suspend fun create(job: SoundCloudJob): SoundCloudJob {
         try {
-            val created = client().createJob(job.track.url, job.format, job.destination)
+            val created = client(job).createJob(job.track.url, job.format, job.destination)
             val next = job.copy(remoteId = created.jobId, state = if (created.needsGateLink) SoundCloudJobState.NEEDS_LINK else SoundCloudJobState.WORKING,
                 message = if (created.needsGateLink) "No download link found" else created.warning ?: "Starting", percent = 0,
                 attention = false, fileName = null, location = null, trackId = null, excludedFolder = null)
@@ -277,7 +283,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         val job = job(id)
         require(job.state == SoundCloudJobState.NEEDS_LINK) { "This download does not need a link" }
         require(link.isNotBlank()) { "Paste a download link" }
-        val client = client()
+        val client = client(job)
         val remoteId = requireNotNull(job.remoteId)
         client.setGateLink(remoteId, link.trim())
         client.start(remoteId)
@@ -290,7 +296,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     suspend fun chooseBandcampTrack(id: String, url: String) {
         val job = job(id)
         require(job.state == SoundCloudJobState.NEEDS_TRACK && job.bandcampTracks.any { it.url == url }) { "Choose one of the album's songs" }
-        client().chooseBandcampTrack(requireNotNull(job.remoteId), url)
+        client(job).chooseBandcampTrack(requireNotNull(job.remoteId), url)
         replace(job, job.copy(state = SoundCloudJobState.WORKING, message = "Downloading", bandcampTracks = emptyList()))
         schedule()
     }
@@ -300,7 +306,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     suspend fun cancel(id: String) {
         val job = job(id)
         require(job.state in cancellable) { "This download can no longer be canceled" }
-        try { client().cancel(requireNotNull(job.remoteId)) }
+        try { client(job).cancel(requireNotNull(job.remoteId)) }
         catch (missing: ScGateException) { if (missing.status != 404) throw missing }
         // The job may have finished downloading while the request ran; leave that progress alone.
         edits.withLock {
@@ -322,7 +328,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             restart(job)
             return
         } else {
-            try { client().start(remoteId) }
+            try { client(job).start(remoteId) }
             catch (error: ScGateException) {
                 if (error.status == 404) { restart(job); return }
                 // A job that is already running or waits for a link reports its real stage on the next poll.
@@ -377,7 +383,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     }
 
     private suspend fun poll(job: SoundCloudJob) {
-        val status = client().job(requireNotNull(job.remoteId))
+        val status = client(job).job(requireNotNull(job.remoteId))
         val next = when (status.stage) {
             "waiting_hypeddit" -> job.copy(state = SoundCloudJobState.NEEDS_LINK, message = "No download link found", attention = false)
             "waiting_bandcamp_track" -> job.copy(state = SoundCloudJobState.NEEDS_TRACK, message = "Choose the song on the Bandcamp album",
@@ -399,7 +405,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     private suspend fun transfer(job: SoundCloudJob) {
         val destination = requireNotNull(files) { "Downloads to this device are unavailable" }
         val location = destination.save(requireNotNull(job.fileName)) { sink ->
-            client().download(requireNotNull(job.remoteId)) { sink.write(it) }
+            client(job).download(requireNotNull(job.remoteId)) { sink.write(it) }
         }
         val next = job.copy(state = SoundCloudJobState.IMPORTING, message = "Adding to your library", location = location)
         if (replace(job, next)) advance(next)
@@ -412,12 +418,19 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             val name = requireNotNull(job.fileName)
             // Only Navidrome's own API lists real file paths. Other Subsonic servers are matched by the tags below.
             val navidrome = client.isNavidrome()
+            // The library already knows these server songs, so a tag match outside them is the new file.
+            val owners = "source-owner:server:${client.serverId}:"
+            val known = if (navidrome) emptySet() else store.database.records().list("source-owners").mapNotNullTo(HashSet()) {
+                it.key.takeIf { key -> key.startsWith(owners) }
+            }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
             // sc-gate-dl tags the file with the same title and artist the search showed.
             val (track, song) = catalogue.firstOrNull { (_, song) -> song.filePath?.let { it == name || it.endsWith("/$name") } == true }
-                ?: catalogue.firstOrNull { (_, song) -> song.metadata.title.equals(job.track.title, ignoreCase = true) &&
-                    song.metadata.artist.equals(job.track.artist, ignoreCase = true) }
+                ?: catalogue.filter { (_, song) -> song.metadata.title.equals(job.track.title, ignoreCase = true) &&
+                    song.metadata.artist.equals(job.track.artist, ignoreCase = true) }.let { tagged ->
+                    tagged.firstOrNull { (_, song) -> "$owners${song.id}" !in known } ?: tagged.firstOrNull()
+                }
                 ?: throw IllegalStateException("The music server has not indexed the song yet. Retry in a moment.")
             song.coverArt?.let { cover ->
                 try { artwork?.fetch(track.id, client, cover) }
