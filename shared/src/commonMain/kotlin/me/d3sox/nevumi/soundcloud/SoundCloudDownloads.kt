@@ -128,6 +128,8 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private val runs = Mutex()
     private val edits = Mutex()
+    // Profile writes, so a late settings change cannot bring back a profile that Disconnect removed.
+    private val profiles = Mutex()
     // Jobs whose creation request is running in this process.
     private val creating = MutableStateFlow<Set<String>>(emptySet())
     // Consecutive failed polls per job, so a short outage does not end a download.
@@ -204,18 +206,21 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
     suspend fun connect(baseUrl: String, format: ScGateFormat, destination: SoundCloudDestination): SoundCloudProfile {
         val address = normalizeServerAddress(baseUrl)
         val profile = SoundCloudProfile(address, format, destination, capabilities(address).libraryDestination)
-        store.put("soundcloud:profile", "soundcloud-settings", profile)
-        capabilitiesChecked = true
-        mutableProfile.value = profile
+        profiles.withLock {
+            store.put("soundcloud:profile", "soundcloud-settings", profile)
+            capabilitiesChecked = true
+            mutableProfile.value = profile
+        }
         return profile
     }
 
-    suspend fun update(format: ScGateFormat, destination: SoundCloudDestination) {
-        val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads first" }
+    /** Does nothing after Disconnect, which may finish first when both are chosen quickly. */
+    suspend fun update(format: ScGateFormat, destination: SoundCloudDestination) = profiles.withLock {
+        val profile = store.read<SoundCloudProfile>("soundcloud:profile") ?: return@withLock
         store.put("soundcloud:profile", "soundcloud-settings", profile.copy(format = format, destination = destination).also { mutableProfile.value = it })
     }
 
-    suspend fun disconnect() {
+    suspend fun disconnect() = profiles.withLock {
         store.database.records().delete("soundcloud:profile")
         mutableProfile.value = null
     }
@@ -226,9 +231,11 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         if (!capabilitiesChecked) {
             val capabilities = client.capabilities()
             if (!capabilities.search) throw ScGateException("Update sc-gate-dl to search SoundCloud from Nevumi")
-            store.read<SoundCloudProfile>("soundcloud:profile")?.takeIf { it.libraryDestination != capabilities.libraryDestination }?.let {
-                store.put("soundcloud:profile", "soundcloud-settings", it.copy(libraryDestination = capabilities.libraryDestination)
-                    .also { updated -> mutableProfile.value = updated })
+            profiles.withLock {
+                store.read<SoundCloudProfile>("soundcloud:profile")?.takeIf { it.libraryDestination != capabilities.libraryDestination }?.let {
+                    store.put("soundcloud:profile", "soundcloud-settings", it.copy(libraryDestination = capabilities.libraryDestination)
+                        .also { updated -> mutableProfile.value = updated })
+                }
             }
             capabilitiesChecked = true
         }
@@ -278,22 +285,24 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
 
     /** Asks sc-gate-dl to create the job saved as [job]; the caller has marked it as [creating]. */
     private suspend fun create(job: SoundCloudJob): SoundCloudJob {
+        // Keeps a keep-offline request made while sc-gate-dl was creating the job.
+        suspend fun finish(change: (SoundCloudJob) -> SoundCloudJob) = edits.withLock {
+            change(job.copy(keepOffline = store.read<SoundCloudJob>("soundcloud-job:${job.id}")?.keepOffline ?: job.keepOffline)).also { save(it) }
+        }
         try {
             val created = client(job).createJob(job.track.url, job.format, job.destination)
-            val next = edits.withLock {
-                // Keep a keep-offline request made while sc-gate-dl was creating the job.
-                val keepOffline = store.read<SoundCloudJob>("soundcloud-job:${job.id}")?.keepOffline ?: job.keepOffline
-                job.copy(remoteId = created.jobId, state = if (created.needsGateLink) SoundCloudJobState.NEEDS_LINK else SoundCloudJobState.WORKING,
+            val next = finish {
+                it.copy(remoteId = created.jobId, state = if (created.needsGateLink) SoundCloudJobState.NEEDS_LINK else SoundCloudJobState.WORKING,
                     message = if (created.needsGateLink) "No download link found" else created.warning ?: "Starting", percent = 0,
-                    attention = false, fileName = null, location = null, trackId = null, excludedFolder = null, keepOffline = keepOffline).also { save(it) }
+                    attention = false, fileName = null, location = null, trackId = null, excludedFolder = null)
             }
             if (next.active) schedule()
             return next
         } catch (cancelled: CancellationException) {
-            withContext(NonCancellable) { save(job.copy(state = SoundCloudJobState.FAILED, message = "Interrupted. Retry to start again.")) }
+            withContext(NonCancellable) { finish { it.copy(state = SoundCloudJobState.FAILED, message = "Interrupted. Retry to start again.") } }
             throw cancelled
         } catch (error: Exception) {
-            return job.copy(state = SoundCloudJobState.FAILED, message = error.message ?: "sc-gate-dl could not start the download").also { save(it) }
+            return finish { it.copy(state = SoundCloudJobState.FAILED, message = error.message ?: "sc-gate-dl could not start the download") }
         } finally { creating.update { it - job.id } }
     }
 
