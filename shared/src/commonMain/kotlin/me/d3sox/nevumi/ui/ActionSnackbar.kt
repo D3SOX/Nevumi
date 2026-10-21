@@ -21,13 +21,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.ActionDestination
 import me.d3sox.nevumi.app.ActionNotice
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
 
 internal class ActionSnackbarVisuals(val notice: ActionNotice) : SnackbarVisuals {
-    override val message = notice.message
+    /** The notice text is a string resource; [ActionSnackbar] resolves it where it is drawn. */
+    override val message = ""
     override val actionLabel = if (notice.undo != null) { if (notice.isRedo) "Redo" else "Undo" }
         else if (notice.play != null) "Play" else notice.destination?.openLabel()
     override val withDismissAction = false
@@ -70,7 +72,7 @@ internal fun ActionSnackbar(data: SnackbarData, open: (ActionDestination) -> Uni
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 48.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon((if (notice == null) AppIcon.INFO else AppIcon.CHECK).vector, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(data.visuals.message, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text(notice?.let { stringResource(it.message, *it.arguments.toTypedArray()) } ?: data.visuals.message, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
             data.visuals.actionLabel?.let { label ->
                 TextButton(onClick = data::performAction) {
                     if (notice?.undo != null) { Icon((if (notice.isRedo) AppIcon.REDO else AppIcon.UNDO).vector, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)) }

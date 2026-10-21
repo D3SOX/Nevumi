@@ -60,7 +60,8 @@ class PlaybackTransferTest {
             assertEquals(before.entries.take(2).map { it.section }, target.state.value.queue.entries.map { it.section })
             assertTrue(target.state.value.playback.positionMs >= 450)
             val moved = withTimeout(3_000) { notice.await() }
-            assertTrue(moved.message.contains("1 unavailable"), moved.message)
+            val movedText = org.jetbrains.compose.resources.getString(moved.message, *moved.arguments.toTypedArray())
+            assertTrue(movedText.contains("1 unavailable"), movedText)
             requireNotNull(moved.undo)().join()
             assertEquals(before.entries.take(2), source.state.value.queue.entries)
             source.enqueue(missing.id, QueueAction.PLAY_NEXT).join()
