@@ -175,10 +175,12 @@ class QueueDesktopUiTest {
         waitForIdle()
         mainClock.autoAdvance = false
         runBlocking { controller.playTrack(tracks[3].id, tracks.map { it.id }, 3).join() }
+        val replacement = controller.state.value.queue.currentEntryId
         repeat(6) { mainClock.advanceTimeByFrame() }
         val switching = list.captureToImage().toPixelMap()
         mainClock.autoAdvance = true
         waitForIdle()
+        onNodeWithTag("queue-entry:$replacement").assertIsDisplayed()
         val settled = list.captureToImage().toPixelMap()
         assertEquals(switching.width to switching.height, settled.width to settled.height)
         val changed = (0 until settled.width).sumOf { x -> (0 until settled.height).count { y -> switching[x, y] != settled[x, y] } }
