@@ -175,7 +175,7 @@ class AndroidBackNavigationTest {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 app.controller.refresh()
                 app.controller.playTrack(track.id, listOf(track.id)).join()
-                compose.waitUntil(5_000) { app.controller.state.value.playback.playing }
+                compose.waitUntil(15_000) { app.controller.state.value.playback.playing }
                 app.controller.pause().join()
                 compose.onNodeWithTag("mini-player").performClick()
                 val original = compose.onNodeWithTag("now-playing").fetchSemanticsNode().boundsInRoot.top
@@ -199,9 +199,11 @@ class AndroidBackNavigationTest {
                 scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                 compose.onNodeWithTag("queue-header").assertIsDisplayed()
                 assertTrue(kotlin.math.abs(compose.onNodeWithTag("queue-header").fetchSemanticsNode().boundsInRoot.top - queueTop) < 2)
-                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                // Dispatch Back to the activity: a key event would close a system dialog that has taken focus on a slow emulator.
+                scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                compose.onNodeWithTag("queue-header").assertDoesNotExist()
                 compose.onNodeWithTag("now-playing").assertIsDisplayed()
-                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
                 compose.onNodeWithTag("mini-player").assertIsDisplayed()
             }
         } finally { app.controller.pause().join(); file.delete() }

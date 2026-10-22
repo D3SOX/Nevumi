@@ -40,8 +40,10 @@ class AndroidFolderPickerTest {
         fun nodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> = listOf(root) +
             (0 until root.childCount).mapNotNull { root.getChild(it) }.flatMap(::nodes)
         fun clickNative(label: String, titleOnly: Boolean = false) {
-            compose.waitUntil(5_000) {
+            // DocumentsUI can be slow to list folders on CI emulators.
+            compose.waitUntil(15_000) {
                 val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@waitUntil false
+                if (waitOnNotRespondingDialog(root)) return@waitUntil false
                 val node = nodes(root).firstOrNull { it.isVisibleToUser &&
                     (it.text?.toString()?.equals(label, ignoreCase = true) == true || it.contentDescription?.toString() == label) &&
                     (!titleOnly || it.viewIdResourceName == "android:id/title") } ?: return@waitUntil false

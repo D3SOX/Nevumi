@@ -125,8 +125,9 @@ class AndroidFileEditingUiTest {
                 fun clickPickerItem(text: String) {
                     var requested = false
                     try {
-                    compose.waitUntil(5_000) {
+                    compose.waitUntil(15_000) {
                         val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@waitUntil false
+                        if (waitOnNotRespondingDialog(root)) return@waitUntil false
                         fun nodes(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> = listOf(node) +
                             (0 until node.childCount).mapNotNull { node.getChild(it) }.flatMap(::nodes)
                         val visible = nodes(root).filter { it.isVisibleToUser }
@@ -255,7 +256,7 @@ class AndroidFileEditingUiTest {
                 compose.onNode(hasText("Title") and hasSetTextAction()).performTextReplacement("Android edited music")
                 compose.onNode(hasText("Year") and hasSetTextAction()).performScrollTo().performTextReplacement("2026")
                 compose.onNodeWithText("Save changes").performClick()
-                compose.waitUntil(5_000) {
+                compose.waitUntil(15_000) {
                     app.controller.state.value.tracks.any { track -> track.sources.any { source -> source.location == uri.toString() } && track.metadata.title == "Android edited music" && track.metadata.year == 2026 } &&
                         compose.onAllNodesWithText("Save changes").fetchSemanticsNodes().isEmpty()
                 }

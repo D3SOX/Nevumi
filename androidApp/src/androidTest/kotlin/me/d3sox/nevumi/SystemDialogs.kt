@@ -23,7 +23,8 @@ internal fun waitOnNotRespondingDialog(root: AccessibilityNodeInfo): Boolean {
 /**
  * Clicks the first clickable node matching [matches] in a system dialog. Slow emulators can show a permission dialog
  * without moving input focus to it, so this searches every application window. Skip the app tree and system bars
- * so querying unrelated UI cannot consume the time allowed for the dialog.
+ * so querying unrelated UI cannot consume the time allowed for the dialog. Answers system "not responding" dialogs
+ * that cover it.
  */
 internal suspend fun UiAutomation.clickSystemDialogButton(matches: (AccessibilityNodeInfo) -> Boolean) {
     serviceInfo = serviceInfo.apply { flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
@@ -34,5 +35,8 @@ internal suspend fun UiAutomation.clickSystemDialogButton(matches: (Accessibilit
         return (0 until node.childCount).any { click(node.getChild(it)) }
     }
     while (!windows.any { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && click(it.root) } &&
-        !click(rootInActiveWindow)) delay(50)
+        !click(rootInActiveWindow)) {
+        windows.forEach { window -> window.root?.let(::waitOnNotRespondingDialog) }
+        delay(50)
+    }
 }

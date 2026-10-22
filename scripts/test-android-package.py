@@ -143,7 +143,7 @@ class AndroidPackageTest(unittest.TestCase):
                 permission = "android.permission.READ_MEDIA_AUDIO" if api >= 33 else "android.permission.READ_EXTERNAL_STORAGE"
                 adb("shell", "pm", "grant", APP, permission)
                 if api >= 33: adb("shell", "pm", "grant", APP, "android.permission.POST_NOTIFICATIONS")
-                for _ in range(3): adb("shell", "input", "keyevent", "4")
+                adb("shell", "am", "force-stop", APP)
                 adb("shell", "am", "start", "-W", "--user", "0", "-n", APP + "/.MainActivity")
                 click("Settings"); click("Local music"); click("Scan music")
                 deadline = time.monotonic() + 30

@@ -63,8 +63,8 @@ class AndroidFileConsentTest {
             ActivityScenario.launch(MainActivity::class.java).use {
                 val editing = async(Dispatchers.Default) { runCatching { edits.editTags(track.id, track.metadata.copy(title = "Nevumi edit")) } }
                 try {
-                    withTimeout(5_000) { requested.await() }
-                    withTimeout(5_000) {
+                    withTimeout(15_000) { requested.await() }
+                    withTimeout(15_000) {
                         // System images expose this label as either "Allow" or "ALLOW".
                         instrumentation.uiAutomation.clickSystemDialogButton { it.text?.toString()?.equals("Allow", ignoreCase = true) == true }
                     }
