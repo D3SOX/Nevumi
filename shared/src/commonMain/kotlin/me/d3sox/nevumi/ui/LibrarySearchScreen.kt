@@ -77,8 +77,10 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     LocalLibraryScrollKey provides "search-detail:${openedType?.name}:${opened.id}") {
                     SongList(opened.tracks, controller, playlistId = opened.id.takeIf { openedType == SearchType.PLAYLISTS }, contextName = opened.title,
                         header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) { openedId = null } })
+                } else if (query.isBlank()) {
+                    if (type == SearchType.SOUNDCLOUD) SearchPrompt(AppIcon.CLOUD, "Search SoundCloud for songs to download", Modifier.align(Alignment.Center))
+                    else SearchPrompt(AppIcon.MUSIC, "Enter a search term", Modifier.align(Alignment.Center))
                 } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller)
-                else if (query.isBlank()) SearchPrompt(Modifier.align(Alignment.Center))
                 else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search")
                 else {
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD } else listOf(type)
@@ -125,20 +127,20 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
 }
 
 @Composable
-private fun SearchPrompt(modifier: Modifier = Modifier) {
+private fun SearchPrompt(icon: AppIcon, label: String, modifier: Modifier = Modifier) {
     Column(modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(Modifier.size(96.dp)) {
             Box(Modifier.size(80.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
                 contentAlignment = Alignment.Center) {
-                Icon(AppIcon.MUSIC.vector, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Icon(icon.vector, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
             }
             Box(Modifier.align(Alignment.BottomEnd).size(48.dp).background(MaterialTheme.colorScheme.surface, CircleShape),
                 contentAlignment = Alignment.Center) {
                 Icon(AppIcon.SEARCH.vector, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
-        Text("Enter a search term", style = MaterialTheme.typography.bodyLarge,
+        Text(label, style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
