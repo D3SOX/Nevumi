@@ -89,7 +89,7 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                             { edge(tab, last = false) ?: Float.NEGATIVE_INFINITY }, { edge(tab, last = true) ?: Float.POSITIVE_INFINITY }) }
                         // Other sections can't be move targets, even when auto-scroll picks the nearest row.
                         ReorderableItem(reorderable, tab.name,
-                            enabled = draggingTab.let { it == null || (it in primary) == (tab in primary) }) { _ ->
+                            enabled = draggingTab?.let { tab in group(it) } ?: true) { _ ->
                             Surface(color = MaterialTheme.colorScheme.surfaceContainer,
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
