@@ -35,6 +35,7 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
     onSave: (List<LibraryTab>, Set<LibraryTab>?) -> Unit, dismiss: () -> Unit) {
     var tabs by remember { mutableStateOf(initial) }
     var bottomTabs by remember { mutableStateOf(initialBottomNavigationTabs) }
+    var draggingTab by remember { mutableStateOf<LibraryTab?>(null) }
     var width by remember { mutableIntStateOf(0) }
     val sizing = rememberLibraryNavigationSizing()
     val primary = sizing.primary(tabs, bottomTabs, width)
@@ -51,6 +52,11 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
         return true
     }
     val scroll = rememberLazyListState()
+    val currentPrimary by rememberUpdatedState(primary)
+    fun slot(tab: LibraryTab) = scroll.layoutInfo.visibleItemsInfo.firstOrNull { it.key == tab.name }?.offset?.toFloat()
+    // A dragged tab stops at the first and last rows of its section; an edge outside the viewport doesn't limit it.
+    fun edge(tab: LibraryTab, last: Boolean) = tabs.filter { (it in currentPrimary) == (tab in currentPrimary) }
+        .let { slot(if (last) it.last() else it.first()) }
     val reorderable = rememberReorderableLazyListState(scroll) { from, to ->
         val source = tabs.indexOfFirst { it.name == from.key }
         val destination = tabs.indexOfFirst { it.name == to.key }
@@ -79,7 +85,11 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     items(section, key = { it.name }) { tab ->
-                        ReorderableItem(reorderable, tab.name) { _ ->
+                        val boundary = remember(tab, scroll) { DragBoundary({ slot(tab) ?: 0f },
+                            { edge(tab, last = false) ?: Float.NEGATIVE_INFINITY }, { edge(tab, last = true) ?: Float.POSITIVE_INFINITY }) }
+                        // Other sections can't be move targets, even when auto-scroll picks the nearest row.
+                        ReorderableItem(reorderable, tab.name,
+                            enabled = draggingTab?.let { tab in group(it) } ?: true) { _ ->
                             Surface(color = MaterialTheme.colorScheme.surfaceContainer,
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -107,7 +117,8 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                             })
                                     }
                                     if (tab in tabs) {
-                                        Box(Modifier.size(48.dp).draggableHandle().semantics {
+                                        Box(Modifier.size(48.dp).draggableHandle(dragGestureDetector = boundary,
+                                            onDragStarted = { draggingTab = tab }, onDragStopped = { draggingTab = null }).semantics {
                                             contentDescription = "Reorder tab: ${tab.label}"
                                             customActions = listOf(CustomAccessibilityAction("Move up") { move(tab, -1) },
                                                 CustomAccessibilityAction("Move down") { move(tab, 1) })

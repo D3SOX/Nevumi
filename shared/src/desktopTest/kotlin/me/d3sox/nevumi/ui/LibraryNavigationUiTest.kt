@@ -238,6 +238,27 @@ class LibraryNavigationUiTest {
         assertEquals(configured - LibraryTab.RECOMMENDATIONS, savedBottom)
     }
 
+    @Test fun draggedTabsStopAtTheEdgesOfTheirSection() = runComposeUiTest {
+        var saved: List<LibraryTab>? = null
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.width(360.dp)) { LibraryTabsEditor(tabs, null, onSave = { enabled, _ -> saved = enabled }, dismiss = {}) }
+        } }
+        listOf(tabs[0] to -1f, tabs[3] to 1f).forEach { (tab, direction) ->
+            val handle = onNodeWithContentDescription("Reorder tab: ${tab.label}", useUnmergedTree = true)
+            val start = handle.fetchSemanticsNode().boundsInRoot.top
+            handle.performTouchInput { down(center) }
+            repeat(6) {
+                handle.performTouchInput { moveBy(androidx.compose.ui.geometry.Offset(0f, direction * 60f), delayMillis = 50) }
+                waitForIdle()
+                assertEquals(start, handle.fetchSemanticsNode().boundsInRoot.top, 1f)
+            }
+            handle.performTouchInput { up() }
+            waitForIdle()
+        }
+        onNodeWithText("Save tabs").performClick()
+        assertEquals(tabs, saved)
+    }
+
     private fun ComposeUiTest.captureNavigation(name: String, tag: String = "library-navigation") {
         System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
             val pixels = onNodeWithTag(tag).captureToImage().toPixelMap()
