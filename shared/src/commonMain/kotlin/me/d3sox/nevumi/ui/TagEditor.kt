@@ -47,7 +47,7 @@ internal fun TagEditor(track: Track, controller: MusicController, target: FileEd
     val yearValid = year.isBlank() || year.toIntOrNull() in 1..9999
     val editable = original != null && !saving
     val valid = original != null && title.isNotBlank() && (number.isBlank() || (number.toIntOrNull() ?: -1) >= 0) && (disc.toIntOrNull() ?: 0) > 0 && yearValid
-    AlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Edit server tags" else "Edit tags") }, text = {
+    KeyboardAlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Edit server tags" else "Edit tags") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(if (target == FileEditTarget.SERVER) "Save tags to the server music file. Nevumi keeps the original so you can undo this edit."
                 else "Save tags to the music file. Nevumi keeps the original so you can undo this edit.")

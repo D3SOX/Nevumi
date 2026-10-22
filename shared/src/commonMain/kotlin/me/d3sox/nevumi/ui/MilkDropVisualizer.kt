@@ -144,7 +144,7 @@ private fun MilkDropPresetPicker(presets: List<MilkDropPresetInfo>, selected: In
             }
         }
     }
-    AlertDialog(onDismissRequest = close, title = { Text("MilkDrop presets") }, text = {
+    KeyboardAlertDialog(onDismissRequest = close, title = { Text("MilkDrop presets") }, text = {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search presets") }, singleLine = true)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

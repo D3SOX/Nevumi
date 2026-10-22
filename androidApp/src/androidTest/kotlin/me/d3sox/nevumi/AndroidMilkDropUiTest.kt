@@ -1,7 +1,10 @@
 package me.d3sox.nevumi
 
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import me.d3sox.nevumi.library.*
@@ -56,7 +59,18 @@ class AndroidMilkDropUiTest {
                 compose.onNodeWithText(presets[1].name).assertExists()
                 compose.onNodeWithContentDescription("Choose MilkDrop preset").performClick()
                 compose.onNodeWithText("Search presets").performTextInput("postcard from Fractopia")
-                compose.onNodeWithText("Flexi + Rovastar - postcard from Fractopia").performClick()
+                val preset = compose.onNodeWithText("Flexi + Rovastar - postcard from Fractopia")
+                // The dialog moves above the keyboard as it opens, so tap the preset once it stops moving.
+                val dialog = (preset.fetchSemanticsNode().root as ViewRootForTest).view
+                compose.waitUntil(5_000) { ViewCompat.getRootWindowInsets(dialog)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+                var presetBounds = preset.fetchSemanticsNode().boundsInRoot
+                var stableSince = android.os.SystemClock.uptimeMillis()
+                compose.waitUntil(5_000) {
+                    val next = preset.fetchSemanticsNode().boundsInRoot
+                    if (next != presetBounds) { presetBounds = next; stableSince = android.os.SystemClock.uptimeMillis() }
+                    android.os.SystemClock.uptimeMillis() - stableSince >= 300
+                }
+                preset.performClick()
                 compose.onNodeWithText("Flexi + Rovastar - postcard from Fractopia").assertExists()
                 compose.waitForIdle()
                 requireNotNull(instrumentation.uiAutomation.takeScreenshot()).let { bitmap ->

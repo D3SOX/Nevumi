@@ -26,7 +26,7 @@ internal fun FileRename(track: Track, controller: MusicController, target: FileE
     }
     val valid = name.isNotBlank() && name.none { it == '/' || it == '\\' || it == '\u0000' } &&
         name.substringAfterLast('.').equals(original.substringAfterLast('.'), ignoreCase = true)
-    AlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Rename server file" else "Rename file") }, text = {
+    KeyboardAlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Rename server file" else "Rename file") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("You can undo this rename.")
             OutlinedTextField(name, { name = it }, label = { Text("File name") }, singleLine = true,

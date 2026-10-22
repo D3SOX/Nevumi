@@ -151,7 +151,7 @@ internal fun EditPlaylistDialog(playlist: Playlist, state: AppState, controller:
     val scope = rememberCoroutineScope()
     var pickerError by remember { mutableStateOf<String?>(null) }
     val preview by produceState<ImageBitmap?>(null, cover) { value = cover?.let { withContext(Dispatchers.Default) { decodeArtwork(it, 256) } } }
-    AlertDialog(onDismissRequest = dismiss, title = { Text("Edit playlist") }, text = {
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text("Edit playlist") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Surface(Modifier.size(120.dp).align(Alignment.CenterHorizontally), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
                 if (preview != null) Image(requireNotNull(preview), "Playlist cover preview", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -213,7 +213,7 @@ private fun PlaylistFolderPicker(state: AppState, folder: String?, choose: (Stri
     }
     if (creating) {
         var name by remember { mutableStateOf("") }
-        AlertDialog(onDismissRequest = { creating = false }, title = { Text("New folder") }, text = {
+        KeyboardAlertDialog(onDismissRequest = { creating = false }, title = { Text("New folder") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (folder != null) Text("Inside $folder")
                 OutlinedTextField(name, { name = it.filter { c -> c != PLAYLIST_FOLDER_SEPARATOR } }, label = { Text("Folder name") },

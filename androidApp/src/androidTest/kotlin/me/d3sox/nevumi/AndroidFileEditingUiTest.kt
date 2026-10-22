@@ -5,7 +5,11 @@ import android.content.ContentValues
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -13,6 +17,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -296,6 +301,61 @@ class AndroidFileEditingUiTest {
                 ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
                     "content delete --uri $uri")).use { it.readBytes() }
             }
+        }
+    }
+
+    @Test
+    fun typingInTheTagEditorKeepsTheDialogStillAboveTheKeyboard() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as MusicApplication
+        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+        fun shell(command: String) = ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
+        shell("pm grant ${app.packageName} $permission")
+        val resolver = app.contentResolver
+        val bytes = instrumentation.context.assets.open("fixture.flac").use { it.readBytes() }
+        val uri = requireNotNull(resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, "fixture.flac")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/Nevumi-keyboard-${UUID.randomUUID()}")
+            put(MediaStore.Audio.Media.IS_PENDING, 1)
+        }))
+        requireNotNull(resolver.openOutputStream(uri)).use { it.write(bytes) }
+        resolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                runBlocking { app.controller.importSource("device").join() }
+                compose.waitUntil(5_000) { app.controller.state.value.songAt(uri.toString()) != null }
+                compose.onNode(hasScrollToIndexAction() and hasAnyAncestor(hasTestTag("library-pager")))
+                    .performScrollToNode(hasTestTag("track-row:${app.controller.state.value.songAt(uri.toString())!!.id}"))
+                compose.onNode(hasContentDescription("Track options: Northern Light") and
+                    hasAnyAncestor(hasTestTag("track-row:${app.controller.state.value.songAt(uri.toString())!!.id}"))).performClick()
+                compose.openFileAction("Edit tags")
+                compose.waitUntil(5_000) { compose.onAllNodes(hasText("Save changes") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+                val dialog = (compose.onNodeWithText("Edit tags").fetchSemanticsNode().root as ViewRootForTest).view
+                // Panning or resizing the window on every keystroke made the dialog jump while typing.
+                assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING,
+                    (dialog.rootView.layoutParams as WindowManager.LayoutParams).softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST)
+                val year = compose.onNode(hasText("Year") and hasSetTextAction())
+                year.performScrollTo().performClick()
+                fun keyboardTop() = ViewCompat.getRootWindowInsets(dialog)?.takeIf { it.isVisible(WindowInsetsCompat.Type.ime()) }
+                    ?.let { dialog.rootView.height - it.getInsets(WindowInsetsCompat.Type.ime()).bottom }
+                compose.waitUntil(5_000) { keyboardTop() != null }
+                fun yearBounds() = year.fetchSemanticsNode().boundsInWindow
+                var settled = yearBounds()
+                var settledSince = android.os.SystemClock.uptimeMillis()
+                compose.waitUntil(5_000) {
+                    val next = yearBounds()
+                    if (next != settled) { settled = next; settledSince = android.os.SystemClock.uptimeMillis() }
+                    android.os.SystemClock.uptimeMillis() - settledSince >= 300
+                }
+                assertTrue("The focused field must sit above the keyboard", settled.bottom <= keyboardTop()!!)
+                repeat(4) {
+                    shell("input text 5")
+                    compose.waitForIdle()
+                    assertEquals(settled, yearBounds())
+                }
+            }
+        } finally {
+            resolver.delete(uri, null, null)
         }
     }
 }

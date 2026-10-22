@@ -76,7 +76,7 @@ internal fun AudioEffectsScreen(state: AppState, controller: MusicController, di
     }, confirmButton = { PageAction("Done", onClick = dismiss) })
     }
     }
-    if (saving && catalog != null) AlertDialog(onDismissRequest = { if (!working) saving = false },
+    if (saving && catalog != null) KeyboardAlertDialog(onDismissRequest = { if (!working) saving = false },
         title = { Text("Save equalizer profile") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Profile name") },

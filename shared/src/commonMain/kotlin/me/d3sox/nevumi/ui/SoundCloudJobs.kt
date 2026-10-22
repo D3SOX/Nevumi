@@ -77,7 +77,7 @@ internal fun SoundCloudJobItem(job: SoundCloudJob, controller: MusicController, 
     }
     if (pastingLink) {
         var link by remember { mutableStateOf("") }
-        AlertDialog(onDismissRequest = { pastingLink = false }, title = { Text("Paste download link") },
+        KeyboardAlertDialog(onDismissRequest = { pastingLink = false }, title = { Text("Paste download link") },
             text = {
                 OutlinedTextField(link, { link = it }, Modifier.fillMaxWidth(), label = { Text("Gate or download link") }, singleLine = true,
                     supportingText = { Text("Hypeddit, Bandcamp and other links sc-gate-dl supports") })

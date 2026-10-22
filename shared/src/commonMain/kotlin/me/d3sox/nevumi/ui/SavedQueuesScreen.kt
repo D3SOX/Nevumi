@@ -185,7 +185,7 @@ internal fun SavedQueuesScreen(state: AppState, controller: MusicController, dis
             }
         }, confirmButton = { PageAction("Done", onClick = dismiss) })
     }
-    if (saving) AlertDialog(onDismissRequest = { saving = false }, title = { Text("Save current queue") }, text = {
+    if (saving) KeyboardAlertDialog(onDismissRequest = { saving = false }, title = { Text("Save current queue") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Queue name") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Queue name" })
@@ -198,7 +198,7 @@ internal fun SavedQueuesScreen(state: AppState, controller: MusicController, dis
     }) { Text("Save queue") } }, dismissButton = { TextButton(onClick = { saving = false }) { Text("Cancel") } })
     edit?.let { request ->
         var value by remember(request) { mutableStateOf(if (request.duplicate) "${request.queue.name} copy" else request.queue.name) }
-        AlertDialog(onDismissRequest = { edit = null }, title = { Text(if (request.duplicate) "Duplicate queue" else "Rename queue") }, text = {
+        KeyboardAlertDialog(onDismissRequest = { edit = null }, title = { Text(if (request.duplicate) "Duplicate queue" else "Rename queue") }, text = {
             OutlinedTextField(value, { value = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }, confirmButton = { TextButton(enabled = value.isNotBlank(), onClick = {
             if (request.duplicate) controller.duplicateSavedQueue(request.queue.id, value) else controller.renameSavedQueue(request.queue.id, value)
