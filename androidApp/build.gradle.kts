@@ -14,7 +14,7 @@ android {
         applicationId = "me.d3sox.nevumi"
         minSdk = 31
         targetSdk = 37
-        versionCode = 14
+        versionCode = 15
         versionName = providers.gradleProperty("appVersion").get()
         manifestPlaceholders["appLabel"] = "Nevumi"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
