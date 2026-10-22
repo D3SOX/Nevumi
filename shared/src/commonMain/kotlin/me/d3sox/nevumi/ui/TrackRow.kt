@@ -118,6 +118,10 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                         if (track.favorite && (selectionMode || state.preferences.quickAction != TrackAction.FAVORITE))
                             Icon(AppIcon.FAVORITE_FILLED.vector, "Favorited", Modifier.size(16.dp).align(Alignment.CenterVertically),
                             tint = MaterialTheme.colorScheme.primary)
+                        if (state.downloads[track.id]?.status == DownloadStatus.COMPLETE &&
+                            (selectionMode || state.preferences.quickAction != TrackAction.DOWNLOAD || !availableOffline))
+                            Icon(AppIcon.AVAILABLE_OFFLINE.vector, "Downloaded", Modifier.size(16.dp).align(Alignment.CenterVertically),
+                            tint = MaterialTheme.colorScheme.primary)
                         if (track.rating > 0) Row(Modifier.align(Alignment.CenterVertically).semantics(mergeDescendants = true) {
                             contentDescription = if (track.rating == 1) "Rating: 1 star" else "Rating: ${track.rating} stars"
                         }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -133,14 +137,14 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                         Text(if (lastEdit.providerId.startsWith("sftp:")) "Server file deleted" else "Local file deleted",
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     state.downloads[track.id]?.let { record ->
-                        Text(when (record.status) {
-                            DownloadStatus.COMPLETE -> "Downloaded"
+                        when (record.status) {
+                            DownloadStatus.COMPLETE -> null
                             DownloadStatus.DOWNLOADING -> "Downloading · ${record.bytesDownloaded} / ${record.sizeBytes} bytes"
                             DownloadStatus.PENDING -> "Download queued"
                             DownloadStatus.PAUSED -> "Download paused"
                             DownloadStatus.FAILED -> "Download failed"
-                        }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                        }
+                    }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 val action = state.preferences.quickAction
                 val quickAction = !selectionMode && available(action)
