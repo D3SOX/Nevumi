@@ -13,6 +13,9 @@ import java.security.Provider
 import java.security.Security
 import java.io.IOException
 import java.io.InputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.util.UUID
 import net.schmizz.sshj.sftp.OpenMode
@@ -66,7 +69,8 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         try { return block() }
         finally {
             sessionOpen = false
-            shared?.close()
+            // Callers such as the tag editor run on Android's main thread, which must not touch the network.
+            withContext(NonCancellable + Dispatchers.IO) { shared?.close() }
             shared = null
         }
     }
