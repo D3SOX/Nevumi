@@ -258,7 +258,7 @@ class DownloadUiTest {
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Download").performClick()
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.downloads[track.id]?.status == DownloadStatus.COMPLETE }
-                onNodeWithText("Downloaded").assertIsDisplayed()
+                onNodeWithContentDescription("Downloaded").assertIsDisplayed()
                 http.close()
                 onNodeWithText("Northern Light").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
