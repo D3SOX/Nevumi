@@ -44,9 +44,10 @@ class AndroidPlayerAppearanceUiTest {
                 val node = if (description.startsWith("Album artwork:"))
                     compose.onNode(hasContentDescription(description) and hasAnyAncestor(hasTestTag("player-artwork")), useUnmergedTree = true)
                     else compose.onNodeWithContentDescription(description, useUnmergedTree = true)
-                node.captureToImage().toPixelMap().let {
+                // A capture can land mid-layout on slow emulators and throw, so retry it.
+                runCatching { node.captureToImage().toPixelMap() }.getOrNull()?.let {
                     it[it.width / 2, it.height / 2] == Color(0xFFE05040)
-                }
+                } == true
             }
         }
         fun capture(name: String) {
