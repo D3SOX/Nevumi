@@ -70,6 +70,9 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
     private val key = "queue:$queueId"
     /** The last decoded queue with its stored JSON; playback reads the queue many times per second. */
     @Volatile private var decoded: Pair<String, QueueSnapshot>? = null
+    /** Counts queue replacements in this process, so the queue list can swap queues without animating between them. */
+    @Volatile var replacements = 0
+        private set
 
     private suspend fun write(snapshot: QueueSnapshot, replacement: Boolean = false, captureEdits: Boolean = true) = store.transaction {
         if (captureEdits) {
@@ -87,6 +90,7 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         val json = store.json.encodeToString(live)
         store.database.records().put(key, "queues", json)
         decoded = json to live
+        if (replacement) replacements++
         if (selected != null) store.put("saved-queue:${selected.id}", "saved-queues",
             selected.copy(snapshot = live.copy(selectedSavedQueueId = null)))
     }

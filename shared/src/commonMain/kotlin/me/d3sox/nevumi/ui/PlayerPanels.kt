@@ -127,17 +127,16 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     val previousTrackLimit = if (!state.preferences.showPreviousQueueTracks) 0
         else if (expandedHistory) Int.MAX_VALUE else state.preferences.previousQueueTrackLimit
     var rows by remember { mutableStateOf(queueRows(state.queue, previousTrackLimit)) }
-    // A replaced queue shares no entries with the old one. A fresh list skips cross-fading every row,
-    // which can leave stale rows drawn over the new queue.
-    var queueGeneration by remember { mutableIntStateOf(0) }
+    // A replaced queue gets a fresh list, because cross-fading every row can leave stale rows drawn over the new queue.
+    // It changes together with the rows, so the fresh list never animates the old rows away.
+    var rowsReplacement by remember { mutableIntStateOf(controller.queue.replacements) }
     val displayedEntries = remember(rows, state.queue) { queueEntries(rows, state.queue) }
     val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
     LaunchedEffect(state.queue.entries, state.queue.currentEntryId, state.queue.contextName, previousTrackLimit, draggingEntry, committingDrag) {
         if (draggingEntry == null && !committingDrag) {
-            val next = queueRows(state.queue, previousTrackLimit)
-            val previousEntries = rows.mapNotNullTo(HashSet()) { it.entry?.id }
-            if (next.none { it.entry != null && it.entry.id in previousEntries }) queueGeneration++
-            rows = next
+            rows = queueRows(state.queue, previousTrackLimit)
+            // The queue counts a replacement before the controller publishes it.
+            rowsReplacement = controller.queue.replacements
         }
     }
     val reorderable = rememberReorderableLazyListState(queueScroll) { from, to ->
@@ -427,7 +426,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                         AppIconButton(AppIcon.DOWN, "Now playing") { show(PlayerPanel.PLAYING) }
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                    key(queueGeneration) {
+                    key(rowsReplacement) {
                     LazyColumn(Modifier.fillMaxSize().clipToBounds().onGloballyPositioned { queueTop = it.positionInRoot().y }
                         .pointerInput(Unit) {
                             awaitPointerEventScope {
