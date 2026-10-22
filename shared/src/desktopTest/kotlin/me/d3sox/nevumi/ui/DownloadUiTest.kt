@@ -17,6 +17,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.settings.TrackAction
 import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicLong
 
@@ -258,6 +259,9 @@ class DownloadUiTest {
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Download").performClick()
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.downloads[track.id]?.status == DownloadStatus.COMPLETE }
+                onNodeWithContentDescription("Downloaded").assertIsDisplayed()
+                // The Download quick action only marks songs stored on the device, so the row keeps its icon.
+                runBlocking { controller.updatePreferences { it.copy(quickAction = TrackAction.DOWNLOAD) }.join() }
                 onNodeWithContentDescription("Downloaded").assertIsDisplayed()
                 http.close()
                 onNodeWithText("Northern Light").performClick()

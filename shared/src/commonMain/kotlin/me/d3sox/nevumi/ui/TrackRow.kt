@@ -119,7 +119,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                             Icon(AppIcon.FAVORITE_FILLED.vector, "Favorited", Modifier.size(16.dp).align(Alignment.CenterVertically),
                             tint = MaterialTheme.colorScheme.primary)
                         if (state.downloads[track.id]?.status == DownloadStatus.COMPLETE &&
-                            (selectionMode || state.preferences.quickAction != TrackAction.DOWNLOAD))
+                            (selectionMode || state.preferences.quickAction != TrackAction.DOWNLOAD || !availableOffline))
                             Icon(AppIcon.AVAILABLE_OFFLINE.vector, "Downloaded", Modifier.size(16.dp).align(Alignment.CenterVertically),
                             tint = MaterialTheme.colorScheme.primary)
                         if (track.rating > 0) Row(Modifier.align(Alignment.CenterVertically).semantics(mergeDescendants = true) {
