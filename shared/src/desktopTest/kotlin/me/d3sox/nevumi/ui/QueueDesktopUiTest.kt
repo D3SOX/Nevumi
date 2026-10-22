@@ -169,6 +169,38 @@ class QueueDesktopUiTest {
         onNodeWithText(tracks[0].metadata.title).assertIsDisplayed()
     }
 
+    /** Fading rows have no semantics, so this compares what the list draws right after [replace] with its settled state. */
+    private fun ComposeUiTest.assertQueueReplacementDrawsNoOldRows(replace: () -> Unit) {
+        val list = onNode(hasScrollToIndexAction())
+        waitForIdle()
+        mainClock.autoAdvance = false
+        replace()
+        repeat(6) { mainClock.advanceTimeByFrame() }
+        val switching = list.captureToImage().toPixelMap()
+        mainClock.autoAdvance = true
+        waitForIdle()
+        val settled = list.captureToImage().toPixelMap()
+        assertEquals(switching.width to switching.height, settled.width to settled.height)
+        val changed = (0 until settled.width).sumOf { x -> (0 until settled.height).count { y -> switching[x, y] != settled[x, y] } }
+        assertEquals(0, changed, "Rows from the replaced queue must not stay drawn over the new queue")
+    }
+
+    @Test fun replacingTheQueueDropsTheOldRowsInsteadOfFadingThemOverTheNewOnes() = withPlayer { controller, tracks ->
+        assertQueueReplacementDrawsNoOldRows { runBlocking { controller.playTrack(tracks[3].id, tracks.map { it.id }, 3).join() } }
+        onNodeWithTag("queue-entry:${controller.state.value.queue.currentEntryId}").assertIsDisplayed()
+    }
+
+    @Test fun restoringASavedQueueThatSharesEntriesStillDropsTheOldRows() = withPlayer { controller, tracks ->
+        runBlocking {
+            controller.saveQueue("Saved", SavedQueueKind.SNAPSHOT).join()
+            controller.enqueue(tracks.take(3).map { it.id }, QueueAction.PLAY_NEXT).join()
+        }
+        val added = controller.state.value.queue.upNext.map { it.id }
+        val saved = controller.state.value.savedQueues.single { it.name == "Saved" }.id
+        assertQueueReplacementDrawsNoOldRows { runBlocking { controller.loadSavedQueue(saved, confirmed = true).join() } }
+        added.forEach { onNodeWithTag("queue-entry:$it").assertDoesNotExist() }
+    }
+
     @Test fun anEmptyManualQueueHasNoHeadingOrRemainingTime()= withPlayer { controller, tracks ->
         onNodeWithText("Up next").assertDoesNotExist()
         onNodeWithContentDescription("Manual queue time remaining").assertDoesNotExist()
