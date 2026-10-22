@@ -69,7 +69,9 @@ jobs:
         with:
           go-version-file: native/tailscale/go.mod
           cache-dependency-path: native/tailscale/go.sum
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg mpv libmpv-dev libsecret-tools xvfb dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg mpv libmpv-dev libsecret-tools xvfb dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
       - run: python3 scripts/build_mpv.py --prefix .test-environment/mpv-runtime
       - run: ./gradlew --configure-on-demand :desktopApp:createDistributable --console=plain
       - run: python3 scripts/test-linux-player.py

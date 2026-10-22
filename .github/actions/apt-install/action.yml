@@ -1,0 +1,41 @@
+name: Install Ubuntu packages
+description: Installs apt packages from a weekly download cache, so a slow Ubuntu mirror only serves packages that changed.
+inputs:
+  packages:
+    description: Space-separated package names
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        echo "prefix=apt-$ImageOS-$(printf '%s' "$PACKAGES" | sha256sum | cut -c1-16)-" >> "$GITHUB_OUTPUT"
+        echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/apt-archives
+        key: ${{ steps.key.outputs.prefix }}${{ steps.key.outputs.week }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+    - shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        archives="$HOME/.cache/apt-archives"
+        mkdir -p "$archives/partial"
+        apt=(sudo apt-get -o "Dir::Cache::Archives=$archives" -o APT::Sandbox::User=root)
+        "${apt[@]}" update
+        # shellcheck disable=SC2086 # Split the package list into arguments.
+        "${apt[@]}" install -y $PACKAGES
+        # Drop packages the mirror no longer lists, so the cache only holds current versions.
+        "${apt[@]}" autoclean
+        sudo chown -R "$(id -u):$(id -g)" "$archives"
+    # Save right away so the downloads survive a later failure in the job.
+    - if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/apt-archives
+        key: ${{ steps.key.outputs.prefix }}${{ steps.key.outputs.week }}
