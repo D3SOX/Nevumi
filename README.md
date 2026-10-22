@@ -35,19 +35,20 @@ I started it because I couldn't find a music player with all the features I want
 
 ## What it does
 
-- Browse songs, albums, artists, genres and folders. Search the whole library and filter the results by type. Choose your library tabs, rearrange Home's sections and hide the sections you don't use.
-- Manage playlists, smart playlists and M3U imports and exports. Drag your playlists into a custom order and group them into folders, including folders inside folders. Folders are saved as `Folder ▸ Playlist` names, so they sync through your music server. Publish playlists to your music server and keep their changes synced, including covers on Navidrome 0.61 or newer.
-- Keep a separate Up next queue. Save queues with their played history, current song and playback position. Switch between live queues and snapshots, export them to playlists, and enable recovery snapshots if you want them.
-- Download server music for offline playback. Match local and server copies of the same song instead of showing duplicates.
-- Search SoundCloud through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server and download songs into your music server's library or onto your device. Check a download's tags before sc-gate-dl saves it, and open sc-gate-dl's browser when a gate needs a captcha. Searches and covers go through sc-gate-dl, so Nevumi never contacts SoundCloud.
-- Use gapless playback, crossfade, speed and pitch controls, repeat counts, an equalizer, mono audio and a sleep timer. Open common playback settings from Now playing. Browse AutoEQ headphone profiles or save your own settings as a profile.
-- Show waveforms from the actual audio. Prepare a library in the background with bounded parallel decoding and a persistent cache.
-- Edit local tags and artwork, or edit Navidrome's music files over SFTP. Find metadata through MusicBrainz.
-- Reach your music server and SFTP server on a tailnet through Nevumi's built-in Tailscale client, without the Tailscale app or a VPN. Headscale works too. Choose which connections use it in Settings › Tunnel.
-- Track listening history and scrobble through your music server, Last.fm or ListenBrainz.
-- Pair devices with a camera QR scan or a manual code. Sync playlists, favorites, ratings, listening history and saved queue contents. Playback positions stay separate on each device.
-- Choose light, dark, system or artwork-based colors, including a custom color palette. Desktop has a volume slider in the mini player, right-click menus and MPRIS media controls.
-- Run MilkDrop presets through projectM. Android has an in-app visualizer. Linux opens a separate window. The full original MilkDrop collection and projectM's Cream of the Crop pack ship offline: 10,347 presets and 67 textures, with search, collection and category filters, favorite presets, a favorites-only mode and automatic preset changes. Locked presets stay selected when you reopen the visualizer.
+- **Library.** Browse songs, albums, artists, genres and folders, and search everything. You choose the library tabs and Home sections.
+- **Playlists.** Create regular, smart and M3U playlists and sort them into nested folders. Nevumi syncs them with your music server, including covers on Navidrome 0.61 or newer.
+- **Queue.** Up next is a separate queue. Save queues with their history and position, switch between them, or export them as playlists.
+- **Offline.** Download music from your server. Nevumi shows local and server copies of the same song as one song.
+- **SoundCloud.** Search and download songs through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server, to your music server or your device. Nevumi never contacts SoundCloud.
+- **Playback.** Nevumi has gapless playback, crossfade, speed and pitch, repeat counts, an equalizer with AutoEQ headphone profiles, mono audio and a sleep timer.
+- **Waveforms.** Nevumi draws waveforms from the actual audio and caches them.
+- **Tag editing.** Edit local tags and artwork, or your Navidrome files over SFTP. Look up metadata on MusicBrainz.
+- **Tailscale.** The built-in client reaches your servers on a tailnet without the Tailscale app or a VPN. Headscale works too.
+- **Scrobbling.** Nevumi keeps a listening history and scrobbles to your music server, Last.fm or ListenBrainz.
+- **Device sync.** Pair devices with a QR code to sync playlists, favorites, ratings, history and saved queues.
+- **Themes.** Pick light, dark, system or artwork-based colors, or a custom palette.
+- **Desktop.** Linux has MPRIS media controls, right-click menus and a volume slider in the mini player.
+- **Visualizer.** Nevumi runs MilkDrop presets through projectM. Over 10,000 presets ship with the app. You can search them, mark favorites and switch presets automatically.
 
 ## Screenshots
 
