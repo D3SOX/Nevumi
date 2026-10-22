@@ -13,7 +13,8 @@ import kotlinx.coroutines.withContext
 class PlaylistDownloads(private val playlists: Playlists, private val library: MusicLibrary,
     private val downloads: AudioDownloads, private val client: NavidromeClient,
     private val sourceAccessible: (String) -> Boolean = FileAudioAccess::available) {
-    suspend fun synchronize(excluded: Set<String> = emptySet()) {
+    /** Returns whether every song it had to download completed. */
+    suspend fun synchronize(excluded: Set<String> = emptySet()): Boolean {
         val collections = playlists.all()
         // This already pins every song of a downloaded playlist, so the loop below only finds songs to download.
         downloads.replacePlaylistPins(collections, excluded)
@@ -32,11 +33,13 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
         // A few songs are cheaper to look up one by one; many songs are cheaper as one catalogue download.
         val catalogue = if (missing.size > SINGLE_LOOKUPS) client.songs().associateBy { it.id } else null
         val releases = mutableMapOf<String, String>()
+        var completed = true
         for ((trackId, songId) in missing) {
             val song = if (catalogue != null) catalogue[songId] ?: continue
                 else try { client.song(songId, releases) } catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
-            downloads.download(trackId, song)
+            if (downloads.download(trackId, song).status != DownloadStatus.COMPLETE) completed = false
         }
+        return completed
     }
 
     // Android's media scan records local music's file path; checking it is far cheaper than opening each content URI through

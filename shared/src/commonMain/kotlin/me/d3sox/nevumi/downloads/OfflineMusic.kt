@@ -223,12 +223,10 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         if (revisions == settled) return
         settled = null
         // A pass that wrote changes, or ran while something else changed them, runs once more before settling.
-        // Paused and offline passes only protect the cache, so they never settle.
-        if (pass() && store.list<DownloadRecord>("downloads").all { it.status == DownloadStatus.COMPLETE } &&
-            store.database.records().revisions(PASS_INPUTS) == revisions) settled = revisions
+        if (pass() && store.database.records().revisions(PASS_INPUTS) == revisions) settled = revisions
     }
 
-    /** Returns whether the pass looked for and ran downloads. */
+    /** Returns whether every download the pass needed completed. Paused and offline passes only protect the cache, so they return false. */
     private suspend fun pass(): Boolean {
         dropDeviceFileDownloads()
         val paused = preferences.load().downloadsPaused || !networkPermitted()
@@ -245,6 +243,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         // A few songs are cheaper to look up one by one; a large batch is cheaper as one catalogue download.
         val catalogue = if (requests.size > PlaylistDownloads.SINGLE_LOOKUPS) connection.songs().associateBy { it.id } else null
         val releases = mutableMapOf<String, String>()
+        var completed = true
         for (request in requests) {
             currentCoroutineContext().ensureActive()
             val track = library.findTrack(request.trackId) ?: continue
@@ -255,12 +254,12 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                 else try { connection.song(source.location, releases) }
                 catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
             val complete = downloads.download(track.id, song)
-            if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}")
+            if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}") else completed = false
             refresh()
         }
-        PlaylistDownloads(playlists, library, downloads, connection, sourceAccessible).synchronize(excluded)
+        if (!PlaylistDownloads(playlists, library, downloads, connection, sourceAccessible).synchronize(excluded)) completed = false
         downloads.enforceCacheBudget(preferences.load().cacheBytes, inUseTracks())
-        return true
+        return completed
     }
 
     // A song whose server file is on the device needs no download; this also drops copies made before it was linked to that file.

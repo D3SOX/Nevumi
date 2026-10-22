@@ -560,6 +560,8 @@ class OfflineMusicTest {
             val track = library.importTrack(TrackMetadata("Song"), TrackSource("local:$file", SourceKind.LOCAL, file))
             val playlists = Playlists(store)
             playlists.setAutoDownload(playlists.create("Offline", listOf(track.id)).id, true)
+            // A failure left behind by a playlist that no longer downloads automatically needs no further passes.
+            store.put("download:obsolete", "downloads", DownloadRecord("obsolete", DownloadStatus.FAILED))
             // The first pass records the playlist's protection, so the second one confirms nothing else changed.
             offline.runPending()
             offline.runPending()
