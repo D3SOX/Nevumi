@@ -215,6 +215,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
     }
 
     override suspend fun apply(editId: String): LocalFileEdit = edits.withLock { applyPrepared(editId) }
+    private suspend fun applyFresh(edit: LocalFileEdit): LocalFileEdit = edits.withLock { applyPrepared(edit.id, fresh = true) }
 
     override suspend fun discard(editId: String) = edits.withLock { withContext(Dispatchers.IO) {
         val edit = requireNotNull(readEdit(editId)) { "Edit is missing" }
@@ -224,10 +225,11 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         store.database.records().delete("file-edit:$editId")
     } }
 
-    private suspend fun applyPrepared(editId: String): LocalFileEdit = withContext(Dispatchers.IO) {
+    private suspend fun applyPrepared(editId: String, fresh: Boolean = false): LocalFileEdit = withContext(Dispatchers.IO) {
             val edit = requireNotNull(readEdit(editId)) { "Edit is missing" }
             check(!edit.undone) { "This edit was already undone" }
-            val hash = sourceHash(edit.sourcePath)
+            // A remote file just matched its backup, and atomic replacement compares it again, so reading it once more only costs time.
+            val hash = if (fresh && files.atomicWrites) edit.originalHash else sourceHash(edit.sourcePath)
             if (hash != edit.editedHash) {
                 check(!edit.applied && hash == edit.originalHash) {
                     "The music file changed outside Nevumi. Applying this edit would overwrite those changes."
@@ -287,7 +289,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         }
     }
 
-    override suspend fun editTags(trackId: String, metadata: TrackMetadata): LocalFileEdit = apply(prepareTags(trackId, metadata).id)
+    override suspend fun editTags(trackId: String, metadata: TrackMetadata): LocalFileEdit = applyFresh(prepareTags(trackId, metadata))
 
     override suspend fun rename(trackId: String, name: String): LocalFileEdit = edits.withLock { withContext(Dispatchers.IO) {
         require(name.isNotBlank() && name != "." && name != ".." && name.none { it == '/' || it == '\\' || it == '\u0000' }) { "Choose a file name without folders" }
@@ -362,7 +364,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             val track = library.findTrack(id)
             try {
                 requireNotNull(track) { "Track is missing" }
-                completed += apply(prepare(id) { tag ->
+                completed += applyFresh(prepare(id) { tag ->
                     changes.title?.let { tag.setField(FieldKey.TITLE, it) }
                     changes.artist?.let { tag.setFieldOrDelete(FieldKey.ARTIST, it) }
                     changes.album?.let { tag.setFieldOrDelete(FieldKey.ALBUM, it) }
@@ -377,7 +379,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                         require(it in 0..9999) { "Year must be between 1 and 9999, or empty" }
                         tag.setFieldOrDelete(FieldKey.YEAR, it.takeIf { value -> value > 0 }?.toString().orEmpty())
                     }
-                }.id)
+                })
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
                 val name = track?.sources?.firstOrNull { it.kind == SourceKind.LOCAL }?.location
@@ -403,7 +405,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             binaryData = bytes; mimeType = mime; pictureType = 3
             this.width = width; this.height = height
         }
-        return apply(prepare(trackId) { tag -> tag.deleteArtworkField(); tag.setField(artwork) }.id)
+        return applyFresh(prepare(trackId) { tag -> tag.deleteArtworkField(); tag.setField(artwork) })
     }
 
     suspend fun prepareTags(trackId: String, metadata: TrackMetadata): LocalFileEdit = prepare(trackId) { tag ->

@@ -19,6 +19,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import me.d3sox.nevumi.settings.MusicPreferences
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import io.ktor.http.HttpHeaders
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteChannel
@@ -543,6 +544,63 @@ class OfflineMusicTest {
                 "Fixture Artist", "Fixture Album", "01 Northern Light.flac")
             assertContentEquals(Files.readAllBytes(original), Files.readAllBytes(Path.of(complete.path!!)))
         } finally { offline?.closeAndJoin(); store.close(); http.close(); failedHttp.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun anUnchangedLibraryIsNotCheckedAgainUntilSomethingChanges() = runBlocking {
+        val directory = Files.createTempDirectory("settled-downloads")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val http = HttpClient(MockEngine { respond("", HttpStatusCode.ServiceUnavailable) })
+        val library = MusicLibrary(store)
+        val checks = AtomicInteger()
+        val offline = OfflineMusic(store, library, { NavidromeClient(http, "https://music.example", ServerCredentials("test", "test")) },
+            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = {})
+        try {
+            val file = Files.write(directory.resolve("song.flac"), byteArrayOf(1)).toString()
+            val track = library.importTrack(TrackMetadata("Song"), TrackSource("local:$file", SourceKind.LOCAL, file))
+            val playlists = Playlists(store)
+            playlists.setAutoDownload(playlists.create("Offline", listOf(track.id)).id, true)
+            // A failure left behind by a playlist that no longer downloads automatically needs no further passes.
+            store.put("download:obsolete", "downloads", DownloadRecord("obsolete", DownloadStatus.FAILED))
+            // The first pass records the playlist's protection, so the second one confirms nothing else changed.
+            offline.runPending()
+            offline.runPending()
+            val checked = checks.get()
+            assertEquals(true, checked > 0)
+            offline.runPending()
+            assertEquals(checked, checks.get())
+            // Playing a song changes what cache eviction must keep.
+            offline.useTrack(track.id)
+            offline.runPending()
+            val afterPlayback = checks.get()
+            assertEquals(true, afterPlayback > checked)
+            offline.runPending()
+            assertEquals(afterPlayback, checks.get())
+            library.setFavorite(track.id, true)
+            offline.runPending()
+            assertEquals(true, checks.get() > afterPlayback)
+        } finally { offline.closeAndJoin(); store.close(); http.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun anAutomaticSmartPlaylistKeepsBeingCheckedBecauseItFollowsListeningAndTime() = runBlocking {
+        val directory = Files.createTempDirectory("smart-downloads")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val http = HttpClient(MockEngine { respond("", HttpStatusCode.ServiceUnavailable) })
+        val library = MusicLibrary(store)
+        val checks = AtomicInteger()
+        val offline = OfflineMusic(store, library, { NavidromeClient(http, "https://music.example", ServerCredentials("test", "test")) },
+            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = {})
+        try {
+            val file = Files.write(directory.resolve("song.flac"), byteArrayOf(1)).toString()
+            library.importTrack(TrackMetadata("Song"), TrackSource("local:$file", SourceKind.LOCAL, file))
+            val playlists = Playlists(store)
+            playlists.setAutoDownload(playlists.createSmart("Everything", LibraryQuery()).id, true)
+            repeat(2) { offline.runPending() }
+            val checked = checks.get()
+            offline.runPending()
+            assertEquals(true, checks.get() > checked)
+        } finally { offline.closeAndJoin(); store.close(); http.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test

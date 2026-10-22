@@ -142,7 +142,7 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         } catch (failure: Exception) { Files.deleteIfExists(staged); throw failure }
     }
 
-    private suspend fun editor(configuration: SftpConfiguration, credentialsRequired: Boolean = true): MusicFileEdits {
+    private suspend fun editor(configuration: SftpConfiguration, credentialsRequired: Boolean = true): SftpMusicFileEdits {
         val server = requireNotNull(client()) { "Reconnect to the original Navidrome server" }
         check(server.serverId == configuration.serverId) { "Reconnect to the original Navidrome server" }
         val secret = vault.read(configuration.id)
@@ -152,8 +152,8 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
             File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork, tailscale())
     }
 
-    private suspend fun currentEditor(): MusicFileEdits = editor(checkNotNull(configuration()) { "Connect to SFTP first" })
-    private suspend fun journalEditor(id: String): MusicFileEdits {
+    private suspend fun currentEditor(): SftpMusicFileEdits = editor(checkNotNull(configuration()) { "Connect to SFTP first" })
+    private suspend fun journalEditor(id: String): SftpMusicFileEdits {
         val record = requireNotNull(store.read<LocalFileEdit>("file-edit:$id")) { "File edit is missing" }
         val configuration = checkNotNull(store.read<SftpConfiguration>("sftp:profile:${record.providerId}")) {
             "Reconnect to the original SFTP directory"
@@ -161,8 +161,12 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         return editor(configuration)
     }
 
+    // Each operation runs over one SSH connection instead of connecting for every file step.
+    private suspend fun <T> current(operation: suspend MusicFileEdits.() -> T): T = work.withLock { currentEditor().session(operation) }
+    private suspend fun <T> journal(id: String, operation: suspend MusicFileEdits.() -> T): T = work.withLock { journalEditor(id).session(operation) }
+
     override suspend fun fileName(trackId: String) = work.withLock { currentEditor().fileName(trackId) }
-    override suspend fun readTags(trackId: String) = work.withLock { currentEditor().readTags(trackId) }
+    override suspend fun readTags(trackId: String) = current { readTags(trackId) }
     override suspend fun linkTracks(keepId: String, otherId: String) = work.withLock { library.linkTracks(keepId, otherId) }
     override suspend fun history() = store.list<LocalFileEdit>("file-edits").filter { it.providerId.startsWith("sftp:") }.sortedBy { it.createdAt }
     override suspend fun trimHistory(maxAgeMs: Long, maxBytes: Long) = work.withLock {
@@ -173,15 +177,15 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
     override suspend fun recover() = work.withLock {
         val server = client() ?: return@withLock
         for (configuration in store.list<SftpConfiguration>("sftp-profiles").filter { it.serverId == server.serverId })
-            if (vault.read(configuration.id) != null) editor(configuration).recover()
+            if (vault.read(configuration.id) != null) editor(configuration).session { recover() }
     }
-    override suspend fun apply(editId: String) = work.withLock { journalEditor(editId).apply(editId) }
-    override suspend fun discard(editId: String) = work.withLock { journalEditor(editId).discard(editId) }
-    override suspend fun editTags(trackId: String, metadata: TrackMetadata) = work.withLock { currentEditor().editTags(trackId, metadata) }
-    override suspend fun editTags(trackIds: List<String>, changes: TagChanges) = work.withLock { currentEditor().editTags(trackIds, changes) }
-    override suspend fun replaceArtwork(trackId: String, bytes: ByteArray) = work.withLock { currentEditor().replaceArtwork(trackId, bytes) }
-    override suspend fun rename(trackId: String, name: String) = work.withLock { currentEditor().rename(trackId, name) }
-    override suspend fun delete(trackId: String) = work.withLock { currentEditor().delete(trackId) }
-    override suspend fun undo(editId: String) = work.withLock { journalEditor(editId).undo(editId) }
-    override suspend fun restoreOriginal(editId: String) = work.withLock { journalEditor(editId).restoreOriginal(editId) }
+    override suspend fun apply(editId: String) = journal(editId) { apply(editId) }
+    override suspend fun discard(editId: String) = journal(editId) { discard(editId) }
+    override suspend fun editTags(trackId: String, metadata: TrackMetadata) = current { editTags(trackId, metadata) }
+    override suspend fun editTags(trackIds: List<String>, changes: TagChanges) = current { editTags(trackIds, changes) }
+    override suspend fun replaceArtwork(trackId: String, bytes: ByteArray) = current { replaceArtwork(trackId, bytes) }
+    override suspend fun rename(trackId: String, name: String) = current { rename(trackId, name) }
+    override suspend fun delete(trackId: String) = current { delete(trackId) }
+    override suspend fun undo(editId: String) = journal(editId) { undo(editId) }
+    override suspend fun restoreOriginal(editId: String) = journal(editId) { restoreOriginal(editId) }
 }

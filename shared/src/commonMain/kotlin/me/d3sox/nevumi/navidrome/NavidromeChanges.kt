@@ -130,6 +130,9 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         }
     }
 
+    /** Imports one changed song after any running catalogue refresh, so the refresh cannot overwrite it with older metadata. */
+    suspend fun refreshSong(connection: NavidromeClient, song: ServerSong): Track = synchronization.withLock { importSong(connection, song) }
+
     suspend fun importSong(connection: NavidromeClient, song: ServerSong, linkTo: String? = null): Track = store.transaction {
         val sourceId = "server:${connection.serverId}:${song.id}"
         val owner = library.trackForSource(sourceId)
