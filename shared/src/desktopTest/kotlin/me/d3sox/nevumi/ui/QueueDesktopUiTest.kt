@@ -169,6 +169,22 @@ class QueueDesktopUiTest {
         onNodeWithText(tracks[0].metadata.title).assertIsDisplayed()
     }
 
+    @Test fun replacingTheQueueDropsTheOldRowsInsteadOfFadingThemOverTheNewOnes() = withPlayer { controller, tracks ->
+        // Fading rows have no semantics, so compare what the list draws against its settled state.
+        val list = onNode(hasScrollToIndexAction())
+        waitForIdle()
+        mainClock.autoAdvance = false
+        runBlocking { controller.playTrack(tracks[3].id, tracks.map { it.id }, 3).join() }
+        repeat(6) { mainClock.advanceTimeByFrame() }
+        val switching = list.captureToImage().toPixelMap()
+        mainClock.autoAdvance = true
+        waitForIdle()
+        val settled = list.captureToImage().toPixelMap()
+        assertEquals(switching.width to switching.height, settled.width to settled.height)
+        val changed = (0 until settled.width).sumOf { x -> (0 until settled.height).count { y -> switching[x, y] != settled[x, y] } }
+        assertEquals(0, changed, "Rows from the replaced queue must not stay drawn over the new queue")
+    }
+
     @Test fun anEmptyManualQueueHasNoHeadingOrRemainingTime()= withPlayer { controller, tracks ->
         onNodeWithText("Up next").assertDoesNotExist()
         onNodeWithContentDescription("Manual queue time remaining").assertDoesNotExist()
