@@ -36,6 +36,8 @@ interface RecordDao {
     suspend fun list(kind: String): List<StoredRecord>
     @Query("SELECT COALESCE((SELECT revision FROM record_revisions WHERE kind = :kind), 0)")
     fun observeRevision(kind: String): Flow<Long>
+    @Query("SELECT * FROM record_revisions WHERE kind IN (:kinds) ORDER BY kind")
+    suspend fun revisions(kinds: List<String>): List<RecordRevision>
     // Room invalidates whole tables. Check a small revision before reading a potentially large collection.
     fun observe(kind: String): Flow<List<StoredRecord>> = observeRevision(kind).distinctUntilChanged().map { list(kind) }
     @Query("DELETE FROM records WHERE `key` = :key") suspend fun delete(key: String)

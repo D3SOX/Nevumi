@@ -8,6 +8,7 @@ import me.d3sox.nevumi.library.FileAudioAccess
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.storage.MusicStore
+import me.d3sox.nevumi.storage.RecordRevision
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +50,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     private val refreshing = Mutex()
     @Volatile private var processing: Deferred<Unit>? = null
     @Volatile private var changingLibrary = false
+    // Record revisions after a pass that left nothing to download; while they stay the same, another pass would only repeat it.
+    @Volatile private var settled: List<RecordRevision>? = null
 
     init {
         scope.launch {
@@ -216,15 +219,26 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     }
 
     private suspend fun process() {
+        val revisions = store.database.records().revisions(PASS_INPUTS)
+        if (revisions == settled) return
+        settled = null
+        // A pass that wrote changes, or ran while something else changed them, runs once more before settling.
+        // Paused and offline passes only protect the cache, so they never settle.
+        if (pass() && store.list<DownloadRecord>("downloads").all { it.status == DownloadStatus.COMPLETE } &&
+            store.database.records().revisions(PASS_INPUTS) == revisions) settled = revisions
+    }
+
+    /** Returns whether the pass looked for and ran downloads. */
+    private suspend fun pass(): Boolean {
         dropDeviceFileDownloads()
         val paused = preferences.load().downloadsPaused || !networkPermitted()
         val connection = if (paused) null else client()
         val downloads = AudioDownloads(store, library, connection, directory, availableSpace)
         val excluded = store.list<OfflineRequest>("offline-exclusions").map { it.trackId }.toSet()
-        downloads.replacePlaylistPins(playlists.all(), excluded)
         if (paused || connection == null) {
+            downloads.replacePlaylistPins(playlists.all(), excluded)
             downloads.enforceCacheBudget(preferences.load().cacheBytes, inUseTracks())
-            return
+            return false
         }
         val requests = store.list<OfflineRequest>("offline-requests")
             .filterNot { it.trackId in excluded || library.findTrack(it.trackId)?.onDevice() == true }
@@ -246,6 +260,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         }
         PlaylistDownloads(playlists, library, downloads, connection, sourceAccessible).synchronize(excluded)
         downloads.enforceCacheBudget(preferences.load().cacheBytes, inUseTracks())
+        return true
     }
 
     // A song whose server file is on the device needs no download; this also drops copies made before it was linked to that file.
@@ -291,6 +306,9 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     override fun close() { processing?.cancel(); supervisor.cancel() }
     suspend fun closeAndJoin() { val task = processing; close(); task?.join(); supervisor.join() }
 }
+
+// Everything a pass reads from the store to decide what to download, keep or evict.
+private val PASS_INPUTS = listOf("downloads", "offline-exclusions", "offline-requests", "pins", "playlists", "servers", "settings", "tracks")
 
 @Serializable
 private data class OfflinePins(val trackId: String, val owners: Set<String> = emptySet())
