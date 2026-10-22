@@ -12,6 +12,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Provider
 import java.security.Security
 import java.io.IOException
+import java.io.InputStream
 import java.security.MessageDigest
 import java.util.UUID
 import net.schmizz.sshj.sftp.OpenMode
@@ -43,9 +44,33 @@ private object SftpCrypto {
     fun initialize() {}
 }
 
+// Requests kept in flight per transfer, as in sshj's own get and put; waiting for each reply makes tunnelled transfers crawl.
+private const val PIPELINED_REQUESTS = 16
+
 /** [tailscale] carries the connection over the tailnet when set. */
 class SftpFiles(private val profile: SftpProfile, private val authentication: SftpAuthentication,
     private val tailscale: Tailscale? = null) {
+    private class Connection(val ssh: SSHClient, val sftp: SFTPClient) : AutoCloseable {
+        override fun close() {
+            try { sftp.close() } catch (_: IOException) { }
+            try { ssh.close() } catch (_: IOException) { }
+        }
+    }
+    @Volatile private var sessionOpen = false
+    @Volatile private var shared: Connection? = null
+
+    /** Runs [block] with one SSH connection for all of its file steps; connecting through a tunnel takes seconds each time. */
+    suspend fun <T> session(block: suspend () -> T): T {
+        if (sessionOpen) return block()
+        sessionOpen = true
+        try { return block() }
+        finally {
+            sessionOpen = false
+            shared?.close()
+            shared = null
+        }
+    }
+
     fun verifyDirectory() = connected { client ->
         val directory = client.canonicalize(profile.musicDirectory)
         check(client.stat(directory).type == FileMode.Type.DIRECTORY) { "Choose the server's music directory" }
@@ -57,10 +82,9 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         publish(client, target, source, originalHash = null, transferId = transferId)
     }
 
+    // The original is compared with originalHash just before the staged upload replaces it.
     fun replace(relativePath: String, source: File, originalHash: String) = connected { client ->
-        val target = path(client, relativePath)
-        if (hash(client, target) != originalHash) throw SftpFailure(SftpFailure.Kind.CONFLICT)
-        publish(client, target, source, originalHash)
+        publish(client, path(client, relativePath), source, originalHash)
     }
 
     fun exists(relativePath: String): Boolean = connected { client ->
@@ -90,12 +114,7 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         require(source.isFile) { "Choose an existing music file to upload" }
         require(UUID.fromString(transferId).toString() == transferId) { "Invalid upload identifier" }
         val staged = target.substringBeforeLast('/') + "/.nevumi-$transferId.part"
-        val expected = source.inputStream().use { input ->
-            val hash = MessageDigest.getInstance("SHA-256")
-            val buffer = ByteArray(64 * 1024)
-            while (true) { val size = input.read(buffer); if (size < 0) break; hash.update(buffer, 0, size) }
-            hash.digest().joinToString("") { "%02x".format(it) }
-        }
+        val expected = source.inputStream().use(::sha256)
         var owned = false
         try {
             client.statExistence(staged)?.let {
@@ -106,7 +125,8 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
             }
             client.open(staged, setOf(OpenMode.WRITE, OpenMode.CREAT, OpenMode.EXCL)).use { remote ->
                 owned = true
-                source.inputStream().use { input -> remote.RemoteFileOutputStream().use { input.copyTo(it) } }
+                val chunk = client.sftpEngine.subsystem.remoteMaxPacketSize - remote.outgoingPacketOverhead
+                source.inputStream().use { input -> remote.RemoteFileOutputStream(0, PIPELINED_REQUESTS).use { input.copyTo(it, chunk) } }
             }
             check(hash(client, staged) == expected) { "The upload changed before it could be verified" }
             if (originalHash == null) client.rename(staged, target)
@@ -121,19 +141,14 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         }
     }
 
-    private fun hash(client: SFTPClient, target: String): String {
-        val received = MessageDigest.getInstance("SHA-256")
-        client.open(target).use { remote ->
-            val buffer = ByteArray(64 * 1024)
-            var offset = 0L
-            while (true) {
-                val size = remote.read(offset, buffer, 0, buffer.size)
-                if (size < 0) break
-                received.update(buffer, 0, size)
-                offset += size
-            }
-        }
-        return received.digest().joinToString("") { "%02x".format(it) }
+    private fun hash(client: SFTPClient, target: String): String =
+        client.open(target).use { remote -> remote.ReadAheadRemoteFileInputStream(PIPELINED_REQUESTS).use(::sha256) }
+
+    private fun sha256(input: InputStream): String {
+        val hash = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(64 * 1024)
+        while (true) { val size = input.read(buffer); if (size < 0) break; hash.update(buffer, 0, size) }
+        return hash.digest().joinToString("") { "%02x".format(it) }
     }
 
     fun download(relativePath: String, destination: File) = connected { client ->
@@ -172,29 +187,41 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         require(profile.musicDirectory.startsWith('/') && profile.musicDirectory != "/") { "Enter the absolute server music directory" }
         require(profile.hostKeySha256.startsWith("SHA256:")) { "Enter the server's SHA-256 host-key fingerprint" }
         var stage = SftpFailure.Kind.CONNECTION
+        shared?.takeUnless { it.ssh.isConnected }?.let { it.close(); shared = null }
+        var connection = shared
         try {
-            SftpCrypto.initialize()
-            return SSHClient().use { ssh ->
-                ssh.connectTimeout = 10_000
-                ssh.timeout = 20_000
-                ssh.addHostKeyVerifier(FingerprintVerifier.getInstance(profile.hostKeySha256))
-                if (tailscale != null) {
-                    val tunnel = tailscale.connect(profile.host, profile.port, 30_000, ssh.timeout)
-                    try { ssh.connectVia(tunnel.input, tunnel.output) } catch (failure: IOException) { tunnel.close(); throw failure }
-                } else ssh.connect(profile.host, profile.port)
-                stage = SftpFailure.Kind.AUTHENTICATION
-                if (authentication.privateKey != null) {
-                    val finder = authentication.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-                    ssh.authPublickey(profile.username, ssh.loadKeys(authentication.privateKey, null, finder))
-                } else ssh.authPassword(profile.username, requireNotNull(authentication.password) { "Enter an SFTP password or SSH private key" })
-                stage = SftpFailure.Kind.FILE_OPERATION
-                ssh.newSFTPClient().use(operation)
+            if (connection == null) {
+                SftpCrypto.initialize()
+                val ssh = SSHClient()
+                try {
+                    ssh.connectTimeout = 10_000
+                    ssh.timeout = 20_000
+                    ssh.addHostKeyVerifier(FingerprintVerifier.getInstance(profile.hostKeySha256))
+                    if (tailscale != null) {
+                        val tunnel = tailscale.connect(profile.host, profile.port, 30_000, ssh.timeout)
+                        try { ssh.connectVia(tunnel.input, tunnel.output) } catch (failure: IOException) { tunnel.close(); throw failure }
+                    } else ssh.connect(profile.host, profile.port)
+                    stage = SftpFailure.Kind.AUTHENTICATION
+                    if (authentication.privateKey != null) {
+                        val finder = authentication.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
+                        ssh.authPublickey(profile.username, ssh.loadKeys(authentication.privateKey, null, finder))
+                    } else ssh.authPassword(profile.username, requireNotNull(authentication.password) { "Enter an SFTP password or SSH private key" })
+                    stage = SftpFailure.Kind.FILE_OPERATION
+                    connection = Connection(ssh, ssh.newSFTPClient())
+                } catch (failure: Exception) { try { ssh.close() } catch (_: IOException) { }; throw failure }
+                if (sessionOpen) shared = connection
             }
+            stage = SftpFailure.Kind.FILE_OPERATION
+            return operation(connection.sftp)
         } catch (failure: IOException) {
             if (failure is SftpFailure) throw failure
+            // The next step of a session connects again instead of reusing a connection that failed.
+            if (connection === shared) shared = null
             val kind = if (failure is SSHException && failure.disconnectReason == DisconnectReason.HOST_KEY_NOT_VERIFIABLE)
                 SftpFailure.Kind.HOST_KEY else if (failure is TailscaleSignInRequired) SftpFailure.Kind.TAILSCALE else stage
             throw SftpFailure(kind)
+        } finally {
+            if (connection !== shared) connection?.close()
         }
     }
 }

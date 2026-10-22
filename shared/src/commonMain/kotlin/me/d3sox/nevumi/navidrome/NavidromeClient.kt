@@ -14,6 +14,8 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.fromHttpToGmtDate
@@ -334,6 +336,42 @@ class NavidromeClient(
 
     suspend fun isNavidrome(): Boolean = request("ping")["type"]?.jsonPrimitive?.content == "navidrome"
 
+    /** Looks up one song's music file without downloading the file catalogue; null once the server no longer has the song. */
+    suspend fun musicFile(songId: String): NavidromeMusicFile? = serverRequest {
+        nativeAccess.withLock {
+            http.config { followRedirects = false }.use { nativeHttp ->
+                val body = timedRequest {
+                    val response = nativeGet(nativeHttp, "$baseUrl/api/song/${songId.encodeURLPathPart()}")
+                    when (response.status.value) {
+                        404 -> ""
+                        in 200..299 -> response.bodyAsText()
+                        else -> throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}")
+                    }
+                }
+                // Navidrome keeps a deleted file's song, marked missing, until its library is cleaned up.
+                body.takeIf { it.isNotEmpty() }?.let { Json.parseToJsonElement(it).jsonObject }
+                    ?.takeUnless { it["missing"]?.jsonPrimitive?.booleanOrNull == true }?.let(::parseMusicFile)
+            }
+        }
+    }
+
+    private fun parseMusicFile(song: JsonObject) = NavidromeMusicFile(song.getValue("id").jsonPrimitive.content,
+        song.getValue("path").jsonPrimitive.content, requireNotNull(song["libraryId"]?.jsonPrimitive?.longOrNull),
+        song["libraryName"]?.jsonPrimitive?.content.orEmpty())
+
+    // Signs in again once when the native API session expired.
+    private suspend fun nativeGet(nativeHttp: HttpClient, url: String, parameters: HttpRequestBuilder.() -> Unit = {}): HttpResponse {
+        suspend fun send(): HttpResponse {
+            val token = nativeSession(nativeHttp)
+            return nativeHttp.get(url) { header("x-nd-authorization", "Bearer $token"); parameters() }
+        }
+        val response = send()
+        if (response.status.value != 401) return response
+        response.bodyAsText()
+        nativeToken = null
+        return send()
+    }
+
     suspend fun musicFiles(onProgress: (ServerRefreshProgress) -> Unit = {}): List<NavidromeMusicFile> = serverRequest {
         onProgress(ServerRefreshProgress(ServerRefreshStage.FILES))
         if (!isNavidrome())
@@ -344,29 +382,15 @@ class NavidromeClient(
                 val seen = mutableSetOf<String>()
                 var offset = 0
                 while (true) {
-                    suspend fun page(): io.ktor.client.statement.HttpResponse {
-                        val token = nativeSession(nativeHttp)
-                        return nativeHttp.get("$baseUrl/api/song") {
-                            header("x-nd-authorization", "Bearer $token")
+                    val body = timedRequest {
+                        val response = nativeGet(nativeHttp, "$baseUrl/api/song") {
                             parameter("_start", offset); parameter("_end", offset + 500)
                             parameter("_sort", "id"); parameter("_order", "ASC")
-                        }
-                    }
-                    val body = timedRequest {
-                        var response = page()
-                        if (response.status.value == 401) {
-                            response.bodyAsText()
-                            nativeToken = null
-                            response = page()
                         }
                         if (response.status.value !in 200..299) throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}")
                         response.bodyAsText()
                     }
-                    val entries = Json.parseToJsonElement(body).jsonArray.map { item ->
-                        val song = item.jsonObject
-                        NavidromeMusicFile(song.getValue("id").jsonPrimitive.content, song.getValue("path").jsonPrimitive.content,
-                            requireNotNull(song["libraryId"]?.jsonPrimitive?.longOrNull), song["libraryName"]?.jsonPrimitive?.content.orEmpty())
-                    }
+                    val entries = Json.parseToJsonElement(body).jsonArray.map { parseMusicFile(it.jsonObject) }
                     if (entries.isEmpty()) break
                     val fresh = entries.filter { seen.add(it.songId) }
                     check(fresh.isNotEmpty()) { "Navidrome returned a repeated file catalogue page" }
