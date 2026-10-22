@@ -14,7 +14,7 @@ updates:
       camerax:
         patterns: ["androidx.camera:*"]
   - package-ecosystem: github-actions
-    directory: /
+    directories: [/, /.github/actions/*]
     schedule:
       interval: weekly
     groups:

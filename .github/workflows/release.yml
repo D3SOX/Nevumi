@@ -29,7 +29,9 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - run: bash scripts/sdkmanager-retry.sh 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - run: ./gradlew :androidApp:lintRelease :androidApp:assembleRelease --console=plain
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg python3-pil
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg python3-pil
       - name: Enable emulator hardware acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -89,7 +91,9 @@ jobs:
           go-version-file: native/tailscale/go.mod
           cache-dependency-path: native/tailscale/go.sum
       - run: python3 scripts/check-release-version.py "$GITHUB_REF_NAME"
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg mpv libmpv-dev libsecret-tools xvfb dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg mpv libmpv-dev libsecret-tools xvfb dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
       - run: python3 scripts/build_mpv.py --prefix .test-environment/mpv-runtime
       - run: ./gradlew --configure-on-demand :desktopApp:createDistributable --console=plain
       - run: python3 scripts/test-linux-player.py
@@ -149,7 +153,9 @@ jobs:
         with:
           name: release-android
           path: .test-environment/android-release
-      - run: sudo apt-get update && sudo apt-get install -y libzbar0
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: libzbar0
       - run: python3 -m venv .test-environment/fdroid-env && .test-environment/fdroid-env/bin/pip install -r scripts/requirements.txt
       - name: Create the signed F-Droid repository
         env:

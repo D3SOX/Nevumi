@@ -31,8 +31,9 @@ jobs:
           import os
           import subprocess
 
-          include = ['.github/workflows/tests.yml', 'androidApp/*', 'desktopApp/*', 'shared/*', 'native/*', 'gradle/*',
-                     '*.gradle.kts', 'gradle.properties', 'gradlew', 'gradlew.bat', 'scripts/*', 'packaging/*', '.fdroid.yml']
+          include = ['.github/workflows/tests.yml', '.github/actions/*', 'androidApp/*', 'desktopApp/*', 'shared/*',
+                     'native/*', 'gradle/*', '*.gradle.kts', 'gradle.properties', 'gradlew', 'gradlew.bat', 'scripts/*',
+                     'packaging/*', '.fdroid.yml']
           exclude = ['scripts/package-website.py', 'packaging/screenshots/*', 'packaging/fdroid-qr*.png']
           # Like `on: paths`, `*` matches `/`, but patterns without a `/` only match files at the root.
           def matches(path, patterns):
@@ -82,7 +83,9 @@ jobs:
           go-version-file: native/tailscale/go.mod
           cache-dependency-path: native/tailscale/go.sum
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg mpv libmpv-dev libsecret-tools gnome-keyring openssh-server xvfb xauth dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg mpv libmpv-dev libsecret-tools gnome-keyring openssh-server xvfb xauth dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
       - run: python3 scripts/build_mpv.py --prefix .test-environment/mpv-runtime
       - run: dbus-run-session -- bash scripts/ci-tests.sh desktop
       - if: always()
@@ -123,7 +126,9 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - run: bash scripts/sdkmanager-retry.sh 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg mpv libsecret-tools openssh-server cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg mpv libsecret-tools openssh-server cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils
       - name: Build test artifacts before starting the emulator
         run: >-
           ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx2g --max-workers=2

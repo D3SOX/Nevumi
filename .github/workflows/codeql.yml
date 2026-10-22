@@ -105,7 +105,9 @@ jobs:
       - if: matrix.build-mode == 'manual'
         run: bash scripts/sdkmanager-retry.sh 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - if: matrix.language == 'c-cpp'
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build libsdl2-dev libgl1-mesa-dev
+        uses: ./.github/actions/apt-install
+        with:
+          packages: cmake ninja-build libsdl2-dev libgl1-mesa-dev
       - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: ${{ matrix.language }}
