@@ -569,9 +569,16 @@ class OfflineMusicTest {
             assertEquals(true, checked > 0)
             offline.runPending()
             assertEquals(checked, checks.get())
+            // Playing a song changes what cache eviction must keep.
+            offline.useTrack(track.id)
+            offline.runPending()
+            val afterPlayback = checks.get()
+            assertEquals(true, afterPlayback > checked)
+            offline.runPending()
+            assertEquals(afterPlayback, checks.get())
             library.setFavorite(track.id, true)
             offline.runPending()
-            assertEquals(true, checks.get() > checked)
+            assertEquals(true, checks.get() > afterPlayback)
         } finally { offline.closeAndJoin(); store.close(); http.close(); directory.toFile().deleteRecursively() }
     }
 

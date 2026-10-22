@@ -50,8 +50,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     private val refreshing = Mutex()
     @Volatile private var processing: Deferred<Unit>? = null
     @Volatile private var changingLibrary = false
-    // Record revisions after a pass that left nothing to download; while they stay the same, another pass would only repeat it.
-    @Volatile private var settled: List<RecordRevision>? = null
+    // Record revisions and protected songs after a pass that left nothing to download; while both stay the same, another pass would only repeat it.
+    @Volatile private var settled: Pair<List<RecordRevision>, Set<String>>? = null
 
     init {
         scope.launch {
@@ -219,11 +219,12 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     }
 
     private suspend fun process() {
-        val revisions = store.database.records().revisions(PASS_INPUTS)
-        if (revisions == settled) return
+        // The playing and current queue songs are kept out of cache eviction, so a change to them needs a pass too.
+        val inputs = store.database.records().revisions(PASS_INPUTS) to inUseTracks()
+        if (inputs == settled) return
         settled = null
         // A pass that wrote changes, or ran while something else changed them, runs once more before settling.
-        if (pass() && store.database.records().revisions(PASS_INPUTS) == revisions) settled = revisions
+        if (pass() && (store.database.records().revisions(PASS_INPUTS) to inUseTracks()) == inputs) settled = inputs
     }
 
     /** Returns whether every download the pass needed completed. Paused and offline passes only protect the cache, so they return false. */
