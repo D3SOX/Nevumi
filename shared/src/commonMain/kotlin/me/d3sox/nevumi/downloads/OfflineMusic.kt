@@ -6,6 +6,7 @@ import me.d3sox.nevumi.navidrome.NavidromeException
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.FileAudioAccess
 import me.d3sox.nevumi.navidrome.NavidromeClient
+import me.d3sox.nevumi.playlists.Playlist
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.storage.MusicStore
 import me.d3sox.nevumi.storage.RecordRevision
@@ -224,7 +225,9 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         if (inputs == settled) return
         settled = null
         // A pass that wrote changes, or ran while something else changed them, runs once more before settling.
-        if (pass() && (store.database.records().revisions(PASS_INPUTS) to inUseTracks()) == inputs) settled = inputs
+        // Smart playlists follow listening and the clock, which no record revision shows, so they keep checking.
+        if (pass() && (store.database.records().revisions(PASS_INPUTS) to inUseTracks()) == inputs &&
+            store.list<Playlist>("playlists").none { it.autoDownload && it.rule != null }) settled = inputs
     }
 
     /** Returns whether every download the pass needed completed. Paused and offline passes only protect the cache, so they return false. */
@@ -251,9 +254,10 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             val source = track.sources.firstOrNull {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
             } ?: continue
-            val song = if (catalogue != null) catalogue[source.location] ?: continue
+            // A song the server lacks can return without any library change, so the pass stays unsettled and asks again.
+            val song = (if (catalogue != null) catalogue[source.location]
                 else try { connection.song(source.location, releases) }
-                catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
+                catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone }) ?: run { completed = false; continue }
             val complete = downloads.download(track.id, song)
             if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}") else completed = false
             refresh()

@@ -583,6 +583,27 @@ class OfflineMusicTest {
     }
 
     @Test
+    fun anAutomaticSmartPlaylistKeepsBeingCheckedBecauseItFollowsListeningAndTime() = runBlocking {
+        val directory = Files.createTempDirectory("smart-downloads")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val http = HttpClient(MockEngine { respond("", HttpStatusCode.ServiceUnavailable) })
+        val library = MusicLibrary(store)
+        val checks = AtomicInteger()
+        val offline = OfflineMusic(store, library, { NavidromeClient(http, "https://music.example", ServerCredentials("test", "test")) },
+            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = {})
+        try {
+            val file = Files.write(directory.resolve("song.flac"), byteArrayOf(1)).toString()
+            library.importTrack(TrackMetadata("Song"), TrackSource("local:$file", SourceKind.LOCAL, file))
+            val playlists = Playlists(store)
+            playlists.setAutoDownload(playlists.createSmart("Everything", LibraryQuery()).id, true)
+            repeat(2) { offline.runPending() }
+            val checked = checks.get()
+            offline.runPending()
+            assertEquals(true, checks.get() > checked)
+        } finally { offline.closeAndJoin(); store.close(); http.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun songsLinkedToTheirServerFileOnTheDeviceDropTheirDownloadsUntilTheFileLeavesTheDevice() = runBlocking {
         val directory = Files.createTempDirectory("device-file-downloads")
         val store = openMusicStore(directory.resolve("library.db").toString())

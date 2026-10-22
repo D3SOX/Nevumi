@@ -35,8 +35,10 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
         val releases = mutableMapOf<String, String>()
         var completed = true
         for ((trackId, songId) in missing) {
-            val song = if (catalogue != null) catalogue[songId] ?: continue
-                else try { client.song(songId, releases) } catch (gone: NavidromeException) { if (gone.code == 70) continue else throw gone }
+            // A song the server lacks can return without any library change, so it does not count as done.
+            val song = (if (catalogue != null) catalogue[songId]
+                else try { client.song(songId, releases) } catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone })
+                ?: run { completed = false; continue }
             if (downloads.download(trackId, song).status != DownloadStatus.COMPLETE) completed = false
         }
         return completed
