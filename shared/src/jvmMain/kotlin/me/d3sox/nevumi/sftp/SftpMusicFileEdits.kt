@@ -34,7 +34,7 @@ private class SftpFileEditAccess(val remote: SftpFiles, profile: SftpProfile, pr
 
     override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> {
         client.rescan()
-        val songs = changedSong(location)?.let { listOf(serverChanges.importSong(client, it) to it) }
+        val songs = changedSong(location)?.let { listOf(serverChanges.refreshSong(client, it) to it) }
             ?: serverChanges.refreshLibrary(client, includeFilePaths = true)
         songs.firstOrNull { (_, song) -> song.filePath == location && song.fileLibraryId == libraryId }?.let { (track, _) -> readArtwork(track, location) }
         written = null
