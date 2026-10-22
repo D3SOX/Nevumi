@@ -85,10 +85,14 @@ class SoundCloudSearchUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady && controller.state.value.soundCloud != null }
                 onNodeWithContentDescription("Search").performClick()
+                val chips = onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
+                chips.performScrollToNode(hasTestTag("search-type:SOUNDCLOUD"))
+                onNodeWithTag("search-type:SOUNDCLOUD").performClick()
+                onNodeWithText("Search SoundCloud for songs to download").assertIsDisplayed()
+                snapshot("soundcloud-search-empty")
+                chips.performScrollToNode(hasTestTag("search-type:ALL"))
+                onNodeWithTag("search-type:ALL").performClick()
                 onNodeWithContentDescription("Search your library").performTextInput("Night")
-                onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
-                    .performScrollToNode(hasTestTag("search-type:SOUNDCLOUD"))
-                onNodeWithTag("search-type:SOUNDCLOUD").assertIsDisplayed()
                 onNodeWithTag("search-soundcloud").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("SoundCloud song: Night Swim by Other").fetchSemanticsNodes().isNotEmpty() }
                 assertEquals(listOf("Night"), searches)

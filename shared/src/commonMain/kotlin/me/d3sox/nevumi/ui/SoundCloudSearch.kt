@@ -39,7 +39,7 @@ private fun songKey(artist: String, title: String) = "${artist.trim().lowercase(
 internal fun SoundCloudSearchResults(query: String, state: AppState, controller: MusicController) {
     val results = remember(query) { mutableStateListOf<SoundCloudTrack>() }
     var nextOffset by remember(query) { mutableStateOf<Int?>(null) }
-    var loading by remember(query) { mutableStateOf(query.isNotBlank()) }
+    var loading by remember(query) { mutableStateOf(true) }
     var error by remember(query) { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf<SoundCloudTrack?>(null) }
     val scope = rememberCoroutineScope()
@@ -55,7 +55,6 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
         finally { loading = false }
     }
     LaunchedEffect(query) {
-        if (query.isBlank()) return@LaunchedEffect
         delay(500)
         load(0)
     }
@@ -72,7 +71,6 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
         }
     }
     LazyColumn(Modifier.fillMaxSize().testTag("soundcloud-results")) {
-        if (query.isBlank()) item { Text("Search SoundCloud for songs to download.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         items(results, key = { "soundcloud:${it.id}" }) { track ->
             val job = jobs[track.url]?.firstOrNull()
             val inLibrary = songKey(track.artist, track.title) in owned
@@ -101,7 +99,7 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
         error?.let { message ->
             item { Text(message, Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error) }
         }
-        if (!loading && error == null && query.isNotBlank() && results.isEmpty() && nextOffset == null)
+        if (!loading && error == null && results.isEmpty() && nextOffset == null)
             item { Text("No SoundCloud results for “${query.trim()}”", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         nextOffset?.let { offset ->
             if (!loading) item { TextButton(onClick = { scope.launch { load(offset) } }, Modifier.padding(horizontal = 8.dp)) { Text("Show more") } }
