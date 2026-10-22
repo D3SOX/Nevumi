@@ -17,7 +17,7 @@ import me.d3sox.nevumi.history.listeningStatistics
 @Composable
 internal fun LibraryFiltersDialog(state: AppState, controller: MusicController, dismiss: () -> Unit) {
     var query by remember { mutableStateOf<LibraryQuery?>(state.preferences.libraryFilter) }
-    AlertDialog(onDismissRequest = dismiss, title = { Text("Filter library") }, text = {
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text("Filter library") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             LibraryQueryFields(state.preferences.libraryFilter, includeSearchAndOrder = false) { query = it }
             query?.let { Text(countLabel(filterTracks(state.tracks, it, listeningStatistics(state.listens)).size, "matching song")) }

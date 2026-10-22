@@ -36,7 +36,7 @@ internal fun QueueExportDialog(snapshot: QueueSnapshot, title: String, controlle
             finally { busy = false }
         }
     }
-    AlertDialog(onDismissRequest = { if (!busy) dismiss() }, title = { Text("Export queue") }, text = {
+    KeyboardAlertDialog(onDismissRequest = { if (!busy) dismiss() }, title = { Text("Export queue") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it; error = null }, label = { Text("Playlist name") }, singleLine = true, enabled = !busy,
                 modifier = Modifier.fillMaxWidth())

@@ -31,7 +31,7 @@ internal fun ServerUploadDialog(track: Track, controller: MusicController, dismi
     }
     val valid = original != null && path.isNotBlank() && !path.startsWith('/') && path.none { it in "\\\u0000\r\n" } &&
         path.split('/').none { it in setOf("", ".", "..") } && path.substringAfterLast('.').equals(original?.substringAfterLast('.'), ignoreCase = true)
-    AlertDialog(onDismissRequest = { if (!uploading) dismiss() }, title = { Text("Upload to server") }, text = {
+    KeyboardAlertDialog(onDismissRequest = { if (!uploading) dismiss() }, title = { Text("Upload to server") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(track.metadata.title, style = MaterialTheme.typography.titleMedium)
             state.sftp?.let { Text("${it.libraryName} · ${it.connection.host}") }

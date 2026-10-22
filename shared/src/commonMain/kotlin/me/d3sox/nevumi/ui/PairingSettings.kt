@@ -100,7 +100,7 @@ internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismis
     }, dismiss = { scanning = false }, useManualCode = { scanning = false; error = null; enteringCode = true })
     if (enteringCode) {
         val focus = remember { FocusRequester() }
-        AlertDialog(onDismissRequest = { enteringCode = false }, title = { Text("Enter pairing code") }, text = {
+        KeyboardAlertDialog(onDismissRequest = { enteringCode = false }, title = { Text("Enter pairing code") }, text = {
             LaunchedEffect(Unit) { focus.requestFocus() }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Paste the pairing invitation from your other device.")

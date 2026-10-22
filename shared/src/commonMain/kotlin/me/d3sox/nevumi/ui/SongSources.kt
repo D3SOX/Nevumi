@@ -43,7 +43,7 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
         }, dismissButton = { TextButton(enabled = !saving, onClick = { candidate = null }) { Text("Cancel") } })
         return
     }
-    AlertDialog(onDismissRequest = dismiss, title = { Text(if (choosing) "Link another copy" else "Song sources") }, text = {
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(if (choosing) "Link another copy" else "Song sources") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (choosing) {
                 Text("Choose another library song that represents the same recording and edition.")

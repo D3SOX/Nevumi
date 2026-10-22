@@ -29,7 +29,7 @@ internal fun BulkTagEditor(tracks: List<Track>, controller: MusicController, tar
         (value("Track number")?.let { it.isEmpty() || (it.toIntOrNull() ?: -1) >= 0 } != false) &&
         (value("Disc number")?.let { (it.toIntOrNull() ?: 0) > 0 } != false) &&
         (value("Year")?.let { it.isBlank() || it.toIntOrNull() in 1..9999 } != false)
-    AlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Edit ${countLabel(tracks.size, "server song")}" else "Edit ${countLabel(tracks.size, "song")}") }, text = {
+    KeyboardAlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Edit ${countLabel(tracks.size, "server song")}" else "Edit ${countLabel(tracks.size, "song")}") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Only checked fields will change. Original files are kept for undo.")
             fields.forEach { field ->

@@ -576,7 +576,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     exportingQueue?.let { QueueExportDialog(it, it.contextName, controller) { exportingQueue = null } }
     if (showRepeatCount) {
         val plays = repeatCount.toIntOrNull()?.takeIf { it > 0 }
-        AlertDialog(onDismissRequest = { showRepeatCount = false }, title = { Text("Repeat this song") }, text = {
+        KeyboardAlertDialog(onDismissRequest = { showRepeatCount = false }, title = { Text("Repeat this song") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Includes the current play. Then continue the queue.")
                 OutlinedTextField(repeatCount, { repeatCount = it }, label = { Text("Total plays") }, singleLine = true,

@@ -372,7 +372,7 @@ internal fun SmartPlaylistDialog(state: AppState, controller: MusicController, p
     var name by remember { mutableStateOf(playlist?.name.orEmpty()) }
     var rule by remember { mutableStateOf<LibraryQuery?>(playlist?.rule ?: LibraryQuery()) }
     val count = remember(state.tracks, rule) { rule?.let { filterTracks(state.tracks, it).size } }
-    AlertDialog(onDismissRequest = dismiss, title = { Text(if (playlist == null) "New smart playlist" else "Edit rules") },
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(if (playlist == null) "New smart playlist" else "Edit rules") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (playlist == null) OutlinedTextField(name, { name = it }, label = { Text("Playlist name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -391,7 +391,7 @@ internal fun SmartPlaylistDialog(state: AppState, controller: MusicController, p
 @Composable
 private fun CreatePlaylistDialog(controller: MusicController, trackIds: List<String> = emptyList(), onCreated: () -> Unit = {}, dismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = dismiss, title = { Text("New playlist") },
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text("New playlist") },
         text = { OutlinedTextField(name, { name = it }, label = { Text("Playlist name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
         confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { controller.createPlaylist(name, trackIds); onCreated(); dismiss() }) { Text("Create") } },
         dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
