@@ -13,6 +13,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.history.listeningStatistics
+import me.d3sox.nevumi.playlists.playlistedTrackIds
 
 @Composable
 internal fun LibraryFiltersDialog(state: AppState, controller: MusicController, dismiss: () -> Unit) {
@@ -20,7 +21,8 @@ internal fun LibraryFiltersDialog(state: AppState, controller: MusicController, 
     KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text("Filter library") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             LibraryQueryFields(state.preferences.libraryFilter, includeSearchAndOrder = false) { query = it }
-            query?.let { Text(countLabel(filterTracks(state.tracks, it, listeningStatistics(state.listens)).size, "matching song")) }
+            query?.let { Text(countLabel(filterTracks(state.tracks, it, listeningStatistics(state.listens),
+                playlisted = playlistedTrackIds(state.playlists)).size, "matching song")) }
         }
     }, confirmButton = { TextButton(enabled = query != null, onClick = {
         val valid = requireNotNull(query)
@@ -94,6 +96,8 @@ internal fun LibraryQueryFields(initial: LibraryQuery, includeSearchAndOrder: Bo
     OutlinedTextField(playedDays, { playedDays = it }, label = { Text("Played within days") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(unplayedDays, { unplayedDays = it }, label = { Text("Not played within days") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     QueryToggle("Available sources only", base.availableOnly) { base = base.copy(availableOnly = it) }
+    QueryToggle("Not on server", base.notOnServer) { base = base.copy(notOnServer = it) }
+    QueryToggle("Not in any playlist", base.notInPlaylist) { base = base.copy(notInPlaylist = it) }
     OutlinedTextField(limit, { limit = it }, label = { Text("Song limit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     result.exceptionOrNull()?.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }

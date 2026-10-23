@@ -37,6 +37,7 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.LibrarySort
 import me.d3sox.nevumi.library.SourceKind
+import me.d3sox.nevumi.playlists.playlistedTrackIds
 import me.d3sox.nevumi.library.filterTracks
 import me.d3sox.nevumi.library.recentAt
 import me.d3sox.nevumi.library.LocalFolderRules
@@ -109,15 +110,19 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         filter.playCountTo != null || filter.lastPlayedWithinDays != null || filter.notPlayedWithinDays != null
     // Playback adds listened time every few seconds, which never changes the order; play counts and play times can.
     val rankedStatistics = rememberDerived(null, listOf(ranked), listOf(statistics)) { if (ranked) statistics.mapValues { (_, it) -> it.playCount to it.lastPlayedAt } else null }
+    // Playlist edits only matter while the "Not in any playlist" filter is on.
+    val playlisted = remember(filter.notInPlaylist, state.playlists) {
+        if (filter.notInPlaylist) playlistedTrackIds(state.playlists) else emptySet()
+    }
     // Sort and filter choices answer at once; a library change, such as one song's favorite, re-sorts in the background.
     val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders)
-    val tracks = rememberDerived(null, trackChoices, listOf(state.tracks, rankedStatistics, filterTime)) {
+    val tracks = rememberDerived(null, trackChoices, listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         val visible = state.tracks.filter { track ->
             val localAllowed = folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
             localAllowed || sources != SourceKind.LOCAL && track.sources.any { it.kind != SourceKind.LOCAL }
         }
-        filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now)
+        filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now, playlisted)
     }
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages, LocalDerivedResults provides derived) {
