@@ -51,7 +51,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val tracks = library.tracks().associateBy { it.id }
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
         val settings = preferences.load().let { it.copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap(),
-            libraryFilter = it.libraryFilter.copy(folder = it.libraryFilter.folder?.takeUnless(::isDevicePath))) }
+            libraryFilter = it.libraryFilter.copy(folder = it.libraryFilter.folder?.takeUnless(::isDevicePath)),
+            // A custom Folders order names local folders by their paths.
+            collectionLayouts = it.collectionLayouts.mapValues { (_, layout) -> layout.copy(order = layout.order.filterNot(::isDevicePath)) }) }
         val listened = history.all()
         val playlists = playlists.all().map { playlist ->
             val rule = playlist.rule

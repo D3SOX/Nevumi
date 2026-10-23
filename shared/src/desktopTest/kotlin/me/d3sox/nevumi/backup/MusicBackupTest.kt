@@ -32,6 +32,8 @@ import me.d3sox.nevumi.soundcloud.SoundCloudProfile
 import me.d3sox.nevumi.storage.MusicStore
 import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
+import me.d3sox.nevumi.library.LibraryTab
+import me.d3sox.nevumi.settings.CollectionLayout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -99,7 +101,8 @@ class MusicBackupTest {
         history.import(listOf(Listen("listen-1", northernId, "play-1", 10_000, northern, 150_000, 150_000, 200_000, ended = true),
             Listen("listen-2", missingId, "play-2", 20_000, missing, 50_000, 50_000, 100_000)))
         preferences.update { it.copy(themeMode = ThemeMode.DARK, speed = 1.25, includeFolders = listOf("/home/someone/Music"),
-            libraryFilter = LibraryQuery(folder = "/home/someone/Music/Sky")) }
+            libraryFilter = LibraryQuery(folder = "/home/someone/Music/Sky"),
+            collectionLayouts = mapOf(LibraryTab.FOLDERS to CollectionLayout(order = listOf("/home/someone/Music/Sky", "Rock/Live")))) }
         equalizer.save("Warm", AudioEffects(enabled = true, preampDb = -2.0))
         store.put("scrobbling-profile:lb", "scrobbling-profiles", ScrobblingProfile("lb", ScrobblingService.LISTENBRAINZ, "listener",
             "https://api.listenbrainz.org", 5))
@@ -126,7 +129,8 @@ class MusicBackupTest {
         target.sameSongs()
         val summary = target.backup.restore(source.backup.export("1.2.3"))
 
-        assertEquals(source.preferences.load().copy(includeFolders = emptyList(), libraryFilter = LibraryQuery()), target.preferences.load())
+        assertEquals(source.preferences.load().copy(includeFolders = emptyList(), libraryFilter = LibraryQuery(),
+            collectionLayouts = mapOf(LibraryTab.FOLDERS to CollectionLayout(order = listOf("Rock/Live")))), target.preferences.load())
         val playlists = target.playlists.all().associateBy { it.name }
         assertEquals(setOf("Road", "Music ▸ Night", "Loved"), playlists.keys)
         assertEquals(listOf("Northern Light", "Long Way Home", "Night Walk"), target.titles(playlists.getValue("Road").trackIds))
