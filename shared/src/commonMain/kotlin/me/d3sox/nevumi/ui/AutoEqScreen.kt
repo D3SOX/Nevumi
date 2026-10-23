@@ -16,6 +16,28 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.playback.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.done
+import me.d3sox.nevumi.resources.remove
+import me.d3sox.nevumi.resources.settings_autoeq_catalog
+import me.d3sox.nevumi.resources.settings_autoeq_download_catalog
+import me.d3sox.nevumi.resources.settings_autoeq_license
+import me.d3sox.nevumi.resources.settings_autoeq_no_matches
+import me.d3sox.nevumi.resources.settings_autoeq_privacy
+import me.d3sox.nevumi.resources.settings_catalog_profile_action
+import me.d3sox.nevumi.resources.settings_could_not_load_equalizer_profile
+import me.d3sox.nevumi.resources.settings_download_profile
+import me.d3sox.nevumi.resources.settings_headphone_profiles
+import me.d3sox.nevumi.resources.settings_import_profile
+import me.d3sox.nevumi.resources.settings_refresh_catalog
+import me.d3sox.nevumi.resources.settings_remove_saved_profile_named
+import me.d3sox.nevumi.resources.settings_saved_profiles
+import me.d3sox.nevumi.resources.settings_search_headphones
+import me.d3sox.nevumi.resources.settings_use_profile
+import me.d3sox.nevumi.resources.settings_use_saved_profile
+import me.d3sox.nevumi.resources.settings_use_saved_profile_named
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AutoEqScreen(profiles: AutoEqProfiles, controller: MusicController, dismiss: () -> Unit) {
@@ -40,7 +62,7 @@ internal fun AutoEqScreen(profiles: AutoEqProfiles, controller: MusicController,
             error = null
             try { operation(); revision++ }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { error = failure.message ?: "Could not load this equalizer profile" }
+            catch (failure: Exception) { error = failure.message ?: getString(Res.string.settings_could_not_load_equalizer_profile) }
             finally { if (catalogRefresh) refreshing = false else working = false }
         }
     }
@@ -53,56 +75,59 @@ internal fun AutoEqScreen(profiles: AutoEqProfiles, controller: MusicController,
     }
     AnimatedNavigation(license, false, canGoBack = license, onBack = { license = false }, depth = { if (it) 1 else 0 }) { showLicense ->
     if (showLicense) {
-        SettingsScreen(onDismissRequest = { license = false }, title = { Text("AutoEQ license") },
+        SettingsScreen(onDismissRequest = { license = false }, title = { Text(stringResource(Res.string.settings_autoeq_license)) },
             text = { Text(autoEqLicense, Modifier.verticalScroll(rememberScrollState())) })
     } else {
-    SettingsScreen(onDismissRequest = dismiss, title = { Text("Headphone profiles") }, text = {
+    SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.settings_headphone_profiles)) }, text = {
         LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Text("AutoEQ profiles stay on this device. Catalog refreshes and profile downloads contact GitHub.",
+                Text(stringResource(Res.string.settings_autoeq_privacy),
                     style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search headphones") }, singleLine = true)
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.settings_search_headphones)) }, singleLine = true)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton("Refresh catalog", AppIcon.REFRESH, enabled = !refreshing, style = ActionStyle.OUTLINED) {
+                    ActionButton(stringResource(Res.string.settings_refresh_catalog), AppIcon.REFRESH, enabled = !refreshing, style = ActionStyle.OUTLINED) {
                         action(catalogRefresh = true) { profiles.refreshCatalog() }
                     }
-                    ActionButton("Import profile", AppIcon.IMPORT, enabled = !working, style = ActionStyle.OUTLINED) { action {
+                    ActionButton(stringResource(Res.string.settings_import_profile), AppIcon.IMPORT, enabled = !working, style = ActionStyle.OUTLINED) { action {
                         files.open()?.let { document -> select(profiles.import(document.name, document.text)) }
                     } }
                 }
                 if (working || refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
-            if (saved.isNotEmpty()) item { Text("Saved profiles", style = MaterialTheme.typography.titleMedium) }
+            if (saved.isNotEmpty()) item { Text(stringResource(Res.string.settings_saved_profiles), style = MaterialTheme.typography.titleMedium) }
             items(saved, key = { "saved:${it.id}" }) { profile ->
+                val useDescription = stringResource(Res.string.settings_use_saved_profile_named, profile.name)
+                val removeDescription = stringResource(Res.string.settings_remove_saved_profile_named, profile.name)
                 Column {
                     Text(profile.name)
                     Text(profile.attribution, style = MaterialTheme.typography.bodySmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ActionButton("Use profile", AppIcon.CHECK, Modifier.semantics { contentDescription = "Use saved profile: ${profile.name}" },
+                        ActionButton(stringResource(Res.string.settings_use_profile), AppIcon.CHECK, Modifier.semantics { contentDescription = useDescription },
                             enabled = !working) { action { select(profile) } }
-                        ActionButton("Remove", AppIcon.REMOVE, Modifier.semantics { contentDescription = "Remove saved profile: ${profile.name}" },
+                        ActionButton(stringResource(Res.string.remove), AppIcon.REMOVE, Modifier.semantics { contentDescription = removeDescription },
                             enabled = !working, style = ActionStyle.DESTRUCTIVE) { action { profiles.remove(profile.id) } }
                     }
                 }
             }
             if (catalog.isEmpty()) item {
-                Text(if (query.isBlank()) "Download the AutoEQ catalog to search headphone profiles." else "No matching headphone profiles. Try another search or refresh the catalog.")
-            } else item { Text("AutoEQ catalog", style = MaterialTheme.typography.titleMedium) }
+                Text(stringResource(if (query.isBlank()) Res.string.settings_autoeq_download_catalog else Res.string.settings_autoeq_no_matches))
+            } else item { Text(stringResource(Res.string.settings_autoeq_catalog), style = MaterialTheme.typography.titleMedium) }
             items(catalog, key = { "catalog:${it.id}" }) { profile ->
                 Column {
                     Text(profile.name)
                     Text(profile.attribution, style = MaterialTheme.typography.bodySmall)
                     val isSaved = saved.any { it.id == profile.id }
-                    val label = if (isSaved) "Use saved profile" else "Download profile"
+                    val label = stringResource(if (isSaved) Res.string.settings_use_saved_profile else Res.string.settings_download_profile)
+                    val description = stringResource(Res.string.settings_catalog_profile_action, label, profile.name, profile.attribution)
                     ActionButton(label, if (isSaved) AppIcon.CHECK else AppIcon.DOWNLOAD,
-                        Modifier.semantics { contentDescription = "$label: ${profile.name}, ${profile.attribution}" },
+                        Modifier.semantics { contentDescription = description },
                         enabled = !working) { action { select(profiles.download(profile)) } }
                 }
             }
-            item { ActionButton("AutoEQ license", AppIcon.LICENSE, style = ActionStyle.OUTLINED) { license = true } }
+            item { ActionButton(stringResource(Res.string.settings_autoeq_license), AppIcon.LICENSE, style = ActionStyle.OUTLINED) { license = true } }
         }
-    }, confirmButton = { PageAction("Done", onClick = dismiss) })
+    }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })
     }
     }
 }

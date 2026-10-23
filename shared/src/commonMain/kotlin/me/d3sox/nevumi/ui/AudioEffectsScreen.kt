@@ -18,6 +18,29 @@ import me.d3sox.nevumi.playback.EqualizerProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.audio_effects
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.done
+import me.d3sox.nevumi.resources.settings_could_not_save_profile
+import me.d3sox.nevumi.resources.settings_custom_settings
+import me.d3sox.nevumi.resources.settings_effective_preamp
+import me.d3sox.nevumi.resources.settings_enable_equalizer
+import me.d3sox.nevumi.resources.settings_equalizer_gain_at
+import me.d3sox.nevumi.resources.settings_equalizer_profile
+import me.d3sox.nevumi.resources.settings_headphone_profiles
+import me.d3sox.nevumi.resources.settings_headphone_profiles_description
+import me.d3sox.nevumi.resources.settings_mono_audio
+import me.d3sox.nevumi.resources.settings_preamp
+import me.d3sox.nevumi.resources.settings_profile_name
+import me.d3sox.nevumi.resources.settings_profile_replaces_saved
+import me.d3sox.nevumi.resources.settings_reduce_gain_for_boosts
+import me.d3sox.nevumi.resources.settings_reset_equalizer
+import me.d3sox.nevumi.resources.settings_save_as_profile
+import me.d3sox.nevumi.resources.settings_save_equalizer_profile
+import me.d3sox.nevumi.resources.settings_save_profile
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 internal fun frequencyLabel(frequency: Double): String = if (frequency >= 1_000) {
     "${(frequency / 1_000).toString().removeSuffix(".0")} kHz"
@@ -42,47 +65,47 @@ internal fun AudioEffectsScreen(state: AppState, controller: MusicController, di
     AnimatedNavigation(profiles, false, canGoBack = profiles, onBack = { profiles = false }, depth = { if (it) 1 else 0 }) { showProfiles ->
     if (showProfiles && controller.equalizerProfiles != null) AutoEqScreen(controller.equalizerProfiles, controller) { profiles = false }
     else {
-    SettingsScreen(onDismissRequest = dismiss, title = { Text("Audio effects") }, text = {
+    SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.audio_effects)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            EffectSwitch("Enable equalizer", effects.enabled) { enabled -> update { it.copy(enabled = enabled) } }
-            EffectSwitch("Mono audio", effects.mono) { mono -> update { it.copy(mono = mono) } }
+            EffectSwitch(stringResource(Res.string.settings_enable_equalizer), effects.enabled) { enabled -> update { it.copy(enabled = enabled) } }
+            EffectSwitch(stringResource(Res.string.settings_mono_audio), effects.mono) { mono -> update { it.copy(mono = mono) } }
             if (catalog != null) {
                 val selected = saved.firstOrNull { it.effects.copy(mono = effects.mono) == effects }?.id
-                SettingChoice("Equalizer profile", selected,
-                    listOf(null to "Custom settings") + saved.map { it.id as String? to it.name }) { id ->
+                SettingChoice(Res.string.settings_equalizer_profile, selected,
+                    listOf(null to stringResource(Res.string.settings_custom_settings)) + saved.map { it.id as String? to it.name }) { id ->
                     if (id == null) update { it.copy(profileName = null) }
                     saved.firstOrNull { it.id == id }?.let { profile -> update {
                         if (profile.id.startsWith("equalizer-custom:")) profile.effects else profile.effects.copy(mono = it.mono)
                     } }
                 }
-                SettingsLink("Headphone profiles", AppIcon.HEADPHONES, "Browse AutoEQ, import and manage profiles") { profiles = true }
+                SettingsLink(stringResource(Res.string.settings_headphone_profiles), AppIcon.HEADPHONES, stringResource(Res.string.settings_headphone_profiles_description)) { profiles = true }
                 OutlinedButton(onClick = { name = ""; error = null; saving = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(AppIcon.PLUS.vector, null); Spacer(Modifier.width(8.dp)); Text("Save as profile")
+                    Icon(AppIcon.PLUS.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.settings_save_as_profile))
                 }
             }
-            EffectSlider("Preamp", effects.preampDb, -30f..12f, 41, effects.enabled) { gain -> update { it.copy(preampDb = gain) } }
-            EffectSwitch("Reduce gain for boosts", effects.reduceGainForBoosts) { enabled -> update { it.copy(reduceGainForBoosts = enabled) } }
-            Text("Effective preamp: ${effects.effectivePreampDb.toString().removeSuffix(".0")} dB",
+            EffectSlider(stringResource(Res.string.settings_preamp), effects.preampDb, -30f..12f, 41, effects.enabled) { gain -> update { it.copy(preampDb = gain) } }
+            EffectSwitch(stringResource(Res.string.settings_reduce_gain_for_boosts), effects.reduceGainForBoosts) { enabled -> update { it.copy(reduceGainForBoosts = enabled) } }
+            Text(stringResource(Res.string.settings_effective_preamp, effects.effectivePreampDb.toString().removeSuffix(".0")),
                 style = MaterialTheme.typography.bodySmall)
             effects.bands.forEachIndexed { index, band ->
                 val label = frequencyLabel(band.frequencyHz)
-                EffectSlider("Equalizer gain at $label", band.gainDb, -24f..24f, 47, effects.enabled,
+                EffectSlider(stringResource(Res.string.settings_equalizer_gain_at, label), band.gainDb, -24f..24f, 47, effects.enabled,
                     visibleLabel = label) { gain -> update { current ->
                     current.copy(profileName = null, bands = current.bands.mapIndexed { i, value -> if (i == index) value.copy(gainDb = gain) else value })
                 } }
             }
-            ActionButton("Reset equalizer", AppIcon.RESET, style = ActionStyle.OUTLINED) { update { AudioEffects(enabled = it.enabled, mono = it.mono) } }
+            ActionButton(stringResource(Res.string.settings_reset_equalizer), AppIcon.RESET, style = ActionStyle.OUTLINED) { update { AudioEffects(enabled = it.enabled, mono = it.mono) } }
         }
-    }, confirmButton = { PageAction("Done", onClick = dismiss) })
+    }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })
     }
     }
     if (saving && catalog != null) KeyboardAlertDialog(onDismissRequest = { if (!working) saving = false },
-        title = { Text("Save equalizer profile") }, text = {
+        title = { Text(stringResource(Res.string.settings_save_equalizer_profile)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Profile name") },
+                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.settings_profile_name)) },
                     singleLine = true, enabled = !working)
                 if (saved.any { it.id.startsWith("equalizer-custom:") && it.name == name.trim() })
-                    Text("This replaces your saved profile with the same name.", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(Res.string.settings_profile_replaces_saved), style = MaterialTheme.typography.bodySmall)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }, confirmButton = { TextButton(enabled = name.trim().length in 1..200 && !working, onClick = {
@@ -93,11 +116,11 @@ internal fun AudioEffectsScreen(state: AppState, controller: MusicController, di
                     controller.updatePreferences { it.copy(audioEffects = profile.effects) }.join()
                     revision++; saving = false
                 } catch (cancelled: CancellationException) { throw cancelled }
-                catch (failure: Exception) { error = failure.message ?: "Could not save this profile" }
+                catch (failure: Exception) { error = failure.message ?: getString(Res.string.settings_could_not_save_profile) }
                 finally { working = false }
             }
-        }) { Text("Save profile") } }, dismissButton = {
-            TextButton(enabled = !working, onClick = { saving = false }) { Text("Cancel") }
+        }) { Text(stringResource(Res.string.settings_save_profile)) } }, dismissButton = {
+            TextButton(enabled = !working, onClick = { saving = false }) { Text(stringResource(Res.string.cancel)) }
         })
 }
 

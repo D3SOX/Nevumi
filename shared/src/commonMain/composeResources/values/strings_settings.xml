@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings pages, settings search, audio effects, AutoEQ, Home customization and About. -->
+<resources>
+    <!-- Settings pages -->
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_library_gestures">Library &amp; gestures</string>
+    <string name="settings_local_music">Local music</string>
+    <string name="settings_waveforms">Waveforms</string>
+    <string name="settings_downloads_cache">Downloads &amp; cache</string>
+    <string name="settings_listening_scrobbling">Listening &amp; scrobbling</string>
+    <string name="settings_files_recovery">Files &amp; recovery</string>
+    <string name="settings_manage_downloads">Manage downloads</string>
+    <string name="settings_soundcloud">SoundCloud</string>
+    <string name="settings_search_settings">Search settings</string>
+
+    <!-- Settings overview -->
+    <string name="settings_appearance_description">Theme, system colors and artwork colors</string>
+    <string name="settings_local_music_summary">Scan music, include folders and exclusions</string>
+    <string name="settings_library_gestures_description">Tabs and swipe actions</string>
+    <string name="settings_playback_description">Speed, pitch, crossfade and audio effects</string>
+    <string name="settings_downloads_cache_description">Offline music, network and source priority</string>
+    <string name="settings_music_server_description">Navidrome and Subsonic</string>
+    <string name="settings_tunnel_description">Reach your servers through Tailscale</string>
+    <string name="settings_soundcloud_description">Search and download songs through sc-gate-dl</string>
+    <string name="settings_listening_scrobbling_description">History, statistics and connected services</string>
+    <string name="settings_paired_devices_description">Sync with your phone or computer</string>
+    <string name="settings_files_recovery_description">Undo backups and server file editing</string>
+    <string name="settings_saved_queues_description">Manage saved playback queues</string>
+    <string name="settings_about_nevumi_description">Source code and license</string>
+
+    <!-- Appearance -->
+    <string name="settings_theme_follow_system">Follow system</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_amoled_black">AMOLED black</string>
+    <string name="settings_amoled_black_description">Use a black background in dark mode</string>
+    <string name="settings_colors_system">System colors</string>
+    <string name="settings_colors_artwork">Artwork colors</string>
+    <string name="settings_colors_custom">Custom</string>
+    <string name="settings_title_scroll_speed">Title scroll speed</string>
+    <string name="settings_custom_color">Custom color</string>
+    <string name="settings_custom_color_named">Custom color: %1$s</string>
+    <string name="settings_color_red">Red</string>
+    <string name="settings_color_coral">Coral</string>
+    <string name="settings_color_orange">Orange</string>
+    <string name="settings_color_amber">Amber</string>
+    <string name="settings_color_yellow">Yellow</string>
+    <string name="settings_color_lime">Lime</string>
+    <string name="settings_color_green">Green</string>
+    <string name="settings_color_emerald">Emerald</string>
+    <string name="settings_color_mint">Mint</string>
+    <string name="settings_color_teal">Teal</string>
+    <string name="settings_color_cyan">Cyan</string>
+    <string name="settings_color_sky_blue">Sky blue</string>
+    <string name="settings_color_blue">Blue</string>
+    <string name="settings_color_indigo">Indigo</string>
+    <string name="settings_color_purple">Purple</string>
+    <string name="settings_color_violet">Violet</string>
+    <string name="settings_color_pink">Pink</string>
+    <string name="settings_color_rose">Rose</string>
+    <string name="settings_color_brown">Brown</string>
+    <string name="settings_color_slate">Slate</string>
+
+    <!-- Library & gestures -->
+    <string name="settings_last_opened_page">Last opened page</string>
+    <string name="settings_show_options_buttons_description">Show ⋮ on songs and collections. Long press opens the same menu.</string>
+    <string name="settings_remember_scroll_positions">Remember scroll positions</string>
+    <string name="settings_remember_scroll_positions_description">Reopen library lists and grids where you left off.</string>
+    <string name="settings_customize_home_description">Reorder sections on your Home page</string>
+    <string name="settings_library_tabs_description">Choose and reorder library pages</string>
+    <string name="settings_clear_favorites">Clear favorites</string>
+    <string name="settings_clear_ratings">Clear ratings</string>
+    <string name="settings_clear_all_ratings">Clear all ratings?</string>
+    <string name="settings_clear_all_ratings_message">Remove ratings from %1$s, including songs hidden by filters. Your music files will stay in your library.</string>
+    <string name="settings_clear_all_favorites">Clear all favorites?</string>
+    <string name="settings_clear_all_favorites_message">Remove all %1$s from favorites, including songs hidden by filters. Your music files will stay in your library.</string>
+
+    <!-- Home customization -->
+    <string name="settings_home_description">Choose the sections to show and drag them into your preferred order.</string>
+    <string name="settings_show_home_section">Show %1$s</string>
+    <string name="settings_move_section_up">Move %1$s up</string>
+    <string name="settings_move_section_down">Move %1$s down</string>
+    <string name="settings_reorder_home_section">Reorder Home section: %1$s</string>
+    <string name="settings_reset">Reset</string>
+    <string name="settings_save_order">Save order</string>
+
+    <!-- Playback -->
+    <string name="settings_playback_speed">Playback speed</string>
+    <string name="settings_playback_pitch">Playback pitch</string>
+    <string name="settings_original_pitch">Original pitch</string>
+    <string name="settings_waveforms_description">Prepare and cache waveforms for your music</string>
+    <string name="settings_show_audio_info">Show audio info</string>
+    <string name="settings_show_audio_info_description">Format, bitrate and sample rate in Now Playing</string>
+    <string name="settings_audio_effects_description">Equalizer, headphone profiles and mono audio</string>
+    <string name="settings_gapless_playback">Gapless playback</string>
+    <string name="settings_gapless_playback_description">Play adjacent tracks without a break when crossfade is off.</string>
+    <string name="settings_show_previous_tracks">Show previous tracks in queue</string>
+    <string name="settings_show_previous_tracks_description">Display songs before the current track</string>
+    <string name="settings_confirm_queue_jumps">Confirm queue jumps</string>
+    <string name="settings_confirm_queue_jumps_description">Ask before playing a song other than the next one</string>
+    <string name="settings_confirm_up_next_interruption">Confirm interrupting Up next</string>
+    <string name="settings_confirm_up_next_interruption_description">Ask before starting other music while Up next is active</string>
+    <string name="settings_previous_track_limit">Previous track limit</string>
+
+    <!-- Waveforms -->
+    <string name="settings_prepare_automatically">Prepare automatically</string>
+    <string name="settings_prepare_automatically_description">Prepare local and downloaded music in the background, starting with upcoming songs</string>
+    <string name="settings_waveforms_prepared">%1$d of %2$d prepared</string>
+    <string name="settings_waveforms_failed">%1$d could not be prepared</string>
+    <string name="settings_waveforms_cache_note">Prepared waveforms are cached and reused when you play a song or reopen Nevumi. Server tracks need to be downloaded first.</string>
+    <string name="settings_pause_preparation">Pause preparation</string>
+    <string name="settings_prepare_all_waveforms">Prepare all waveforms</string>
+
+    <!-- Audio effects -->
+    <string name="settings_enable_equalizer">Enable equalizer</string>
+    <string name="settings_mono_audio">Mono audio</string>
+    <string name="settings_equalizer_profile">Equalizer profile</string>
+    <string name="settings_custom_settings">Custom settings</string>
+    <string name="settings_headphone_profiles">Headphone profiles</string>
+    <string name="settings_headphone_profiles_description">Browse AutoEQ, import and manage profiles</string>
+    <string name="settings_save_as_profile">Save as profile</string>
+    <string name="settings_preamp">Preamp</string>
+    <string name="settings_reduce_gain_for_boosts">Reduce gain for boosts</string>
+    <string name="settings_effective_preamp">Effective preamp: %1$s dB</string>
+    <string name="settings_equalizer_gain_at">Equalizer gain at %1$s</string>
+    <string name="settings_reset_equalizer">Reset equalizer</string>
+    <string name="settings_save_equalizer_profile">Save equalizer profile</string>
+    <string name="settings_profile_name">Profile name</string>
+    <string name="settings_profile_replaces_saved">This replaces your saved profile with the same name.</string>
+    <string name="settings_could_not_save_profile">Could not save this profile</string>
+    <string name="settings_save_profile">Save profile</string>
+
+    <!-- AutoEQ -->
+    <string name="settings_could_not_load_equalizer_profile">Could not load this equalizer profile</string>
+    <string name="settings_autoeq_license">AutoEQ license</string>
+    <string name="settings_autoeq_privacy">AutoEQ profiles stay on this device. Catalog refreshes and profile downloads contact GitHub.</string>
+    <string name="settings_search_headphones">Search headphones</string>
+    <string name="settings_refresh_catalog">Refresh catalog</string>
+    <string name="settings_import_profile">Import profile</string>
+    <string name="settings_saved_profiles">Saved profiles</string>
+    <string name="settings_use_profile">Use profile</string>
+    <string name="settings_use_saved_profile_named">Use saved profile: %1$s</string>
+    <string name="settings_remove_saved_profile_named">Remove saved profile: %1$s</string>
+    <string name="settings_autoeq_download_catalog">Download the AutoEQ catalog to search headphone profiles.</string>
+    <string name="settings_autoeq_no_matches">No matching headphone profiles. Try another search or refresh the catalog.</string>
+    <string name="settings_autoeq_catalog">AutoEQ catalog</string>
+    <string name="settings_use_saved_profile">Use saved profile</string>
+    <string name="settings_download_profile">Download profile</string>
+    <string name="settings_catalog_profile_action">%1$s: %2$s, %3$s</string>
+
+    <!-- Downloads & cache -->
+    <string name="settings_source_local">Local</string>
+    <string name="settings_unmetered_only">Unmetered only</string>
+    <string name="settings_any_network">Any network</string>
+    <string name="settings_manage_downloads_description">Downloads, progress and offline music</string>
+
+    <!-- Listening & scrobbling -->
+    <string name="settings_clear_listening_history">Clear listening history</string>
+    <string name="settings_clear_listening_history_question">Clear listening history?</string>
+    <string name="settings_clear_listening_history_message">This removes this device’s listening history and statistics.</string>
+    <string name="settings_clear_history">Clear history</string>
+    <string name="settings_scrobble_after">Scrobble after</string>
+    <string name="settings_or_after">Or after</string>
+
+    <!-- Files & recovery -->
+    <string name="settings_review_interrupted_edit">Review interrupted edit</string>
+    <string name="settings_review_interrupted_edit_description">Restore or finish a pending music file edit</string>
+    <string name="settings_server_files_description">Optional file editing and uploads</string>
+    <string name="settings_undo_backups_note">Older backups expire. The newest edit and unfinished recovery can exceed the storage target.</string>
+
+    <!-- Local music -->
+    <string name="settings_could_not_select_folder">Could not select this folder</string>
+    <string name="settings_local_music_description">Scan the music already stored on your device. Files stay in their current folders.</string>
+    <string name="settings_scan_music">Scan music</string>
+    <string name="settings_scanning_music">Scanning music · %1$d / %2$d</string>
+    <string name="settings_scan_complete">Scan complete · %1$s</string>
+    <string name="settings_folder_rules_note">Selected folders include their subfolders. Exclusions take priority.</string>
+    <string name="settings_include_folders">Include folders</string>
+    <string name="settings_include_folders_empty">All scanned folders are included</string>
+    <string name="settings_exclude_folders">Exclude folders</string>
+    <string name="settings_exclude_folders_empty">No folders excluded</string>
+    <string name="settings_dismiss_folder_error">Dismiss folder error</string>
+    <string name="settings_add_folder">Add folder</string>
+    <string name="settings_add_included_folder">Add included folder</string>
+    <string name="settings_add_excluded_folder">Add excluded folder</string>
+    <string name="settings_remove_included_folder">Remove included folder: %1$s</string>
+    <string name="settings_remove_excluded_folder">Remove excluded folder: %1$s</string>
+
+    <!-- About -->
+    <string name="settings_license">License</string>
+    <string name="settings_nevumi_logo">Nevumi logo</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_about_tagline">Local music and your music server in one library.</string>
+    <string name="settings_source_code">Source code</string>
+    <string name="settings_view_license">View license</string>
+
+    <!-- Settings search -->
+    <string name="settings_search_query">Search settings query</string>
+    <string name="settings_search_hint">Find a setting in any category</string>
+    <string name="settings_search_no_results">No matching settings</string>
+    <!-- Extra search terms for each setting. Translate them as space-separated words people may type. -->
+    <string name="settings_keywords_theme">light dark follow system</string>
+    <string name="settings_keywords_amoled_black">dark background oled</string>
+    <string name="settings_keywords_colors">system artwork material you dynamic</string>
+    <string name="settings_keywords_title_scroll_speed">marquee scrolling long song names artist text animation</string>
+    <string name="settings_keywords_on_launch">startup start page last opened</string>
+    <string name="settings_keywords_swipe_right">gesture play next after favorite rate none</string>
+    <string name="settings_keywords_swipe_left">gesture add queue none</string>
+    <string name="settings_keywords_quick_action">song list button favorite rate playlist play next after none</string>
+    <string name="settings_keywords_show_options_buttons">three dots more menu overflow long press hold hide</string>
+    <string name="settings_keywords_customize_home">reorder home sections</string>
+    <string name="settings_keywords_library_tabs">bottom navigation reorder pages search header</string>
+    <string name="settings_keywords_clear_favorites">remove reset all favorites favourites starred songs</string>
+    <string name="settings_keywords_clear_ratings">remove reset all stars ratings</string>
+    <string name="settings_keywords_remember_scroll_positions">save restore list grid position start top</string>
+    <string name="settings_keywords_scan_music">index refresh local device files</string>
+    <string name="settings_keywords_include_folders">picker local music</string>
+    <string name="settings_keywords_exclude_folders">picker exclusions local music</string>
+    <string name="settings_keywords_playback_speed">tempo</string>
+    <string name="settings_keywords_playback_pitch">semitones</string>
+    <string name="settings_keywords_crossfade">transition seconds</string>
+    <string name="settings_keywords_show_audio_info">format bitrate sample rate kb/s kHz quality</string>
+    <string name="settings_keywords_show_previous_tracks">history previously played</string>
+    <string name="settings_keywords_previous_track_limit">queue history count</string>
+    <string name="settings_keywords_confirm_queue_jumps">confirmation skip play now</string>
+    <string name="settings_keywords_confirm_up_next_interruption">confirmation replace queue starting music album playlist</string>
+    <string name="settings_keywords_prepare_all_waveforms">audio waveform background cache precompute progress</string>
+    <string name="settings_keywords_prepare_automatically">audio waveform background cache precompute</string>
+    <string name="settings_keywords_audio_effects">equalizer headphone profiles mono balance limiter preamp</string>
+    <string name="settings_keywords_source_priority">local downloads server mixed library</string>
+    <string name="settings_keywords_playback_cache">storage offline</string>
+    <string name="settings_keywords_download_network">metered wifi unmetered</string>
+    <string name="settings_keywords_manage_downloads">offline progress auto playlist</string>
+    <string name="settings_keywords_music_server">navidrome subsonic address url username password connect refresh disconnect</string>
+    <string name="settings_keywords_record_listening_history">statistics recommendations</string>
+    <string name="settings_keywords_clear_listening_history">delete statistics</string>
+    <string name="settings_keywords_scrobble_after">threshold percentage percent lastfm listenbrainz server</string>
+    <string name="settings_keywords_or_after">scrobble scrobbling time limit threshold seconds minutes duration lastfm listenbrainz server</string>
+    <string name="settings_keywords_connect_last_fm">lastfm authorization sign in account</string>
+    <string name="settings_keywords_connect_listenbrainz">token service address account</string>
+    <string name="settings_keywords_keep_undo_backups">retention days edit tags</string>
+    <string name="settings_keywords_undo_backup_storage">space recovery limit</string>
+    <string name="settings_keywords_server_files">ssh host port username directory fingerprint key password upload editing</string>
+    <string name="settings_keywords_tunnel">tailscale headscale tailnet vpn control server auth key sign in navidrome sftp</string>
+    <string name="settings_keywords_soundcloud">sc-gate-dl search download gate hypeddit server address format mp3 flac browser headless visible novnc tags metadata</string>
+    <string name="settings_keywords_paired_devices">sync phone desktop pairing</string>
+    <string name="settings_keywords_saved_queues">restore delete playback</string>
+    <string name="settings_keywords_about_nevumi">license agpl source code version github</string>
+
+    <!-- Units and counts -->
+    <plurals name="settings_seconds">
+        <item quantity="one">%1$d second</item>
+        <item quantity="other">%1$d seconds</item>
+    </plurals>
+    <plurals name="settings_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="settings_semitones_up">
+        <item quantity="one">+%1$d semitone</item>
+        <item quantity="other">+%1$d semitones</item>
+    </plurals>
+    <!-- Takes the absolute number of semitones. -->
+    <plurals name="settings_semitones_down">
+        <item quantity="one">−%1$d semitone</item>
+        <item quantity="other">-%1$d semitones</item>
+    </plurals>
+</resources>
