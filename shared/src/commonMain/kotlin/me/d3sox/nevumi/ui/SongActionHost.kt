@@ -112,8 +112,8 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     Box(contextMenu) {
         content(::available, ::perform, openMenu, menu && artworkPlaced)
     }
-    val imageUnavailable = stringResource(Res.string.player_image_unavailable)
     if (menu) {
+        val imageUnavailable = stringResource(Res.string.player_image_unavailable)
         fun MutableList<TrackOption>.option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) {
             add(TrackOption(label, icon, detail) { menu = false; click() })
         }

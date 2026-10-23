@@ -129,10 +129,6 @@ internal fun rememberLibraryTime(): Long {
 internal fun formatListeningStatistics(plays: Int, milliseconds: Long): String =
     stringResource(Res.string.sources_listening_statistics, countLabel(plays, Res.plurals.plays), formatListeningDuration(milliseconds))
 
-/** Fills the `%1$s`-style placeholders of a string resolved without arguments, for text built outside composition. */
-private fun String.withArgs(vararg args: String) =
-    args.foldIndexed(this) { index, text, arg -> text.replace("%${index + 1}\$s", arg) }
-
 internal fun formatListeningDuration(milliseconds: Long): String {
     val seconds = milliseconds.coerceAtLeast(0) / 1_000
     return when {

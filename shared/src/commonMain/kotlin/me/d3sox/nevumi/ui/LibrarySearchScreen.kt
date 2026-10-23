@@ -118,6 +118,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 else {
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD } else listOf(type)
                     val count = if (type == SearchType.ALL) results.count else results.collections[type].orEmpty().size
+                    CompositionLocalProvider(LocalTrackRowStrings provides trackRowStrings()) {
                     LazyColumn(Modifier.fillMaxSize().testTag("search-results")) {
                         if (count == 0) item { Text(stringResource(Res.string.sources_no_results_for, query.trim()), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         categories.forEach { category ->
@@ -153,6 +154,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                         if (type == SearchType.ALL && state.soundCloud != null) item(key = "search-soundcloud") {
                             SearchSoundCloudRow(query) { type = SearchType.SOUNDCLOUD; stopTyping() }
                         }
+                    }
                     }
                 }
             }

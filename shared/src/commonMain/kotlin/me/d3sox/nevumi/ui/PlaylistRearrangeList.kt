@@ -48,12 +48,14 @@ internal fun PlaylistRearrangeList(playlist: Playlist, state: AppState, controll
         val target = rows.indexOfFirst { it.key == destination.key }
         if (source >= 0 && target >= 0) rows = rows.toMutableList().apply { add(target, removeAt(source)) }
     }
+    val reorderTemplate = stringResource(Res.string.library_reorder_position)
     Box(modifier.fillMaxSize()) {
+    CompositionLocalProvider(LocalTrackRowStrings provides trackRowStrings()) {
     LazyColumn(Modifier.fillMaxSize(), state = scroll) {
         item("playlist-header") { header() }
         itemsIndexed(rows, key = { _, row -> row.key }) { index, row ->
             val track = catalog[row.trackId] ?: return@itemsIndexed
-            val reorderDescription = stringResource(Res.string.library_reorder_position, track.metadata.title, index + 1)
+            val reorderDescription = reorderTemplate.withArgs(track.metadata.title, index + 1)
             ReorderableItem(reorderable, row.key) { _ ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.padding(start = 8.dp).size(48.dp).testTag("playlist-reorder:${row.key}")
@@ -74,6 +76,7 @@ internal fun PlaylistRearrangeList(playlist: Playlist, state: AppState, controll
                 }
             }
         }
+    }
     }
     val scrollRows = rows
     LibraryScrollbar(scroll, scrollRows.size, stringResource(Res.string.library_scroll_playlist), headerItems = 1) { index ->

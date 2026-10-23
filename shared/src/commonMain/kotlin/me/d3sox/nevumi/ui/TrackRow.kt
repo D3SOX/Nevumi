@@ -37,23 +37,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import me.d3sox.nevumi.resources.Res
-import me.d3sox.nevumi.resources.player_download_failed
-import me.d3sox.nevumi.resources.player_download_paused
-import me.d3sox.nevumi.resources.player_download_queued
-import me.d3sox.nevumi.resources.player_downloaded
-import me.d3sox.nevumi.resources.player_downloading_bytes
-import me.d3sox.nevumi.resources.player_duration
-import me.d3sox.nevumi.resources.player_favorited
-import me.d3sox.nevumi.resources.player_local_file_deleted
-import me.d3sox.nevumi.resources.player_quick_action_description
-import me.d3sox.nevumi.resources.player_rating_stars
-import me.d3sox.nevumi.resources.player_select_track
-import me.d3sox.nevumi.resources.player_server_file_deleted
-import me.d3sox.nevumi.resources.player_song_artwork
-import me.d3sox.nevumi.resources.player_track_options
-import me.d3sox.nevumi.resources.unknown_artist
-import org.jetbrains.compose.resources.pluralStringResource
-import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.plays
 
 @Composable
 internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds: List<String>? = null, contextIndex: Int? = null,
@@ -87,13 +71,8 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
         hiddenAction = if (selectionMode) TrackAction.NONE else state.preferences.quickAction) { available, perform, openMenu, menuOpen ->
     val performAction by rememberUpdatedState(perform)
     val actionAvailable by rememberUpdatedState(available)
-    val actionLabels = TrackAction.entries.associateWith { it.displayLabel(track.favorite, availableOffline) }
-    val selectDescription = stringResource(Res.string.player_select_track, track.metadata.title)
-    val ratingDescription = pluralStringResource(Res.plurals.player_rating_stars, track.rating, track.rating)
-    val durationDescription = stringResource(Res.string.player_duration, playbackTime(track.metadata.durationMs))
-    val quickActionDescription = stringResource(Res.string.player_quick_action_description,
-        actionLabels.getValue(state.preferences.quickAction), track.metadata.title)
-    val optionsDescription = stringResource(Res.string.player_track_options, track.metadata.title)
+    val strings = LocalTrackRowStrings.current ?: trackRowStrings()
+    fun label(action: TrackAction) = strings.actionLabel(action, track.favorite, availableOffline)
     Box(Modifier.fillMaxWidth().testTag("track-row:${track.id}").semantics { this.selected = selected }.clipToBounds()) {
         Surface(Modifier.matchParentSize(), color = MaterialTheme.colorScheme.primaryContainer) {
             Box(Modifier.padding(horizontal = 24.dp), contentAlignment = if (offset >= 0) Alignment.CenterStart else Alignment.CenterEnd) {
@@ -102,7 +81,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                     Column(Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(action.icon(track.favorite, track.rating, track.id in state.playlistTrackIds, availableOffline).vector, null, Modifier.size(24.dp))
-                        Text(action.displayLabel(track.favorite, availableOffline), style = MaterialTheme.typography.labelSmall,
+                        Text(label(action), style = MaterialTheme.typography.labelSmall,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
                 }
@@ -119,7 +98,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                 settle()
             }.semantics {
                 customActions = TrackAction.entries.filter { available(it) }.map { action ->
-                    CustomAccessibilityAction(actionLabels.getValue(action)) { perform(action) }
+                    CustomAccessibilityAction(label(action)) { perform(action) }
                 }
             }, color = MaterialTheme.colorScheme.surface) {
             Row(Modifier.combinedClickable(onClick = {
@@ -128,46 +107,46 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
             }, onLongClick = openMenu).padding(start = 24.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (selectionMode) Checkbox(selected, onCheckedChange = { onSelect?.invoke() },
-                    modifier = Modifier.semantics { contentDescription = selectDescription })
+                    modifier = Modifier.semantics { contentDescription = strings.selectTemplate.withArgs(track.metadata.title) })
                 Surface(Modifier.size(52.dp).onGloballyPositioned { artworkBounds = Rect(it.positionOnScreen(),
                     androidx.compose.ui.geometry.Size(it.size.width.toFloat(), it.size.height.toFloat())) }
                     .graphicsLayer { alpha = if (menuOpen) 0f else 1f }, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                    MusicArtwork(state.artwork[track.id], track.metadata.title, stringResource(Res.string.player_song_artwork, track.metadata.title))
+                    MusicArtwork(state.artwork[track.id], track.metadata.title, strings.artworkTemplate.withArgs(track.metadata.title))
                 }
                 Column(Modifier.weight(1f)) {
                     Text(track.metadata.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Text(track.metadata.artist.ifBlank { strings.unknownArtist }, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         if (track.favorite && (selectionMode || state.preferences.quickAction != TrackAction.FAVORITE))
-                            Icon(AppIcon.FAVORITE_FILLED.vector, stringResource(Res.string.player_favorited), Modifier.size(16.dp).align(Alignment.CenterVertically),
+                            Icon(AppIcon.FAVORITE_FILLED.vector, strings.favorited, Modifier.size(16.dp).align(Alignment.CenterVertically),
                             tint = MaterialTheme.colorScheme.primary)
                         if (state.downloads[track.id]?.status == DownloadStatus.COMPLETE &&
                             (selectionMode || state.preferences.quickAction != TrackAction.DOWNLOAD || !availableOffline))
-                            Icon(AppIcon.AVAILABLE_OFFLINE.vector, stringResource(Res.string.player_downloaded), Modifier.size(16.dp).align(Alignment.CenterVertically),
+                            Icon(AppIcon.AVAILABLE_OFFLINE.vector, strings.downloaded, Modifier.size(16.dp).align(Alignment.CenterVertically),
                             tint = MaterialTheme.colorScheme.primary)
                         if (track.rating > 0) Row(Modifier.align(Alignment.CenterVertically).semantics(mergeDescendants = true) {
-                            contentDescription = ratingDescription
+                            contentDescription = strings.rating(track.rating)
                         }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             Icon(AppIcon.RATING_FILLED.vector, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                             Text("${track.rating}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
-                        statistics?.let { Text(formatListeningStatistics(it.playCount, it.listenedMs), Modifier.align(Alignment.CenterVertically),
+                        statistics?.let { Text(strings.statisticsTemplate.withArgs(countLabel(it.playCount, Res.plurals.plays), formatListeningDuration(it.listenedMs)), Modifier.align(Alignment.CenterVertically),
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         extraInfo?.let { Text(it, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically)) }
                     }
                     if (lastEdit?.operation == FileEditOperation.DELETE)
-                        Text(stringResource(if (lastEdit.providerId.startsWith("sftp:")) Res.string.player_server_file_deleted else Res.string.player_local_file_deleted),
+                        Text(if (lastEdit.providerId.startsWith("sftp:")) strings.serverFileDeleted else strings.localFileDeleted,
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     state.downloads[track.id]?.let { record ->
                         when (record.status) {
                             DownloadStatus.COMPLETE -> null
-                            DownloadStatus.DOWNLOADING -> stringResource(Res.string.player_downloading_bytes, record.bytesDownloaded, record.sizeBytes)
-                            DownloadStatus.PENDING -> stringResource(Res.string.player_download_queued)
-                            DownloadStatus.PAUSED -> stringResource(Res.string.player_download_paused)
-                            DownloadStatus.FAILED -> stringResource(Res.string.player_download_failed)
+                            DownloadStatus.DOWNLOADING -> strings.downloadingTemplate.withArgs(record.bytesDownloaded, record.sizeBytes)
+                            DownloadStatus.PENDING -> strings.downloadQueued
+                            DownloadStatus.PAUSED -> strings.downloadPaused
+                            DownloadStatus.FAILED -> strings.downloadFailed
                         }
                     }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
@@ -177,13 +156,13 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (track.metadata.durationMs > 0) Text(playbackTime(track.metadata.durationMs),
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.semantics { contentDescription = durationDescription })
+                        modifier = Modifier.semantics { contentDescription = strings.durationTemplate.withArgs(playbackTime(track.metadata.durationMs)) })
                     if (quickAction) {
                         val member = track.id in state.playlistTrackIds
                         val active = action == TrackAction.FAVORITE && track.favorite || action == TrackAction.RATE && track.rating > 0 ||
                             action == TrackAction.ADD_TO_PLAYLIST && member || action == TrackAction.DOWNLOAD && availableOffline
                         IconButton(onClick = { performAction(action) }, Modifier.size(48.dp).semantics {
-                            contentDescription = quickActionDescription
+                            contentDescription = strings.quickActionTemplate.withArgs(label(action), track.metadata.title)
                             if (action == TrackAction.FAVORITE || action == TrackAction.ADD_TO_PLAYLIST || action == TrackAction.DOWNLOAD) this.selected = active
                         }) {
                             BadgedBox(badge = { if (action == TrackAction.RATE && track.rating > 0) Badge { Text("${track.rating}") } }) {
@@ -195,7 +174,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                 }
                 if (!quickAction && track.metadata.durationMs > 0 && state.preferences.showMoreButtons) Spacer(Modifier.width(16.dp))
                 if (state.preferences.showMoreButtons) Box {
-                    IconButton(onClick = openMenu, Modifier.semantics { contentDescription = optionsDescription }) {
+                    IconButton(onClick = openMenu, Modifier.semantics { contentDescription = strings.optionsTemplate.withArgs(track.metadata.title) }) {
                         Icon(AppIcon.MORE.vector, null)
                     }
                 }
