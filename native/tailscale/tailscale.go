@@ -201,9 +201,10 @@ func warm(host string) error {
 		return err
 	}
 	// Running can still mean the network map cached on disk, which may lack the peer until control sends the current one.
+	// A reply relayed through DERP leaves the direct path still to be found, so pinging continues until one arrives directly.
 	for {
 		if address, ok := peerAddress(ctx, client, host); ok {
-			if result, err := client.Ping(ctx, address, tailcfg.PingDisco); err == nil && result.Err == "" {
+			if result, err := client.Ping(ctx, address, tailcfg.PingDisco); err == nil && result.Err == "" && result.Endpoint != "" {
 				return nil
 			}
 		}

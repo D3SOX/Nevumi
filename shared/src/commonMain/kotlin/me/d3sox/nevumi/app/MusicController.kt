@@ -423,7 +423,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                     } }
                 }
         }
-        serverFiles?.let { files -> scope.launch { files.warmUp() } }
+        // Warming up can wait up to 30 seconds inside Tailscale, which cancelling cannot interrupt, so closing does not wait for it.
+        serverFiles?.let { files -> CoroutineScope(Dispatchers.Default).launch { files.warmUp() } }
         offline?.let { downloads -> scope.launch {
             downloads.network.collect { network ->
                 operations.withLock { mutableState.update { it.copy(downloadNetwork = network) } }
