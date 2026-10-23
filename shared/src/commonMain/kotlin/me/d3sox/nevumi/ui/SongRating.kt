@@ -18,6 +18,16 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.player_clear_rating
+import me.d3sox.nevumi.resources.player_confirm
+import me.d3sox.nevumi.resources.player_not_rated
+import me.d3sox.nevumi.resources.player_rate_song
+import me.d3sox.nevumi.resources.player_rating_out_of_five
+import me.d3sox.nevumi.resources.player_stars
+import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.pluralStringResource
 
 @Composable
 internal fun SongRating(track: Track, controller: MusicController, dismiss: () -> Unit) {
@@ -32,7 +42,7 @@ internal fun SongRating(track: Track, controller: MusicController, dismiss: () -
     }
     var preview by remember(track.id) { mutableStateOf<Int?>(null) }
     val selectedRating = preview ?: draft
-    AlertDialog(onDismissRequest = ::close, title = { Text("Rate song") }, text = {
+    AlertDialog(onDismissRequest = ::close, title = { Text(stringResource(Res.string.player_rate_song)) }, text = {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(track.metadata.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -61,17 +71,17 @@ internal fun SongRating(track: Track, controller: MusicController, dismiss: () -
                         .background(if (preview == rating) MaterialTheme.colorScheme.onSurface.copy(alpha = .12f) else Color.Transparent, CircleShape)
                         .semantics { selected = rating <= selectedRating }) {
                     Icon((if (rating <= selectedRating) AppIcon.RATING_FILLED else AppIcon.RATING).vector,
-                        if (rating == 1) "1 star" else "$rating stars", Modifier.size(32.dp),
+                        pluralStringResource(Res.plurals.player_stars, rating, rating), Modifier.size(32.dp),
                         tint = if (rating <= selectedRating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Text(if (selectedRating == 0) "Not rated" else "$selectedRating / 5", style = MaterialTheme.typography.labelLarge,
+            Text(if (selectedRating == 0) stringResource(Res.string.player_not_rated) else stringResource(Res.string.player_rating_out_of_five, selectedRating), style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { draft = 0 }) {
-                Icon(AppIcon.CLOSE.vector, null); Spacer(Modifier.width(8.dp)); Text("Clear rating")
+                Icon(AppIcon.CLOSE.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.player_clear_rating))
             }
         }
     }, confirmButton = { Button(onClick = ::confirm) {
-        Icon(AppIcon.CHECK.vector, null); Spacer(Modifier.width(8.dp)); Text("Confirm")
-    } }, dismissButton = { TextButton(onClick = ::close) { Text("Cancel") } })
+        Icon(AppIcon.CHECK.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.player_confirm))
+    } }, dismissButton = { TextButton(onClick = ::close) { Text(stringResource(Res.string.cancel)) } })
 }

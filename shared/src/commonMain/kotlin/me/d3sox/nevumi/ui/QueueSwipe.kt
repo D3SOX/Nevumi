@@ -16,6 +16,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.remove
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun QueueSwipe(entryId: String, onRemove: () -> Unit, content: @Composable () -> Unit) {
@@ -41,7 +44,7 @@ internal fun QueueSwipe(entryId: String, onRemove: () -> Unit, content: @Composa
             if (offset < 0f) Column(Modifier.fillMaxSize().padding(end = 24.dp),
                 horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.Center) {
                 Icon(AppIcon.REMOVE.vector, null, Modifier.size(24.dp))
-                Text("Remove", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(Res.string.remove), style = MaterialTheme.typography.labelSmall)
             }
         }
         Box(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.horizontalSwipe(entryId, dismissing, onDrag = { amount ->

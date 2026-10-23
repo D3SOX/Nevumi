@@ -62,24 +62,98 @@ import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.graphics.StrokeCap
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.all
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.clear
+import me.d3sox.nevumi.resources.export_queue
+import me.d3sox.nevumi.resources.move_down
+import me.d3sox.nevumi.resources.move_up
+import me.d3sox.nevumi.resources.next
+import me.d3sox.nevumi.resources.next_track
+import me.d3sox.nevumi.resources.pause
+import me.d3sox.nevumi.resources.play
+import me.d3sox.nevumi.resources.player_album_artwork
+import me.d3sox.nevumi.resources.player_audio_output
+import me.d3sox.nevumi.resources.player_clear_all_text
+import me.d3sox.nevumi.resources.player_clear_all_title
+import me.d3sox.nevumi.resources.player_clear_duplicates_text
+import me.d3sox.nevumi.resources.player_clear_duplicates_title
+import me.d3sox.nevumi.resources.player_clear_next_text
+import me.d3sox.nevumi.resources.player_clear_next_title
+import me.d3sox.nevumi.resources.player_clear_previous_text
+import me.d3sox.nevumi.resources.player_clear_previous_title
+import me.d3sox.nevumi.resources.player_clear_queue
+import me.d3sox.nevumi.resources.player_clear_queue_text
+import me.d3sox.nevumi.resources.player_collapse
+import me.d3sox.nevumi.resources.player_duplicated_tracks
+import me.d3sox.nevumi.resources.player_elapsed_time
+import me.d3sox.nevumi.resources.player_enter_positive_number
+import me.d3sox.nevumi.resources.player_jump_to_song
+import me.d3sox.nevumi.resources.player_manage_saved_queues
+import me.d3sox.nevumi.resources.player_manual_queue_time_remaining
+import me.d3sox.nevumi.resources.player_mini_player_artwork
+import me.d3sox.nevumi.resources.player_mini_player_position
+import me.d3sox.nevumi.resources.player_new_empty_queue
+import me.d3sox.nevumi.resources.player_now_playing
+import me.d3sox.nevumi.resources.player_paused
+import me.d3sox.nevumi.resources.player_play_now
+import me.d3sox.nevumi.resources.player_play_song_now_title
+import me.d3sox.nevumi.resources.player_playback_position
+import me.d3sox.nevumi.resources.player_playback_settings
+import me.d3sox.nevumi.resources.player_playing
+import me.d3sox.nevumi.resources.player_playing_context
+import me.d3sox.nevumi.resources.player_playing_from
+import me.d3sox.nevumi.resources.player_playing_from_context
+import me.d3sox.nevumi.resources.player_previously_played
+import me.d3sox.nevumi.resources.player_queue_artwork
+import me.d3sox.nevumi.resources.player_queue_mini_player_artwork
+import me.d3sox.nevumi.resources.player_queue_play_pause
+import me.d3sox.nevumi.resources.player_remaining_time
+import me.d3sox.nevumi.resources.player_reorder
+import me.d3sox.nevumi.resources.player_repeat_this_song
+import me.d3sox.nevumi.resources.player_repeat_this_song_text
+import me.d3sox.nevumi.resources.player_scroll_queue
+import me.d3sox.nevumi.resources.player_set_repeat_count
+import me.d3sox.nevumi.resources.player_show_all
+import me.d3sox.nevumi.resources.player_show_less
+import me.d3sox.nevumi.resources.player_shuffle
+import me.d3sox.nevumi.resources.player_this_song
+import me.d3sox.nevumi.resources.player_time_remaining
+import me.d3sox.nevumi.resources.player_total_plays
+import me.d3sox.nevumi.resources.player_track_options
+import me.d3sox.nevumi.resources.player_track_preview
+import me.d3sox.nevumi.resources.player_unavailable_track
+import me.d3sox.nevumi.resources.queue_export_up_next
+import me.d3sox.nevumi.resources.player_use_temporary_queue
+import me.d3sox.nevumi.resources.previous
+import me.d3sox.nevumi.resources.previous_track
+import me.d3sox.nevumi.resources.queue
+import me.d3sox.nevumi.resources.saved_queues
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.unknown_artist
+import org.jetbrains.compose.resources.stringResource
 
 internal enum class PlayerPanel { MINI, PLAYING, QUEUE }
 
 private data class QueueRow(val key: String, val entry: QueueEntry? = null, val label: String = "", val section: QueueSection? = null)
 
-private fun queueRows(queue: QueueSnapshot, previousTrackLimit: Int): List<QueueRow> = buildList {
+/** Resolved queue section headings, so the rows can be built outside of composition. */
+private data class QueueLabels(val previous: String, val current: String, val upNext: String, val context: String)
+
+private fun queueRows(queue: QueueSnapshot, previousTrackLimit: Int, labels: QueueLabels): List<QueueRow> = buildList {
     fun songs(entries: List<QueueEntry>) { addAll(entries.map { QueueRow(it.id, it) }) }
     if (queue.currentIndex > 0 && previousTrackLimit > 0) {
-        add(QueueRow("queue:previous", label = "Previously played"))
+        add(QueueRow("queue:previous", label = labels.previous))
         songs(queue.entries.take(queue.currentIndex).takeLast(previousTrackLimit))
     }
     queue.entries.getOrNull(queue.currentIndex)?.let {
-        add(QueueRow("queue:current", label = "Now playing"))
+        add(QueueRow("queue:current", label = labels.current))
         songs(listOf(it))
     }
-    add(QueueRow("queue:manual", label = if (queue.upNext.isEmpty()) "" else "Up next", section = QueueSection.MANUAL))
+    add(QueueRow("queue:manual", label = if (queue.upNext.isEmpty()) "" else labels.upNext, section = QueueSection.MANUAL))
     songs(queue.upNext)
-    add(QueueRow("queue:context", label = "Playing from ${queue.contextName}", section = QueueSection.CONTEXT))
+    add(QueueRow("queue:context", label = labels.context, section = QueueSection.CONTEXT))
     songs(queue.context)
 }
 
@@ -126,15 +200,17 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     var expandedHistory by remember { mutableStateOf(false) }
     val previousTrackLimit = if (!state.preferences.showPreviousQueueTracks) 0
         else if (expandedHistory) Int.MAX_VALUE else state.preferences.previousQueueTrackLimit
-    var rows by remember { mutableStateOf(queueRows(state.queue, previousTrackLimit)) }
+    val queueLabels = QueueLabels(stringResource(Res.string.player_previously_played), stringResource(Res.string.player_now_playing),
+        stringResource(Res.string.queue_export_up_next), stringResource(Res.string.player_playing_from_context, state.queue.contextName))
+    var rows by remember { mutableStateOf(queueRows(state.queue, previousTrackLimit, queueLabels)) }
     // A replaced queue gets a fresh list, because cross-fading every row can leave stale rows drawn over the new queue.
     // It changes together with the rows, so the fresh list never animates the old rows away.
     var rowsReplacement by remember { mutableIntStateOf(controller.queue.replacements) }
     val displayedEntries = remember(rows, state.queue) { queueEntries(rows, state.queue) }
     val catalog = rememberDerived(null, emptyList(), listOf(state.tracks)) { state.tracks.associateBy { it.id } }
-    LaunchedEffect(state.queue.entries, state.queue.currentEntryId, state.queue.contextName, previousTrackLimit, draggingEntry, committingDrag) {
+    LaunchedEffect(state.queue.entries, state.queue.currentEntryId, state.queue.contextName, previousTrackLimit, draggingEntry, committingDrag, queueLabels) {
         if (draggingEntry == null && !committingDrag) {
-            rows = queueRows(state.queue, previousTrackLimit)
+            rows = queueRows(state.queue, previousTrackLimit, queueLabels)
             // The queue counts a replacement before the controller publishes it.
             rowsReplacement = controller.queue.replacements
         }
@@ -325,16 +401,17 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                     }
                         .then(if (collapsed || queueProgress >= .999f) Modifier.clearAndSetSemantics {} else Modifier)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
-                            AppIconButton(AppIcon.DOWN, "Collapse") { show(PlayerPanel.MINI) }
+                            AppIconButton(AppIcon.DOWN, stringResource(Res.string.player_collapse)) { show(PlayerPanel.MINI) }
+                            val playingContext = stringResource(Res.string.player_playing_context)
                             Column(Modifier.weight(1f).clickable {
                                 if (state.queue.entries.getOrNull(state.queue.currentIndex)?.section == QueueSection.MANUAL) show(PlayerPanel.QUEUE)
                                 else navigateContext(state.queue.origin ?: me.d3sox.nevumi.queue.QueueOrigin(), current.id)
-                            }.semantics { contentDescription = "Playing context" }, horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Playing from", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                PlayerMarquee(if (state.queue.entries.getOrNull(state.queue.currentIndex)?.section == QueueSection.MANUAL) "Up next" else state.queue.contextName,
+                            }.semantics { contentDescription = playingContext }, horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(stringResource(Res.string.player_playing_from), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                PlayerMarquee(if (state.queue.entries.getOrNull(state.queue.currentIndex)?.section == QueueSection.MANUAL) stringResource(Res.string.queue_export_up_next) else state.queue.contextName,
                                     MaterialTheme.typography.titleSmall, centerProgress = 1f)
                             }
-                            AppIconButton(AppIcon.MORE, "Track options: ${current.metadata.title}", onClick = openPlayingMenu)
+                            AppIconButton(AppIcon.MORE, stringResource(Res.string.player_track_options, current.metadata.title), onClick = openPlayingMenu)
                         }
                         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(24.dp)) {
                             val controlsVisible = expansion >= .999f && queueProgress == 0f
@@ -366,39 +443,40 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
             Surface(Modifier.height(height).fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.fillMaxSize().then(if (sheet.currentValue != PlayerPanel.QUEUE && sheet.targetValue != PlayerPanel.QUEUE) Modifier.clearAndSetSemantics {} else Modifier)) {
                     Row(Modifier.fillMaxWidth().heightIn(min = 88.dp).testTag("queue-mini-player")
-                        .clickable(onClickLabel = "Now playing") { show(PlayerPanel.PLAYING) }.padding(horizontal = 24.dp, vertical = 12.dp),
+                        .clickable(onClickLabel = stringResource(Res.string.player_now_playing)) { show(PlayerPanel.PLAYING) }.padding(horizontal = 24.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Surface(Modifier.size(56.dp).then(motion.anchor(PlayerPanel.QUEUE, PlayerElement.ARTWORK, queueProgress >= .999f))
                             .then(if (queueProgress >= .999f) Modifier.testTag("player-artwork") else Modifier),
                             shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                            MusicArtwork(state.artwork[current.id], current.metadata.title, "Queue mini-player artwork: ${current.metadata.title}")
+                            MusicArtwork(state.artwork[current.id], current.metadata.title, stringResource(Res.string.player_queue_mini_player_artwork, current.metadata.title))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             PlayerMarquee(current.metadata.title, MaterialTheme.typography.titleSmall,
                                 motion.anchor(PlayerPanel.QUEUE, PlayerElement.TITLE, queueProgress >= .999f),
                                 marqueeState = motion.marquee(PlayerElement.TITLE, current.metadata.title), active = queueProgress >= .999f)
-                            PlayerMarquee(current.metadata.artist.ifBlank { "Unknown artist" }, MaterialTheme.typography.bodySmall,
+                            PlayerMarquee(current.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, MaterialTheme.typography.bodySmall,
                                 motion.anchor(PlayerPanel.QUEUE, PlayerElement.ARTIST, queueProgress >= .999f), color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                marqueeState = motion.marquee(PlayerElement.ARTIST, current.metadata.artist.ifBlank { "Unknown artist" }), active = queueProgress >= .999f)
+                                marqueeState = motion.marquee(PlayerElement.ARTIST, current.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }), active = queueProgress >= .999f)
                         }
                         AppVolume(controller, Modifier.width(240.dp))
+                        val playState = stringResource(if (requested) Res.string.player_playing else Res.string.player_paused)
                         FilledIconButton(onClick = { controller.togglePlayback() },
                             modifier = Modifier.size(48.dp).then(motion.anchor(PlayerPanel.QUEUE, PlayerElement.PLAY, queueProgress >= .999f))
-                                .semantics { stateDescription = if (requested) "Playing" else "Paused" },
+                                .semantics { stateDescription = playState },
                             colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-                            Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, "Queue play/pause")
+                            Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, stringResource(Res.string.player_queue_play_pause))
                         }
                     }
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("queue-header").padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(state.savedQueues.firstOrNull { it.id == state.queue.selectedSavedQueueId }?.name ?: "Queue",
+                            Text(state.savedQueues.firstOrNull { it.id == state.queue.selectedSavedQueueId }?.name ?: stringResource(Res.string.queue),
                                 style = MaterialTheme.typography.titleLarge)
-                            Text(countLabel(state.queue.entries.size, "song"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(countLabel(state.queue.entries.size, Res.plurals.songs), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Box {
                             var selectingQueue by remember { mutableStateOf(false) }
-                            AppIconButton(AppIcon.QUEUE, "Saved queues", onClick = { selectingQueue = true })
+                            AppIconButton(AppIcon.QUEUE, stringResource(Res.string.saved_queues), onClick = { selectingQueue = true })
                             DropdownMenu(selectingQueue, { selectingQueue = false }) {
                                 state.savedQueues.filter { it.kind == me.d3sox.nevumi.queue.SavedQueueKind.LIVE }.forEach { saved ->
                                     AppMenuItem(text = { Text(saved.name) },
@@ -406,16 +484,16 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                         onClick = { selectingQueue = false; controller.loadSavedQueue(saved.id) })
                                 }
                                 if (state.queue.selectedSavedQueueId != null)
-                                    AppMenuItem(text = { Text("Use temporary queue") }, onClick = { selectingQueue = false; controller.detachSavedQueue() })
-                                AppMenuItem(text = { Text("New empty queue") }, onClick ={ selectingQueue = false; controller.startEmptyQueue() })
-                                AppMenuItem(text = { Text("Manage saved queues") }, onClick = { selectingQueue = false; savedQueues() })
+                                    AppMenuItem(text = { Text(stringResource(Res.string.player_use_temporary_queue)) }, onClick = { selectingQueue = false; controller.detachSavedQueue() })
+                                AppMenuItem(text = { Text(stringResource(Res.string.player_new_empty_queue)) }, onClick ={ selectingQueue = false; controller.startEmptyQueue() })
+                                AppMenuItem(text = { Text(stringResource(Res.string.player_manage_saved_queues)) }, onClick = { selectingQueue = false; savedQueues() })
                             }
                         }
-                        AppIconButton(AppIcon.SAVE, "Export queue", enabled = state.queue.entries.isNotEmpty()) {
+                        AppIconButton(AppIcon.SAVE, stringResource(Res.string.export_queue), enabled = state.queue.entries.isNotEmpty()) {
                             exportingQueue = state.queue.copy(positionMs = controller.state.value.playback.positionMs)
                         }
                         Box {
-                            AppIconButton(AppIcon.CLEAR_QUEUE, "Clear queue", enabled = state.queue.entries.size > 1) { clearMenu = true }
+                            AppIconButton(AppIcon.CLEAR_QUEUE, stringResource(Res.string.player_clear_queue), enabled = state.queue.entries.size > 1) { clearMenu = true }
                             DropdownMenu(clearMenu, { clearMenu = false }) {
                                 QueueClear.entries.forEach { selection ->
                                     AppMenuItem(text = { Text(selection.label()) }, leadingIcon = { Icon(selection.icon().vector, null) },
@@ -423,7 +501,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                 }
                             }
                         }
-                        AppIconButton(AppIcon.DOWN, "Now playing") { show(PlayerPanel.PLAYING) }
+                        AppIconButton(AppIcon.DOWN, stringResource(Res.string.player_now_playing)) { show(PlayerPanel.PLAYING) }
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                     key(rowsReplacement) {
@@ -446,7 +524,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                     Text(row.label, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                                     if (row.key == "queue:previous" && (expandedHistory || state.queue.currentIndex > state.preferences.previousQueueTrackLimit)) {
                                         TextButton(onClick = { expandedHistory = !expandedHistory }) {
-                                            Text(if (expandedHistory) "Show less" else "Show all ${state.queue.currentIndex}")
+                                            Text(if (expandedHistory) stringResource(Res.string.player_show_less) else stringResource(Res.string.player_show_all, state.queue.currentIndex))
                                         }
                                     }
                                     if (row.section == QueueSection.MANUAL) ManualQueueTime(controller)
@@ -468,6 +546,10 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                     ?: if (queueScroll.firstVisibleItemIndex > manualIndex) 0 else layout.viewportEndOffset
                                 queueTop + bottom.coerceAtLeast(0)
                             }) }
+                            val nowPlaying = stringResource(Res.string.player_now_playing)
+                            val moveUp = stringResource(Res.string.move_up)
+                            val moveDown = stringResource(Res.string.move_down)
+                            val reorderDescription = stringResource(Res.string.player_reorder, track?.metadata?.title.toString())
                             ReorderableItem(reorderable, entry.id, enabled = upcoming) { isDragging ->
                             QueueSwipe(entry.id, { controller.removeQueueEntry(entry.id) }) {
                             val item: @Composable ((() -> Unit)?, Boolean) -> Unit = { openMenu, menuOpen ->
@@ -478,11 +560,11 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                 .testTag("queue-entry:${entry.id}")
                                 .semantics {
                                     selected = entry.id == state.queue.currentEntryId
-                                    if (entry.id == state.queue.currentEntryId) stateDescription = "Now playing"
-                                    customActions = if (!upcoming) emptyList() else listOf(CustomAccessibilityAction("Move up") {
+                                    if (entry.id == state.queue.currentEntryId) stateDescription = nowPlaying
+                                    customActions = if (!upcoming) emptyList() else listOf(CustomAccessibilityAction(moveUp) {
                                         val allowed = index > state.queue.currentIndex + 1
                                         if (allowed) controller.moveQueueEntry(entry.id, index - 1); allowed
-                                    }, CustomAccessibilityAction("Move down") {
+                                    }, CustomAccessibilityAction(moveDown) {
                                         val allowed = upcoming && index < state.queue.entries.lastIndex
                                         if (allowed) controller.moveQueueEntry(entry.id, index + 1)
                                         allowed
@@ -493,11 +575,11 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                         else controller.selectQueueEntry(entry.id)
                                     }
                                 }),
-                                headlineContent = { Text(track?.metadata?.title ?: "Unavailable track", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                headlineContent = { Text(track?.metadata?.title ?: stringResource(Res.string.player_unavailable_track), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 supportingContent = { Text(track?.metadata?.artist.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 leadingContent = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (upcoming) Box(Modifier.size(48.dp).semantics { contentDescription = "Reorder: ${track?.metadata?.title}" }
+                                        if (upcoming) Box(Modifier.size(48.dp).semantics { contentDescription = reorderDescription }
                                             .pointerInput(Unit) {
                                                 // Holding the grip belongs to reordering; the row owns its context menu.
                                                 awaitEachGesture {
@@ -514,14 +596,14 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                         Surface(Modifier.size(48.dp).onGloballyPositioned { artworkBounds = Rect(it.positionOnScreen(), it.size.toSize()) }
                                             .graphicsLayer { alpha = if (menuOpen) 0f else 1f },
                                             shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                                            MusicArtwork(state.artwork[entry.trackId], track?.metadata?.title.orEmpty(), "Queue artwork: ${entry.id}")
+                                            MusicArtwork(state.artwork[entry.trackId], track?.metadata?.title.orEmpty(), stringResource(Res.string.player_queue_artwork, entry.id))
                                         }
                                     }
                                 }, trailingContent = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (track != null && track.metadata.durationMs > 0) Text(playbackTime(track.metadata.durationMs),
                                         style = MaterialTheme.typography.labelMedium, color = supporting)
-                                    if (openMenu != null && state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "Track options: ${track?.metadata?.title}", onClick = openMenu)
+                                    if (openMenu != null && state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(Res.string.player_track_options, track?.metadata?.title.toString()), onClick = openMenu)
                                 }
                             },
                                 colors = ListItemDefaults.colors(headlineColor = foreground, supportingColor = supporting,
@@ -540,7 +622,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                     }
                     }
                     val scrollRows = rows
-                    LibraryScrollbar(queueScroll, scrollRows.size, "Scroll queue") { index ->
+                    LibraryScrollbar(queueScroll, scrollRows.size, stringResource(Res.string.player_scroll_queue)) { index ->
                         scrollRows.getOrNull(index)?.let { row -> row.entry?.let { catalog[it.trackId]?.metadata?.title } ?: row.label }.orEmpty()
                     }
                     }
@@ -561,40 +643,40 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
         val target = state.queue.entries.firstOrNull { it.id == entryId }
         if (target == null) LaunchedEffect(entryId) { queueJump = null }
         else AlertDialog(onDismissRequest = { queueJump = null }, icon = { Icon(AppIcon.QUEUE.vector, null) },
-            title = { Text("Play this song now?") },
-            text = { Text("Jump to ${catalog[target.trackId]?.metadata?.title ?: "this song"} in the queue?") },
+            title = { Text(stringResource(Res.string.player_play_song_now_title)) },
+            text = { Text(stringResource(Res.string.player_jump_to_song, catalog[target.trackId]?.metadata?.title ?: stringResource(Res.string.player_this_song))) },
             confirmButton = { Button(onClick = { controller.selectQueueEntry(entryId); queueJump = null }) {
-                Icon(AppIcon.PLAY.vector, null); Spacer(Modifier.width(8.dp)); Text("Play now")
-            } }, dismissButton = { TextButton(onClick = { queueJump = null }) { Text("Cancel") } })
+                Icon(AppIcon.PLAY.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.player_play_now))
+            } }, dismissButton = { TextButton(onClick = { queueJump = null }) { Text(stringResource(Res.string.cancel)) } })
     }
     if (choosingOutput) AudioOutputPicker(controller, { choosingOutput = false }, onPairedDevices)
     if (showingMilkDrop) MilkDropVisualizer(state, controller) { showingMilkDrop = false }
     if (showingPlaybackSettings) PlaybackQuickSettings(state, controller,
         audioEffects = { showingPlaybackSettings = false; onAudioEffects() }, close = { showingPlaybackSettings = false })
     clearingQueue?.let { selection -> AlertDialog(onDismissRequest = { clearingQueue = null },
-        icon = { Icon(selection.icon().vector, null) }, title = { Text("Clear ${selection.label().lowercase()}?") },
-        text = { Text("${when (selection) {
-            QueueClear.DUPLICATES -> "Remove repeated occurrences of the same songs."
-            QueueClear.PREVIOUS -> "Remove previously played songs."
-            QueueClear.NEXT -> "Remove upcoming songs from both sections."
-            QueueClear.ALL -> "Remove all other songs from the queue."
-        }} The current song will keep playing. You can undo this.") },
+        icon = { Icon(selection.icon().vector, null) }, title = { Text(stringResource(selection.clearTitle())) },
+        text = { Text(stringResource(Res.string.player_clear_queue_text, stringResource(when (selection) {
+            QueueClear.DUPLICATES -> Res.string.player_clear_duplicates_text
+            QueueClear.PREVIOUS -> Res.string.player_clear_previous_text
+            QueueClear.NEXT -> Res.string.player_clear_next_text
+            QueueClear.ALL -> Res.string.player_clear_all_text
+        }))) },
         confirmButton = { Button(onClick = { controller.clearQueue(selection); clearingQueue = null }) {
-            Icon(AppIcon.CLEAR_QUEUE.vector, null); Spacer(Modifier.width(8.dp)); Text("Clear")
-        } }, dismissButton = { TextButton(onClick = { clearingQueue = null }) { Text("Cancel") } }) }
+            Icon(AppIcon.CLEAR_QUEUE.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.clear))
+        } }, dismissButton = { TextButton(onClick = { clearingQueue = null }) { Text(stringResource(Res.string.cancel)) } }) }
     exportingQueue?.let { QueueExportDialog(it, it.contextName, controller) { exportingQueue = null } }
     if (showRepeatCount) {
         val plays = repeatCount.toIntOrNull()?.takeIf { it > 0 }
-        KeyboardAlertDialog(onDismissRequest = { showRepeatCount = false }, title = { Text("Repeat this song") }, text = {
+        KeyboardAlertDialog(onDismissRequest = { showRepeatCount = false }, title = { Text(stringResource(Res.string.player_repeat_this_song)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Includes the current play. Then continue the queue.")
-                OutlinedTextField(repeatCount, { repeatCount = it }, label = { Text("Total plays") }, singleLine = true,
+                Text(stringResource(Res.string.player_repeat_this_song_text))
+                OutlinedTextField(repeatCount, { repeatCount = it }, label = { Text(stringResource(Res.string.player_total_plays)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), isError = plays == null,
-                    supportingText = { if (plays == null) Text("Enter a positive whole number") }, modifier = Modifier.fillMaxWidth())
+                    supportingText = { if (plays == null) Text(stringResource(Res.string.player_enter_positive_number)) }, modifier = Modifier.fillMaxWidth())
             }
         }, confirmButton = { TextButton(enabled = plays != null, onClick = {
             controller.setQueueRepeat(RepeatMode.ONE, requireNotNull(plays)); showRepeatCount = false
-        }) { Text("Set repeat count") } }, dismissButton = { TextButton(onClick = { showRepeatCount = false }) { Text("Cancel") } })
+        }) { Text(stringResource(Res.string.player_set_repeat_count)) } }, dismissButton = { TextButton(onClick = { showRepeatCount = false }) { Text(stringResource(Res.string.cancel)) } })
     }
 }
 
@@ -604,16 +686,16 @@ internal fun MiniTrackInformation(state: AppState, track: Track, modifier: Modif
         Surface(Modifier.size(48.dp).then(motion?.anchor(PlayerPanel.MINI, PlayerElement.ARTWORK, visible) ?: Modifier)
             .then(if (preview == null && visible) Modifier.testTag("player-artwork") else Modifier), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
             MusicArtwork(state.artwork[track.id], track.metadata.title,
-                if (preview == null) "Mini-player artwork: ${track.metadata.title}" else "$preview track preview: ${track.metadata.title}")
+                if (preview == null) stringResource(Res.string.player_mini_player_artwork, track.metadata.title) else stringResource(Res.string.player_track_preview, preview, track.metadata.title))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             PlayerMarquee(track.metadata.title, MaterialTheme.typography.titleSmall,
                 if (preview == null) motion?.anchor(PlayerPanel.MINI, PlayerElement.TITLE, visible) ?: Modifier else Modifier.testTag("mini-preview-title"),
                 marqueeState = if (preview == null) motion?.marquee(PlayerElement.TITLE, track.metadata.title) else null, active = visible)
-            PlayerMarquee(track.metadata.artist.ifBlank { "Unknown artist" }, MaterialTheme.typography.bodySmall,
+            PlayerMarquee(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, MaterialTheme.typography.bodySmall,
                 motion?.anchor(PlayerPanel.MINI, PlayerElement.ARTIST, visible) ?: Modifier, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                marqueeState = if (preview == null) motion?.marquee(PlayerElement.ARTIST, track.metadata.artist.ifBlank { "Unknown artist" }) else null, active = visible)
+                marqueeState = if (preview == null) motion?.marquee(PlayerElement.ARTIST, track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }) else null, active = visible)
         }
     }
 }
@@ -622,7 +704,7 @@ internal fun MiniTrackInformation(state: AppState, track: Track, modifier: Modif
 private fun PlayerCover(state: AppState, track: Track, modifier: Modifier, motion: PlayerMotion) {
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
         Surface(Modifier.size(minOf(maxWidth, maxHeight, 420.dp)).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTWORK)), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-            MusicArtwork(state.artwork[track.id], track.metadata.title, "Album artwork: ${track.metadata.title}", maxDimension = 1024)
+            MusicArtwork(state.artwork[track.id], track.metadata.title, stringResource(Res.string.player_album_artwork, track.metadata.title), maxDimension = 1024)
         }
     }
 }
@@ -661,6 +743,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe)
         Column(Modifier.fillMaxWidth()) {
+            val playbackPosition = stringResource(Res.string.player_playback_position)
             Slider(value = (seeking ?: positionMs.toFloat()).coerceIn(0f, duration), valueRange = 0f..duration, colors = sliderColors,
                 enabled = durationMs > 0 && state.playback.entryId != null, onValueChange = { seekRequest++; seeking = it },
                 onValueChangeFinished = {
@@ -670,7 +753,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
                         try { if (entry != null) controller.seekAndConfirm(entry, position.toLong()) }
                         finally { if (request == seekRequest) seeking = null }
                     } }
-                }, modifier = Modifier.semantics { contentDescription = "Playback position" }
+                }, modifier = Modifier.semantics { contentDescription = playbackPosition }
                     .then(if (peaks.isNotEmpty()) Modifier.testTag("audio-waveform") else Modifier),
                 track = { slider ->
                     if (peaks.isEmpty()) SliderDefaults.Track(slider, colors = sliderColors)
@@ -690,8 +773,9 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 val position = (seeking ?: positionMs.toFloat()).toLong()
                 val remaining = state.preferences.showRemainingTime
+                val timeDescription = stringResource(if (remaining) Res.string.player_remaining_time else Res.string.player_elapsed_time)
                 Surface(onClick = { controller.updatePreferences { it.copy(showRemainingTime = !it.showRemainingTime) } },
-                    modifier = Modifier.semantics { contentDescription = if (remaining) "Remaining time" else "Elapsed time" },
+                    modifier = Modifier.semantics { contentDescription = timeDescription },
                     color = androidx.compose.ui.graphics.Color.Transparent, shape = RoundedCornerShape(12.dp)) {
                     Box(Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp).padding(horizontal = 8.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
                         Text(if (remaining) "−${playbackTime((durationMs - position).coerceAtLeast(0))}" else playbackTime(position),
@@ -706,25 +790,25 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
                 modifier = Modifier.size(48.dp).semantics { selected = state.queue.unshuffledEntryIds != null },
                 colors = IconButtonDefaults.filledIconToggleButtonColors(containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onSurface, checkedContainerColor = MaterialTheme.colorScheme.primary,
-                    checkedContentColor = MaterialTheme.colorScheme.onPrimary)) { Icon(AppIcon.SHUFFLE.vector, "Shuffle") }
-            AppIconButton(AppIcon.PREVIOUS, "Previous track", Modifier.size(48.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.PREVIOUS, visible))) { controller.skip(-1) }
+                    checkedContentColor = MaterialTheme.colorScheme.onPrimary)) { Icon(AppIcon.SHUFFLE.vector, stringResource(Res.string.player_shuffle)) }
+            AppIconButton(AppIcon.PREVIOUS, stringResource(Res.string.previous_track), Modifier.size(48.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.PREVIOUS, visible))) { controller.skip(-1) }
             FilledIconButton(onClick = { controller.togglePlayback() }, modifier = Modifier.size(72.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.PLAY, visible)),
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-                Icon(if (requested) AppIcon.PAUSE.vector else AppIcon.PLAY.vector, if (requested) "Pause" else "Play", Modifier.size(36.dp))
+                Icon(if (requested) AppIcon.PAUSE.vector else AppIcon.PLAY.vector, stringResource(if (requested) Res.string.pause else Res.string.play), Modifier.size(36.dp))
             }
-            AppIconButton(AppIcon.NEXT, "Next track", Modifier.size(48.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.NEXT, visible))) { controller.skip(1) }
+            AppIconButton(AppIcon.NEXT, stringResource(Res.string.next_track), Modifier.size(48.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.NEXT, visible))) { controller.skip(1) }
             PlayerRepeatControl(state.queue, controller, onRepeatCount, Modifier.size(48.dp))
         }
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically) {
                 Row {
-                    AppIconButton(AppIcon.DEVICES, "Audio output", onClick = onOutput)
+                    AppIconButton(AppIcon.DEVICES, stringResource(Res.string.player_audio_output), onClick = onOutput)
                     MilkDropButton(onVisualizer)
                 }
                 Row {
-                    AppIconButton(AppIcon.SETTINGS, "Playback settings", onClick = onPlaybackSettings)
-                    AppIconButton(AppIcon.QUEUE, "Queue", onClick = onQueue)
+                    AppIconButton(AppIcon.SETTINGS, stringResource(Res.string.player_playback_settings), onClick = onPlaybackSettings)
+                    AppIconButton(AppIcon.QUEUE, stringResource(Res.string.queue), onClick = onQueue)
                 }
             }
             Box(Modifier.fillMaxWidth().padding(horizontal = 96.dp), contentAlignment = Alignment.Center) {
@@ -770,7 +854,8 @@ private fun ManualQueueTime(controller: MusicController) {
         }.distinctUntilChanged()
     }
     val seconds by remainingFlow.collectAsState(0)
-    Text("${playbackTime(seconds * 1_000)} remaining", Modifier.semantics { contentDescription = "Manual queue time remaining" },
+    val description = stringResource(Res.string.player_manual_queue_time_remaining)
+    Text(stringResource(Res.string.player_time_remaining, playbackTime(seconds * 1_000)), Modifier.semantics { contentDescription = description },
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
@@ -788,6 +873,7 @@ private fun MiniPlayerSeekBar(controller: MusicController, modifier: Modifier) {
     val inactive = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .6f)
     val interaction = remember { MutableInteractionSource() }
     val dragging by interaction.collectIsDraggedAsState()
+    val description = stringResource(Res.string.player_mini_player_position)
     Slider(value = value, onValueChange = { seekRequest++; seeking = it }, valueRange = 0f..duration,
         enabled = playback.durationMs > 0, interactionSource = interaction,
         onValueChangeFinished = {
@@ -797,7 +883,7 @@ private fun MiniPlayerSeekBar(controller: MusicController, modifier: Modifier) {
                 try { if (entry != null) controller.seekAndConfirm(entry, position.toLong()) }
                 finally { if (request == seekRequest) seeking = null }
             } }
-        }, modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp).height(24.dp).semantics { contentDescription = "Mini-player position" },
+        }, modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp).height(24.dp).semantics { contentDescription = description },
         thumb = { Spacer(Modifier.size(10.dp)) },
         track = { Canvas(Modifier.fillMaxWidth().height(10.dp)) {
             val center = Offset(size.width * value / duration, size.height / 2)
@@ -814,11 +900,19 @@ private suspend fun MusicController.seekAndConfirm(entryId: String, positionMs: 
     }
 }
 
-private fun QueueClear.label() = when (this) {
-    QueueClear.DUPLICATES -> "Duplicated tracks"
-    QueueClear.PREVIOUS -> "Previous"
-    QueueClear.NEXT -> "Next"
-    QueueClear.ALL -> "All"
+@Composable
+private fun QueueClear.label() = stringResource(when (this) {
+    QueueClear.DUPLICATES -> Res.string.player_duplicated_tracks
+    QueueClear.PREVIOUS -> Res.string.previous
+    QueueClear.NEXT -> Res.string.next
+    QueueClear.ALL -> Res.string.all
+})
+
+private fun QueueClear.clearTitle() = when (this) {
+    QueueClear.DUPLICATES -> Res.string.player_clear_duplicates_title
+    QueueClear.PREVIOUS -> Res.string.player_clear_previous_title
+    QueueClear.NEXT -> Res.string.player_clear_next_title
+    QueueClear.ALL -> Res.string.player_clear_all_title
 }
 
 private fun QueueClear.icon() = when (this) {

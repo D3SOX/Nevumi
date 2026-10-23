@@ -12,6 +12,26 @@ import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.settings.TrackAction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.done
+import me.d3sox.nevumi.resources.edit_server_tags
+import me.d3sox.nevumi.resources.edit_tags
+import me.d3sox.nevumi.resources.player_artwork_not_changed
+import me.d3sox.nevumi.resources.player_delete_local_file
+import me.d3sox.nevumi.resources.player_delete_server_file
+import me.d3sox.nevumi.resources.player_image_unavailable
+import me.d3sox.nevumi.resources.player_move_to_context
+import me.d3sox.nevumi.resources.player_move_to_up_next
+import me.d3sox.nevumi.resources.player_rating_out_of_five
+import me.d3sox.nevumi.resources.player_remove_from_playlist
+import me.d3sox.nevumi.resources.player_remove_from_queue
+import me.d3sox.nevumi.resources.player_rename_file
+import me.d3sox.nevumi.resources.player_rename_server_file
+import me.d3sox.nevumi.resources.player_replace_artwork
+import me.d3sox.nevumi.resources.player_replace_server_artwork
+import me.d3sox.nevumi.resources.player_undo_file_edit
+import me.d3sox.nevumi.resources.player_upload_to_server
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun SongActionHost(track: Track, state: AppState, controller: MusicController,
@@ -92,6 +112,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     Box(contextMenu) {
         content(::available, ::perform, openMenu, menu && artworkPlaced)
     }
+    val imageUnavailable = stringResource(Res.string.player_image_unavailable)
     if (menu) {
         fun MutableList<TrackOption>.option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) {
             add(TrackOption(label, icon, detail) { menu = false; click() })
@@ -103,15 +124,15 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
                 TrackAction.GO_GENRE, TrackAction.GO_FOLDER, TrackAction.SHOW_SOURCES,
                 TrackAction.SELECT, TrackAction.DOWNLOAD)
             val availableOffline = track.sources.any { it.kind == SourceKind.LOCAL && it.available }
-            primary.filter { it != hiddenAction && available(it) }.forEach { action -> option(action.label(track.favorite, availableOffline), action.icon(track.favorite, track.rating,
+            primary.filter { it != hiddenAction && available(it) }.forEach { action -> option(action.displayLabel(track.favorite, availableOffline), action.icon(track.favorite, track.rating,
                 track.id in state.playlistTrackIds, availableOffline),
-                if (action == TrackAction.RATE && track.rating > 0) "${track.rating} / 5" else null) { perform(action) } }
+                if (action == TrackAction.RATE && track.rating > 0) stringResource(Res.string.player_rating_out_of_five, track.rating) else null) { perform(action) } }
             if (queueEntryId != null) {
-                option("Remove from queue", AppIcon.REMOVE) { controller.removeQueueEntry(queueEntryId) }
+                option(stringResource(Res.string.player_remove_from_queue), AppIcon.REMOVE) { controller.removeQueueEntry(queueEntryId) }
                 val entry = state.queue.entries.firstOrNull { it.id == queueEntryId }
                 if (entry != null && state.queue.entries.indexOf(entry) > state.queue.currentIndex) {
                     val manual = entry.section == me.d3sox.nevumi.queue.QueueSection.MANUAL
-                    option(if (manual) "Move to context" else "Move to Up next", if (manual) AppIcon.LIBRARY else AppIcon.QUEUE) {
+                    option(stringResource(if (manual) Res.string.player_move_to_context else Res.string.player_move_to_up_next), if (manual) AppIcon.LIBRARY else AppIcon.QUEUE) {
                         controller.moveQueueEntryToSection(queueEntryId, if (manual) me.d3sox.nevumi.queue.QueueSection.CONTEXT else me.d3sox.nevumi.queue.QueueSection.MANUAL)
                     }
                 }
@@ -119,37 +140,37 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             playSimilarOption(track, state, controller) { menu = false }
             val playlistIndex = playlistPosition ?: contextIndex
             if (playlistId != null && playlistIndex != null) {
-                option("Remove from playlist", AppIcon.REMOVE) { controller.removePlaylistTrack(playlistId, playlistIndex) }
+                option(stringResource(Res.string.player_remove_from_playlist), AppIcon.REMOVE) { controller.removePlaylistTrack(playlistId, playlistIndex) }
             }
         }
         val fileOptions = buildList {
             if (controller.localFileEditingAvailable && track.sources.any { it.kind == SourceKind.LOCAL && it.available }) {
-                option("Edit tags", AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; tagEditor = true }
-                option("Rename file", AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; renaming = true }
-                option("Delete local file", AppIcon.REMOVE) { fileTarget = FileEditTarget.LOCAL; deleting = true }
-                option("Replace artwork", AppIcon.ALBUM) {
+                option(stringResource(Res.string.edit_tags), AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; tagEditor = true }
+                option(stringResource(Res.string.player_rename_file), AppIcon.EDIT) { fileTarget = FileEditTarget.LOCAL; renaming = true }
+                option(stringResource(Res.string.player_delete_local_file), AppIcon.REMOVE) { fileTarget = FileEditTarget.LOCAL; deleting = true }
+                option(stringResource(Res.string.player_replace_artwork), AppIcon.ALBUM) {
                     scope.launch {
                         try { artworkPicker.pick()?.let { controller.replaceArtwork(track.id, it).join() } }
                         catch (cancelled: CancellationException) { throw cancelled }
-                        catch (error: Exception) { artworkError = error.message ?: "The selected image is unavailable" }
+                        catch (error: Exception) { artworkError = error.message ?: imageUnavailable }
                     }
                 }
             }
             if (controller.canEditServerTrack(track)) {
-                option("Edit server tags", AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; tagEditor = true }
-                option("Rename server file", AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; renaming = true }
-                option("Delete server file", AppIcon.REMOVE) { fileTarget = FileEditTarget.SERVER; deleting = true }
-                option("Replace server artwork", AppIcon.ALBUM) {
+                option(stringResource(Res.string.edit_server_tags), AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; tagEditor = true }
+                option(stringResource(Res.string.player_rename_server_file), AppIcon.EDIT) { fileTarget = FileEditTarget.SERVER; renaming = true }
+                option(stringResource(Res.string.player_delete_server_file), AppIcon.REMOVE) { fileTarget = FileEditTarget.SERVER; deleting = true }
+                option(stringResource(Res.string.player_replace_server_artwork), AppIcon.ALBUM) {
                     scope.launch {
                         try { artworkPicker.pick()?.let { controller.replaceArtwork(track.id, it, FileEditTarget.SERVER).join() } }
                         catch (cancelled: CancellationException) { throw cancelled }
-                        catch (error: Exception) { artworkError = error.message ?: "The selected image is unavailable" }
+                        catch (error: Exception) { artworkError = error.message ?: imageUnavailable }
                     }
                 }
             }
             if (state.sftp != null && state.sftp?.serverId == state.server?.serverId && track.sources.any { it.kind == SourceKind.LOCAL && it.available })
-                option("Upload to server", AppIcon.CLOUD) { uploading = true }
-            lastEdit?.let { edit -> option("Undo file edit", AppIcon.UNDO) { controller.undoFileEdit(edit.id) } }
+                option(stringResource(Res.string.player_upload_to_server), AppIcon.CLOUD) { uploading = true }
+            lastEdit?.let { edit -> option(stringResource(Res.string.player_undo_file_edit), AppIcon.UNDO) { controller.undoFileEdit(edit.id) } }
         }
         TrackActionDialog(track, state.artwork[track.id], options, { menu = false },
             artworkOrigin = openingArtwork,
@@ -165,6 +186,6 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     if (renaming) FileRename(track, controller, fileTarget) { renaming = false }
     if (deleting) FileDelete(track, controller, fileTarget) { deleting = false }
     if (uploading) ServerUploadDialog(track, controller) { uploading = false }
-    artworkError?.let { error -> AlertDialog(onDismissRequest = { artworkError = null }, title = { Text("Artwork not changed") },
-        text = { Text(error) }, confirmButton = { TextButton(onClick = { artworkError = null }) { Text("Done") } }) }
+    artworkError?.let { error -> AlertDialog(onDismissRequest = { artworkError = null }, title = { Text(stringResource(Res.string.player_artwork_not_changed)) },
+        text = { Text(error) }, confirmButton = { TextButton(onClick = { artworkError = null }) { Text(stringResource(Res.string.done)) } }) }
 }

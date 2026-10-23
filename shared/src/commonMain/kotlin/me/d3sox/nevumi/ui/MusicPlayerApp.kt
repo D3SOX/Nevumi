@@ -39,6 +39,12 @@ import me.d3sox.nevumi.queue.QueueSnapshot
 import me.d3sox.nevumi.app.AppState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.player_interrupt_up_next_text
+import me.d3sox.nevumi.resources.player_interrupt_up_next_title
+import me.d3sox.nevumi.resources.player_keep_queue
+import me.d3sox.nevumi.resources.player_play_instead
+import org.jetbrains.compose.resources.stringResource
 
 /** The app state without playback progress, shared so song rows do not each wake on every position update. */
 internal val LocalSteadyState = staticCompositionLocalOf<StateFlow<AppState>?> { null }
@@ -227,10 +233,10 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     state.playbackConfirmation?.let { request ->
         MusicTheme(state.preferences, artworkColor) {
             AlertDialog(onDismissRequest = controller::cancelPlaybackConfirmation,
-                title = { Text("Interrupt Up next?") },
-                text = { Text("Play ${request.title} instead of continuing your Up next queue?") },
-                confirmButton = { TextButton(onClick = controller::acceptPlaybackConfirmation) { Text("Play instead") } },
-                dismissButton = { TextButton(onClick = controller::cancelPlaybackConfirmation) { Text("Keep queue") } })
+                title = { Text(stringResource(Res.string.player_interrupt_up_next_title)) },
+                text = { Text(stringResource(Res.string.player_interrupt_up_next_text, request.title)) },
+                confirmButton = { TextButton(onClick = controller::acceptPlaybackConfirmation) { Text(stringResource(Res.string.player_play_instead)) } },
+                dismissButton = { TextButton(onClick = controller::cancelPlaybackConfirmation) { Text(stringResource(Res.string.player_keep_queue)) } })
         }
     }
 }

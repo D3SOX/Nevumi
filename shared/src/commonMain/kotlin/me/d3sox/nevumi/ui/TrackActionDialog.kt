@@ -45,6 +45,13 @@ import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.file_actions
+import me.d3sox.nevumi.resources.player_back_to_song_actions
+import me.d3sox.nevumi.resources.player_close_song_actions
+import me.d3sox.nevumi.resources.player_song_menu_artwork
+import me.d3sox.nevumi.resources.unknown_artist
+import org.jetbrains.compose.resources.stringResource
 
 internal data class TrackOption(val label: String, val icon: AppIcon, val detail: String? = null, val click: () -> Unit)
 
@@ -140,16 +147,16 @@ internal fun TrackActionDialog(track: Track, artwork: String?, options: List<Tra
                         else CollectionArtwork(artwork, track.metadata.title, AppIcon.MUSIC, Modifier.size(48.dp).testTag("track-action-artwork"))
                         Column(Modifier.weight(1f)) {
                             Text(track.metadata.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(track.metadata.artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall,
+                            Text(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        if (onFiles) AppIconButton(AppIcon.BACK, "Back to song actions", enabled = !closing, onClick = { showPage(0f) })
-                        AppIconButton(AppIcon.CLOSE, "Close song actions", enabled = !closing, onClick = { close() })
+                        if (onFiles) AppIconButton(AppIcon.BACK, stringResource(Res.string.player_back_to_song_actions), enabled = !closing, onClick = { showPage(0f) })
+                        AppIconButton(AppIcon.CLOSE, stringResource(Res.string.player_close_song_actions), enabled = !closing, onClick = { close() })
                     }
                     Layout({
                         if (showActions) TrackOptionPage(options, !closing, ::close, Modifier.layoutId(0)) {
                             if (fileOptions != null) TextButton(onClick = { showPage(1f) }, enabled = !closing, modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                                Icon(AppIcon.EDIT.vector, null); Spacer(Modifier.width(8.dp)); Text("File actions")
+                                Icon(AppIcon.EDIT.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.file_actions))
                             } else Spacer(Modifier.height(12.dp))
                         }
                         if (fileOptions != null && showFiles) TrackOptionPage(fileOptions, !closing, ::close, Modifier.layoutId(1)) {
@@ -186,7 +193,7 @@ internal fun TrackActionDialog(track: Track, artwork: String?, options: List<Tra
                     shape = RoundedCornerShape(((originCorner + (targetCorner - originCorner) * progress.value) / scaleX / density).dp)
                     clip = true
                 }.onGloballyPositioned { onArtworkPlaced() }.testTag("track-action-artwork"), shape = RectangleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                    MusicArtwork(artwork, track.metadata.title, "Song menu artwork: ${track.metadata.title}",
+                    MusicArtwork(artwork, track.metadata.title, stringResource(Res.string.player_song_menu_artwork, track.metadata.title),
                         maxDimension = if (from.width > coverSize * 2) 1024 else 256)
                 }
             }

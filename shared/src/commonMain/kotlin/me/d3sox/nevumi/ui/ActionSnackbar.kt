@@ -21,26 +21,39 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.ActionDestination
 import me.d3sox.nevumi.app.ActionNotice
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.play
+import me.d3sox.nevumi.resources.player_dismiss_message
+import me.d3sox.nevumi.resources.player_open_downloads
+import me.d3sox.nevumi.resources.player_open_favorites
+import me.d3sox.nevumi.resources.player_open_playlists
+import me.d3sox.nevumi.resources.player_open_queue
+import me.d3sox.nevumi.resources.player_redo
+import me.d3sox.nevumi.resources.undo
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
 
-internal class ActionSnackbarVisuals(val notice: ActionNotice) : SnackbarVisuals {
+/** Builds the visuals for [notice], resolving its action label from the string resources. */
+internal suspend fun ActionSnackbarVisuals(notice: ActionNotice) = ActionSnackbarVisuals(notice,
+    (if (notice.undo != null) { if (notice.isRedo) Res.string.player_redo else Res.string.undo }
+        else if (notice.play != null) Res.string.play else notice.destination?.openLabel())?.let { getString(it) })
+
+internal class ActionSnackbarVisuals(val notice: ActionNotice, override val actionLabel: String?) : SnackbarVisuals {
     /** The notice text is a string resource; [ActionSnackbar] resolves it where it is drawn. */
     override val message = ""
-    override val actionLabel = if (notice.undo != null) { if (notice.isRedo) "Redo" else "Undo" }
-        else if (notice.play != null) "Play" else notice.destination?.openLabel()
     override val withDismissAction = false
     override val duration = if (notice.undo != null || notice.play != null) SnackbarDuration.Long else SnackbarDuration.Short
 }
 
 internal fun ActionDestination.openLabel() = when (this) {
-    ActionDestination.QUEUE -> "Open queue"
-    ActionDestination.FAVORITES -> "Open favorites"
-    ActionDestination.PLAYLISTS -> "Open playlists"
-    ActionDestination.DOWNLOADS -> "Open downloads"
+    ActionDestination.QUEUE -> Res.string.player_open_queue
+    ActionDestination.FAVORITES -> Res.string.player_open_favorites
+    ActionDestination.PLAYLISTS -> Res.string.player_open_playlists
+    ActionDestination.DOWNLOADS -> Res.string.player_open_downloads
 }
 
 @Composable
@@ -84,9 +97,9 @@ internal fun ActionSnackbar(data: SnackbarData, open: (ActionDestination) -> Uni
                     ActionDestination.QUEUE, ActionDestination.PLAYLISTS -> AppIcon.QUEUE
                     ActionDestination.FAVORITES -> AppIcon.FAVORITE
                     ActionDestination.DOWNLOADS -> AppIcon.DOWNLOAD
-                }, destination.openLabel()) { data.dismiss(); open(destination) }
+                }, stringResource(destination.openLabel())) { data.dismiss(); open(destination) }
             }
-            if (data.visuals.withDismissAction) AppIconButton(AppIcon.CLOSE, "Dismiss message", onClick = data::dismiss)
+            if (data.visuals.withDismissAction) AppIconButton(AppIcon.CLOSE, stringResource(Res.string.player_dismiss_message), onClick = data::dismiss)
         }
     }
 }
