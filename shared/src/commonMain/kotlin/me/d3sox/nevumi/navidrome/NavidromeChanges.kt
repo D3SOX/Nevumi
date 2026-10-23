@@ -312,12 +312,13 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
             val remote = connection.playlist(requireNotNull(link.id))
             if (remote.readOnly) {
                 // The server refuses every edit to it, so retrying would only repeat the refusal.
+                // Its change time stays unrecorded so the next pull imports the rest of this version, such as a new cover.
                 val remoteTracks = localTracks(remote, connection)
                 val discarded = store.transaction {
                     val current = playlists.get(playlist.id) ?: return@transaction false
                     store.put("playlist:${playlist.id}", "playlists", current.copy(name = remote.name, trackIds = remoteTracks,
                         description = remote.description, pendingSync = false, server = link.copy(baselineName = remote.name,
-                            baselineSongIds = remote.songIds, baselineDescription = remote.description, readOnly = true, changed = remote.changed)))
+                            baselineSongIds = remote.songIds, baselineDescription = remote.description, readOnly = true, changed = "")))
                     true
                 }
                 if (discarded) mutableDiscardedEdits.emit(remote.name)

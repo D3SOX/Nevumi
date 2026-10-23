@@ -321,13 +321,15 @@ class NavidromeChangesTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         var synced = false
         val edits = mutableListOf<String>()
+        var downloads = 0
         val http = HttpClient(MockEngine { request ->
             val songs = if (synced) """[{"id":"first"},{"id":"second"}]""" else """[{"id":"first"}]"""
+            val changed = if (synced) "2026-10-02T00:00:00Z" else "2026-10-01T00:00:00Z"
             val body = when {
                 request.url.encodedPath.endsWith("/getPlaylists.view") ->
-                    """{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"m3u"}]}}}"""
-                request.url.encodedPath.endsWith("/getPlaylist.view") ->
-                    """{"subsonic-response":{"status":"ok","playlist":{"id":"m3u","name":"From a file","owner":"fixture","readonly":$synced,"entry":$songs}}}"""
+                    """{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"m3u","changed":"$changed"}]}}}"""
+                request.url.encodedPath.endsWith("/getPlaylist.view") -> { downloads++
+                    """{"subsonic-response":{"status":"ok","playlist":{"id":"m3u","name":"From a file","owner":"fixture","readonly":$synced,"changed":"$changed","entry":$songs}}}""" }
                 else -> { edits += request.url.encodedPath; """{"subsonic-response":{"status":"failed","error":{"code":50,"message":"User is not authorized for the given operation"}}}""" }
             }
             respond(body)
@@ -352,6 +354,9 @@ class NavidromeChangesTest {
             assertFalse(restored.pendingSync)
             assertEquals(true, restored.server?.readOnly)
             assertEquals(emptyList(), edits, "A read-only playlist must not receive the edit")
+            val before = downloads
+            changes.pullPlaylists()
+            assertEquals(before + 1, downloads, "The next pull must still import the new version, such as its cover")
             changes.importPlaylists(client)
             assertEquals(true, playlists.get(playlist.id)?.server?.readOnly, "The owner cannot edit a playlist the server keeps read-only")
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
