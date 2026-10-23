@@ -3,6 +3,8 @@ package me.d3sox.nevumi.app
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import me.d3sox.nevumi.playback.PlaybackEngine
+import me.d3sox.nevumi.queue.PlaybackQueue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
@@ -28,7 +30,8 @@ data class BackupStatus(val working: Boolean = false, val summary: RestoreSummar
 
 /** Writes the app's data to a backup file and merges a backup file back, through the file picker. */
 class BackupController internal constructor(private val context: ControllerContext, private val loader: AppStateLoader,
-    private val playback: PlaybackController, private val backup: MusicBackup?) {
+    private val playback: PlaybackController, private val fileEditing: FileEditController, private val queue: PlaybackQueue,
+    private val engine: PlaybackEngine, private val backup: MusicBackup?) {
     val backupAvailable: Boolean get() = backup != null
     private val mutableStatus = MutableStateFlow(BackupStatus())
     val status = mutableStatus.asStateFlow()
@@ -40,12 +43,18 @@ class BackupController internal constructor(private val context: ControllerConte
 
     fun restore(files: BackupFiles) = run(Res.string.backup_error_restore) {
         val text = files.open() ?: return@run
-        // Settings are not observed; reload them with the library and apply the playback ones to the player,
+        // Settings are not observed; reload them with the library and apply them as changing them in Settings does,
         // also after a failure, because each restored part is saved as it goes.
+        val previous = context.state.value.preferences
         val summary = try { requireNotNull(backup).restore(text) } finally {
             withContext(NonCancellable) { context.operations.withLock {
                 loader.refresh()
                 playback.applyPreferences()
+                val settings = context.state.value.preferences
+                if (playback.queueLoaded && settings.sourcePriority != previous.sourcePriority)
+                    engine.updateQueue(playback.playableQueue(queue.snapshot()))
+                if (settings.undoRetentionDays != previous.undoRetentionDays || settings.undoBackupBytes != previous.undoBackupBytes)
+                    fileEditing.trimFileHistory()
             } }
         }
         mutableStatus.update { it.copy(summary = summary) }

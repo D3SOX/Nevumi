@@ -127,7 +127,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val downloadController = DownloadController(context, loader, playbackController, library, queue, engine, offline)
     val soundCloudController = SoundCloudController(context, serverController, libraryController, queueController, soundCloud)
     val discoveryController = DiscoveryController(context, queueController, discovery)
-    val backupController = BackupController(context, loader, playbackController, backup)
+    val backupController = BackupController(context, loader, playbackController, fileEditController, queue, engine, backup)
     val lyricsController = LyricsController(context, lyrics)
     private val shutdown = Mutex()
     private var shutdownFinished = false
