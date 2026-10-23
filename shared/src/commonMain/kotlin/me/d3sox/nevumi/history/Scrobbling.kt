@@ -87,6 +87,8 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
     private val listens = me.d3sox.nevumi.storage.decodedRecords<Listen>(store.json)
     private val journal = me.d3sox.nevumi.storage.decodedRecords<ScrobbleSubmission>(store.json)
     private var eligibilityRules: Any? = null
+    /** Listens whose song had no source on a Navidrome profile's server yet; a later library refresh can link them. */
+    private var unlinked = emptyList<Listen>()
     fun onPlayback(status: PlaybackStatus) { playback.value = status }
 
     fun start() {
@@ -247,12 +249,13 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         // written since the previous pass can have become eligible.
         val rules = listOf(settings.scrobblePercent, settings.scrobbleMaxSeconds, profiles.map { it.id to it.enabledSince })
         val update = decoding.withLock { listens.update(store.database.records().list("listens")) }
-        val candidates = (if (rules != eligibilityRules) update.all else update.changed)
+        val candidates = ((if (rules != eligibilityRules) update.all else update.changed) + unlinked).distinctBy { it.id }
             .filter { it.qualifiesForScrobbling(settings) && it.originDeviceId == null }
         eligibilityRules = null
         val receipts = store.database.records().keys("scrobble-submissions").toHashSet()
         val catalogue = if (candidates.size > 20 && profiles.any { it.service == ScrobblingService.NAVIDROME })
             library.tracks().associateBy { it.id } else null
+        val skipped = LinkedHashMap<String, Listen>()
         store.transaction {
             for (profile in profiles) for (listen in candidates.filter { it.startedAt >= profile.enabledSince }) {
                 if (profile.service != ScrobblingService.NAVIDROME && (listen.metadata.title.isBlank() || listen.metadata.artist.isBlank())) continue
@@ -260,13 +263,14 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
                 val songId = if (profile.service == ScrobblingService.NAVIDROME)
                     (catalogue?.get(listen.trackId) ?: library.findTrack(listen.trackId))?.sources?.firstOrNull {
                         it.kind == SourceKind.SERVER && it.id.startsWith("server:${profile.serverId}:")
-                    }?.location ?: continue else null
+                    }?.location ?: run { skipped[listen.id] = listen; continue } else null
                 val id = "${profile.id}\u0000${listen.playbackId}".encodeUtf8().sha256().hex()
                 if (receipts.add("scrobble-submission:$id"))
                     store.put("scrobble-submission:$id", "scrobble-submissions", ScrobbleSubmission(id, profile.id, listen.playbackId, listen, songId = songId))
             }
         }
         eligibilityRules = rules
+        unlinked = skipped.values.toList()
     }
 
     private suspend fun reportNowPlaying(): String? = sending.withLock {
