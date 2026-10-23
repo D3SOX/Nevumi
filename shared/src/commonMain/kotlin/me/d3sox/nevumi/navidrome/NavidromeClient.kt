@@ -5,6 +5,7 @@ import me.d3sox.nevumi.lyrics.Lyrics
 import me.d3sox.nevumi.lyrics.classicLyrics
 import me.d3sox.nevumi.lyrics.structuredLyrics
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -95,6 +96,10 @@ internal fun Throwable.isConnectionFailure(): Boolean = isUnreachableHost() || t
     "HttpRequestTimeoutException", "SocketException", "SSLException", "SSLHandshakeException", "SSLPeerUnverifiedException",
     "EOFException", "IOException", "StreamResetException", "ConnectionShutdownException")
 
+private const val SLOW_SERVER = "The music server took too long to respond. Try again later."
+
+private fun Throwable.isTimeout(): Boolean = this::class.simpleName in setOf("SocketTimeoutException", "HttpRequestTimeoutException")
+
 private class DownloadCallbackFailure(val failure: Exception) : Exception()
 
 private suspend fun <T> serverRequest(block: suspend () -> T): T = try { block() }
@@ -102,7 +107,10 @@ private suspend fun <T> serverRequest(block: suspend () -> T): T = try { block()
     catch (local: DownloadCallbackFailure) { throw local.failure }
     catch (rejected: NavidromeException) { throw rejected }
     catch (safe: NavidromeRequestException) { throw safe }
-    catch (error: Exception) { throw NavidromeRequestException(unreachable = error.isUnreachableHost(), connectionFailure = error.isConnectionFailure()) }
+    catch (error: Exception) {
+        if (error.isTimeout()) throw NavidromeRequestException(SLOW_SERVER, connectionFailure = true)
+        throw NavidromeRequestException(unreachable = error.isUnreachableHost(), connectionFailure = error.isConnectionFailure())
+    }
 
 private suspend fun downloadCallback(block: suspend () -> Unit) {
     try { block() }
@@ -114,12 +122,14 @@ internal const val CONCURRENT_REQUESTS = 6
 
 /** Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server. */
 class NavidromeClient(
-    private val http: HttpClient,
+    http: HttpClient,
     baseUrl: String,
     private val credentials: ServerCredentials,
     requestUrl: String = baseUrl,
     private val requestTimeoutMillis: Long = 30_000,
 ) {
+    // OkHttp gives up on a response that takes more than ten seconds to start, long before a busy server answers.
+    private val http = http.config { install(HttpTimeout) { socketTimeoutMillis = this@NavidromeClient.requestTimeoutMillis } }
     private val baseUrl = normalizeServerAddress(requestUrl)
     val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username).serverId
     val username: String get() = credentials.username
@@ -128,7 +138,7 @@ class NavidromeClient(
 
     private suspend fun <T : Any> timedRequest(block: suspend () -> T): T =
         withTimeoutOrNull(requestTimeoutMillis) { block() }
-            ?: throw NavidromeRequestException("The music server took too long to respond. Try again later.", connectionFailure = true)
+            ?: throw NavidromeRequestException(SLOW_SERVER, connectionFailure = true)
 
     private fun checkResponse(response: HttpResponse) {
         if (response.status.value !in 200..299) throw NavidromeRequestException(
