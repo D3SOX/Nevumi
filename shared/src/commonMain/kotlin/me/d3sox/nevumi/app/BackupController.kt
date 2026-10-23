@@ -46,6 +46,8 @@ class BackupController internal constructor(private val context: ControllerConte
         val text = files.open() ?: return@run
         // The merge takes several steps, so it holds the operation lock against other changes, but only once the picker closed.
         val summary = context.operations.withLock {
+            // An import may have started while the picker was open.
+            checkNotImporting()
             // Settings are not observed; reload them with the library and apply them as changing them in Settings does,
             // also after a failure, because each restored part is saved as it goes.
             val previous = context.state.value.preferences
@@ -68,11 +70,15 @@ class BackupController internal constructor(private val context: ControllerConte
     fun dismissSummary() = mutableStatus.update { it.copy(summary = null) }
 
     /** Runs outside the operation lock, because the picker waits for the user; a restore takes the lock once it has its file. */
-    private fun run(failure: org.jetbrains.compose.resources.StringResource, block: suspend () -> Unit) = context.action(serialized = false) {
-        if (backup == null) throw IllegalStateException(getString(Res.string.backup_error_unavailable))
-        // A backup taken or matched while songs are still importing would miss the songs imported later.
+    /** A backup taken or matched while songs are still importing would miss the songs imported later. */
+    private suspend fun checkNotImporting() {
         val state = context.state.value
         if (state.localScan != null || state.serverRefresh?.running == true) throw IllegalStateException(getString(Res.string.backup_error_importing))
+    }
+
+    private fun run(failure: org.jetbrains.compose.resources.StringResource, block: suspend () -> Unit) = context.action(serialized = false) {
+        if (backup == null) throw IllegalStateException(getString(Res.string.backup_error_unavailable))
+        checkNotImporting()
         // One step, so two quick taps cannot both start.
         if (mutableStatus.getAndUpdate { it.copy(working = true) }.working) return@action
         try { block() }

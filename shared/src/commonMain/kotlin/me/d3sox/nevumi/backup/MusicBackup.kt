@@ -57,13 +57,17 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             .mapNotNullTo(HashSet()) { it.metadata.folder.ifBlank { null } }
         val localFolders = folders(SourceKind.LOCAL) - folders(SourceKind.SERVER)
         fun isDeviceFolder(folder: String) = isDevicePath(folder) || folder in localFolders
+        val storedPlaylists = playlists.all()
+        // Playlist IDs differ on every device, so a custom Playlists order names each playlist by its place in the backup.
+        val playlistPositions = storedPlaylists.withIndex().associate { it.value.id to "$BACKUP_PLAYLIST${it.index}" }
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
         val settings = preferences.load().let { it.copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap(),
             libraryFilter = it.libraryFilter.copy(folder = it.libraryFilter.folder?.takeUnless(::isDeviceFolder)),
             // A custom Folders order names local folders by their paths.
-            collectionLayouts = it.collectionLayouts.mapValues { (_, layout) -> layout.copy(order = layout.order.filterNot(::isDeviceFolder)) }) }
+            collectionLayouts = it.collectionLayouts.mapValues { (tab, layout) -> layout.copy(order = layout.order.filterNot(::isDeviceFolder)
+                .map { id -> if (tab == LibraryTab.PLAYLISTS) playlistPositions[id] ?: id else id }) }) }
         val listened = history.all()
-        val playlists = playlists.all().map { playlist ->
+        val playlists = storedPlaylists.map { playlist ->
             val rule = playlist.rule
             // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
             if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name,
@@ -129,7 +133,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         // A smart playlist is compatible with the same rule. A server playlist is only compatible when it already has every song,
         // because adding to it would push songs removed since the backup back to the server. Anything else is restored on its own.
         val matched = mutableSetOf<String>()
-        for (backup in document.playlists) {
+        val restoredPlaylists = mutableMapOf<String, String>()
+        for ((index, backup) in document.playlists.withIndex()) {
             val name = backup.name.trim().takeIf { it.isNotEmpty() } ?: continue
             val songs = if (backup.rule == null) backup.trackKeys.mapNotNull(::localId) else emptyList()
             // Among several candidates, the one with the same description and then the most shared songs is the same playlist.
@@ -144,6 +149,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 .thenBy { candidate -> songs.count { it in candidate.trackIds } })
             if (existing != null) {
                 matched += existing.id
+                restoredPlaylists["$BACKUP_PLAYLIST$index"] = existing.id
                 if (existing.server != null) continue
                 // The backup wins for the description, shuffle and order it sets, as it does for a playlist it creates.
                 var changed = false
@@ -167,7 +173,15 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             if (backup.description.isNotBlank()) playlists.edit(created.id, name, backup.description)
             if (backup.shuffle) playlists.setShuffle(created.id, true)
             if (backup.sort != PlaylistSort.CUSTOM || backup.descending) playlists.setSort(created.id, backup.sort, backup.descending)
+            restoredPlaylists["$BACKUP_PLAYLIST$index"] = created.id
             playlistsAdded++
+        }
+        // The restored custom Playlists order named playlists by their place in the backup; point it at the playlists here.
+        if (settings) preferences.update { restored ->
+            val layout = restored.collectionLayouts[LibraryTab.PLAYLISTS] ?: return@update restored
+            restored.copy(collectionLayouts = restored.collectionLayouts + (LibraryTab.PLAYLISTS to layout.copy(order = layout.order.mapNotNull { id ->
+                if (id.startsWith(BACKUP_PLAYLIST)) restoredPlaylists[id] else id
+            })))
         }
 
         var savedQueues = 0
@@ -238,6 +252,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         catch (_: IllegalArgumentException) { throw BackupFormatException() }
     }
 }
+
+/** Prefixes a playlist's place in the backup inside a backed-up custom Playlists order. */
+private const val BACKUP_PLAYLIST = "backup-playlist:"
 
 /** The origin of listens restored from a backup, which were already scrobbled where they were played. */
 private const val BACKUP_ORIGIN = "backup"

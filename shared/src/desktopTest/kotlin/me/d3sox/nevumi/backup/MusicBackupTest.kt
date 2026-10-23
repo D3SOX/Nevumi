@@ -35,6 +35,7 @@ import java.nio.file.Files
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.settings.CollectionLayout
 import me.d3sox.nevumi.queue.QueueOrigin
+import me.d3sox.nevumi.settings.CollectionSort
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -236,6 +237,21 @@ class MusicBackupTest {
         // A second restore matches each playlist once instead of adding more.
         target.backup.restore(text)
         assertEquals(3, target.playlists.all().count { it.name == "Road" })
+    }
+
+    @Test
+    fun aCustomPlaylistOrderFollowsThePlaylistsToTheirNewIds() = devices { source, target ->
+        source.fill()
+        val names = listOf("Loved", "Music ▸ Night", "Road")
+        val ids = source.playlists.all().associate { it.name to it.id }
+        source.preferences.update { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to
+            CollectionLayout(sort = CollectionSort.CUSTOM, order = names.map { name -> ids.getValue(name) }))) }
+        val text = source.backup.export()
+        assertFalse(ids.values.any { it in text })
+        target.sameSongs()
+        target.backup.restore(text)
+        val restored = target.playlists.all().associate { it.id to it.name }
+        assertEquals(names, target.preferences.load().collectionLayouts.getValue(LibraryTab.PLAYLISTS).order.map { restored.getValue(it) })
     }
 
     @Test
