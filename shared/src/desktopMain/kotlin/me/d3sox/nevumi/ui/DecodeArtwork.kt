@@ -44,7 +44,8 @@ private fun subsampled(bytes: ByteArray, maxDimension: Int): ByteArray? =
             val height = reader.getHeight(0)
             var sample = (maxOf(width, height) / maxDimension).coerceAtLeast(1)
             // A large requested size can leave the sampled image above the decode limit, so sample more coarsely then.
-            while ((width / sample).toLong() * (height / sample) > MAX_DECODED_PIXELS) sample++
+            // Sampling keeps a partial last row and column, as ceiling division does.
+            while (((width + sample - 1) / sample).toLong() * ((height + sample - 1) / sample) > MAX_DECODED_PIXELS) sample++
             val picture = reader.read(0, reader.defaultReadParam.apply { setSourceSubsampling(sample, sample, 0, 0) })
             java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(picture, "png", it) }.toByteArray()
         } catch (_: Exception) { null } finally { reader.dispose() }
