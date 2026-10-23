@@ -146,16 +146,31 @@ func dial(host string, port int, timeout, ioTimeout time.Duration) (int64, error
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if _, err := node.Up(ctx); err != nil {
-		return 0, errNotConnected
-	}
-	connection, err := node.Dial(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	connection, err := dialPeer(ctx, node, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return 0, err
 	}
 	handle := nextHandle.Add(1)
 	connections.Store(handle, deadlineConn{connection, ioTimeout})
 	return handle, nil
+}
+
+// dialPeer waits for the node, then dials again whenever an attempt times out. The node reports Running with the network map
+// cached on disk, which can lack the peer until control sends the current one; a dial in that moment leaves Tailscale and only
+// gives up when TCP's retries run out, while a new attempt a few seconds later reaches the peer.
+func dialPeer(ctx context.Context, node *tsnet.Server, network, address string) (net.Conn, error) {
+	if _, err := node.Up(ctx); err != nil {
+		return nil, errNotConnected
+	}
+	for wait := 2 * time.Second; ; wait *= 2 {
+		attempt, cancel := context.WithTimeout(ctx, wait)
+		connection, err := node.Dial(attempt, network, address)
+		expired := attempt.Err() != nil
+		cancel()
+		if err == nil || !expired || ctx.Err() != nil {
+			return connection, err
+		}
+	}
 }
 
 func connection(handle C.jlong) (net.Conn, error) {

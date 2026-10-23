@@ -57,10 +57,7 @@ func relay(origin string) (string, error) {
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
-			if _, err := node.Up(ctx); err != nil {
-				return nil, errNotConnected
-			}
-			return node.Dial(ctx, network, address)
+			return dialPeer(ctx, node, network, address)
 		},
 		ForceAttemptHTTP2:   true,
 		IdleConnTimeout:     90 * time.Second,
