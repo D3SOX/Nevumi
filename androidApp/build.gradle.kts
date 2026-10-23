@@ -95,6 +95,8 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.startup.runtime)
     implementation(libs.glance.appwidget)
+    // Glance renders widgets through WorkManager; the 2.7 release it pulls in lets R8 strip the input merger constructor.
+    implementation(libs.work.runtime)
     implementation(libs.compose.runtime)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
