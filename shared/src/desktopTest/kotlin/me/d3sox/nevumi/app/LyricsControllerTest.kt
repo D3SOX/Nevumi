@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.app
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -36,6 +37,7 @@ class LyricsControllerTest {
         }
         val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), lyrics = lyrics)
         val watching = launch { player.lyricsController.lyrics.collect {} }
+        suspend fun awaitCalls(count: Int) = withTimeout(3_000) { while (calls.size < count) delay(10) }
         try {
             withTimeout(3_000) { player.state.first { it.libraryReady } }
             assertTrue(player.lyricsController.available)
@@ -50,15 +52,19 @@ class LyricsControllerTest {
             assertEquals(listOf(songs[0].id to false), calls)
 
             player.updatePreferences { it.copy(fetchLyricsOnline = true) }.join()
-            withTimeout(3_000) { player.lyricsController.lyrics.first { it is LyricsState.Available && calls.size == 2 } }
+            // A new lookup may leave the state equal to the old one, which a state flow does not emit again, so wait for the call.
+            awaitCalls(2)
+            withTimeout(3_000) { player.lyricsController.lyrics.first { it is LyricsState.Available } }
             assertEquals(songs[0].id to true, calls.last())
 
             player.skip(1).join()
-            withTimeout(3_000) { player.lyricsController.lyrics.first { it == LyricsState.None && calls.size == 3 } }
+            awaitCalls(3)
+            withTimeout(3_000) { player.lyricsController.lyrics.first { it == LyricsState.None } }
             assertEquals(songs[1].id to true, calls.last())
             release = CompletableDeferred(Unit)
             player.lyricsController.refresh()
-            withTimeout(3_000) { player.lyricsController.lyrics.first { it == LyricsState.None && calls.size == 4 } }
+            awaitCalls(4)
+            withTimeout(3_000) { player.lyricsController.lyrics.first { it == LyricsState.None } }
             Unit
         } finally { watching.cancel(); player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
