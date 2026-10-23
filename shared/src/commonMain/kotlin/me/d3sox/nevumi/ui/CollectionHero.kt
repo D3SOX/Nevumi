@@ -70,6 +70,7 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
                 controller.playTrack(ids[index], ids, index, collection.title, shuffleContext = shuffle, origin = origin)
             }, enabled = ids.isNotEmpty(), modifier = Modifier.size(56.dp)) { Icon(AppIcon.PLAY.vector, "Play collection", Modifier.size(32.dp)) }
         }
+        ArtistDiscovery(collection.id, tab, state, controller)
     }
     if (playlists) PlaylistPicker(controller, ids) { playlists = false }
 }

@@ -71,7 +71,7 @@ fun main(arguments: Array<String>) {
             File(directory, "server-edits").path, changes = serverChanges, artwork = artwork, tailscale = tunnel::serverFiles),
         pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
             me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges), credentials, "Linux desktop"),
-        tunnel = tunnel, soundCloud = soundCloud)
+        tunnel = tunnel, soundCloud = soundCloud, discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client))
     option("--import-folder")?.let { controller.importSource(it) }
     val mediaSession = try { LinuxMediaSession(controller) }
         catch (error: Exception) { System.err.println("Desktop media controls unavailable: ${error.message}"); null }

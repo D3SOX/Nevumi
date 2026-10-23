@@ -600,6 +600,38 @@ class NavidromeClient(
             received
         }
     }
+
+    // Discovery: these endpoints are optional, so each returns null when the server does not offer it.
+
+    /** Finds the server's ID for the artist named [name], falling back to the artist of one of their songs, [songId]. */
+    suspend fun artistId(name: String, songId: String? = null): String? = serverRequest {
+        optionalCatalogueRequest("search3", listOf("query" to name, "artistCount" to "20", "albumCount" to "0", "songCount" to "0"))
+            ?.get("searchResult3")?.jsonObject?.get("artist")?.jsonArray.orEmpty().map { it.jsonObject }
+            .firstOrNull { it.text("name").equals(name.trim(), ignoreCase = true) }?.text("id")?.ifBlank { null }
+            ?: songId?.let { optionalCatalogueRequest("getSong", listOf("id" to it))?.get("song")?.jsonObject?.text("artistId")?.ifBlank { null } }
+    }
+
+    suspend fun artistInfo(artistId: String): ServerArtistInfo? = serverRequest {
+        optionalCatalogueRequest("getArtistInfo2", listOf("id" to artistId))?.get("artistInfo2")?.jsonObject?.let(::parseArtistInfo)
+    }
+
+    suspend fun similarSongs(songId: String, count: Int = 50): List<ServerSong>? =
+        discoveredSongs("getSimilarSongs", "similarSongs", listOf("id" to songId, "count" to count.toString()))
+
+    suspend fun similarSongsByArtist(artistId: String, count: Int = 50): List<ServerSong>? =
+        discoveredSongs("getSimilarSongs2", "similarSongs2", listOf("id" to artistId, "count" to count.toString()))
+
+    suspend fun topSongs(artistName: String, count: Int = 10): List<ServerSong>? =
+        discoveredSongs("getTopSongs", "topSongs", listOf("artist" to artistName, "count" to count.toString()))
+
+    private suspend fun discoveredSongs(endpoint: String, container: String, parameters: List<Pair<String, String>>): List<ServerSong>? = serverRequest {
+        optionalCatalogueRequest(endpoint, parameters)?.let { envelope ->
+            val entries = envelope[container]?.jsonObject?.get("song")?.jsonArray.orEmpty().map { it.jsonObject }
+            // Discovery needs only each song's identity and tags, so it skips the album requests that look up release IDs.
+            val releases = entries.associate { it.text("albumId") to "" }.toMutableMap()
+            entries.map { parseSong(it, releases) }
+        }
+    }
 }
 
 internal expect fun passwordToken(password: String, salt: String): String

@@ -116,6 +116,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
                     }
                 }
             }
+            playSimilarOption(track, state, controller) { menu = false }
             val playlistIndex = playlistPosition ?: contextIndex
             if (playlistId != null && playlistIndex != null) {
                 option("Remove from playlist", AppIcon.REMOVE) { controller.removePlaylistTrack(playlistId, playlistIndex) }

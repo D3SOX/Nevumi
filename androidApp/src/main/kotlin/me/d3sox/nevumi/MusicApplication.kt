@@ -94,7 +94,8 @@ class MusicApplication : Application() {
             pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges, AndroidAudioAccess(this)::contentId), credentials, "Android phone",
                 networkAccess = localNetworkRequests::request),
-            tunnel = tunnel, networkAccess = localNetworkRequests::request, soundCloud = soundCloud)
+            tunnel = tunnel, networkAccess = localNetworkRequests::request, soundCloud = soundCloud,
+            discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client))
         widgetUpdates = NowPlayingWidgetUpdates(this, controller).apply { resume() }
     }
 

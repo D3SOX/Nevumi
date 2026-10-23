@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Server-powered discovery: artist information, similar artists, top songs and similar songs. -->
+<resources>
+    <string name="discovery_about">About</string>
+    <string name="discovery_show_more">Show more</string>
+    <string name="discovery_show_less">Show less</string>
+    <string name="discovery_open_last_fm">Open on Last.fm</string>
+    <string name="discovery_similar_artists">Similar artists</string>
+    <string name="discovery_not_in_library">%1$s is not in your library</string>
+    <string name="discovery_top_songs">Top songs</string>
+    <string name="discovery_play_similar">Play similar</string>
+    <string name="discovery_play_similar_songs">Play similar songs</string>
+    <string name="discovery_similar_to">Similar to %1$s</string>
+    <string name="discovery_playing_similar_song">Playing 1 similar song</string>
+    <string name="discovery_playing_similar_songs">Playing %1$s similar songs</string>
+    <string name="discovery_nothing_similar">Nothing similar found in your library</string>
+</resources>
