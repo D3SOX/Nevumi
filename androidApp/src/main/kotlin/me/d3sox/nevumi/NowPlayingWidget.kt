@@ -100,15 +100,17 @@ private fun Content(playing: NowPlaying, artwork: Bitmap?) {
         .cornerRadius(android.R.dimen.system_app_widget_background_radius).padding(horizontal = 12.dp, vertical = 4.dp)
         .clickable(actionStartActivity<MainActivity>()), Alignment.Center) {
         // Three buttons do not fit the smallest size, so it only plays and pauses.
-        if (size.width < wide.width) Controls(playing.playing, skips = false)
+        // A one-row widget can be as short as 40 dp, so artwork and buttons shrink to the height left inside the padding.
+        val fit = minOf(48.dp, size.height - 8.dp)
+        if (size.width < wide.width) Controls(playing.playing, fit, skips = false)
         else Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Artwork(artwork, GlanceModifier.size(if (size.height >= tall.height) 80.dp else 48.dp).cornerRadius(8.dp))
+            Artwork(artwork, GlanceModifier.size(if (size.height >= tall.height) 80.dp else fit).cornerRadius(8.dp))
             Column(GlanceModifier.defaultWeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(playing.title ?: context.getString(R.string.nothing_playing), maxLines = 1,
                     style = TextStyle(GlanceTheme.colors.onSurface, 15.sp, FontWeight.Medium))
                 if (playing.artist.isNotEmpty()) Text(playing.artist, maxLines = 1, style = TextStyle(GlanceTheme.colors.onSurfaceVariant, 13.sp))
             }
-            Controls(playing.playing)
+            Controls(playing.playing, fit)
         }
     }
 }
@@ -123,15 +125,15 @@ private fun Artwork(bitmap: Bitmap?, modifier: GlanceModifier) {
 }
 
 @Composable
-private fun Controls(playing: Boolean, skips: Boolean = true) {
+private fun Controls(playing: Boolean, buttonSize: androidx.compose.ui.unit.Dp, skips: Boolean = true) {
     val context = LocalContext.current
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (skips) CircleIconButton(ImageProvider(R.drawable.ic_skip_previous), context.getString(R.string.playback_previous), PlaybackAction.action("previous"),
+        if (skips) CircleIconButton(ImageProvider(R.drawable.ic_skip_previous), context.getString(R.string.playback_previous), PlaybackAction.action("previous"), GlanceModifier.size(buttonSize),
             backgroundColor = null, contentColor = GlanceTheme.colors.onSurface)
         CircleIconButton(ImageProvider(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
-            context.getString(if (playing) R.string.playback_pause else R.string.playback_play), PlaybackAction.action("toggle"),
+            context.getString(if (playing) R.string.playback_pause else R.string.playback_play), PlaybackAction.action("toggle"), GlanceModifier.size(buttonSize),
             backgroundColor = GlanceTheme.colors.primary, contentColor = GlanceTheme.colors.onPrimary)
-        if (skips) CircleIconButton(ImageProvider(R.drawable.ic_skip_next), context.getString(R.string.playback_next), PlaybackAction.action("next"),
+        if (skips) CircleIconButton(ImageProvider(R.drawable.ic_skip_next), context.getString(R.string.playback_next), PlaybackAction.action("next"), GlanceModifier.size(buttonSize),
             backgroundColor = null, contentColor = GlanceTheme.colors.onSurface)
     }
 }
