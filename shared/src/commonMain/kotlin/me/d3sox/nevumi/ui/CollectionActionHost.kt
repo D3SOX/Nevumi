@@ -101,7 +101,7 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
             AppMenuItem(text = { Text("Open") }, leadingIcon = { Icon(AppIcon.FORWARD.vector, null) }, onClick = { close(open) })
         }
     }
-    if (picker) PlaylistPicker(state, controller, rememberTracks().first) { picker = false }
+    if (picker) PlaylistPicker(controller, rememberTracks().first) { picker = false }
     if (editing && playlist != null) EditPlaylistDialog(playlist, state, controller) { editing = false }
     if (rules && playlist != null) SmartPlaylistDialog(state, controller, playlist) { rules = false }
     if (deleting && playlist != null) AlertDialog(onDismissRequest = { deleting = false }, title = { Text("Delete ${playlist.name}?") },

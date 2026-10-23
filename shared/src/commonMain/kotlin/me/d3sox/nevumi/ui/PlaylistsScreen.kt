@@ -275,13 +275,15 @@ private fun pickerRows(playlists: List<Playlist>, sort: PlaylistPickerSort, layo
 }
 
 @Composable
-internal fun PlaylistPicker(state: AppState, controller: MusicController, trackId: String, dismiss: () -> Unit) {
-    PlaylistPicker(state, controller, listOf(trackId), dismiss)
+internal fun PlaylistPicker(controller: MusicController, trackId: String, dismiss: () -> Unit) {
+    PlaylistPicker(controller, listOf(trackId), dismiss)
 }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-internal fun PlaylistPicker(state: AppState, controller: MusicController, trackIds: List<String>, dismiss: () -> Unit) {
+internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>, dismiss: () -> Unit) {
+    // Song rows keep a state that skips library updates, so read the songs' current sources here.
+    val state by (LocalSteadyState.current ?: controller.state).collectAsState()
     var creating by remember { mutableStateOf(false) }
     var choices by remember(trackIds) { mutableStateOf(emptyMap<String, Boolean>()) }
     var query by remember { mutableStateOf("") }

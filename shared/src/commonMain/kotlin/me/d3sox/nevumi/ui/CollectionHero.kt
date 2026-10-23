@@ -70,7 +70,7 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
             }, enabled = ids.isNotEmpty(), modifier = Modifier.size(56.dp)) { Icon(AppIcon.PLAY.vector, "Play collection", Modifier.size(32.dp)) }
         }
     }
-    if (playlists) PlaylistPicker(state, controller, ids) { playlists = false }
+    if (playlists) PlaylistPicker(controller, ids) { playlists = false }
 }
 
 @Composable
