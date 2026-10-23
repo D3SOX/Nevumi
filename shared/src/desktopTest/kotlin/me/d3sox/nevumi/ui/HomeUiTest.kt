@@ -4,6 +4,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.runtime.CompositionLocalProvider
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ListeningHistory
@@ -17,9 +18,54 @@ import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.*
+import java.awt.EventQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalTestApi::class)
 class HomeUiTest {
+    @Test fun aLoadingHomeFeedDoesNotClaimAnExistingLibraryIsEmpty() {
+        val directory = Files.createTempDirectory("nevumi-home-loading")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        runBlocking { library.importTrack(TrackMetadata("Home song"), TrackSource("home", SourceKind.LOCAL, "/music/song.flac")) }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            runComposeUiTest {
+                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                val state = controller.state.value
+                val tracks = object : AbstractList<Track>() {
+                    override val size = state.tracks.size
+                    override fun get(index: Int): Track {
+                        if (!EventQueue.isDispatchThread()) {
+                            started.countDown()
+                            check(release.await(10, TimeUnit.SECONDS))
+                        }
+                        return state.tracks[index]
+                    }
+                }
+                setContent {
+                    CompositionLocalProvider(LocalArtworkPicker provides ArtworkPicker { null }) {
+                        MusicTheme(state.preferences, null) { HomeScreen(state, controller, tracks, null, true, {}) }
+                    }
+                }
+                assertTrue(started.await(3, TimeUnit.SECONDS))
+                onNodeWithText("No music available").assertDoesNotExist()
+                onNodeWithTag("home-loading").assertIsDisplayed()
+                release.countDown()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("home-section:Mixes").fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithTag("home-loading").assertDoesNotExist()
+            }
+        } finally {
+            release.countDown()
+            runBlocking { controller.closeAndJoin() }
+            store.close()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     @Test fun homeSectionsCanBeDraggedAndMovedWithButtonsAndTheirOrderSurvivesRestart() {
         val directory = Files.createTempDirectory("nevumi-home-order")
         val database = directory.resolve("library.db").toString()

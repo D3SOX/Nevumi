@@ -62,10 +62,11 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     var seed by rememberSaveable { mutableIntStateOf(Random.nextInt()) }
     val unknownAlbum = stringResource(Res.string.library_unknown_album)
     val unknownArtist = stringResource(Res.string.unknown_artist)
-    val feed = rememberDerived("home-feed", listOf(seed, unknownAlbum, unknownArtist), listOf(tracks, state.listens, now), initial = { HomeFeed() }) {
+    val loadedFeed = rememberDerived<HomeFeed?>("home-feed", listOf(seed, unknownAlbum, unknownArtist), listOf(tracks, state.listens, now), initial = { null }) {
         // The minute clock can predate a listen that has just arrived.
         homeFeed(tracks, state.listens, kotlin.time.Clock.System.now().toEpochMilliseconds(), seed, unknownAlbum, unknownArtist)
     }
+    val feed = loadedFeed ?: HomeFeed()
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var handled by rememberSaveable { mutableIntStateOf(-1) }
     LaunchedEffect(destination) {
@@ -112,7 +113,10 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
                     AppIconButton(AppIcon.TABS, stringResource(Res.string.customize_home)) { selected = "customize-home" }
                 }
             }
-            if (feed.added.isEmpty()) item(key = "empty") {
+            if (loadedFeed == null) item(key = "loading") {
+                LinearProgressIndicator(Modifier.fillMaxWidth().testTag("home-loading"))
+            }
+            else if (feed.added.isEmpty()) item(key = "empty") {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(AppIcon.LIBRARY.vector, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)

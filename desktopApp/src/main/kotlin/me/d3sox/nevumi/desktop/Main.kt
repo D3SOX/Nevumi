@@ -135,7 +135,7 @@ fun main(arguments: Array<String>) = application {
             } catch (cancelled: CancellationException) {
                 initialized.cancel(cancelled)
                 throw cancelled
-            } catch (error: Exception) { initialized.completeExceptionally(error) }
+            } catch (error: Throwable) { initialized.completeExceptionally(error) }
         }
     }
     Window(title = "Nevumi", icon = painterResource("nevumi.png"), state = rememberWindowState(size = DpSize(1100.dp, 800.dp)),
@@ -155,7 +155,7 @@ fun main(arguments: Array<String>) = application {
             startup.start()
             try { controller = initialized.await() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { startupError = error.message ?: error.toString() }
+            catch (error: Throwable) { startupError = error.message ?: error.toString() }
         }
         val ready = controller
         if (ready != null) MusicPlayerApp(ready)

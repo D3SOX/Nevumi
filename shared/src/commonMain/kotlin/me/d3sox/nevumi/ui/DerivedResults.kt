@@ -30,11 +30,11 @@ private const val INLINE_COMPUTE_MS = 5L
 /**
  * Like `remember(keys) { compute() }`, for library data that is expensive to derive.
  *
- * A change to [keys] computes the value immediately, like `remember`. A change to only [refreshKeys], such as the
+ * Once a value is ready, a change to [keys] computes immediately, like `remember`. A change to only [refreshKeys], such as the
  * library after one song's favorite changed or the listening history that playback checkpoints every few seconds,
  * computes it off the main thread and keeps the previous value until the new one is ready, unless the previous
  * computation was quick enough to repeat inline. With an [id], the value outlives this composable inside the library,
- * so returning to a tab reuses it. With [initial], the first calculation also runs in the background.
+ * so returning to a tab reuses it. With [initial], calculations run in the background until the first value is ready.
  */
 @Composable
 @Suppress("UNCHECKED_CAST")
@@ -52,7 +52,8 @@ internal fun <T> rememberDerived(id: String?, keys: List<Any?>, refreshKeys: Lis
     // The cell is a cache of a pure function of its keys, so updating it during composition is safe.
     val previous = cell.result
     val result = when {
-        previous == null && initial != null -> DerivedResult(keys, refreshKeys, initial(), pending = true)
+        initial != null && (previous == null || (previous.pending && previous.keys != keys)) ->
+            DerivedResult(keys, refreshKeys, initial(), pending = true)
         previous == null || previous.keys != keys -> computed()
         previous.pending -> previous
         previous.refreshKeys != refreshKeys && previous.costMs < INLINE_COMPUTE_MS -> computed()
