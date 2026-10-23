@@ -124,14 +124,16 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         for (backup in document.playlists) {
             val name = backup.name.trim().takeIf { it.isNotEmpty() } ?: continue
             val songs = if (backup.rule == null) backup.trackKeys.mapNotNull(::localId) else emptyList()
-            val existing = existingPlaylists.firstOrNull { playlist ->
+            // Among several candidates, the one with the same description and then the most shared songs is the same playlist.
+            val existing = existingPlaylists.filter { playlist ->
                 playlist.id !in matched && playlist.name.trim() == name && when {
                     backup.rule != null -> playlist.rule == backup.rule
                     playlist.rule != null -> false
                     playlist.server != null -> playlist.trackIds.containsAll(songs)
                     else -> true
                 }
-            }
+            }.maxWithOrNull(compareBy<me.d3sox.nevumi.playlists.Playlist> { it.description == backup.description }
+                .thenBy { candidate -> songs.count { it in candidate.trackIds } })
             if (existing != null) {
                 matched += existing.id
                 if (existing.server != null) continue
