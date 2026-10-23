@@ -135,7 +135,14 @@ Builds:
     gradle:
       - yes
 
+  - versionName: 0.12.0
+    versionCode: 18
+    commit: v0.12.0
+    subdir: androidApp
+    gradle:
+      - yes
+
 AutoUpdateMode: Version v%v
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
-CurrentVersion: 0.11.1
-CurrentVersionCode: 17
+CurrentVersion: 0.12.0
+CurrentVersionCode: 18
