@@ -31,6 +31,7 @@ import me.d3sox.nevumi.playlists.folderPath
 import me.d3sox.nevumi.playlists.folderSegments
 import me.d3sox.nevumi.playlists.isInFolder
 import me.d3sox.nevumi.playlists.parentFolder
+import me.d3sox.nevumi.playlists.playlistedTrackIds
 import me.d3sox.nevumi.playlists.title
 import me.d3sox.nevumi.settings.CollectionLayout
 import me.d3sox.nevumi.settings.PlaylistPickerSort
@@ -373,7 +374,9 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
 internal fun SmartPlaylistDialog(state: AppState, controller: MusicController, playlist: Playlist?, dismiss: () -> Unit) {
     var name by remember { mutableStateOf(playlist?.name.orEmpty()) }
     var rule by remember { mutableStateOf<LibraryQuery?>(playlist?.rule ?: LibraryQuery()) }
-    val count = remember(state.tracks, rule) { rule?.let { filterTracks(state.tracks, it).size } }
+    val count = remember(state.tracks, state.playlists, rule) {
+        rule?.let { filterTracks(state.tracks, it, playlisted = playlistedTrackIds(state.playlists)).size }
+    }
     KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(if (playlist == null) "New smart playlist" else "Edit rules") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -47,6 +47,36 @@ class PlaylistsTest {
     }
 
     @Test
+    fun aSmartPlaylistFindsDeviceOnlySongsThatAreNotInAnyPlaylist() = runBlocking {
+        val directory = Files.createTempDirectory("smart-playlist-unsorted")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val unsorted = library.importTrack(TrackMetadata("Northern Light"), TrackSource("local:unsorted", SourceKind.LOCAL, "/music/unsorted.flac"))
+            val sorted = library.importTrack(TrackMetadata("Evening"), TrackSource("local:sorted", SourceKind.LOCAL, "/music/sorted.flac"))
+            val onServer = library.importTrack(TrackMetadata("Night Walk"), TrackSource("local:shared", SourceKind.LOCAL, "/music/shared.flac"))
+            library.importTrack(onServer.metadata, TrackSource("server:fixture:shared", SourceKind.SERVER, "shared"), linkTo = onServer.id)
+            // A refresh keeps the server copy of a song deleted from the server, but marks it unavailable.
+            val deleted = library.importTrack(TrackMetadata("Old Demo"), TrackSource("local:deleted", SourceKind.LOCAL, "/music/deleted.flac"))
+            library.importTrack(deleted.metadata, TrackSource("server:fixture:deleted", SourceKind.SERVER, "deleted", available = false), linkTo = deleted.id)
+            val playlists = Playlists(store)
+            val regular = playlists.create("Evening", listOf(sorted.id, deleted.id))
+            val rule = LibraryQuery(notOnServer = true, notInPlaylist = true)
+            val smart = playlists.createSmart("Unsorted", rule)
+            assertEquals(listOf(unsorted.id), smart.trackIds)
+            assertEquals(listOf(unsorted.id), library.tracks(rule).map { it.id })
+            assertEquals(setOf(sorted.id, unsorted.id, deleted.id), playlists.createSmart("Device only", LibraryQuery(notOnServer = true)).trackIds.toSet())
+            // Songs that only appear in smart playlists still count as unsorted.
+            assertEquals(listOf(unsorted.id), playlists.get(smart.id)!!.trackIds)
+            val update = async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeout(3_000) { playlists.observe().first { it.single { p -> p.id == smart.id }.trackIds.isEmpty() } }
+            }
+            playlists.append(regular.id, unsorted.id)
+            assertEquals(emptyList(), update.await().single { it.id == smart.id }.trackIds)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun observingASmartPlaylistShowsItsCurrentSongsAndUpdatesWhenAFavoriteChanges() = runBlocking {
         val directory = Files.createTempDirectory("live-smart-playlist")
         val store = openMusicStore(directory.resolve("library.db").toString())

@@ -13,6 +13,7 @@ import kotlin.uuid.Uuid
 import kotlin.math.abs
 import me.d3sox.nevumi.queue.remapQueueTracks
 import me.d3sox.nevumi.playlists.remapPlaylistTracks
+import me.d3sox.nevumi.playlists.playlistedTrackIds
 import me.d3sox.nevumi.downloads.remapDownloadedTrack
 import me.d3sox.nevumi.downloads.DownloadStatus
 import me.d3sox.nevumi.history.remapListeningHistory
@@ -57,7 +58,8 @@ data class LibraryQuery(val text: String = "", val album: String? = null, val ar
     val availableOnly: Boolean = false, val limit: Int? = null,
     val ratingFrom: Int? = null, val ratingTo: Int? = null,
     val playCountFrom: Int? = null, val playCountTo: Int? = null,
-    val lastPlayedWithinDays: Int? = null, val notPlayedWithinDays: Int? = null) {
+    val lastPlayedWithinDays: Int? = null, val notPlayedWithinDays: Int? = null,
+    val notOnServer: Boolean = false, val notInPlaylist: Boolean = false) {
     init {
         require(limit == null || limit > 0) { "Song limit must be positive" }
         require(yearFrom == null || yearFrom >= 0) { "Year cannot be negative" }
@@ -77,8 +79,9 @@ data class LibraryQuery(val text: String = "", val album: String? = null, val ar
     }
 }
 
+/** [playlisted] holds the songs in any regular playlist, which [LibraryQuery.notInPlaylist] leaves out. */
 fun filterTracks(tracks: List<Track>, query: LibraryQuery, statistics: Map<String, ListeningStatistics> = emptyMap(),
-    now: Long = Clock.System.now().toEpochMilliseconds()): List<Track> = tracks.filter { track ->
+    now: Long = Clock.System.now().toEpochMilliseconds(), playlisted: Set<String> = emptySet()): List<Track> = tracks.filter { track ->
     val metadata = track.metadata
     (query.text.isEmpty() || listOf(metadata.title, metadata.artist, metadata.album, metadata.albumArtist).plus(metadata.genres)
         .any { it.contains(query.text, ignoreCase = true) }) &&
@@ -98,7 +101,9 @@ fun filterTracks(tracks: List<Track>, query: LibraryQuery, statistics: Map<Strin
         (query.lastPlayedWithinDays == null || statistics[track.id]?.lastPlayedAt?.let { it >= now - query.lastPlayedWithinDays * 86_400_000L } == true) &&
         (query.notPlayedWithinDays == null || statistics[track.id]?.lastPlayedAt?.let { it < now - query.notPlayedWithinDays * 86_400_000L } != false) &&
         (!query.availableOnly || track.sources.any { it.available }) &&
-        (query.sourceKind == null || track.sources.any { it.kind == query.sourceKind })
+        (query.sourceKind == null || track.sources.any { it.kind == query.sourceKind }) &&
+        (!query.notOnServer || track.sources.none { it.kind == SourceKind.SERVER && it.available }) &&
+        (!query.notInPlaylist || track.id !in playlisted)
 }.let { matching ->
     // Derive each sort key once per song instead of on every comparison; large libraries make that the main cost.
     class Row(val track: Track, val title: String, val group: String, val rank: Long)
@@ -193,7 +198,8 @@ class MusicLibrary(private val store: MusicStore) {
             query.playCountTo != null || query.lastPlayedWithinDays != null || query.notPlayedWithinDays != null
         val tracks = loadTracks()
         return if (query == LibraryQuery()) tracks else filterTracks(tracks, query,
-            if (history) listeningStatistics(store.list<Listen>("listens")) else emptyMap())
+            if (history) listeningStatistics(store.list<Listen>("listens")) else emptyMap(),
+            playlisted = if (query.notInPlaylist) playlistedTrackIds(store.list("playlists")) else emptySet())
     }
     suspend fun importTrack(metadata: TrackMetadata, source: TrackSource, linkTo: String? = null): Track = store.transaction {
         val owner = store.read<SourceOwner>("source-owner:${source.id}")

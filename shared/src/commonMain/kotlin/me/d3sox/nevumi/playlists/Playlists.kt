@@ -52,6 +52,9 @@ fun folderSegments(folder: String) = folder.split(FOLDER_JOINER)
 fun parentFolder(folder: String) = folder.substringBeforeLast(FOLDER_JOINER, "").ifEmpty { null }
 fun isInFolder(playlistFolder: String?, folder: String) = playlistFolder == folder || playlistFolder?.startsWith(folder + FOLDER_JOINER) == true
 
+/** Songs in regular playlists; smart playlists are left out so their rules cannot depend on each other. */
+fun playlistedTrackIds(playlists: List<Playlist>): Set<String> = playlists.filter { it.rule == null }.flatMapTo(HashSet()) { it.trackIds }
+
 @Serializable
 internal data class PlaylistRemoval(val playlist: Playlist, val revision: String = Uuid.random().toString())
 
@@ -104,8 +107,9 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         if (playlists.none { it.rule != null }) return playlists
         val tracks = library.tracks()
         val statistics = history.statistics()
+        val playlisted = playlistedTrackIds(store.list<Playlist>("playlists"))
         return playlists.map { playlist -> playlist.rule?.let { rule ->
-            playlist.copy(trackIds = filterTracks(tracks, rule, statistics, clock()).map { it.id })
+            playlist.copy(trackIds = filterTracks(tracks, rule, statistics, clock(), playlisted).map { it.id })
         } ?: playlist }
     }
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -114,8 +118,9 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         if (playlists.none { it.rule != null }) flowOf(playlists)
         else combine(library.observe(), history.observe().map { listens -> listeningStatistics(listens) }.distinctUntilChanged(),
         flow { while (true) { emit(clock()); delay(refreshEveryMs) } }) { tracks, statistics, now ->
+        val playlisted = playlistedTrackIds(playlists)
         playlists.map { playlist ->
-            playlist.rule?.let { rule -> playlist.copy(trackIds = filterTracks(tracks, rule, statistics, now).map { it.id }) } ?: playlist
+            playlist.rule?.let { rule -> playlist.copy(trackIds = filterTracks(tracks, rule, statistics, now, playlisted).map { it.id }) } ?: playlist
         }
         }
     }.distinctUntilChanged()
