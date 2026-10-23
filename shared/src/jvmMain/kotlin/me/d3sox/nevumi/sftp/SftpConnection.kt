@@ -5,11 +5,13 @@ import me.d3sox.nevumi.storage.MusicStore
 import me.d3sox.nevumi.security.CredentialVault
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeChanges
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 import java.io.InputStream
 import java.nio.file.Files
@@ -63,11 +65,15 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
                 store.put("sftp:profile:${configuration.id}", "sftp-profiles", configuration)
                 store.put("sftp:current", "sftp-settings", configuration.id)
             }
+            remote?.second?.close()
+            remote = null
         }
     }
     override suspend fun disconnect() = work.withLock {
         for (profile in store.list<SftpConfiguration>("sftp-profiles")) vault.delete(profile.id)
         store.database.records().delete("sftp:current")
+        remote?.second?.close()
+        remote = null
     }
     override suspend fun upload(trackId: String, relativePath: String): Track = work.withLock { performUpload(trackId, relativePath) }
     private suspend fun performUpload(trackId: String, relativePath: String): Track = withContext(Dispatchers.IO) {
@@ -148,9 +154,13 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         val secret = vault.read(configuration.id)
         check(secret != null || !credentialsRequired) { "Unlock your credential store or reconnect to the original SFTP directory" }
         val authentication = secret?.let { store.json.decodeFromString<SftpAuthentication>(it) } ?: SftpAuthentication()
-        return SftpMusicFileEdits(store, library, server, configuration.connection, authentication,
-            File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork, tailscale())
+        val key = Triple(configuration.connection, secret, tailscale())
+        val files = remote?.takeIf { it.first == key }?.second ?: SftpFiles(key.first, authentication, key.third).also { remote?.second?.close(); remote = key to it }
+        return SftpMusicFileEdits(store, library, server, files, configuration.connection,
+            File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork)
     }
+    // Kept across editors, so saving reuses the connection the tag editor just opened.
+    private var remote: Pair<Triple<SftpProfile, String?, Tailscale?>, SftpFiles>? = null
 
     private suspend fun currentEditor(): SftpMusicFileEdits = editor(checkNotNull(configuration()) { "Connect to SFTP first" })
     private suspend fun journalEditor(id: String): SftpMusicFileEdits {
@@ -173,6 +183,16 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         val server = client() ?: return@withLock
         for (configuration in store.list<SftpConfiguration>("sftp-profiles").filter { it.serverId == server.serverId })
             editor(configuration, credentialsRequired = false).trimHistory(maxAgeMs, maxBytes)
+    }
+    // Starting Tailscale and reaching the server take seconds, which would otherwise delay opening the first tag editor.
+    override suspend fun warmUp() = withContext(Dispatchers.IO) {
+        val connection = configuration()?.connection ?: return@withContext
+        val node = tailscale() ?: return@withContext
+        try { node.warmUp(connection.host) } catch (_: IOException) { }
+    }
+    // The editor keeps the connection and the tags it read, so opening the tag editor next only checks that the file is unchanged.
+    override suspend fun prepareEdit(trackId: String) = work.withLock {
+        try { currentEditor().session { readTags(trackId) }; Unit } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
     }
     override suspend fun recover() = work.withLock {
         val server = client() ?: return@withLock

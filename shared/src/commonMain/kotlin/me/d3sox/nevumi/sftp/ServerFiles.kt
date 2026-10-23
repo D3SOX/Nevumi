@@ -41,4 +41,8 @@ interface ServerFiles : MusicFileEdits {
     suspend fun pendingUploads(): List<PendingServerUpload>
     suspend fun retryUpload(id: String): Track
     suspend fun discardUpload(id: String)
+    /** Prepares the network path to the server ahead of the first file operation, where that takes long. */
+    suspend fun warmUp() {}
+    /** Reads the tags of [trackId] ahead of a likely edit, so the tag editor opens without waiting for the server. */
+    suspend fun prepareEdit(trackId: String) {}
 }

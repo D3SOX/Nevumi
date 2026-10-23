@@ -5,6 +5,7 @@ import java.io.InputStream
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 
 interface FileEditAccess {
     val providerId: String get() = "local"
@@ -20,8 +21,19 @@ interface FileEditAccess {
     fun exists(location: String): Boolean
     fun open(location: String): InputStream
     fun copy(location: String, destination: File)
+    /** Copies what a tag edit needs, which is the whole file unless [holdsOnlyTags] says otherwise for its hash. */
+    fun image(location: String, destination: File) = copy(location, destination)
+    /** Hashes the file as its [image] is compared, or every byte with [whole]. */
+    fun contentHash(location: String, whole: Boolean = false): String = open(location).use(::contentHash)
+    fun contentHash(file: File, location: String, whole: Boolean = false): String = file.inputStream().use(::contentHash)
+    /** Whether a copy with [hash] holds only the tags, so [replaceTags] has to take the audio from the file it replaces. */
+    fun holdsOnlyTags(hash: String) = false
+    /** The storage a copy with [hash] takes up, which for a sparse copy of only the tags is far less than its length. */
+    fun storedSize(copy: File, hash: String): Long = copy.length()
     fun stagingDirectory(location: String): File
     suspend fun replace(location: String, staged: File, originalHash: String? = null)
+    /** Replaces the file with a tag edit of an [image]. */
+    suspend fun replaceTags(location: String, staged: File, originalHash: String) = replace(location, staged, originalHash)
     fun renamedLocation(location: String, name: String): String
     suspend fun rename(location: String, name: String)
     fun scanLocation(location: String): String
@@ -30,6 +42,17 @@ interface FileEditAccess {
     suspend fun restoreDeleted(location: String, original: File, name: String, folder: String,
         reserve: suspend (String) -> Unit): String { throw UnsupportedOperationException("Restoring this file is unavailable") }
     suspend fun completeRestoration(location: String) {}
+}
+
+fun contentHash(input: InputStream): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val buffer = ByteArray(64 * 1024)
+    while (true) {
+        val size = input.read(buffer)
+        if (size < 0) break
+        digest.update(buffer, 0, size)
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
 object FileSystemEditAccess : FileEditAccess {

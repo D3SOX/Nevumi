@@ -45,7 +45,7 @@ class SftpUiTest {
     fun anInterruptedServerTagEditCanBeDiscardedFromFileRecoveryAfterRestart() = recoverInterruptedServerEdit("Discard prepared edit")
 
     @Test
-    fun aDamagedInterruptedServerEditCanRestoreItsOriginalBackupAfterRestart() = recoverInterruptedServerEdit("Restore original file")
+    fun aDamagedServerFileIsKeptWhenAnInterruptedEditBackedUpOnlyItsTags() = recoverInterruptedServerEdit("Restore original file")
 
     private fun recoverInterruptedServerEdit(action: String) {
         val root = Path.of(System.getProperty("nevumi.testRoot"))
@@ -98,12 +98,17 @@ class SftpUiTest {
                 waitUntil(timeoutMillis = 8_000) { !player.state.value.loading &&
                     (player.state.value.fileEdits.isEmpty() || player.state.value.fileEdits.single().applied ||
                         player.state.value.fileEdits.single().undone || player.state.value.error != null) }
+                if (action == "Restore original file") {
+                    // Server edits back up only the tags, which cannot replace the audio of a damaged file.
+                    assertEquals("The music file is missing or damaged, and its backup holds only the tags", player.state.value.error)
+                    assertEquals(true, byteArrayOf(1, 2, 3, 4).contentEquals(Files.readAllBytes(file)))
+                    return@runComposeUiTest
+                }
                 assertEquals(null, player.state.value.error)
                 val expected = if (action == "Apply prepared edit") "Recovered server edit" else "Northern Light"
                 assertEquals(expected, AudioFileIO.read(file.toFile()).tag.getFirst(FieldKey.TITLE))
                 kotlin.test.assertTrue(runBlocking { navidrome.client()!!.songs().any { it.metadata.title == expected } })
                 if (action != "Apply prepared edit") assertEquals(-1L, Files.mismatch(original, file))
-                if (action == "Restore original file") kotlin.test.assertTrue(runBlocking { files.history().single().undone })
                 if (action == "Discard prepared edit") {
                     kotlin.test.assertTrue(runBlocking { files.history().isEmpty() })
                 }

@@ -229,6 +229,11 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 it.fileLibraryId == configuration.libraryId && it.filePath != null
         }
     }
+    /** Reads the server tags while the user picks a file action for [track], so the server tag editor opens sooner. */
+    fun prepareServerFileEdit(track: Track) {
+        val files = serverFiles ?: return
+        if (canEditServerTrack(track)) scope.launch { files.prepareEdit(track.id) }
+    }
     private fun fileEditor(target: FileEditTarget): MusicFileEdits = requireNotNull(
         if (target == FileEditTarget.SERVER) serverFiles else fileEdits) { "File editing is unavailable" }
     private fun journalEditor(editId: String): MusicFileEdits {
@@ -418,6 +423,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                     } }
                 }
         }
+        // Warming up can wait up to 30 seconds inside Tailscale, which cancelling cannot interrupt, so closing does not wait for it.
+        serverFiles?.let { files -> CoroutineScope(Dispatchers.Default).launch { files.warmUp() } }
         offline?.let { downloads -> scope.launch {
             downloads.network.collect { network ->
                 operations.withLock { mutableState.update { it.copy(downloadNetwork = network) } }

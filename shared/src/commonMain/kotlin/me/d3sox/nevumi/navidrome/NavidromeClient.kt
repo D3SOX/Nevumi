@@ -143,9 +143,15 @@ class NavidromeClient(
     /** Checks the address and credentials with a single request. */
     suspend fun ping() { request("ping") }
 
-    /** Asks the server to index new or changed files; a full scan re-reads every file and is rarely needed. */
-    suspend fun rescan(fullScan: Boolean = false) {
-        request("startScan", if (fullScan) listOf("fullScan" to "true") else emptyList())
+    /**
+     * Asks the server to index new or changed files; a full scan re-reads every file and is rarely needed.
+     * [folder], a library ID and path, limits the scan to that folder where the server supports it, which is much faster.
+     */
+    suspend fun rescan(fullScan: Boolean = false, folder: Pair<Long, String>? = null) {
+        request("startScan", buildList {
+            if (fullScan) add("fullScan" to "true")
+            folder?.let { (library, path) -> add("target" to "$library:$path") }
+        })
         val finished = kotlinx.coroutines.withTimeoutOrNull(120_000) {
             while (request("getScanStatus")["scanStatus"]?.jsonObject?.get("scanning")?.jsonPrimitive?.booleanOrNull == true)
                 kotlinx.coroutines.delay(250)

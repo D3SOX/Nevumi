@@ -154,7 +154,8 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             artworkOrigin = openingArtwork,
             onArtworkPlaced = { artworkPlaced = true },
             artworkCornerRadius = artworkCornerRadius,
-            fileOptions = fileOptions.takeIf { it.isNotEmpty() })
+            fileOptions = fileOptions.takeIf { it.isNotEmpty() },
+            onFileActions = { controller.prepareServerFileEdit(track) })
     }
     if (sources) SongSources(track, controller) { sources = false }
     if (rating) SongRating(track, controller) { rating = false }

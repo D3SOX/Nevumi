@@ -317,8 +317,8 @@ class LocalFileEditsTest {
             val track = LocalFiles(library).scan(file.toString()).single()
             var abandoned: File? = null
             val provider = object : FileEditAccess by FileSystemEditAccess {
-                override fun copy(location: String, destination: File) {
-                    FileSystemEditAccess.copy(location, destination)
+                override fun image(location: String, destination: File) {
+                    FileSystemEditAccess.image(location, destination)
                     abandoned = destination
                     throw SimulatedProcessExit()
                 }

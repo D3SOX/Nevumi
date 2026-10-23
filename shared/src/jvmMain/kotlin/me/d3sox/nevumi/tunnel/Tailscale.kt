@@ -21,6 +21,7 @@ internal object TailscaleNative {
     external fun status(): String
     external fun signOut()
     external fun relay(origin: String): String
+    external fun warm(host: String)
     external fun dial(host: String, port: Int, timeoutMs: Int, ioTimeoutMs: Int): Long
     external fun read(handle: Long, buffer: ByteArray, offset: Int, length: Int): Int
     external fun write(handle: Long, buffer: ByteArray, offset: Int, length: Int)
@@ -67,6 +68,12 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
         catch (failure: IOException) {
             throw if (status().state != "Running") TailscaleSignInRequired() else failure
         }
+    }
+
+    /** Starts the node and finds a path to the peer that carries [host], which takes seconds after the app starts. */
+    fun warmUp(host: String) {
+        ready()
+        TailscaleNative.warm(host)
     }
 
     /** Returns a loopback URL that forwards HTTP requests to [origin] over the tailnet. */
