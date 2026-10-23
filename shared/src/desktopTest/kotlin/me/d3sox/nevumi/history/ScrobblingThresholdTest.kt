@@ -130,6 +130,30 @@ class ScrobblingThresholdTest {
     }
 
     @Test
+    fun aDeferredListenThatWasDeletedIsNotScrobbledOnceItsSongIsLinked() = runBlocking {
+        val directory = Files.createTempDirectory("scrobbling-deleted-deferred")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val http = HttpClient(MockEngine { error("Offline listens must remain queued") })
+        val scrobbling = Scrobbling(store, MusicLibrary(store), http, SecretServiceVault("me.d3sox.nevumi.tests.deleted-deferred"),
+            network = MutableStateFlow(DownloadNetwork(connected = false)))
+        try {
+            val library = MusicLibrary(store)
+            val track = library.importTrack(TrackMetadata("Song", "Artist", durationMs = 180_000),
+                TrackSource("local:song", SourceKind.LOCAL, directory.resolve("song.flac").toString()))
+            val profile = ScrobblingProfile("navidrome", ScrobblingService.NAVIDROME, "fixture", "https://example.test", 0, serverId = "fixture")
+            store.put("scrobbling-profile:${profile.id}", "scrobbling-profiles", profile)
+            val listen = Listen("listen", track.id, "play", 1_000, track.metadata, playedMs = 100_000, durationMs = 180_000)
+            store.put("listen:${listen.id}", "listens", listen)
+            scrobbling.enqueueEligible()
+            store.database.records().delete("listen:${listen.id}")
+            store.put("track:${track.id}", "tracks", track.copy(sources = track.sources +
+                TrackSource("server:fixture:song", SourceKind.SERVER, "server-song")))
+            scrobbling.enqueueEligible()
+            assertEquals(emptyList(), scrobbling.submissions(), "A deleted listen must not be scrobbled")
+        } finally { scrobbling.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun savedThresholdChangesWakeAllServicesAndKeepLastFmShortTrackAndDeduplicationRules() = runBlocking {
         val directory = Files.createTempDirectory("scrobbling-threshold")
         val database = directory.resolve("music.db").toString()

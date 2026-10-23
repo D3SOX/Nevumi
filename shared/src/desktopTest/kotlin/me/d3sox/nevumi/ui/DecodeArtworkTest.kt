@@ -18,6 +18,12 @@ class DecodeArtworkTest {
     }
 
     @Test
+    fun aLargeRequestedSizeStillKeepsAHugeCoverWithinTheDecodeLimit() {
+        val bitmap = assertNotNull(decodeArtwork(png(5_000, 4_000), 3_000), "Sampling must bring the cover under the limit")
+        kotlin.test.assertTrue(bitmap.width.toLong() * bitmap.height <= 16_000_000 && maxOf(bitmap.width, bitmap.height) <= 3_000)
+    }
+
+    @Test
     fun aRegularCoverIsScaledToTheRequestedSize() {
         val bitmap = assertNotNull(decodeArtwork(png(1_200, 600), 300))
         assertEquals(300, bitmap.width)

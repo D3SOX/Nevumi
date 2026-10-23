@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.channels.BufferOverflow
 
 class ArtworkLibrary(private val directory: String) {
-    private val writes = Mutex()
     private val mutableChanges = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 128,
         onBufferOverflow = BufferOverflow.DROP_OLDEST)
     internal val changes = mutableChanges.asSharedFlow()
@@ -26,7 +25,7 @@ class ArtworkLibrary(private val directory: String) {
     suspend fun fetch(trackIds: Collection<String>, client: NavidromeClient, coverId: String) {
         if (trackIds.isEmpty()) return
         val original = client.coverArt(coverId)
-        writes.withLock { withContext(Dispatchers.IO) {
+        storedPaths().writes.withLock { withContext(Dispatchers.IO) {
             val bytes = artworkPreview(original)
             trackIds.toSet().forEach { store(it, bytes) }
         } }
@@ -45,13 +44,13 @@ class ArtworkLibrary(private val directory: String) {
         }
         if (missing.isEmpty()) return
         val original = client.coverArt(coverId)
-        writes.withLock { withContext(Dispatchers.IO) {
+        storedPaths().writes.withLock { withContext(Dispatchers.IO) {
             val bytes = artworkPreview(original)
             missing.forEach { store(it, bytes); FileSystem.SYSTEM.write(coverIdFile(it)) { writeUtf8(coverId) } }
         } }
     }
 
-    suspend fun save(trackId: String, original: ByteArray) = writes.withLock { withContext(Dispatchers.IO) {
+    suspend fun save(trackId: String, original: ByteArray) = storedPaths().writes.withLock { withContext(Dispatchers.IO) {
         store(trackId, artworkPreview(original))
     } }
 
@@ -84,7 +83,7 @@ class ArtworkLibrary(private val directory: String) {
         index.paths?.let { if (path == null) it.remove(key) else it[key] = path }
     } }
 
-    /** The index of this directory, shared by every library that stores covers there so each sees the others' saves. */
+    /** The index and write lock of this directory, shared by every library that stores covers there. */
     private suspend fun storedPaths(): StoredPaths = registry.withLock {
         indexes.getOrPut(directory.toPath().normalized().toString()) { StoredPaths() }
     }
@@ -134,7 +133,7 @@ class ArtworkLibrary(private val directory: String) {
         path(trackId)?.let { file -> FileSystem.SYSTEM.read(file.toPath()) { readByteArray() } }
     }
 
-    suspend fun remove(trackId: String) = writes.withLock { withContext(Dispatchers.IO) {
+    suspend fun remove(trackId: String) = storedPaths().writes.withLock { withContext(Dispatchers.IO) {
         val previous = storedPath(trackId)
         FileSystem.SYSTEM.delete(coverIdFile(trackId), mustExist = false)
         FileSystem.SYSTEM.delete(directory.toPath() / "${key(trackId)}.current", mustExist = false)
@@ -145,6 +144,8 @@ class ArtworkLibrary(private val directory: String) {
 
     // The library asks for every song's cover after each refresh; one directory listing answers all of them.
     private class StoredPaths {
+        /** Serializes saves and removals, so the index ends with the image the last write stored. */
+        val writes = Mutex()
         val lock = Mutex()
         var paths: HashMap<String, String>? = null
     }

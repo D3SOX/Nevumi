@@ -249,7 +249,10 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         // written since the previous pass can have become eligible.
         val rules = listOf(settings.scrobblePercent, settings.scrobbleMaxSeconds, profiles.map { it.id to it.enabledSince })
         val update = decoding.withLock { listens.update(store.database.records().list("listens")) }
-        val candidates = ((if (rules != eligibilityRules) update.all else update.changed) + unlinked).distinctBy { it.id }
+        // Deferred listens are taken from the current records, so a cleared or edited listen is not scrobbled as it was.
+        val stored = update.all.associateBy { it.id }
+        val candidates = ((if (rules != eligibilityRules) update.all else update.changed) + unlinked.mapNotNull { stored[it.id] })
+            .distinctBy { it.id }
             .filter { it.qualifiesForScrobbling(settings) && it.originDeviceId == null }
         eligibilityRules = null
         val receipts = store.database.records().keys("scrobble-submissions").toHashSet()

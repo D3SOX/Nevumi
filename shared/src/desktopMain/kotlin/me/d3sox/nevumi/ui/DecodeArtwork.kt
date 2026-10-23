@@ -29,7 +29,10 @@ internal actual fun decodeArtwork(bytes: ByteArray, maxDimension: Int): ImageBit
 
 private const val MAX_DECODED_PIXELS = 16_000_000L
 
-/** Reads every n-th pixel, keeping at least [maxDimension] on the longer side, or null when ImageIO cannot read the format. */
+/**
+ * Reads every n-th pixel, keeping at least [maxDimension] on the longer side where the decode limit allows,
+ * or null when ImageIO cannot read the format.
+ */
 private fun subsampled(bytes: ByteArray, maxDimension: Int): ByteArray? =
     javax.imageio.ImageIO.createImageInputStream(java.io.ByteArrayInputStream(bytes)).use { input ->
         val readers = javax.imageio.ImageIO.getImageReaders(input)
@@ -37,8 +40,11 @@ private fun subsampled(bytes: ByteArray, maxDimension: Int): ByteArray? =
         val reader = readers.next()
         try {
             reader.input = input
-            val largest = maxOf(reader.getWidth(0), reader.getHeight(0))
-            val sample = (largest / maxDimension).coerceAtLeast(1)
+            val width = reader.getWidth(0)
+            val height = reader.getHeight(0)
+            var sample = (maxOf(width, height) / maxDimension).coerceAtLeast(1)
+            // A large requested size can leave the sampled image above the decode limit, so sample more coarsely then.
+            while ((width / sample).toLong() * (height / sample) > MAX_DECODED_PIXELS) sample++
             val picture = reader.read(0, reader.defaultReadParam.apply { setSourceSubsampling(sample, sample, 0, 0) })
             java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(picture, "png", it) }.toByteArray()
         } catch (_: Exception) { null } finally { reader.dispose() }
