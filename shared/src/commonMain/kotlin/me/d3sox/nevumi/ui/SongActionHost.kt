@@ -159,7 +159,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     }
     if (sources) SongSources(track, controller) { sources = false }
     if (rating) SongRating(track, controller) { rating = false }
-    if (playlistPicker) PlaylistPicker(state, controller, track.id) { playlistPicker = false }
+    if (playlistPicker) PlaylistPicker(controller, track.id) { playlistPicker = false }
     if (tagEditor) TagEditor(track, controller, fileTarget) { tagEditor = false }
     if (renaming) FileRename(track, controller, fileTarget) { renaming = false }
     if (deleting) FileDelete(track, controller, fileTarget) { deleting = false }

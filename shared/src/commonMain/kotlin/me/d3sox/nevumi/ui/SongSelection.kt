@@ -76,5 +76,5 @@ internal fun SongSelectionHeader(selection: SongSelection, controller: MusicCont
         }
     }
     if (editing) BulkTagEditor(tracks, controller, fileTarget) { editing = false }
-    if (playlistPicker) PlaylistPicker(state, controller, tracks.map { it.id }) { playlistPicker = false }
+    if (playlistPicker) PlaylistPicker(controller, tracks.map { it.id }) { playlistPicker = false }
 }

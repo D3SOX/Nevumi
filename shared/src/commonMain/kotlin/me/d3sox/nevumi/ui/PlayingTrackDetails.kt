@@ -60,5 +60,5 @@ internal fun PlayingTrackDetails(state: AppState, controller: MusicController, c
             }
         }
     }
-    managingPlaylist?.let { PlaylistPicker(state, controller, it) { managingPlaylist = null } }
+    managingPlaylist?.let { PlaylistPicker(controller, it) { managingPlaylist = null } }
 }

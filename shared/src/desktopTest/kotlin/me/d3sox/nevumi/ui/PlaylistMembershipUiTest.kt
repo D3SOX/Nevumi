@@ -8,6 +8,7 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
+import me.d3sox.nevumi.playlists.PlaylistServer
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.storage.openMusicStore
@@ -279,6 +280,36 @@ class PlaylistMembershipUiTest {
                 onNodeWithContentDescription("Playlist membership: Road ▸ Drive").performClick()
                 onNodeWithContentDescription("Playlist membership: Evening").performClick()
                 assertOrder()
+            }
+        } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aSongUploadedToTheServerCanJoinItsPlaylistsFromTheSameSongRow() {
+        val directory = Files.createTempDirectory("playlist-membership-upload")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        val song = runBlocking {
+            val playlist = playlists.create("Mix", emptyList())
+            store.put("playlist:${playlist.id}", "playlists", playlist.copy(server = PlaylistServer("server", "mix", "Mix", emptyList(), "owner")))
+            library.importTrack(TrackMetadata("Upload"), TrackSource("upload", SourceKind.LOCAL, "/music/upload.flac"))
+        }
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                waitUntil(timeoutMillis = 3_000) { !player.state.value.loading }
+                openLibraryPage("Songs")
+                val quickAction = onNodeWithContentDescription("Quick action: Add to playlist: Upload")
+                quickAction.performClick()
+                onNodeWithText("Only songs from this server").assertIsDisplayed()
+                onNodeWithText("Cancel").performClick()
+                runBlocking { library.importTrack(TrackMetadata("Upload"), TrackSource("server:server:upload", SourceKind.SERVER, "upload"), linkTo = song.id) }
+                waitUntil(timeoutMillis = 3_000) { player.state.value.tracks.single().sources.size == 2 }
+                quickAction.performClick()
+                onNodeWithText("Only songs from this server").assertDoesNotExist()
+                onNodeWithContentDescription("Playlist membership: Mix").assertIsEnabled()
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
