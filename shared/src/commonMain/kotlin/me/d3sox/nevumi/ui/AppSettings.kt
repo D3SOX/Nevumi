@@ -204,7 +204,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
     savedQueues: () -> Unit, audioEffects: () -> Unit, serverFiles: () -> Unit, tunnel: () -> Unit, pairedDevices: () -> Unit,
     fileRecovery: () -> Unit, soundCloud: () -> Unit = {}, categoryState: MutableState<String?>, onAddMusic: (() -> Unit)? = null, folderPicker: FolderPicker, dismiss: () -> Unit) {
     val settings = state.preferences
-    val trackActions = TrackAction.entries.filter { it != TrackAction.PLAY }.map { it to it.label() }
+    val trackActions = TrackAction.entries.filter { it != TrackAction.PLAY }.map { it to it.displayLabel() }
     var category by categoryState
     val scope = rememberCoroutineScope()
     var pickingFolder by remember { mutableStateOf(false) }

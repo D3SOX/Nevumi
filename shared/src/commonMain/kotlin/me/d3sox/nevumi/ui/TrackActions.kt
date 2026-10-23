@@ -48,26 +48,6 @@ internal fun TrackAction.labelResource(favorite: Boolean = false, availableOffli
 internal fun TrackAction.displayLabel(favorite: Boolean = false, availableOffline: Boolean = false) =
     stringResource(labelResource(favorite, availableOffline))
 
-// English-only label still read by the swipe settings in AppSettings.kt; switch that call to labelResource and remove this.
-internal fun TrackAction.label(favorite: Boolean = false, availableOffline: Boolean = false) = when (this) {
-    TrackAction.NONE -> "None"
-    TrackAction.PLAY_NEXT -> "Play next"
-    TrackAction.PLAY_AFTER -> "Play after"
-    TrackAction.APPEND -> "Add to queue"
-    TrackAction.PLAY -> "Play"
-    TrackAction.FAVORITE -> if (favorite) "Remove favorite" else "Favorite"
-    TrackAction.RATE -> "Rate song"
-    TrackAction.ADD_TO_PLAYLIST -> "Add to playlist"
-    TrackAction.DOWNLOAD -> if (availableOffline) "Available offline" else "Download"
-    TrackAction.GO_ARTIST -> "Go to artist"
-    TrackAction.GO_ALBUM -> "Go to album"
-    TrackAction.GO_ALBUM_ARTIST -> "Go to album artist"
-    TrackAction.GO_GENRE -> "Go to genre"
-    TrackAction.GO_FOLDER -> "Go to folder"
-    TrackAction.SELECT -> "Select song"
-    TrackAction.SHOW_SOURCES -> "Song sources"
-}
-
 internal fun TrackAction.icon(favorite: Boolean = false, rating: Int = 0, inPlaylist: Boolean = false, availableOffline: Boolean = false) = when (this) {
     TrackAction.NONE -> AppIcon.CLOSE
     TrackAction.PLAY_NEXT -> AppIcon.PLAY_NEXT

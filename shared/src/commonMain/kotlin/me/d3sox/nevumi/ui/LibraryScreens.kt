@@ -349,7 +349,8 @@ internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: M
             }
             if (tracks.isEmpty()) item { Text(stringResource(Res.string.library_no_songs_yet), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        LibraryScrollbar(scroll, tracks.size, stringResource(Res.string.library_scroll_library), if (header == null) 0 else 1) { scrollIndicator?.invoke(it) ?: tracks[it].scrollLabel(scrollSort, statistics) }
+        val statisticsLabels = rememberScrollStatisticsLabels(statistics)
+        LibraryScrollbar(scroll, tracks.size, stringResource(Res.string.library_scroll_library), if (header == null) 0 else 1) { scrollIndicator?.invoke(it) ?: tracks[it].scrollLabel(scrollSort, statistics, statisticsLabels) }
         }
     }
 }

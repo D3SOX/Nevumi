@@ -224,4 +224,5 @@
     <!-- A setting name, e.g. "Decrease Crossfade" -->
     <string name="library_decrease">Decrease %1$s</string>
     <string name="library_increase">Increase %1$s</string>
+    <string name="library_never_played">Never played</string>
 </resources>

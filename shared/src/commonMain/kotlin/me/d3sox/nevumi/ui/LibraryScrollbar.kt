@@ -27,6 +27,13 @@ import me.d3sox.nevumi.library.recentAt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.library_never_played
+import me.d3sox.nevumi.resources.plays
+import org.jetbrains.compose.resources.getPluralString
+import org.jetbrains.compose.resources.stringResource
 
 internal fun alphabetIndicator(text: String): String = text.trim().firstOrNull()?.uppercaseChar()?.let {
     if (it.isLetter()) it.toString() else "#"
@@ -34,14 +41,26 @@ internal fun alphabetIndicator(text: String): String = text.trim().firstOrNull()
 
 internal expect fun formatScrollDate(epochMillis: Long): String
 
-internal fun Track.scrollLabel(sort: LibrarySort, statistics: Map<String, ListeningStatistics>?): String = when (sort) {
+/** Text the scrollbar shows for listening statistics, resolved in composition because the scrollbar reads labels outside it. */
+internal class ScrollStatisticsLabels(val plays: Map<Int, String>, val neverPlayed: String)
+
+@Composable
+internal fun rememberScrollStatisticsLabels(statistics: Map<String, ListeningStatistics>?): ScrollStatisticsLabels {
+    val neverPlayed = stringResource(Res.string.library_never_played)
+    val plays by produceState(emptyMap<Int, String>(), statistics) {
+        value = (statistics?.values?.map { it.playCount }.orEmpty() + 0).distinct().associateWith { getPluralString(Res.plurals.plays, it, it) }
+    }
+    return ScrollStatisticsLabels(plays, neverPlayed)
+}
+
+internal fun Track.scrollLabel(sort: LibrarySort, statistics: Map<String, ListeningStatistics>?, labels: ScrollStatisticsLabels): String = when (sort) {
     LibrarySort.TITLE -> alphabetIndicator(metadata.title)
     LibrarySort.ARTIST -> alphabetIndicator(metadata.artist)
     LibrarySort.ALBUM -> alphabetIndicator(metadata.album)
     LibrarySort.RECENT -> formatScrollDate(recentAt)
     LibrarySort.RATING -> "$rating ★"
-    LibrarySort.PLAY_COUNT -> countLabel(statistics?.get(id)?.playCount ?: 0, "play")
-    LibrarySort.LAST_PLAYED -> statistics?.get(id)?.lastPlayedAt?.let(::formatScrollDate) ?: "Never played"
+    LibrarySort.PLAY_COUNT -> (statistics?.get(id)?.playCount ?: 0).let { labels.plays[it] ?: "$it" }
+    LibrarySort.LAST_PLAYED -> statistics?.get(id)?.lastPlayedAt?.let(::formatScrollDate) ?: labels.neverPlayed
 }
 
 @Composable
