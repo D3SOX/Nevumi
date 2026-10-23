@@ -1,5 +1,8 @@
 package me.d3sox.nevumi.app
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 import kotlinx.coroutines.Job
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
@@ -24,7 +27,10 @@ class DiscoveryController internal constructor(private val context: ControllerCo
     private val discovery: ServerDiscovery?) {
 
     /** Null when no server is connected, the server offers no discovery or it knows nothing about [artistName]. */
-    suspend fun artistInfo(artistName: String): ArtistDiscovery? {
+    suspend fun artistInfo(artistName: String): ArtistDiscovery? = withContext(Dispatchers.Default) { artistDetails(artistName) }
+
+    /** Goes over the whole library, so [artistInfo] keeps it off the UI thread. */
+    private suspend fun artistDetails(artistName: String): ArtistDiscovery? {
         val discovery = discovery ?: return null
         val serverId = discovery.serverId() ?: return null
         val tracks = context.state.value.tracks
@@ -59,6 +65,9 @@ class DiscoveryController internal constructor(private val context: ControllerCo
         val ids = similar.orEmpty().mapNotNull { songs[it.id]?.id }.filter { it != excluded }.distinct()
         if (ids.isEmpty()) return context.confirm(Res.string.discovery_nothing_similar)
         queueController.playTrack(ids.first(), ids, 0, contextName).join()
+        // playTrack may only ask for confirmation or report a failure in the app state; only a started queue gets a notice.
+        val started = context.state.value
+        if (started.playbackConfirmation != null || started.queue.currentTrackId != ids.first()) return
         context.confirm(if (ids.size == 1) Res.string.discovery_playing_similar_song else Res.string.discovery_playing_similar_songs,
             ActionDestination.QUEUE, arguments = listOf(ids.size))
     }

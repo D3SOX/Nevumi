@@ -1,8 +1,11 @@
 package me.d3sox.nevumi.app
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.withLock
 import me.d3sox.nevumi.backup.BackupFormatException
@@ -37,11 +40,13 @@ class BackupController internal constructor(private val context: ControllerConte
 
     fun restore(files: BackupFiles) = run(Res.string.backup_error_restore) {
         val text = files.open() ?: return@run
-        val summary = requireNotNull(backup).restore(text)
-        // Settings are not observed; reload them with the library and apply the playback ones to the player.
-        context.operations.withLock {
-            loader.refresh()
-            playback.applyPreferences()
+        // Settings are not observed; reload them with the library and apply the playback ones to the player,
+        // also after a failure, because each restored part is saved as it goes.
+        val summary = try { requireNotNull(backup).restore(text) } finally {
+            withContext(NonCancellable) { context.operations.withLock {
+                loader.refresh()
+                playback.applyPreferences()
+            } }
         }
         mutableStatus.update { it.copy(summary = summary) }
         context.confirm(Res.string.backup_notice_restored)
@@ -52,8 +57,8 @@ class BackupController internal constructor(private val context: ControllerConte
     /** Runs outside the operation lock: the picker waits for the user and the services keep their own transactions. */
     private fun run(failure: org.jetbrains.compose.resources.StringResource, block: suspend () -> Unit) = context.action(serialized = false) {
         if (backup == null) throw IllegalStateException(getString(Res.string.backup_error_unavailable))
-        if (mutableStatus.value.working) return@action
-        mutableStatus.update { it.copy(working = true) }
+        // One step, so two quick taps cannot both start.
+        if (mutableStatus.getAndUpdate { it.copy(working = true) }.working) return@action
         try { block() }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (error: BackupFormatException) {

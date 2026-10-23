@@ -48,10 +48,12 @@ class LyricsSources(private val store: MusicStore?, private val files: LyricsFil
             local.firstNotNullOfOrNull { attempt { files.embedded(it) } }?.let { return it }
             local.firstNotNullOfOrNull { attempt { files.sidecar(it) } }?.let { return it }
         }
-        val key = "lyrics:${cacheKey(track.metadata)}"
-        store?.read<Lyrics>(key)?.let { return it }
-        val found = attempt { serverLyrics(track) } ?: if (online && lrcLib != null) attempt { lrcLib.lyrics(track.metadata) } else null
-        if (found != null) store?.put(key, KIND, found)
+        // The server is asked first, so its lyrics replace an LRCLIB result kept while it was unreachable.
+        val key = cacheKey(track.metadata)?.let { "lyrics:$it" }
+        val found = attempt { serverLyrics(track) }
+            ?: key?.let { store?.read<Lyrics>(it) }?.let { return it }
+            ?: if (online && lrcLib != null) attempt { lrcLib.lyrics(track.metadata) } else null
+        if (found != null && key != null) store?.put(key, KIND, found)
         return found
     }
 
@@ -70,9 +72,10 @@ class LyricsSources(private val store: MusicStore?, private val files: LyricsFil
 
     companion object {
         const val KIND = "lyrics"
-        /** MusicBrainz identifiers when the song has them, otherwise its artist, title and album. */
-        fun cacheKey(metadata: TrackMetadata): String = LibrarySync.identity(metadata)
-            ?: "text:" + listOf(metadata.artist, metadata.title, metadata.album).joinToString("|") { it.trim().lowercase() }
+        /** MusicBrainz identifiers when the song has them, otherwise its artist, title and album; null for untagged files, whose names collide. */
+        fun cacheKey(metadata: TrackMetadata): String? = LibrarySync.identity(metadata)
+            ?: if (metadata.artist.isBlank() || metadata.title.isBlank()) null
+            else "text:" + listOf(metadata.artist, metadata.title, metadata.album).joinToString("|") { it.trim().lowercase() }
     }
 }
 

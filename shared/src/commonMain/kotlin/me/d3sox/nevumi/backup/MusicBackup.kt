@@ -13,6 +13,8 @@ import me.d3sox.nevumi.history.ScrobblingService
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.TrackMetadata
+import me.d3sox.nevumi.settings.HomeSectionId
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.playback.AutoEqProfiles
@@ -77,8 +79,11 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         fun localId(key: String): String? = local[key] ?: null.also { unmatched++ }
 
         val settings = document.settings?.let { restored ->
+            // A backup from an older version may lack newer Home sections or sources; keep its order and add the missing ones.
             preferences.update { current -> restored.copy(includeFolders = current.includeFolders, excludeFolders = current.excludeFolders,
-                libraryPositions = current.libraryPositions) }
+                libraryPositions = current.libraryPositions,
+                homeSections = restored.homeSections.distinct() + HomeSectionId.entries.filterNot { it in restored.homeSections },
+                sourcePriority = restored.sourcePriority.distinct() + SourceKind.entries.filterNot { it in restored.sourcePriority }) }
         } != null
 
         // The backup wins for the flags it sets; songs it leaves unflagged keep theirs.
@@ -101,7 +106,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             val name = backup.name.trim().takeIf { it.isNotEmpty() } ?: continue
             val existing = existingPlaylists.firstOrNull { it.name.trim() == name }
             if (existing != null) {
-                if (backup.rule != null || existing.rule != null || existing.server?.readOnly == true) continue
+                // Merging into a server playlist would push songs removed since the backup back to the server.
+                if (backup.rule != null || existing.rule != null || existing.server != null) continue
                 val additions = backup.trackKeys.mapNotNull(::localId).filterNot { it in existing.trackIds }
                 if (additions.isEmpty()) continue
                 try { playlists.append(existing.id, additions) }
@@ -138,8 +144,10 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             savedQueues++
         }
 
+        // Listens keep their song's tags, so songs no longer in the backup's library can still be matched.
         val listens = history.import(document.listens.mapNotNull { listen ->
-            localId(listen.trackId)?.let { listen.copy(trackId = it, importedAt = null) }
+            (local[listen.trackId] ?: matches.find(listen.metadata.toBackup()) ?: null.also { unmatched++ })
+                ?.let { listen.copy(trackId = it, importedAt = null) }
         })
 
         val equalizerProfiles = equalizer?.let { profiles -> document.equalizerProfiles.count { profiles.restore(it) } } ?: 0
@@ -183,8 +191,10 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
     }
 }
 
-private fun Track.toBackup() = BackupTrack(metadata.title, metadata.artist, metadata.album, metadata.durationMs,
-    LibrarySync.identity(metadata), sources.filter { it.kind == SourceKind.SERVER }.map { it.id }, favorite, rating)
+private fun Track.toBackup() = metadata.toBackup().copy(serverSources = sources.filter { it.kind == SourceKind.SERVER }.map { it.id },
+    favorite = favorite, rating = rating)
+
+private fun TrackMetadata.toBackup() = BackupTrack(title, artist, album, durationMs, LibrarySync.identity(this))
 
 /** Finds a backup's song in this library by its MusicBrainz identity, then its server song, then its tags and length. */
 private class TrackMatcher(tracks: List<Track>) {

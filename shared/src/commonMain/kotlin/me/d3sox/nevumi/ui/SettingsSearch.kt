@@ -101,6 +101,8 @@ import me.d3sox.nevumi.resources.settings_search_no_results
 import me.d3sox.nevumi.resources.settings_search_query
 import me.d3sox.nevumi.resources.settings_search_settings
 import me.d3sox.nevumi.resources.settings_show_audio_info
+import me.d3sox.nevumi.resources.lyrics_keywords_online
+import me.d3sox.nevumi.resources.lyrics_setting_online
 import me.d3sox.nevumi.resources.settings_show_previous_tracks
 import me.d3sox.nevumi.resources.settings_soundcloud
 import me.d3sox.nevumi.resources.settings_title_scroll_speed
@@ -152,6 +154,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_playback_pitch to Res.string.settings_keywords_playback_pitch,
                 Res.string.crossfade to Res.string.settings_keywords_crossfade,
                 Res.string.settings_show_audio_info to Res.string.settings_keywords_show_audio_info,
+                Res.string.lyrics_setting_online to Res.string.lyrics_keywords_online,
                 Res.string.settings_show_previous_tracks to Res.string.settings_keywords_show_previous_tracks,
                 Res.string.settings_previous_track_limit to Res.string.settings_keywords_previous_track_limit,
                 Res.string.settings_confirm_queue_jumps to Res.string.settings_keywords_confirm_queue_jumps,

@@ -60,8 +60,15 @@ class ServerDiscovery(private val store: MusicStore, private val client: suspend
         if (cached != null && now() - cached.fetchedAt in 0 until ARTIST_INFO_TTL_MS) return cached
         return try {
             val id = client.artistId(name, songIds.firstOrNull())
-            ServerArtistDetails(id, id?.let { client.artistInfo(it) }, client.topSongs(name)?.map { it.id }.orEmpty(), now())
-                .also { store.put(key, ARTIST_INFO_KIND, it) }
+            val info = id?.let { client.artistInfo(it) }
+            // Top songs come from a separate request, so their failure must not discard the artist's details.
+            val topSongs = try { client.topSongs(name)?.map { it.id } }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            val details = ServerArtistDetails(id, info, topSongs ?: cached?.topSongIds.orEmpty(), now())
+            // An artist the server cannot find yet, or knows nothing about, is asked for again next time instead of for a week.
+            if (id != null && (info != null || topSongs != null)) store.put(key, ARTIST_INFO_KIND, details)
+            details
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { cached }
     }

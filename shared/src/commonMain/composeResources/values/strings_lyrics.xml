@@ -11,5 +11,6 @@
     <string name="lyrics_source_server">Lyrics from your music server</string>
     <string name="lyrics_source_lrclib">Lyrics from LRCLIB</string>
     <string name="lyrics_setting_online">Find lyrics online</string>
+    <string name="lyrics_keywords_online">lyrics lrclib synced words text karaoke internet</string>
     <string name="lyrics_setting_online_description">Sends the artist, title, album and length of songs without lyrics to LRCLIB.</string>
 </resources>
