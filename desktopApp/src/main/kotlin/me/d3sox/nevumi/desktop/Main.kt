@@ -23,6 +23,7 @@ import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.security.SecretServiceVault
 import me.d3sox.nevumi.storage.openMusicStore
 import me.d3sox.nevumi.ui.MusicPlayerApp
+import me.d3sox.nevumi.ui.MusicPlayerStartup
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import java.io.File
@@ -33,11 +34,15 @@ import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 
-fun main(arguments: Array<String>) {
+private class DesktopPlayer(val controller: MusicController, val close: suspend () -> Unit)
+
+private fun openPlayer(arguments: Array<String>): DesktopPlayer {
     fun option(name: String) = arguments.firstOrNull { it.startsWith("$name=") }?.substringAfter('=')
     val base = System.getenv("XDG_DATA_HOME") ?: File(System.getProperty("user.home"), ".local/share").path
     val directory = File(option("--data-dir") ?: "$base/me.d3sox.nevumi").apply { mkdirs() }
@@ -79,24 +84,39 @@ fun main(arguments: Array<String>) {
     option("--import-folder")?.let { controller.importSource(it) }
     val mediaSession = try { LinuxMediaSession(controller) }
         catch (error: Exception) { System.err.println("Desktop media controls unavailable: ${error.message}"); null }
-    application {
-        val lifecycle = rememberCoroutineScope()
-        var closing by remember { mutableStateOf(false) }
-        Window(title = "Nevumi", icon = painterResource("nevumi.png"), state = rememberWindowState(size = DpSize(1100.dp, 800.dp)),
-            onCloseRequest = {
-                if (!closing) {
-                    closing = true
-                    lifecycle.launch {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                try { mediaSession?.close(); controller.closeAndJoin() }
-                                finally { downloadNetwork?.close(); http.close(); store.close() }
-                            }
-                        } finally { exitApplication() }
-                    }
-                }
-            }) {
-            MusicPlayerApp(controller)
+    return DesktopPlayer(controller) {
+        try { mediaSession?.close(); controller.closeAndJoin() }
+        finally { downloadNetwork?.close(); http.close(); store.close() }
+    }
+}
+
+fun main(arguments: Array<String>) = application {
+    val lifecycle = rememberCoroutineScope()
+    var closing by remember { mutableStateOf(false) }
+    var player by remember { mutableStateOf<DesktopPlayer?>(null) }
+    var startupError by remember { mutableStateOf<String?>(null) }
+    val startup = remember {
+        lifecycle.launch(start = CoroutineStart.LAZY) {
+            try { player = withContext(Dispatchers.IO) { openPlayer(arguments) } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { startupError = error.message ?: error.toString() }
         }
+    }
+    Window(title = "Nevumi", icon = painterResource("nevumi.png"), state = rememberWindowState(size = DpSize(1100.dp, 800.dp)),
+        onCloseRequest = {
+            if (!closing) {
+                closing = true
+                lifecycle.launch {
+                    try {
+                        startup.join()
+                        withContext(Dispatchers.IO) { player?.close?.invoke() }
+                    } finally { exitApplication() }
+                }
+            }
+        }) {
+        LaunchedEffect(startup) { startup.start() }
+        val ready = player
+        if (ready != null) MusicPlayerApp(ready.controller)
+        else MusicPlayerStartup(startupError)
     }
 }

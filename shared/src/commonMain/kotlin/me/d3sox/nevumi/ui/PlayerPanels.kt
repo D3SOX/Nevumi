@@ -394,7 +394,8 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             expansion > 0f && queueProgress < 1f)
                             MilkDropBackground(state, controller, Modifier.fillMaxSize().graphicsLayer { alpha = expansion * (1 - queueProgress) })
                     }
-                    Column(Modifier.fillMaxSize().testTag("now-playing").graphicsLayer {
+                    // A restored queue starts collapsed; measuring the hidden controls delays the first window.
+                    if (!collapsed) Column(Modifier.fillMaxSize().testTag("now-playing").graphicsLayer {
                         translationY = (-offset).coerceAtLeast(0f)
                         val visible = 1 - queueProgress
                         alpha = expansion * visible * visible * visible * visible
@@ -440,7 +441,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                     }
                 }
             }
-            Surface(Modifier.height(height).fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
+            if (!collapsed) Surface(Modifier.height(height).fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.fillMaxSize().then(if (sheet.currentValue != PlayerPanel.QUEUE && sheet.targetValue != PlayerPanel.QUEUE) Modifier.clearAndSetSemantics {} else Modifier)) {
                     Row(Modifier.fillMaxWidth().heightIn(min = 88.dp).testTag("queue-mini-player")
                         .clickable(onClickLabel = stringResource(Res.string.player_now_playing)) { show(PlayerPanel.PLAYING) }.padding(horizontal = 24.dp, vertical = 12.dp),

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import selectors
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -37,6 +38,51 @@ def stop(process):
 
 
 class LinuxPlayerTest(unittest.TestCase):
+    def test_window_opens_while_desktop_services_are_still_starting(self):
+        self.assertTrue(APP.is_file(), "Run :desktopApp:createDistributable first")
+        with tempfile.TemporaryDirectory(prefix="nevumi-startup-") as temporary:
+            directory = Path(temporary)
+            display = app = None
+            with socket.socket(socket.AF_UNIX) as stalled_bus, (directory / "session.log").open("w+") as log:
+                stalled_bus.bind(str(directory / "system-bus"))
+                stalled_bus.listen(1)
+                try:
+                    display = subprocess.Popen(
+                        ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x900x24", "-nolisten", "tcp", "-noreset"],
+                        stdout=subprocess.PIPE, stderr=log, text=True,
+                    )
+                    display_name = ":" + first_line(display, timeout=30)
+                    environment = dict(os.environ, DISPLAY=display_name, SKIKO_RENDER_API="SOFTWARE",
+                                       DBUS_SYSTEM_BUS_ADDRESS="unix:path=" + str(directory / "system-bus"),
+                                       DBUS_SESSION_BUS_ADDRESS="unix:path=" + str(directory / "session-bus"),
+                                       XDG_CONFIG_HOME=str(directory / "config"), XDG_CACHE_HOME=str(directory / "cache"))
+                    environment.pop("WAYLAND_DISPLAY", None)
+                    app = subprocess.Popen([str(APP), "--data-dir=" + str(directory / "music"), "--audio-output=null"],
+                                           env=environment, stdout=log, stderr=log)
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        window = subprocess.run(["xwininfo", "-name", "Nevumi"], env=environment,
+                                                capture_output=True, text=True, timeout=3)
+                        if "Map State: IsViewable" in window.stdout:
+                            break
+                        if app.poll() is not None:
+                            log.seek(0)
+                            self.fail("Desktop player exited: " + log.read())
+                        with selectors.DefaultSelector() as delay:
+                            delay.select(0.1)
+                    else:
+                        log.seek(0)
+                        self.fail("The window waited for desktop services: " + log.read())
+                    # A connected service that never answers must not hold the first window hostage.
+                    stalled_bus.settimeout(3)
+                    connection, _ = stalled_bus.accept()
+                    connection.close()
+                finally:
+                    stop(app)
+                    stop(display)
+                    if display is not None:
+                        display.stdout.close()
+
     def test_packaged_visualizer_loads_its_native_libraries_and_renders_audio(self):
         self.assertTrue(APP.is_file(), "Run :desktopApp:createDistributable first")
         with tempfile.TemporaryDirectory(prefix="nevumi-packaged-visualizer-") as temporary:

@@ -62,7 +62,7 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     var seed by rememberSaveable { mutableIntStateOf(Random.nextInt()) }
     val unknownAlbum = stringResource(Res.string.library_unknown_album)
     val unknownArtist = stringResource(Res.string.unknown_artist)
-    val feed = rememberDerived("home-feed", listOf(seed, unknownAlbum, unknownArtist), listOf(tracks, state.listens, now)) {
+    val feed = rememberDerived("home-feed", listOf(seed, unknownAlbum, unknownArtist), listOf(tracks, state.listens, now), initial = { HomeFeed() }) {
         // The minute clock can predate a listen that has just arrived.
         homeFeed(tracks, state.listens, kotlin.time.Clock.System.now().toEpochMilliseconds(), seed, unknownAlbum, unknownArtist)
     }

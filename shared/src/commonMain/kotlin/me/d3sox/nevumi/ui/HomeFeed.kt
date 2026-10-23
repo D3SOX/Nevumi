@@ -26,9 +26,9 @@ import me.d3sox.nevumi.resources.library_mix_top
 import me.d3sox.nevumi.resources.library_mix_top_description
 
 internal data class HomeMix(val id: String, val title: StringResource, val description: StringResource, val tracks: List<Track>)
-internal data class HomeFeed(val recent: List<Track>, val top: List<Track>, val rediscover: List<Track>,
-    val added: List<Track>, val recentAlbums: List<TrackCollection>, val recentArtists: List<TrackCollection>,
-    val topAlbums: List<TrackCollection>, val topArtists: List<TrackCollection>, val mixes: List<HomeMix>)
+internal data class HomeFeed(val recent: List<Track> = emptyList(), val top: List<Track> = emptyList(), val rediscover: List<Track> = emptyList(),
+    val added: List<Track> = emptyList(), val recentAlbums: List<TrackCollection> = emptyList(), val recentArtists: List<TrackCollection> = emptyList(),
+    val topAlbums: List<TrackCollection> = emptyList(), val topArtists: List<TrackCollection> = emptyList(), val mixes: List<HomeMix> = emptyList())
 
 /** Builds the Home sections; [unknownAlbum] and [unknownArtist] name collections whose tag is blank. */
 internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, randomSeed: Int,
