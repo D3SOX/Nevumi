@@ -150,6 +150,12 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         }
     }
 
+    /** Closes the connection kept open after a session, for example when the user disconnects. */
+    fun close() {
+        val connection = synchronized(this) { closing?.cancel(false); shared.also { shared = null } }
+        connection?.let { closer.execute(it::close) }
+    }
+
     fun verifyDirectory() = connected { client ->
         val directory = client.canonicalize(profile.musicDirectory)
         check(client.stat(directory).type == FileMode.Type.DIRECTORY) { "Choose the server's music directory" }

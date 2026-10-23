@@ -70,6 +70,8 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
     override suspend fun disconnect() = work.withLock {
         for (profile in store.list<SftpConfiguration>("sftp-profiles")) vault.delete(profile.id)
         store.database.records().delete("sftp:current")
+        remote?.second?.close()
+        remote = null
     }
     override suspend fun upload(trackId: String, relativePath: String): Track = work.withLock { performUpload(trackId, relativePath) }
     private suspend fun performUpload(trackId: String, relativePath: String): Track = withContext(Dispatchers.IO) {
@@ -151,7 +153,7 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         check(secret != null || !credentialsRequired) { "Unlock your credential store or reconnect to the original SFTP directory" }
         val authentication = secret?.let { store.json.decodeFromString<SftpAuthentication>(it) } ?: SftpAuthentication()
         val key = Triple(configuration.connection, secret, tailscale())
-        val files = remote?.takeIf { it.first == key }?.second ?: SftpFiles(key.first, authentication, key.third).also { remote = key to it }
+        val files = remote?.takeIf { it.first == key }?.second ?: SftpFiles(key.first, authentication, key.third).also { remote?.second?.close(); remote = key to it }
         return SftpMusicFileEdits(store, library, server, files, configuration.connection,
             File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork)
     }

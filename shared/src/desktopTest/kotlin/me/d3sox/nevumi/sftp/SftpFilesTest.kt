@@ -128,6 +128,10 @@ class SftpFilesTest {
             // Saving soon after the tag editor opened reuses the editor's connection.
             files.session { assertEquals(true, files.exists("song.flac")) }
             assertEquals(3, connections.get())
+            // Disconnecting closes the kept connection, so the next session connects again.
+            files.close()
+            files.session { assertEquals(true, files.exists("song.flac")) }
+            assertEquals(4, connections.get())
         } finally { proxy.close(); directory.toFile().deleteRecursively() }
     }
 
