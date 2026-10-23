@@ -77,6 +77,8 @@ fun AppState.nowPlaying(): NowPlaying {
 }
 
 private const val ARTWORK_PIXELS = 384
+/** The previous, play and next buttons of the tall layout. */
+private val TALL_CONTROLS = 140.dp
 
 class NowPlayingWidget : GlanceAppWidget() {
     // The layout follows the placed size, which launchers with tall cells make much larger than any fixed breakpoint.
@@ -120,19 +122,13 @@ private fun Content(playing: NowPlaying, artwork: Bitmap?) {
                 style = TextStyle(GlanceTheme.colors.onSurface, 15.sp, FontWeight.Medium))
             if (playing.artist.isNotEmpty()) Text(playing.artist, maxLines = 1, style = TextStyle(GlanceTheme.colors.onSurfaceVariant, 13.sp))
         }
+        // Each layout needs room for its buttons and at least 80 dp of title; narrower widgets fall back to the next layout.
+        val fit = minOf(48.dp, inner.height)
+        val tallCover = minOf(inner.height, inner.width * 0.4f, inner.width - TALL_CONTROLS - 16.dp)
         when {
-            // Three buttons and a title do not fit a narrow widget, so it shows the cover above play and pause when there is room.
-            size.width < 200.dp -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
-                val button = minOf(48.dp, inner.height)
-                val cover = minOf(inner.width, inner.height - button - 8.dp)
-                if (cover >= 48.dp) {
-                    Artwork(artwork, GlanceModifier.size(cover))
-                    Box(GlanceModifier.padding(top = 8.dp)) { PlayButton(playing.playing, button) }
-                } else PlayButton(playing.playing, button)
-            }
             // A tall row puts the title above the buttons, and the cover fills the height up to 40% of the width.
-            inner.height >= 96.dp -> Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(artwork, GlanceModifier.size(minOf(inner.height, inner.width * 0.4f)))
+            inner.height >= 96.dp && tallCover >= 64.dp -> Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                Artwork(artwork, GlanceModifier.size(tallCover))
                 Column(GlanceModifier.defaultWeight().fillMaxHeight().padding(start = 16.dp)) {
                     title()
                     Spacer(GlanceModifier.defaultWeight())
@@ -143,13 +139,21 @@ private fun Content(playing: NowPlaying, artwork: Bitmap?) {
                     }
                 }
             }
-            else -> Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                val fit = minOf(48.dp, inner.height)
-                Artwork(artwork, GlanceModifier.size(fit))
+            // A one-row widget drops the cover before it squeezes the title.
+            inner.width >= fit * 3 + 104.dp -> Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                if (inner.width >= fit * 4 + 104.dp) Artwork(artwork, GlanceModifier.size(fit))
                 Column(GlanceModifier.defaultWeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) { title() }
                 SkipButton(-1, fit)
                 PlayButton(playing.playing, fit)
                 SkipButton(1, fit)
+            }
+            // A narrow widget shows the cover above play and pause when there is room.
+            else -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalAlignment = Alignment.CenterVertically) {
+                val cover = minOf(inner.width, inner.height - fit - 8.dp)
+                if (cover >= 48.dp) {
+                    Artwork(artwork, GlanceModifier.size(cover))
+                    Box(GlanceModifier.padding(top = 8.dp)) { PlayButton(playing.playing, fit) }
+                } else PlayButton(playing.playing, fit)
             }
         }
     }
