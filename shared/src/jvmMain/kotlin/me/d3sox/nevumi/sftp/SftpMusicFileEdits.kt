@@ -100,6 +100,8 @@ private class SftpFileEditAccess(val remote: SftpFiles, profile: SftpProfile, pr
     override fun contentHash(file: File, location: String, whole: Boolean) =
         if (whole) file.inputStream().use(::contentHash) else tagFingerprint(file, name(location))
     override fun holdsOnlyTags(hash: String) = hash.startsWith(TagLayout.FINGERPRINT)
+    override fun storedSize(copy: File, hash: String): Long = if (!holdsOnlyTags(hash) || !copy.isFile) copy.length()
+        else try { TagLayout.of(copy).first.tags.sumOf { it.length } } catch (_: UnreadableTags) { copy.length() }
     override fun stagingDirectory(location: String) = staging
     override suspend fun replace(location: String, staged: File, originalHash: String?) {
         // An expected original must still be there, so a file deleted meanwhile is not recreated.

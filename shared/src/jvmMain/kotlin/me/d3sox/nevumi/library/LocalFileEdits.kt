@@ -102,7 +102,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         val removable = records.filter { !it.writing && !it.needsRecovery && (it.applied || it.undone) }
         val expired = removable.filter { it.createdAt < now() - maxAgeMs }.toMutableSet()
         val newest = removable.lastOrNull { !it.undone && it !in expired }?.id
-        fun size(edit: LocalFileEdit) = File(edit.backupPath).length() +
+        fun size(edit: LocalFileEdit) = files.storedSize(File(edit.backupPath), edit.originalHash) +
             if (edit.stagedPath.isNotBlank()) File(edit.stagedPath).length() else 0L
         var retainedBytes = records.filterNot { it in expired }.sumOf(::size)
         for (edit in removable.filterNot { it in expired }) {

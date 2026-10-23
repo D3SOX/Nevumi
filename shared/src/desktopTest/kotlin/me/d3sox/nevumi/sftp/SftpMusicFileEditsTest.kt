@@ -159,6 +159,11 @@ class SftpMusicFileEditsTest {
             assertEquals("Northern Light", client.songs().first { it.id == serverSong.id }.metadata.title)
             assertEquals("Northern Light", reopened.findTrack(track.id)!!.metadata.title)
             assertEquals(true, recovered.history().single().undone)
+            // Backups of only the tags count by their tag bytes rather than the song's length when the history is trimmed.
+            recovered.editTags(track.id, track.metadata.copy(title = "First"))
+            recovered.editTags(track.id, track.metadata.copy(title = "Second"))
+            recovered.trimHistory(maxAgeMs = Long.MAX_VALUE, maxBytes = 40_000)
+            assertEquals(3, recovered.history().size)
             Unit
         } finally {
             Files.copy(original, file, StandardCopyOption.REPLACE_EXISTING)

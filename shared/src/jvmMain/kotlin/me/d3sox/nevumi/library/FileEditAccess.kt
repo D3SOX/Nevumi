@@ -28,6 +28,8 @@ interface FileEditAccess {
     fun contentHash(file: File, location: String, whole: Boolean = false): String = file.inputStream().use(::contentHash)
     /** Whether a copy with [hash] holds only the tags, so [replaceTags] has to take the audio from the file it replaces. */
     fun holdsOnlyTags(hash: String) = false
+    /** The storage a copy with [hash] takes up, which for a sparse copy of only the tags is far less than its length. */
+    fun storedSize(copy: File, hash: String): Long = copy.length()
     fun stagingDirectory(location: String): File
     suspend fun replace(location: String, staged: File, originalHash: String? = null)
     /** Replaces the file with a tag edit of an [image]. */
