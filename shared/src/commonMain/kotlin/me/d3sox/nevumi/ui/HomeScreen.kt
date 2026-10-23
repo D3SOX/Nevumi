@@ -50,6 +50,10 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     val navigate = LocalLibraryNavigate.current
     val homeQueues = remember(state.savedQueues) { state.savedQueues.filter { it.kind != me.d3sox.nevumi.queue.SavedQueueKind.RECOVERY } }
     val catalog = rememberDerived("home-catalog", listOf(tracks)) { tracks.associateBy { it.id } }
+    val playlistLayout = state.preferences.collectionLayout(LibraryTab.PLAYLISTS)
+    val playlists = remember(state.playlists, state.tracks, playlistLayout) {
+        homePlaylists(state.playlists, playlistLayout, state.tracks.associate { it.id to it.recentAt })
+    }
     AnimatedNavigation(selected, null, canGoBack = backEnabled && selected != null,
         onBack = { selected = null }, depth = { if (it == null) 0 else 1 }) { mixId ->
         val mix = feed.mixes.firstOrNull { it.id == mixId }
@@ -132,7 +136,7 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
                     HomeSectionId.PLAYLISTS -> if (state.playlists.isNotEmpty()) item(key = "playlists") {
                 HomeSection("Your playlists", { navigate(LibraryTab.PLAYLISTS, null) }) {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(state.playlists.take(20), key = { it.id }) { playlist ->
+                        items(playlists, key = { it.id }) { playlist ->
                             HomeCollectionCard(playlist.name, countLabel(playlist.trackIds.size, "song"), playlist.trackIds.mapNotNull(catalog::get), state, controller, LibraryTab.PLAYLISTS, playlist.id,
                                 AppIcon.QUEUE, "Open playlist: ${playlist.name}", artwork = playlist.artworkPath(state)) {
                                 navigate(LibraryTab.PLAYLISTS, playlist.id)

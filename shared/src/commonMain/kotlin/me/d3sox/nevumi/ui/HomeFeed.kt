@@ -3,6 +3,9 @@ package me.d3sox.nevumi.ui
 import me.d3sox.nevumi.history.*
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.recentAt
+import me.d3sox.nevumi.playlists.Playlist
+import me.d3sox.nevumi.playlists.title
+import me.d3sox.nevumi.settings.CollectionLayout
 import kotlin.random.Random
 
 internal data class HomeMix(val id: String, val title: String, val description: String, val tracks: List<Track>)
@@ -62,4 +65,13 @@ internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, ran
         mix("top", "Top listens mix", "Your most played in the last 30 days", top)
     }
     return HomeFeed(recent, top, rediscover, added, recentAlbums, recentArtists, topAlbums, topArtists, mixes)
+}
+
+/** Playlists in the order the Playlists page sorts them, so Home shows the same ones first. */
+internal fun homePlaylists(playlists: List<Playlist>, layout: CollectionLayout, recentAt: Map<String, Long>): List<Playlist> {
+    val byId = playlists.associateBy { it.id }
+    return playlists.map { playlist ->
+        CollectionItem(playlist.id, playlist.title, "", null, AppIcon.QUEUE, songCount = playlist.trackIds.size,
+            recentAt = playlist.trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0)
+    }.sortedWith(layout.comparator()).take(20).map { byId.getValue(it.id) }
 }

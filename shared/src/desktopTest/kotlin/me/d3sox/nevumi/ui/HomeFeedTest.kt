@@ -2,6 +2,9 @@ package me.d3sox.nevumi.ui
 
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.library.*
+import me.d3sox.nevumi.playlists.Playlist
+import me.d3sox.nevumi.settings.CollectionLayout
+import me.d3sox.nevumi.settings.CollectionSort
 import kotlin.test.*
 
 class HomeFeedTest {
@@ -45,5 +48,19 @@ class HomeFeedTest {
         assertTrue(filtered.mixes.flatMap { it.tracks }.all { it in tracks.take(2) })
         val empty = homeFeed(emptyList(), tracks.map { listen(it, day) }, now, 42)
         assertTrue(empty.mixes.isEmpty() && empty.recent.isEmpty() && empty.top.isEmpty())
+    }
+
+    @Test fun playlistsFollowTheOrderOfThePlaylistsPage() {
+        val road = Playlist("road", "Music ▸ Road", listOf("a", "b", "c"))
+        val calm = Playlist("calm", "Calm", listOf("c"))
+        val new = Playlist("new", "New", listOf("d"))
+        val recentAt = mapOf("a" to 1L, "b" to 2L, "c" to 3L, "d" to 9L)
+        val playlists = listOf(road, calm, new)
+        fun order(layout: CollectionLayout) = homePlaylists(playlists, layout, recentAt).map { it.id }
+        assertEquals(listOf("calm", "new", "road"), order(CollectionLayout()), "Folders do not count towards the name")
+        assertEquals(listOf("road", "new", "calm"), order(CollectionLayout(sort = CollectionSort.NAME, descending = true)))
+        assertEquals(listOf("road", "new", "calm"), order(CollectionLayout(sort = CollectionSort.SONG_COUNT, descending = true)))
+        assertEquals(listOf("new", "road", "calm"), order(CollectionLayout(sort = CollectionSort.RECENT, descending = true)))
+        assertEquals(listOf("new", "road", "calm"), order(CollectionLayout(sort = CollectionSort.CUSTOM, order = listOf("new", "road"))))
     }
 }
