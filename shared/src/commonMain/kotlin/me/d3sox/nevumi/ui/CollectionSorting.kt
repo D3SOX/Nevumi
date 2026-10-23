@@ -12,15 +12,29 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.settings.CollectionLayout
 import me.d3sox.nevumi.settings.CollectionSort
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.artist
+import me.d3sox.nevumi.resources.ascending
+import me.d3sox.nevumi.resources.descending
+import me.d3sox.nevumi.resources.library_collection_order
+import me.d3sox.nevumi.resources.library_custom_order
+import me.d3sox.nevumi.resources.library_rearrange
+import me.d3sox.nevumi.resources.library_recently_added_music
+import me.d3sox.nevumi.resources.library_song_count
+import me.d3sox.nevumi.resources.library_sort_state
+import me.d3sox.nevumi.resources.name
+import me.d3sox.nevumi.resources.year
+import org.jetbrains.compose.resources.stringResource
 
-internal fun CollectionSort.label() = when (this) {
-    CollectionSort.NAME -> "Name"
-    CollectionSort.ARTIST -> "Artist"
-    CollectionSort.YEAR -> "Year"
-    CollectionSort.SONG_COUNT -> "Song count"
-    CollectionSort.RECENT -> "Recently added music"
-    CollectionSort.CUSTOM -> "Custom order"
-}
+@Composable
+internal fun CollectionSort.label() = stringResource(when (this) {
+    CollectionSort.NAME -> Res.string.name
+    CollectionSort.ARTIST -> Res.string.artist
+    CollectionSort.YEAR -> Res.string.year
+    CollectionSort.SONG_COUNT -> Res.string.library_song_count
+    CollectionSort.RECENT -> Res.string.library_recently_added_music
+    CollectionSort.CUSTOM -> Res.string.library_custom_order
+})
 
 internal fun CollectionSort.icon() = when (this) {
     CollectionSort.NAME -> AppIcon.TITLE
@@ -52,9 +66,10 @@ internal fun CollectionOrder(tab: LibraryTab, layout: CollectionLayout, controll
             (tab to change(settings.collectionLayout(tab)))) }
     }
     Box {
+        val direction = stringResource(if (layout.descending) Res.string.descending else Res.string.ascending)
         val current = if (layout.sort == CollectionSort.CUSTOM) layout.sort.label()
-            else "${layout.sort.label()}, ${if (layout.descending) "Descending" else "Ascending"}"
-        SortIconButton(layout.sort.icon(), "Collection order", current) { expanded = true }
+            else stringResource(Res.string.library_sort_state, layout.sort.label(), direction)
+        SortIconButton(layout.sort.icon(), stringResource(Res.string.library_collection_order), current) { expanded = true }
         DropdownMenu(expanded, { expanded = false }) {
             val choices = listOf(CollectionSort.NAME, CollectionSort.SONG_COUNT, CollectionSort.RECENT) +
                 when (tab) {
@@ -72,14 +87,14 @@ internal fun CollectionOrder(tab: LibraryTab, layout: CollectionLayout, controll
             }
             if (layout.sort != CollectionSort.CUSTOM) {
                 HorizontalDivider()
-                val label = if (layout.descending) "Descending" else "Ascending"
+                val label = direction
                 AppMenuItem(text = { Text(label) }, leadingIcon = { Icon((if (layout.descending) AppIcon.DESCENDING else AppIcon.ASCENDING).vector, null) },
                     modifier = Modifier.semantics { contentDescription = label },
                     onClick = { update { it.copy(descending = !it.descending) }; expanded = false })
             }
             if (rearrange != null) {
                 HorizontalDivider()
-                AppMenuItem(text = { Text("Rearrange") }, leadingIcon = { Icon(AppIcon.DRAG.vector, null) }, onClick = {
+                AppMenuItem(text = { Text(stringResource(Res.string.library_rearrange)) }, leadingIcon = { Icon(AppIcon.DRAG.vector, null) }, onClick = {
                     update { it.copy(sort = CollectionSort.CUSTOM, descending = false) }
                     rearrange(); expanded = false
                 })

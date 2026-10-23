@@ -10,13 +10,29 @@ import me.d3sox.nevumi.playlists.folderSegments
 import me.d3sox.nevumi.playlists.title
 import me.d3sox.nevumi.settings.CollectionLayout
 import kotlin.random.Random
+import org.jetbrains.compose.resources.StringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.library_mix_discovery
+import me.d3sox.nevumi.resources.library_mix_discovery_description
+import me.d3sox.nevumi.resources.library_mix_favorites
+import me.d3sox.nevumi.resources.library_mix_favorites_description
+import me.d3sox.nevumi.resources.library_mix_random
+import me.d3sox.nevumi.resources.library_mix_random_description
+import me.d3sox.nevumi.resources.library_mix_recommendations
+import me.d3sox.nevumi.resources.library_mix_recommendations_description
+import me.d3sox.nevumi.resources.library_mix_rediscover
+import me.d3sox.nevumi.resources.library_mix_rediscover_description
+import me.d3sox.nevumi.resources.library_mix_top
+import me.d3sox.nevumi.resources.library_mix_top_description
 
-internal data class HomeMix(val id: String, val title: String, val description: String, val tracks: List<Track>)
+internal data class HomeMix(val id: String, val title: StringResource, val description: StringResource, val tracks: List<Track>)
 internal data class HomeFeed(val recent: List<Track>, val top: List<Track>, val rediscover: List<Track>,
     val added: List<Track>, val recentAlbums: List<TrackCollection>, val recentArtists: List<TrackCollection>,
     val topAlbums: List<TrackCollection>, val topArtists: List<TrackCollection>, val mixes: List<HomeMix>)
 
-internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, randomSeed: Int): HomeFeed {
+/** Builds the Home sections; [unknownAlbum] and [unknownArtist] name collections whose tag is blank. */
+internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, randomSeed: Int,
+    unknownAlbum: String, unknownArtist: String): HomeFeed {
     val playable = tracks.filter { track -> track.sources.any { it.available } }
     val catalog = playable.associateBy { it.id }
     val events = listens.filter { it.trackId in catalog && it.startedAt <= now }
@@ -37,13 +53,13 @@ internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, ran
         val songs = albumSongs[id] ?: return null
         return albums.getOrPut(id) {
             val first = songs.first().metadata
-            TrackCollection(id, first.album.ifBlank { "Unknown album" },
+            TrackCollection(id, first.album.ifBlank { unknownAlbum },
                 songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }),
                 first.albumArtist.ifBlank { first.artist })
         }
     }
     fun artist(track: Track) = track.metadata.artist.let { artist ->
-        artistSongs[artist]?.let { TrackCollection(artist, artist.ifBlank { "Unknown artist" }, it) }
+        artistSongs[artist]?.let { TrackCollection(artist, artist.ifBlank { unknownArtist }, it) }
     }
     val recentAlbums = recent.mapNotNull(::album).distinctBy { it.id }.take(12)
     val recentArtists = recent.distinctBy { it.metadata.artist }.mapNotNull(::artist).take(12)
@@ -57,15 +73,15 @@ internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, ran
     val recommendations = listeningRecommendations(events, playable, limit = 50, now = now).map { it.track }
     val favorites = playable.filter { it.favorite }.shuffled(Random(randomSeed)).take(50)
     val mixes = buildList {
-        fun mix(id: String, title: String, description: String, songs: List<Track>) {
+        fun mix(id: String, title: StringResource, description: StringResource, songs: List<Track>) {
             if (songs.isNotEmpty()) add(HomeMix(id, title, description, songs))
         }
-        mix("random", "Random mix", "A shuffle of your library", playable.shuffled(Random(randomSeed)).take(50))
-        mix("favorites", "Favorites mix", "The songs you love", favorites)
-        mix("discovery", "Discovery mix", "Songs you haven’t played yet", discovery)
-        mix("recommendations", "For you", "From your listening history", recommendations)
-        mix("rediscover", "Rediscover mix", "Songs you haven’t heard in a while", rediscover)
-        mix("top", "Top listens mix", "Your most played in the last 30 days", top)
+        mix("random", Res.string.library_mix_random, Res.string.library_mix_random_description, playable.shuffled(Random(randomSeed)).take(50))
+        mix("favorites", Res.string.library_mix_favorites, Res.string.library_mix_favorites_description, favorites)
+        mix("discovery", Res.string.library_mix_discovery, Res.string.library_mix_discovery_description, discovery)
+        mix("recommendations", Res.string.library_mix_recommendations, Res.string.library_mix_recommendations_description, recommendations)
+        mix("rediscover", Res.string.library_mix_rediscover, Res.string.library_mix_rediscover_description, rediscover)
+        mix("top", Res.string.library_mix_top, Res.string.library_mix_top_description, top)
     }
     return HomeFeed(recent, top, rediscover, added, recentAlbums, recentArtists, topAlbums, topArtists, mixes)
 }

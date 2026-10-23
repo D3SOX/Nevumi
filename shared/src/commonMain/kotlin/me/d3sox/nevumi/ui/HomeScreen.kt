@@ -31,15 +31,40 @@ import me.d3sox.nevumi.queue.QueueOrigin
 import kotlin.random.Random
 import me.d3sox.nevumi.settings.HomeSectionId
 import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.customize_home
+import me.d3sox.nevumi.resources.library_collection_options_for
+import me.d3sox.nevumi.resources.library_music_settings
+import me.d3sox.nevumi.resources.library_no_music_available
+import me.d3sox.nevumi.resources.library_no_music_available_hint
+import me.d3sox.nevumi.resources.library_no_music_matches
+import me.d3sox.nevumi.resources.library_no_music_matches_hint
+import me.d3sox.nevumi.resources.library_no_music_yet
+import me.d3sox.nevumi.resources.library_no_music_yet_hint
+import me.d3sox.nevumi.resources.library_open_album
+import me.d3sox.nevumi.resources.library_open_artist
+import me.d3sox.nevumi.resources.library_open_mix
+import me.d3sox.nevumi.resources.library_open_playlist
+import me.d3sox.nevumi.resources.library_play_mix
+import me.d3sox.nevumi.resources.library_refresh_mixes
+import me.d3sox.nevumi.resources.library_see_all
+import me.d3sox.nevumi.resources.library_see_all_section
+import me.d3sox.nevumi.resources.library_select_saved_queue
+import me.d3sox.nevumi.resources.library_track_options
+import me.d3sox.nevumi.resources.library_unknown_album
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.unknown_artist
 
 @Composable
 internal fun HomeScreen(state: AppState, controller: MusicController, tracks: List<Track>,
     destination: LibraryDestination?, backEnabled: Boolean, settings: () -> Unit) {
     val now = rememberLibraryTime()
     var seed by rememberSaveable { mutableIntStateOf(Random.nextInt()) }
-    val feed = rememberDerived("home-feed", listOf(seed), listOf(tracks, state.listens, now)) {
+    val unknownAlbum = stringResource(Res.string.library_unknown_album)
+    val unknownArtist = stringResource(Res.string.unknown_artist)
+    val feed = rememberDerived("home-feed", listOf(seed, unknownAlbum, unknownArtist), listOf(tracks, state.listens, now)) {
         // The minute clock can predate a listen that has just arrived.
-        homeFeed(tracks, state.listens, kotlin.time.Clock.System.now().toEpochMilliseconds(), seed)
+        homeFeed(tracks, state.listens, kotlin.time.Clock.System.now().toEpochMilliseconds(), seed, unknownAlbum, unknownArtist)
     }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var handled by rememberSaveable { mutableIntStateOf(-1) }
@@ -60,15 +85,16 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
         val mix = feed.mixes.firstOrNull { it.id == mixId }
         if (mixId == "customize-home") HomeCustomization(state.preferences.homeSections, controller) { selected = null }
         else if (mix != null) Column(Modifier.fillMaxSize()) {
-            CollectionHeader(mix.title) { selected = null }
+            val mixTitle = stringResource(mix.title)
+            CollectionHeader(mixTitle) { selected = null }
             CompositionLocalProvider(LocalLibraryOrigin provides QueueOrigin(LibraryTab.HOME, mix.id),
                 LocalLibraryScrollKey provides "home:mix:${mix.id}") {
-                SongList(mix.tracks, controller, Modifier.weight(1f), contextName = mix.title,
+                SongList(mix.tracks, controller, Modifier.weight(1f), contextName = mixTitle,
                     shuffleContext = true, header = {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(mix.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            PageAction("Play mix", AppIcon.PLAY) {
-                                controller.playTrack(mix.tracks.first().id, mix.tracks.map { it.id }, 0, mix.title,
+                            Text(stringResource(mix.description), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            PageAction(stringResource(Res.string.library_play_mix), AppIcon.PLAY) {
+                                controller.playTrack(mix.tracks.first().id, mix.tracks.map { it.id }, 0, mixTitle,
                                     shuffleContext = true, origin = QueueOrigin(LibraryTab.HOME, mix.id))
                             }
                         }
@@ -79,67 +105,69 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
             verticalArrangement = Arrangement.spacedBy(24.dp)) {
             item(key = "intro") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(countLabel(tracks.size, "song"), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(countLabel(tracks.size, Res.plurals.songs), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (feed.mixes.isNotEmpty()) TextButton(onClick = { seed = Random.nextInt() }) {
-                        Icon(AppIcon.SHUFFLE.vector, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("Refresh mixes")
+                        Icon(AppIcon.SHUFFLE.vector, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.library_refresh_mixes))
                     }
-                    AppIconButton(AppIcon.TABS, "Customize Home") { selected = "customize-home" }
+                    AppIconButton(AppIcon.TABS, stringResource(Res.string.customize_home)) { selected = "customize-home" }
                 }
             }
             if (feed.added.isEmpty()) item(key = "empty") {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(AppIcon.LIBRARY.vector, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text(when { state.tracks.isEmpty() -> "No music yet"; tracks.isEmpty() -> "No music matches your filters"; else -> "No music available" },
+                        Text(stringResource(when { state.tracks.isEmpty() -> Res.string.library_no_music_yet; tracks.isEmpty() -> Res.string.library_no_music_matches
+                            else -> Res.string.library_no_music_available }),
                             style = MaterialTheme.typography.titleLarge)
-                        Text(when {
-                            state.tracks.isEmpty() -> "Add local music or connect your Navidrome or Subsonic server in Settings."
-                            tracks.isEmpty() -> "Change your search or music source filters to see more of your library."
-                            else -> "Reconnect your music sources or scan your library in Settings."
-                        }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        PageAction("Music settings", AppIcon.SETTINGS, onClick = settings)
+                        Text(stringResource(when {
+                            state.tracks.isEmpty() -> Res.string.library_no_music_yet_hint
+                            tracks.isEmpty() -> Res.string.library_no_music_matches_hint
+                            else -> Res.string.library_no_music_available_hint
+                        }), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        PageAction(stringResource(Res.string.library_music_settings), AppIcon.SETTINGS, onClick = settings)
                     }
                 }
             }
             state.preferences.homeSections.filterNot { it in state.preferences.disabledHomeSections }.forEach { section ->
                 when (section) {
                     HomeSectionId.MIXES -> if (feed.mixes.isNotEmpty()) item(key = "mixes") {
-                HomeSection("Mixes") {
+                HomeSection(stringResource(section.label)) {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(feed.mixes, key = { it.id }) { entry ->
-                            HomeCollectionCard(entry.title, entry.description, entry.tracks, state, controller, LibraryTab.HOME, entry.id, AppIcon.SHUFFLE,
-                                "Open mix: ${entry.title}") { selected = entry.id }
+                            val title = stringResource(entry.title)
+                            HomeCollectionCard(title, stringResource(entry.description), entry.tracks, state, controller, LibraryTab.HOME, entry.id, AppIcon.SHUFFLE,
+                                stringResource(Res.string.library_open_mix, title)) { selected = entry.id }
                         }
                     }
                 }
             }
                     HomeSectionId.RECENT -> if (feed.recent.isNotEmpty()) item(key = "recent") {
-                HomeSongs("Recent listens", feed.recent, state, controller) { navigate(LibraryTab.HISTORY, null) }
+                HomeSongs(stringResource(section.label), feed.recent, state, controller) { navigate(LibraryTab.HISTORY, null) }
             }
                     HomeSectionId.TOP -> if (feed.top.isNotEmpty()) item(key = "top") {
-                HomeSongs("Top listens", feed.top, state, controller) { navigate(LibraryTab.STATISTICS, null) }
+                HomeSongs(stringResource(section.label), feed.top, state, controller) { navigate(LibraryTab.STATISTICS, null) }
             }
                     HomeSectionId.RECENT_ALBUMS -> if (feed.recentAlbums.isNotEmpty()) item(key = "recent-albums") {
-                HomeCollections("Recent albums", feed.recentAlbums, LibraryTab.ALBUMS, state, controller, navigate)
+                HomeCollections(stringResource(section.label), feed.recentAlbums, LibraryTab.ALBUMS, state, controller, navigate)
             }
                     HomeSectionId.RECENT_ARTISTS -> if (feed.recentArtists.isNotEmpty()) item(key = "recent-artists") {
-                HomeCollections("Recent artists", feed.recentArtists, LibraryTab.ARTISTS, state, controller, navigate)
+                HomeCollections(stringResource(section.label), feed.recentArtists, LibraryTab.ARTISTS, state, controller, navigate)
             }
                     HomeSectionId.TOP_ALBUMS -> if (feed.topAlbums.isNotEmpty()) item(key = "top-albums") {
-                HomeCollections("Top albums", feed.topAlbums, LibraryTab.ALBUMS, state, controller, navigate)
+                HomeCollections(stringResource(section.label), feed.topAlbums, LibraryTab.ALBUMS, state, controller, navigate)
             }
                     HomeSectionId.TOP_ARTISTS -> if (feed.topArtists.isNotEmpty()) item(key = "top-artists") {
-                HomeCollections("Top artists", feed.topArtists, LibraryTab.ARTISTS, state, controller, navigate)
+                HomeCollections(stringResource(section.label), feed.topArtists, LibraryTab.ARTISTS, state, controller, navigate)
             }
                     HomeSectionId.REDISCOVER -> if (feed.rediscover.isNotEmpty()) item(key = "rediscover") {
-                HomeSongs("Rediscover", feed.rediscover, state, controller)
+                HomeSongs(stringResource(section.label), feed.rediscover, state, controller)
             }
                     HomeSectionId.PLAYLISTS -> if (state.playlists.isNotEmpty()) item(key = "playlists") {
-                HomeSection("Your playlists", { navigate(LibraryTab.PLAYLISTS, null) }) {
+                HomeSection(stringResource(section.label), { navigate(LibraryTab.PLAYLISTS, null) }) {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(playlists, key = { it.id }) { playlist ->
-                            HomeCollectionCard(playlist.name, countLabel(playlist.trackIds.size, "song"), playlist.trackIds.mapNotNull(catalog::get), state, controller, LibraryTab.PLAYLISTS, playlist.id,
-                                AppIcon.QUEUE, "Open playlist: ${playlist.name}", artwork = playlist.artworkPath(state)) {
+                            HomeCollectionCard(playlist.name, countLabel(playlist.trackIds.size, Res.plurals.songs), playlist.trackIds.mapNotNull(catalog::get), state, controller, LibraryTab.PLAYLISTS, playlist.id,
+                                AppIcon.QUEUE, stringResource(Res.string.library_open_playlist, playlist.name), artwork = playlist.artworkPath(state)) {
                                 navigate(LibraryTab.PLAYLISTS, playlist.id)
                             }
                         }
@@ -147,18 +175,18 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
                 }
             }
                     HomeSectionId.SAVED_QUEUES -> if (homeQueues.isNotEmpty()) item(key = "saved-queues") {
-                HomeSection("Saved queues") {
+                HomeSection(stringResource(section.label)) {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(homeQueues.take(20), key = { it.id }) { queue ->
-                            HomeCollectionCard(queue.name, countLabel(queue.snapshot.entries.size, "song"),
+                            HomeCollectionCard(queue.name, countLabel(queue.snapshot.entries.size, Res.plurals.songs),
                                 queue.snapshot.entries.mapNotNull { catalog[it.trackId] }, state, controller, LibraryTab.HOME, queue.id, AppIcon.QUEUE,
-                                "Select saved queue: ${queue.name}") { controller.loadSavedQueue(queue.id) }
+                                stringResource(Res.string.library_select_saved_queue, queue.name)) { controller.loadSavedQueue(queue.id) }
                         }
                     }
                 }
             }
                     HomeSectionId.ADDED -> if (feed.added.isNotEmpty()) item(key = "added") {
-                HomeSongs("Recently added", feed.added, state, controller) { navigate(LibraryTab.RECENT, null) }
+                HomeSongs(stringResource(section.label), feed.added, state, controller) { navigate(LibraryTab.RECENT, null) }
             }
                 }
             }
@@ -171,7 +199,8 @@ private fun HomeSection(title: String, all: (() -> Unit)? = null, content: @Comp
     Column(Modifier.testTag("home-section:$title"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-            if (all != null) TextButton(all, Modifier.semantics { contentDescription = "See all $title" }) { Text("See all") }
+            val seeAllDescription = stringResource(Res.string.library_see_all_section, title)
+            if (all != null) TextButton(all, Modifier.semantics { contentDescription = seeAllDescription }) { Text(stringResource(Res.string.library_see_all)) }
         }
         content()
     }
@@ -195,10 +224,10 @@ private fun HomeSongs(title: String, songs: List<Track>, state: AppState, contro
                                 Column(Modifier.weight(1f)) {
                                     Text(track.metadata.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(track.metadata.artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall,
+                                    Text(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "Track options: ${track.metadata.title}", onClick = menu)
+                                if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(Res.string.library_track_options, track.metadata.title), onClick = menu)
                             }
                         }
                     }
@@ -210,12 +239,12 @@ private fun HomeSongs(title: String, songs: List<Track>, state: AppState, contro
 
 @Composable
 private fun HomeCollections(title: String, collections: List<TrackCollection>, tab: LibraryTab, state: AppState, controller: MusicController, navigate: (LibraryTab, String?) -> Unit) {
-    val tabLabel = stringResource(tab.label)
     HomeSection(title, { navigate(tab, null) }) {
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(collections, key = { it.id }) { collection ->
-                HomeCollectionCard(collection.title, if (tab == LibraryTab.ALBUMS) collection.subtitle else countLabel(collection.tracks.size, "song"),
-                    collection.tracks, state, controller, tab, collection.id, tab.icon(), "Open ${tabLabel.lowercase().removeSuffix("s")}: ${collection.title}") {
+                HomeCollectionCard(collection.title, if (tab == LibraryTab.ALBUMS) collection.subtitle else countLabel(collection.tracks.size, Res.plurals.songs),
+                    collection.tracks, state, controller, tab, collection.id, tab.icon(),
+                    stringResource(if (tab == LibraryTab.ALBUMS) Res.string.library_open_album else Res.string.library_open_artist, collection.title)) {
                     navigate(tab, collection.id)
                 }
             }
@@ -243,7 +272,7 @@ private fun HomeCollectionCard(title: String, subtitle: String, tracks: List<Tra
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "Collection options: $title", onClick = menu)
+                if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(Res.string.library_collection_options_for, title), onClick = menu)
             }
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }

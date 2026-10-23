@@ -17,6 +17,11 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.recentAt
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.back
+import me.d3sox.nevumi.resources.library_disc_track
+import me.d3sox.nevumi.resources.songs
+import org.jetbrains.compose.resources.stringResource
 
 internal data class TrackCollection(val id: String, val title: String, val tracks: List<Track>, val subtitle: String = "")
 
@@ -34,11 +39,13 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
     val selecting = LocalSongSelection.current?.active == true
     val entries = rememberDerived("collections:${tab.name}", emptyList(), listOf(collections, state.artwork)) {
         collections.map { entry ->
-            CollectionItem(entry.id, entry.title, listOf(entry.subtitle, countLabel(entry.tracks.size, "song")).filter { it.isNotBlank() }.joinToString(" · "),
+            CollectionItem(entry.id, entry.title, entry.subtitle,
                 entry.tracks.firstNotNullOfOrNull { state.artwork[it.id] }, tab.icon(),
                 songCount = entry.tracks.size, artist = entry.tracks.firstOrNull()?.metadata?.albumArtist.orEmpty(),
                 year = entry.tracks.maxOfOrNull { it.metadata.year } ?: 0, recentAt = entry.tracks.maxOfOrNull { it.recentAt } ?: 0,
-                trackIds = entry.tracks.map { it.id })
+                trackIds = entry.tracks.map { it.id }, describe = {
+                    listOf(entry.subtitle, countLabel(entry.tracks.size, Res.plurals.songs)).filter { it.isNotBlank() }.joinToString(" · ")
+                })
         }
     }
     AnimatedNavigation(selected, null, canGoBack = backEnabled && selected != null && !selecting,
@@ -46,13 +53,15 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
         val collection = collections.firstOrNull { it.id == id }
         if (collection == null) CollectionBrowser(entries, tab, state, controller) { selected = it }
         else Column(Modifier.fillMaxSize()) {
+            // The scroll indicator is read outside composition, so resolve each album track's position up front.
+            val positions = if (tab == LibraryTab.ALBUMS) collection.tracks.map { track ->
+                track.metadata.takeIf { it.trackNumber > 0 }?.let { stringResource(Res.string.library_disc_track, it.discNumber.coerceAtLeast(1), it.trackNumber) }
+            } else emptyList()
             CompositionLocalProvider(LocalLibraryScrollKey provides "${LocalLibraryScrollKey.current}:collection:${collection.id}",
                 LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(tab, collection.id)) {
             SongList(collection.tracks, controller, Modifier.weight(1f), statistics = statistics, scrollSort = state.preferences.songSort,
                 scrollIndicator = if (tab == LibraryTab.ALBUMS) { index ->
-                    val metadata = collection.tracks[index].metadata
-                    if (metadata.trackNumber > 0) "Disc ${metadata.discNumber.coerceAtLeast(1)} · Track ${metadata.trackNumber}"
-                    else "${index + 1} / ${collection.tracks.size}"
+                    positions.getOrNull(index) ?: "${index + 1} / ${collection.tracks.size}"
                 } else null, contextName = collection.title,
                 header = if (!selecting) ({ CollectionHero(collection, tab, state, controller) { selected = null } }) else null)
             }
@@ -63,7 +72,7 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
 @Composable
 internal fun CollectionHeader(title: String, back: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        AppIconButton(AppIcon.BACK, "Back", onClick = back)
+        AppIconButton(AppIcon.BACK, stringResource(Res.string.back), onClick = back)
         Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }

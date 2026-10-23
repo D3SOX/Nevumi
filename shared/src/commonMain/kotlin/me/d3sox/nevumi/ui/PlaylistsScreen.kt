@@ -37,6 +37,70 @@ import me.d3sox.nevumi.settings.CollectionLayout
 import me.d3sox.nevumi.settings.PlaylistPickerSort
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.apply
+import me.d3sox.nevumi.resources.back
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.delete
+import me.d3sox.nevumi.resources.done
+import me.d3sox.nevumi.resources.edit_rules
+import me.d3sox.nevumi.resources.library_added_to
+import me.d3sox.nevumi.resources.library_alphabetical
+import me.d3sox.nevumi.resources.library_automatic_downloads
+import me.d3sox.nevumi.resources.library_choose_version
+import me.d3sox.nevumi.resources.library_clear_search
+import me.d3sox.nevumi.resources.library_contains_selected_songs
+import me.d3sox.nevumi.resources.library_contains_this_song
+import me.d3sox.nevumi.resources.library_create
+import me.d3sox.nevumi.resources.library_create_playlist_hint
+import me.d3sox.nevumi.resources.library_delete_named
+import me.d3sox.nevumi.resources.library_delete_playlist_description
+import me.d3sox.nevumi.resources.library_delete_server_playlist
+import me.d3sox.nevumi.resources.library_delete_server_playlist_description
+import me.d3sox.nevumi.resources.library_deletion_requested
+import me.d3sox.nevumi.resources.library_import
+import me.d3sox.nevumi.resources.library_import_m3u
+import me.d3sox.nevumi.resources.library_keep_my_version
+import me.d3sox.nevumi.resources.library_new
+import me.d3sox.nevumi.resources.library_new_playlist
+import me.d3sox.nevumi.resources.library_new_smart_playlist
+import me.d3sox.nevumi.resources.library_no_playlists_match
+import me.d3sox.nevumi.resources.library_only_server_songs
+import me.d3sox.nevumi.resources.library_other_playlists
+import me.d3sox.nevumi.resources.library_playlist_artwork
+import me.d3sox.nevumi.resources.library_playlist_changed_on_server
+import me.d3sox.nevumi.resources.library_playlist_export_failed
+import me.d3sox.nevumi.resources.library_playlist_exported
+import me.d3sox.nevumi.resources.library_playlist_import_failed
+import me.d3sox.nevumi.resources.library_playlist_imported
+import me.d3sox.nevumi.resources.library_playlist_membership
+import me.d3sox.nevumi.resources.library_playlist_name
+import me.d3sox.nevumi.resources.library_publish
+import me.d3sox.nevumi.resources.library_publish_description
+import me.d3sox.nevumi.resources.library_publish_named
+import me.d3sox.nevumi.resources.library_read_only
+import me.d3sox.nevumi.resources.library_recently_played
+import me.d3sox.nevumi.resources.library_recently_updated
+import me.d3sox.nevumi.resources.library_same_as_playlists_tab
+import me.d3sox.nevumi.resources.library_search_playlists
+import me.d3sox.nevumi.resources.library_selected_songs_partial
+import me.d3sox.nevumi.resources.library_server_version
+import me.d3sox.nevumi.resources.library_smart
+import me.d3sox.nevumi.resources.library_smart_playlist
+import me.d3sox.nevumi.resources.library_smart_playlist_hint
+import me.d3sox.nevumi.resources.library_sort_by
+import me.d3sox.nevumi.resources.library_unresolved_entries
+import me.d3sox.nevumi.resources.library_unresolved_entries_description
+import me.d3sox.nevumi.resources.library_use_server_version
+import me.d3sox.nevumi.resources.library_your_version
+import me.d3sox.nevumi.resources.manage_playlists
+import me.d3sox.nevumi.resources.matching_songs
+import me.d3sox.nevumi.resources.playlists
+import me.d3sox.nevumi.resources.recently_added
+import me.d3sox.nevumi.resources.save
+import me.d3sox.nevumi.resources.songs
+import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.getString
 
 @Composable
 internal fun PlaylistsScreen(state: AppState, controller: MusicController, backEnabled: Boolean = true, destination: LibraryDestination? = null,
@@ -77,19 +141,22 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
     // A folder disappears once its last playlist moves out, so fall back to the closest folder that still exists.
     val openFolder = if (playlist != null) playlist.folder else generateSequence(folder, ::parentFolder).firstOrNull { name -> visiblePlaylists.any { isInFolder(it.folder, name) } }
     fun collections(page: String?) = visiblePlaylists.filter { it.folder == page }.map { collection ->
-        CollectionItem(collection.id, collection.title,
-            "${countLabel(collection.trackIds.size, "song")}${if (collection.rule != null) " · Smart playlist" else ""}${if (collection.autoDownload) " · Automatic downloads" else ""}",
-            collection.artworkPath(state), AppIcon.QUEUE,
+        CollectionItem(collection.id, collection.title, "", collection.artworkPath(state), AppIcon.QUEUE,
             songCount = collection.trackIds.size, recentAt = collection.trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0,
-            trackIds = collection.trackIds)
+            trackIds = collection.trackIds, describe = {
+                listOfNotNull(countLabel(collection.trackIds.size, Res.plurals.songs),
+                    if (collection.rule != null) stringResource(Res.string.library_smart_playlist) else null,
+                    if (collection.autoDownload) stringResource(Res.string.library_automatic_downloads) else null).joinToString(" · ")
+            })
     } + visiblePlaylists.mapNotNull { playlist ->
         // Group everything below this page by the subfolder it sits in.
         val path = playlist.folder?.takeIf { it != page && (page == null || isInFolder(it, page)) } ?: return@mapNotNull null
         folderPath(folderSegments(path).take((page?.let(::folderSegments)?.size ?: 0) + 1)) to playlist
     }.groupBy({ it.first }, { it.second }).map { (name, contents) ->
         val trackIds = contents.flatMap(Playlist::trackIds).distinct()
-        CollectionItem(PLAYLIST_FOLDER_PREFIX + name, folderSegments(name).last(), countLabel(contents.size, "playlist"), null, AppIcon.FOLDER,
-            songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0, trackIds = trackIds)
+        CollectionItem(PLAYLIST_FOLDER_PREFIX + name, folderSegments(name).last(), "", null, AppIcon.FOLDER,
+            songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0, trackIds = trackIds,
+            describe = { countLabel(contents.size, Res.plurals.playlists) })
     }
     fun closePlaylist() { folder = openFolder; selected = null }
     fun open(id: String) { if (id.startsWith(PLAYLIST_FOLDER_PREFIX)) folder = id.removePrefix(PLAYLIST_FOLDER_PREFIX) else selected = id }
@@ -109,7 +176,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         fileMessage?.let { Text(it, Modifier.padding(horizontal = 24.dp)) }
         if (pageFolder != null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppIconButton(AppIcon.BACK, "Back") { folder = parentFolder(pageFolder) }
+                AppIconButton(AppIcon.BACK, stringResource(Res.string.back)) { folder = parentFolder(pageFolder) }
                 Text(pageFolder, style = MaterialTheme.typography.titleLarge)
             }
             val entries = remember(visiblePlaylists, state.artwork, recentAt, pageFolder) { collections(pageFolder) }
@@ -119,14 +186,14 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
             }
         } else if (playlist == null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PlaylistCreationButton("New", "New playlist", AppIcon.PLUS, Modifier.weight(1f)) { creating = true }
-                PlaylistCreationButton("Smart", "New smart playlist", AppIcon.RECOMMENDATIONS, Modifier.weight(1f)) { smartEditor = true }
-                PlaylistCreationButton("Import", "Import M3U", AppIcon.FOLDER, Modifier.weight(1f), !fileBusy) {
+                PlaylistCreationButton(stringResource(Res.string.library_new), stringResource(Res.string.library_new_playlist), AppIcon.PLUS, Modifier.weight(1f)) { creating = true }
+                PlaylistCreationButton(stringResource(Res.string.library_smart), stringResource(Res.string.library_new_smart_playlist), AppIcon.RECOMMENDATIONS, Modifier.weight(1f)) { smartEditor = true }
+                PlaylistCreationButton(stringResource(Res.string.library_import), stringResource(Res.string.library_import_m3u), AppIcon.FOLDER, Modifier.weight(1f), !fileBusy) {
                 scope.launch {
                     fileBusy = true; fileMessage = null
                     try { files.open()?.let { imported = controller.importM3u(it) } }
                     catch (cancelled: CancellationException) { throw cancelled }
-                    catch (error: Exception) { fileMessage = error.message ?: "The playlist could not be imported" }
+                    catch (error: Exception) { fileMessage = error.message ?: getString(Res.string.library_playlist_import_failed) }
                     finally { fileBusy = false }
                 }
                 }
@@ -149,9 +216,9 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
                             fileBusy = true; fileMessage = null
                             try {
                                 val filename = playlist.name.map { if (it in "/\\" || it.code < 32) '_' else it }.joinToString("").take(120) + ".m3u8"
-                                if (files.save(filename, controller.exportM3u(playlist.id))) fileMessage = "Playlist exported"
+                                if (files.save(filename, controller.exportM3u(playlist.id))) fileMessage = getString(Res.string.library_playlist_exported)
                             } catch (cancelled: CancellationException) { throw cancelled }
-                            catch (error: Exception) { fileMessage = error.message ?: "The playlist could not be exported" }
+                            catch (error: Exception) { fileMessage = error.message ?: getString(Res.string.library_playlist_export_failed) }
                             finally { fileBusy = false }
                         }
                     }, editRules = { smartEditor = true }, publish = if (publishable) ({ publishing = true }) else null,
@@ -171,47 +238,46 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
     }
     }
     imported?.let { result ->
-        AlertDialog(onDismissRequest = { imported = null }, title = { Text("Playlist imported") }, text = {
+        AlertDialog(onDismissRequest = { imported = null }, title = { Text(stringResource(Res.string.library_playlist_imported)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("${countLabel(result.playlist.trackIds.size, "song")} added to ${result.playlist.name}")
+                Text(stringResource(Res.string.library_added_to, countLabel(result.playlist.trackIds.size, Res.plurals.songs), result.playlist.name))
                 if (result.unresolved.isNotEmpty()) {
-                    Text("Unresolved entries")
-                    Text("These entries were not found in your library.")
+                    Text(stringResource(Res.string.library_unresolved_entries))
+                    Text(stringResource(Res.string.library_unresolved_entries_description))
                     LazyColumn(Modifier.heightIn(max = 240.dp)) {
                         items(result.unresolved) { Text(it) }
                     }
                 }
             }
-        }, confirmButton = { TextButton(onClick = { imported = null }) { Text("Done") } })
+        }, confirmButton = { TextButton(onClick = { imported = null }) { Text(stringResource(Res.string.done)) } })
     }
     if (creating) CreatePlaylistDialog(controller) { creating = false }
     if (publishing && playlist != null) AlertDialog(onDismissRequest = { publishing = false },
-        title = { Text("Publish ${playlist.name}?") },
-        text = { Text("Create this playlist on your music server and sync future changes to it.") },
-        confirmButton = { TextButton(onClick = { controller.publishPlaylist(playlist.id); publishing = false }) { Text("Publish") } },
-        dismissButton = { TextButton(onClick = { publishing = false }) { Text("Cancel") } })
+        title = { Text(stringResource(Res.string.library_publish_named, playlist.name)) },
+        text = { Text(stringResource(Res.string.library_publish_description)) },
+        confirmButton = { TextButton(onClick = { controller.publishPlaylist(playlist.id); publishing = false }) { Text(stringResource(Res.string.library_publish)) } },
+        dismissButton = { TextButton(onClick = { publishing = false }) { Text(stringResource(Res.string.cancel)) } })
     if (smartEditor) SmartPlaylistDialog(state, controller, playlist) { smartEditor = false }
     if (deleting && playlist != null) AlertDialog(onDismissRequest = { deleting = false },
-        title = { Text("Delete ${playlist.name}?") }, text = { Text(if (playlist.server != null)
-            "This playlist will also be deleted from your music server when connected. The music files will stay in your library."
-            else "The music files will stay in your library.") },
+        title = { Text(stringResource(Res.string.library_delete_named, playlist.name)) }, text = { Text(stringResource(if (playlist.server != null)
+            Res.string.library_delete_server_playlist_description else Res.string.library_delete_playlist_description)) },
         confirmButton = { TextButton(onClick = {
             controller.deletePlaylist(playlist.id); deleting = false; closePlaylist()
-        }) { Text("Delete") } }, dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } })
+        }) { Text(stringResource(Res.string.delete)) } }, dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(Res.string.cancel)) } })
     val conflict = playlist?.conflict
     if (resolving && playlist != null && conflict != null) {
-        AlertDialog(onDismissRequest = { resolving = false }, title = { Text("Playlist changed on the server") }, text = {
+        AlertDialog(onDismissRequest = { resolving = false }, title = { Text(stringResource(Res.string.library_playlist_changed_on_server)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (conflict.deletionRequested) "You requested deletion of this playlist."
-                    else "Your version: ${playlist.name} · ${countLabel(playlist.trackIds.size, "song")}")
-                Text("Server version: ${conflict.name} · ${countLabel(conflict.trackIds.size, "song")}")
-                Text("Choose which version to keep.")
+                Text(if (conflict.deletionRequested) stringResource(Res.string.library_deletion_requested)
+                    else stringResource(Res.string.library_your_version, playlist.name, countLabel(playlist.trackIds.size, Res.plurals.songs)))
+                Text(stringResource(Res.string.library_server_version, conflict.name, countLabel(conflict.trackIds.size, Res.plurals.songs)))
+                Text(stringResource(Res.string.library_choose_version))
             }
         }, confirmButton = { TextButton(onClick = {
             controller.resolvePlaylistConflict(playlist.id, true); resolving = false
-        }) { Text(if (conflict.deletionRequested) "Delete server playlist" else "Keep my version") } }, dismissButton = { TextButton(onClick = {
+        }) { Text(stringResource(if (conflict.deletionRequested) Res.string.library_delete_server_playlist else Res.string.library_keep_my_version)) } }, dismissButton = { TextButton(onClick = {
             controller.resolvePlaylistConflict(playlist.id, false); resolving = false
-        }) { Text("Use server version") } })
+        }) { Text(stringResource(Res.string.library_use_server_version)) } })
     }
     if (renaming && playlist != null) EditPlaylistDialog(playlist, state, controller) { renaming = false }
 }
@@ -226,11 +292,12 @@ private class PickerRow(val key: String, val label: String, val depth: Int, val 
 private class PickerNode(val item: CollectionItem, val updatedAt: Long, val createdAt: Long, val playedAt: Long,
     val playlist: Playlist?, val children: List<PickerNode> = emptyList())
 
-internal fun PlaylistPickerSort.label() = when (this) {
-    PlaylistPickerSort.UPDATED -> "Recently updated"; PlaylistPickerSort.ADDED -> "Recently added"
-    PlaylistPickerSort.NAME -> "Alphabetical"; PlaylistPickerSort.PLAYED -> "Recently played"
-    PlaylistPickerSort.LIBRARY -> "Same as Playlists tab"
-}
+@Composable
+internal fun PlaylistPickerSort.label() = stringResource(when (this) {
+    PlaylistPickerSort.UPDATED -> Res.string.library_recently_updated; PlaylistPickerSort.ADDED -> Res.string.recently_added
+    PlaylistPickerSort.NAME -> Res.string.library_alphabetical; PlaylistPickerSort.PLAYED -> Res.string.library_recently_played
+    PlaylistPickerSort.LIBRARY -> Res.string.library_same_as_playlists_tab
+})
 internal fun PlaylistPickerSort.icon() = when (this) {
     PlaylistPickerSort.UPDATED -> AppIcon.EDIT; PlaylistPickerSort.ADDED -> AppIcon.RECENT; PlaylistPickerSort.NAME -> AppIcon.TITLE
     PlaylistPickerSort.PLAYED -> AppIcon.HISTORY; PlaylistPickerSort.LIBRARY -> AppIcon.QUEUE
@@ -241,7 +308,7 @@ internal fun PlaylistPickerSort.icon() = when (this) {
  * each folder's other playlists and subfolders together and lists each subfolder's contents below its header.
  */
 private fun pickerRows(playlists: List<Playlist>, sort: PlaylistPickerSort, layout: CollectionLayout,
-    recentAt: Map<String, Long>, trackIds: Set<String>, memberLabel: String): List<PickerRow> {
+    recentAt: Map<String, Long>, trackIds: Set<String>, memberLabel: String, othersLabel: String): List<PickerRow> {
     fun segments(playlist: Playlist) = playlist.folder?.let(::folderSegments).orEmpty()
     fun item(id: String, title: String, trackIds: List<String>) = CollectionItem(id, title, "", null, AppIcon.QUEUE,
         songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0)
@@ -271,7 +338,7 @@ private fun pickerRows(playlists: List<Playlist>, sort: PlaylistPickerSort, layo
     if (members.isEmpty()) return rows(nodes(emptyList(), others), 0)
     return listOf(PickerRow(SECTION_PREFIX + "members", memberLabel, 0, null, section = true)) +
         rows(members.map { node(it, it.name) }.sortedWith(comparator), 0) +
-        (if (others.isEmpty()) emptyList() else listOf(PickerRow(SECTION_PREFIX + "others", "Other playlists", 0, null, section = true))) +
+        (if (others.isEmpty()) emptyList() else listOf(PickerRow(SECTION_PREFIX + "others", othersLabel, 0, null, section = true))) +
         rows(nodes(emptyList(), others), 0)
 }
 
@@ -292,22 +359,24 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
     val layout = state.preferences.collectionLayout(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS)
     val recentAt = remember(state.tracks) { state.tracks.associate { it.id to it.recentAt } }
     val selected = remember(trackIds) { trackIds.distinct() }
+    val memberLabel = stringResource(if (selected.size == 1) Res.string.library_contains_this_song else Res.string.library_contains_selected_songs)
+    val othersLabel = stringResource(Res.string.library_other_playlists)
     // Membership comes from saved playlists, not pending choices, so rows stay put while toggling.
-    val rows = remember(state.playlists, query, sort, layout, recentAt, selected) {
+    val rows = remember(state.playlists, query, sort, layout, recentAt, selected, memberLabel, othersLabel) {
         pickerRows(state.playlists.filter { it.name.contains(query.trim(), ignoreCase = true) }, sort, layout, recentAt,
-            selected.toSet(), if (selected.size == 1) "Contains this song" else "Contains selected songs")
+            selected.toSet(), memberLabel, othersLabel)
     }
     val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
     AppBottomSheet(onDismissRequest = dismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)
             .testTag("playlist-membership-sheet"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Manage playlists", style = MaterialTheme.typography.titleLarge)
-            if (state.playlists.size > 1) SettingChoice("Sort by", sort, PlaylistPickerSort.entries.map { it to it.label() }, card = false) { choice ->
+            Text(stringResource(Res.string.manage_playlists), style = MaterialTheme.typography.titleLarge)
+            if (state.playlists.size > 1) SettingChoice(stringResource(Res.string.library_sort_by), sort, PlaylistPickerSort.entries.map { it to it.label() }, card = false) { choice ->
                 controller.updatePreferences { it.copy(playlistPickerSort = choice) }
             }
             if (state.playlists.isNotEmpty()) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(),
-                label = { Text("Search playlists") }, singleLine = true,
-                trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, "Clear search") { query = "" } })
+                label = { Text(stringResource(Res.string.library_search_playlists)) }, singleLine = true,
+                trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, stringResource(Res.string.library_clear_search)) { query = "" } })
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
                 items(rows, key = { it.key }) { row ->
                     if (row.section) return@items Text(row.label, Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -326,6 +395,8 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
                         it.kind == SourceKind.SERVER && it.id.startsWith("server:${playlist.server.serverId}:")
                     } == true }
                     val editable = playlist.rule == null && playlist.server?.readOnly != true && eligible
+                    val membershipDescription = stringResource(Res.string.library_playlist_membership, playlist.name)
+                    val artworkDescription = stringResource(Res.string.library_playlist_artwork, playlist.name)
                     Row(indent.fillMaxWidth().triStateToggleable(checked, enabled = editable, role = Role.Checkbox,
                         onClick = {
                             val next = checked != ToggleableState.On
@@ -333,37 +404,37 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
                             choices = if (initial == if (next) ToggleableState.On else ToggleableState.Off) choices - playlist.id
                                 else choices + (playlist.id to next)
                         })
-                        .semantics { contentDescription = "Playlist membership: ${playlist.name}" }
+                        .semantics { contentDescription = membershipDescription }
                         .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CollectionArtwork(playlist.artworkPath(state), playlist.name, AppIcon.QUEUE,
-                            Modifier.size(48.dp).semantics { contentDescription = "Playlist artwork: ${playlist.name}" })
+                            Modifier.size(48.dp).semantics { contentDescription = artworkDescription })
                         Column(Modifier.weight(1f)) {
                             Text(row.label, style = MaterialTheme.typography.titleSmall)
                             Text(when {
-                                playlist.rule != null -> "Smart playlist"
-                                playlist.server?.readOnly == true -> "Read-only"
-                                !eligible -> "Only songs from this server"
-                                contained in 1 until selected.size -> "$contained of ${selected.size} selected songs"
-                                else -> countLabel(playlist.trackIds.size, "song")
+                                playlist.rule != null -> stringResource(Res.string.library_smart_playlist)
+                                playlist.server?.readOnly == true -> stringResource(Res.string.library_read_only)
+                                !eligible -> stringResource(Res.string.library_only_server_songs)
+                                contained in 1 until selected.size -> stringResource(Res.string.library_selected_songs_partial, contained, selected.size)
+                                else -> countLabel(playlist.trackIds.size, Res.plurals.songs)
                             }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         TriStateCheckbox(checked, onClick = null, enabled = editable)
                     }
                 }
-                if (state.playlists.isEmpty()) item { Text("Create a playlist to keep these songs together.") }
-                else if (rows.isEmpty()) item { Text("No playlists match \"${query.trim()}\".") }
+                if (state.playlists.isEmpty()) item { Text(stringResource(Res.string.library_create_playlist_hint)) }
+                else if (rows.isEmpty()) item { Text(stringResource(Res.string.library_no_playlists_match, query.trim())) }
             }
             OutlinedButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(AppIcon.PLUS.vector, null); Spacer(Modifier.width(8.dp)); Text("New playlist")
+                Icon(AppIcon.PLUS.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.library_new_playlist))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = dismiss, modifier = Modifier.weight(1f)) {
-                    Icon(AppIcon.CLOSE.vector, null); Spacer(Modifier.width(8.dp)); Text("Cancel")
+                    Icon(AppIcon.CLOSE.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.cancel))
                 }
                 Button(enabled = choices.isNotEmpty(), modifier = Modifier.weight(1f), onClick = {
                     controller.managePlaylistMembership(selected, choices); dismiss()
-                }) { Icon(AppIcon.CHECK.vector, null); Spacer(Modifier.width(8.dp)); Text("Apply") }
+                }) { Icon(AppIcon.CHECK.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.apply)) }
             }
         }
     }
@@ -377,29 +448,29 @@ internal fun SmartPlaylistDialog(state: AppState, controller: MusicController, p
     val count = remember(state.tracks, state.playlists, rule) {
         rule?.let { filterTracks(state.tracks, it, playlisted = playlistedTrackIds(state.playlists)).size }
     }
-    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(if (playlist == null) "New smart playlist" else "Edit rules") },
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(if (playlist == null) Res.string.library_new_smart_playlist else Res.string.edit_rules)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (playlist == null) OutlinedTextField(name, { name = it }, label = { Text("Playlist name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text("Songs update automatically as your library changes.")
+                if (playlist == null) OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.library_playlist_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text(stringResource(Res.string.library_smart_playlist_hint))
                 LibraryQueryFields(playlist?.rule ?: LibraryQuery()) { rule = it }
-                if (count != null) Text(countLabel(count, "matching song"))
+                if (count != null) Text(countLabel(count, Res.plurals.matching_songs))
             }
         },
         confirmButton = { TextButton(enabled = rule != null && (playlist != null || name.isNotBlank()), onClick = {
             if (playlist == null) controller.createSmartPlaylist(name, requireNotNull(rule)) else controller.updatePlaylistRule(playlist.id, requireNotNull(rule))
             dismiss()
-        }) { Text(if (playlist == null) "Create" else "Save") } },
-        dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
+        }) { Text(stringResource(if (playlist == null) Res.string.library_create else Res.string.save)) } },
+        dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(Res.string.cancel)) } })
 }
 
 @Composable
 private fun CreatePlaylistDialog(controller: MusicController, trackIds: List<String> = emptyList(), onCreated: () -> Unit = {}, dismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
-    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text("New playlist") },
-        text = { OutlinedTextField(name, { name = it }, label = { Text("Playlist name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
-        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { controller.createPlaylist(name, trackIds); onCreated(); dismiss() }) { Text("Create") } },
-        dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.library_new_playlist)) },
+        text = { OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.library_playlist_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { controller.createPlaylist(name, trackIds); onCreated(); dismiss() }) { Text(stringResource(Res.string.library_create)) } },
+        dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(Res.string.cancel)) } })
 }
 
 @Composable

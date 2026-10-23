@@ -10,6 +10,17 @@ import me.d3sox.nevumi.app.FileEditTarget
 import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.library_file_name
+import me.d3sox.nevumi.resources.library_keep_extension
+import me.d3sox.nevumi.resources.library_music_file_unavailable
+import me.d3sox.nevumi.resources.library_rename_file
+import me.d3sox.nevumi.resources.library_rename_server_file
+import me.d3sox.nevumi.resources.library_rename_undo_hint
+import me.d3sox.nevumi.resources.rename
+import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.getString
 
 @Composable
 internal fun FileRename(track: Track, controller: MusicController, target: FileEditTarget = FileEditTarget.LOCAL, dismiss: () -> Unit) {
@@ -22,16 +33,16 @@ internal fun FileRename(track: Track, controller: MusicController, target: FileE
     LaunchedEffect(track.id) {
         try { original = controller.musicFileName(track.id, target); name = original }
         catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: Exception) { loadError = error.message ?: "The music file is unavailable" }
+        catch (error: Exception) { loadError = error.message ?: getString(Res.string.library_music_file_unavailable) }
     }
     val valid = name.isNotBlank() && name.none { it == '/' || it == '\\' || it == '\u0000' } &&
         name.substringAfterLast('.').equals(original.substringAfterLast('.'), ignoreCase = true)
-    KeyboardAlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Rename server file" else "Rename file") }, text = {
+    KeyboardAlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(stringResource(if (target == FileEditTarget.SERVER) Res.string.library_rename_server_file else Res.string.library_rename_file)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("You can undo this rename.")
-            OutlinedTextField(name, { name = it }, label = { Text("File name") }, singleLine = true,
+            Text(stringResource(Res.string.library_rename_undo_hint))
+            OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.library_file_name)) }, singleLine = true,
                 enabled = original.isNotEmpty() && !saving, isError = original.isNotEmpty() && !valid,
-                supportingText = { Text("Keep the .${original.substringAfterLast('.')} extension") }, modifier = Modifier.fillMaxWidth())
+                supportingText = { Text(stringResource(Res.string.library_keep_extension, original.substringAfterLast('.'))) }, modifier = Modifier.fillMaxWidth())
             if (saving || (original.isEmpty() && loadError == null)) LinearProgressIndicator(Modifier.fillMaxWidth())
             (loadError ?: state.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
@@ -43,6 +54,6 @@ internal fun FileRename(track: Track, controller: MusicController, target: FileE
                 saving = false
                 if (controller.state.value.error == null) dismiss()
             }
-        }) { Text("Rename") }
-    }, dismissButton = { TextButton(enabled = !saving, onClick = dismiss) { Text("Cancel") } })
+        }) { Text(stringResource(Res.string.rename)) }
+    }, dismissButton = { TextButton(enabled = !saving, onClick = dismiss) { Text(stringResource(Res.string.cancel)) } })
 }

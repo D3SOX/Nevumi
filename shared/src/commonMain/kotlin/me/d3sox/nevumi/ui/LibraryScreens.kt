@@ -52,6 +52,36 @@ import me.d3sox.nevumi.history.listeningStatistics
 import me.d3sox.nevumi.history.ListeningStatistics
 import me.d3sox.nevumi.resources.nevumi_logo
 import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.album
+import me.d3sox.nevumi.resources.artist
+import me.d3sox.nevumi.resources.ascending
+import me.d3sox.nevumi.resources.descending
+import me.d3sox.nevumi.resources.downloads
+import me.d3sox.nevumi.resources.library_all_sources
+import me.d3sox.nevumi.resources.library_device
+import me.d3sox.nevumi.resources.library_filters
+import me.d3sox.nevumi.resources.library_last_played
+import me.d3sox.nevumi.resources.library_nevumi_logo
+import me.d3sox.nevumi.resources.library_no_songs_yet
+import me.d3sox.nevumi.resources.library_rating
+import me.d3sox.nevumi.resources.library_scroll_library
+import me.d3sox.nevumi.resources.library_song_order
+import me.d3sox.nevumi.resources.library_sort_state
+import me.d3sox.nevumi.resources.library_unknown_album
+import me.d3sox.nevumi.resources.library_unknown_album_artist
+import me.d3sox.nevumi.resources.library_unknown_folder
+import me.d3sox.nevumi.resources.library_unknown_genre
+import me.d3sox.nevumi.resources.most_played
+import me.d3sox.nevumi.resources.music_sources
+import me.d3sox.nevumi.resources.recently_added
+import me.d3sox.nevumi.resources.search
+import me.d3sox.nevumi.resources.server
+import me.d3sox.nevumi.resources.settings
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.title
+import me.d3sox.nevumi.resources.unknown_artist
+import org.jetbrains.compose.resources.StringResource
 
 @Composable
 internal fun LibraryScreens(state: AppState, controller: MusicController, modifier: Modifier = Modifier,
@@ -105,6 +135,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     val derived = remember { DerivedResults() }
     val statistics = rememberDerived(null, emptyList(), listOf(state.listens)) { listeningStatistics(state.listens) }
     val filter = state.preferences.libraryFilter
+    val unknownAlbum = stringResource(Res.string.library_unknown_album)
     // Only time-window filters depend on the clock; everything else must not re-sort the library every minute.
     val filterTime = if (filter.lastPlayedWithinDays != null || filter.notPlayedWithinDays != null) now else 0L
     val ranked = order == LibrarySort.PLAY_COUNT || order == LibrarySort.LAST_PLAYED || filter.playCountFrom != null ||
@@ -133,28 +164,30 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.foundation.Image(org.jetbrains.compose.resources.painterResource(me.d3sox.nevumi.resources.Res.drawable.nevumi_logo),
-                    "Nevumi logo", Modifier.size(40.dp))
-                Text(if (tabs[currentIndex] == LibraryTab.HOME) "Home" else countLabel(tracks.size, "song"), style = MaterialTheme.typography.titleSmall,
+                    stringResource(Res.string.library_nevumi_logo), Modifier.size(40.dp))
+                Text(if (tabs[currentIndex] == LibraryTab.HOME) stringResource(LibraryTab.HOME.label) else countLabel(tracks.size, Res.plurals.songs), style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (LibraryTab.SEARCH !in tabs) AppIconButton(AppIcon.SEARCH, "Search", onClick = onSearch)
+            if (LibraryTab.SEARCH !in tabs) AppIconButton(AppIcon.SEARCH, stringResource(Res.string.search), onClick = onSearch)
             val currentTab = tabs[currentIndex]
             val activeSongLists = songPages.activeLists[currentTab] ?: 0
             val sortable = currentTab in setOf(LibraryTab.SONGS, LibraryTab.FAVORITES) ||
                 activeSongLists > 0 && currentTab in setOf(LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS)
+            val direction = stringResource(if (descending) Res.string.descending else Res.string.ascending)
             if (sortable) Box {
-                SortIconButton(order.icon(), "Song order", "${order.name}, ${if (descending) "Descending" else "Ascending"}") { sortMenu = true }
+                SortIconButton(order.icon(), stringResource(Res.string.library_song_order),
+                    stringResource(Res.string.library_sort_state, order.name, direction)) { sortMenu = true }
                 DropdownMenu(sortMenu, { sortMenu = false }) {
-                    listOf(LibrarySort.TITLE to "Title", LibrarySort.ARTIST to "Artist", LibrarySort.ALBUM to "Album",
-                        LibrarySort.RECENT to "Recently added", LibrarySort.RATING to "Rating",
-                        LibrarySort.PLAY_COUNT to "Most played", LibrarySort.LAST_PLAYED to "Last played").forEach { (value, name) ->
-                        AppMenuItem(modifier = Modifier.semantics { selected = value == order }, text = { Text(name) },
+                    listOf(LibrarySort.TITLE to Res.string.title, LibrarySort.ARTIST to Res.string.artist, LibrarySort.ALBUM to Res.string.album,
+                        LibrarySort.RECENT to Res.string.recently_added, LibrarySort.RATING to Res.string.library_rating,
+                        LibrarySort.PLAY_COUNT to Res.string.most_played, LibrarySort.LAST_PLAYED to Res.string.library_last_played).forEach { (value, name) ->
+                        AppMenuItem(modifier = Modifier.semantics { selected = value == order }, text = { Text(stringResource(name)) },
                             leadingIcon = { Icon(value.icon().vector, null) },
                             trailingIcon = { if (value == order) Icon(AppIcon.CHECK.vector, null) },
                             onClick = { controller.updatePreferences { it.copy(songSort = value) }; sortMenu = false })
                     }
                     HorizontalDivider()
-                    AppMenuItem(modifier = Modifier.semantics { contentDescription = if (descending) "Descending" else "Ascending" }, text = { Text(if (descending) "Descending" else "Ascending") }, leadingIcon = { Icon((if (descending) AppIcon.DESCENDING else AppIcon.ASCENDING).vector, null) },
+                    AppMenuItem(modifier = Modifier.semantics { contentDescription = direction }, text = { Text(direction) }, leadingIcon = { Icon((if (descending) AppIcon.DESCENDING else AppIcon.ASCENDING).vector, null) },
                         onClick = { controller.updatePreferences { it.copy(songOrderReversed = !reversed) }; sortMenu = false })
                 }
             }
@@ -162,13 +195,13 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                     LibraryTab.GENRES, LibraryTab.FOLDERS, LibraryTab.PLAYLISTS))
                 CollectionOrder(currentTab, state.preferences.collectionLayout(currentTab), controller,
                     rearrange = if (currentTab == LibraryTab.PLAYLISTS) ({ rearrangingPlaylists = true }) else null)
-            AppIconButton(AppIcon.SETTINGS, "Settings", onClick = onSettings)
+            AppIconButton(AppIcon.SETTINGS, stringResource(Res.string.settings), onClick = onSettings)
             Box {
-                AppIconButton(AppIcon.MENU, "Music sources") { sourceMenu = true }
+                AppIconButton(AppIcon.MENU, stringResource(Res.string.music_sources)) { sourceMenu = true }
                 DropdownMenu(sourceMenu, { sourceMenu = false }) {
-                    listOf<Pair<SourceKind?, String>>(null to "All sources", SourceKind.LOCAL to "Device",
-                        SourceKind.SERVER to "Server", SourceKind.DOWNLOAD to "Downloads").forEach { (value, name) ->
-                        AppMenuItem(modifier = Modifier.semantics { selected = value == sources }, text = { Text(name) }, leadingIcon = { Icon(when {
+                    listOf<Pair<SourceKind?, StringResource>>(null to Res.string.library_all_sources, SourceKind.LOCAL to Res.string.library_device,
+                        SourceKind.SERVER to Res.string.server, SourceKind.DOWNLOAD to Res.string.downloads).forEach { (value, name) ->
+                        AppMenuItem(modifier = Modifier.semantics { selected = value == sources }, text = { Text(stringResource(name)) }, leadingIcon = { Icon(when {
                             value == SourceKind.SERVER -> AppIcon.CLOUD.vector
                             value == SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD.vector
                             value == SourceKind.LOCAL -> AppIcon.DEVICE.vector
@@ -176,7 +209,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                         }, null) }, trailingIcon = { if (value == sources) Icon(AppIcon.CHECK.vector, null) }, onClick = { controller.updatePreferences { it.copy(sourceFilter = value) }; sourceMenu = false })
                     }
                     HorizontalDivider()
-                    AppMenuItem(text = { Text("Filters") }, leadingIcon = { Icon(AppIcon.FILTER.vector, null) },
+                    AppMenuItem(text = { Text(stringResource(Res.string.library_filters)) }, leadingIcon = { Icon(AppIcon.FILTER.vector, null) },
                         onClick = { filters = true; sourceMenu = false })
                 }
             }
@@ -202,16 +235,21 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 LibraryTab.HOME -> HomeScreen(state, controller, tracks, destination, handleBack, onSettings)
                 LibraryTab.SONGS -> SongList(tracks, controller, statistics = statistics, scrollSort = order)
                 LibraryTab.ALBUMS -> {
-                    val albums = rememberDerived("albums", trackChoices, listOf(tracks)) { tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
+                    val albums = rememberDerived("albums", trackChoices + unknownAlbum, listOf(tracks)) { tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
                         .entries.sortedBy { it.key.first.lowercase() }.map { (key, songs) ->
-                            TrackCollection("${key.first.length}:${key.first}${key.second}", key.first.ifBlank { "Unknown album" },
+                            TrackCollection("${key.first.length}:${key.first}${key.second}", key.first.ifBlank { unknownAlbum },
                                 songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }), key.second)
                         } }
                     TrackCollections(albums, LibraryTab.ALBUMS, state, controller, statistics, handleBack, destination)
                 }
                 LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS -> {
-                    val unknownName = "Unknown ${stringResource(tab.label).lowercase().removeSuffix("s")}"
-                    val collections = rememberDerived(tab.name, trackChoices, listOf(tracks)) {
+                    val unknownName = stringResource(when (tab) {
+                        LibraryTab.ARTISTS -> Res.string.unknown_artist
+                        LibraryTab.ALBUM_ARTISTS -> Res.string.library_unknown_album_artist
+                        LibraryTab.GENRES -> Res.string.library_unknown_genre
+                        else -> Res.string.library_unknown_folder
+                    })
+                    val collections = rememberDerived(tab.name, trackChoices + unknownName, listOf(tracks)) {
                         groupedCollections(tracks, unknownName) { track ->
                             when (tab) {
                                 LibraryTab.ARTISTS -> listOf(track.metadata.artist)
@@ -309,9 +347,9 @@ internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: M
                     { toggle(track.id) }, statistics?.get(track.id), entryInfo?.invoke(index) ?: extraInfo[track.id], contextName,
                     playlistPosition = playlistPositions?.getOrNull(index), shuffleContext = shuffleContext)
             }
-            if (tracks.isEmpty()) item { Text("No songs here yet", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (tracks.isEmpty()) item { Text(stringResource(Res.string.library_no_songs_yet), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        LibraryScrollbar(scroll, tracks.size, "Scroll library", if (header == null) 0 else 1) { scrollIndicator?.invoke(it) ?: tracks[it].scrollLabel(scrollSort, statistics) }
+        LibraryScrollbar(scroll, tracks.size, stringResource(Res.string.library_scroll_library), if (header == null) 0 else 1) { scrollIndicator?.invoke(it) ?: tracks[it].scrollLabel(scrollSort, statistics) }
         }
     }
 }
