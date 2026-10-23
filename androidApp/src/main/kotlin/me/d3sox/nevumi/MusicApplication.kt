@@ -83,19 +83,21 @@ class MusicApplication : Application() {
         val localSources = AndroidLocalSources(this, library, artwork)
         soundCloud = SoundCloudDownloads(store, http, tunnel::scGateUrl, MediaStoreSoundCloudFiles(this), localSources,
             connection::client, serverChanges, artwork, offline, scheduleWork = downloadJobs::scheduleSoundCloud)
+        val scrobbling = Scrobbling(store, library, http, credentials, downloadNetwork.state, connection::client)
+        val equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http)
         controller = MusicController(library, PlaybackQueue(store),
             AndroidPlaybackEngine(this, PlaybackService::class.java),
             connection, localSources, offline, playlists, AndroidAudioAccess(this)::available,
             MusicPreferences(store), artwork, serverChanges,
             AndroidFileEdits(this, store, library, File(filesDir, "file-edits").path, mediaWriteRequests::request, artwork),
             listeningHistory = history,
-            scrobbling = Scrobbling(store, library, http, credentials, downloadNetwork.state, connection::client),
-            equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http), serverFiles = serverFiles,
+            scrobbling = scrobbling, equalizerProfiles = equalizerProfiles, serverFiles = serverFiles,
             pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges, AndroidAudioAccess(this)::contentId), credentials, "Android phone",
                 networkAccess = localNetworkRequests::request),
             tunnel = tunnel, networkAccess = localNetworkRequests::request, soundCloud = soundCloud,
-            discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client))
+            discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client),
+            backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles))
         widgetUpdates = NowPlayingWidgetUpdates(this, controller).apply { resume() }
     }
 

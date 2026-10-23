@@ -178,6 +178,14 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
     }
 
     suspend fun saved(): List<SavedQueue> = store.list<SavedQueue>("saved-queues").sortedBy { it.name.lowercase() }
+    /** Adds a saved queue made elsewhere, such as from a backup, without touching the current queue. */
+    suspend fun addSaved(name: String, snapshot: QueueSnapshot, kind: SavedQueueKind, capturedAt: Long): SavedQueue {
+        require(name.isNotBlank()) { "Enter a queue name" }
+        require(kind != SavedQueueKind.RECOVERY) { "Recovery snapshots are captured automatically" }
+        val saved = SavedQueue(Uuid.random().toString(), name.trim(), snapshot.copy(selectedSavedQueueId = null), kind, capturedAt)
+        store.put("saved-queue:${saved.id}", "saved-queues", saved)
+        return saved
+    }
     fun observeSaved() = store.database.records().observe("saved-queues").map { Unit }
 
     suspend fun renameSaved(id: String, name: String) = store.transaction {

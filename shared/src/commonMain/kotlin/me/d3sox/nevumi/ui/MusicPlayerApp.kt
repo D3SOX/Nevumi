@@ -56,11 +56,12 @@ private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES,
 @Composable
 fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null, artworkPicker: ArtworkPicker? = null,
     playlistFiles: PlaylistFiles? = null, equalizerFiles: EqualizerFiles? = null, folderPicker: FolderPicker? = null,
-    audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null) {
+    audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null, backupFiles: BackupFiles? = null) {
     val picker = artworkPicker ?: rememberArtworkPicker()
     val files = playlistFiles ?: rememberPlaylistFiles()
     val equalizerDocuments = equalizerFiles ?: rememberEqualizerFiles()
     val folders = folderPicker ?: rememberFolderPicker()
+    val backups = backupFiles ?: rememberBackupFiles()
     // The position changes many times per second; the seek bar observes it on its own so the app does not recompose.
     val steadyState = remember(controller) { MutableStateFlow(controller.state.value.withoutProgress()) }
     LaunchedEffect(steadyState) { controller.state.collect { steadyState.value = it.withoutProgress() } }
@@ -111,6 +112,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         value = if (cover == null) null else withContext(Dispatchers.Default) { cover.themeColor(Color(0xFF6750A4)) }
     }
     CompositionLocalProvider(LocalSteadyState provides steadyState, LocalAudioWaveforms provides waveforms, LocalArtworkPicker provides picker, LocalPlaylistFiles provides files, LocalEqualizerFiles provides equalizerDocuments,
+        LocalBackupFiles provides backups,
         LocalMarqueeSpeed provides state.preferences.marqueeSpeed.toFloat(),
         LocalLibraryNavigate provides { tab, id -> openLibrary(tab, id) },
         LocalLibraryFocusHandled provides { libraryDestination = libraryDestination?.copy(trackId = null) },

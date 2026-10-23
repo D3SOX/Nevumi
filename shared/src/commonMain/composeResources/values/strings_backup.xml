@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Backing up and restoring settings, playlists, history and profiles. -->
+<resources>
+    <string name="backup_export">Export backup</string>
+    <string name="backup_export_description">Save settings, playlists, history and profiles to a file</string>
+    <string name="backup_restore">Restore backup</string>
+    <string name="backup_restore_description">Add a backup file’s playlists, history and settings to this device</string>
+    <string name="backup_in_progress">Working on the backup…</string>
+    <string name="backup_file_type">Nevumi backups</string>
+
+    <string name="backup_restore_confirm_title">Restore a backup?</string>
+    <string name="backup_restore_confirm_text">Your settings are replaced by the backup’s. Playlists, saved queues, listening history, favorites and ratings are added to what is already here, and nothing is deleted. Backups contain no passwords or tokens, so you may need to sign in to your services again.</string>
+    <string name="backup_restore_confirm">Choose file</string>
+
+    <string name="backup_summary_title">Backup restored</string>
+    <string name="backup_summary_settings">Settings</string>
+    <string name="backup_summary_settings_restored">Restored</string>
+    <string name="backup_summary_favorites">Favorites added</string>
+    <string name="backup_summary_ratings">Ratings changed</string>
+    <string name="backup_summary_playlists_added">New playlists</string>
+    <string name="backup_summary_playlists_merged">Playlists with added songs</string>
+    <string name="backup_summary_saved_queues">Saved queues</string>
+    <string name="backup_summary_listens">Listens</string>
+    <string name="backup_summary_equalizer">Equalizer profiles</string>
+    <string name="backup_summary_scrobbling">Scrobbling accounts updated</string>
+    <string name="backup_summary_soundcloud">SoundCloud downloads</string>
+    <string name="backup_summary_soundcloud_restored">Set up</string>
+    <string name="backup_summary_unmatched">Songs not found in this library</string>
+    <string name="backup_summary_unmatched_description">Playlists, queues and history skip these songs. Add the music, then restore again to fill them in.</string>
+    <string name="backup_summary_nothing">Everything in this backup is already here.</string>
+    <string name="backup_summary_sign_in">Sign in again</string>
+
+    <string name="backup_service_music_server">Music server</string>
+    <string name="backup_service_sftp">Server files (SFTP)</string>
+    <string name="backup_service_listenbrainz">ListenBrainz</string>
+    <string name="backup_service_lastfm">Last.fm</string>
+
+    <string name="backup_notice_exported">Backup saved</string>
+    <string name="backup_notice_restored">Backup restored</string>
+
+    <string name="backup_error_export">Could not save the backup. %1$s</string>
+    <string name="backup_error_restore">Could not restore the backup. %1$s</string>
+    <string name="backup_error_invalid">This file is not a Nevumi backup</string>
+    <string name="backup_error_version">This backup uses format %1$d, which this version of Nevumi cannot read. Update Nevumi and try again.</string>
+    <string name="backup_error_unavailable">Backups are unavailable</string>
+    <string name="backup_error_picker_open">A file picker is already open</string>
+    <string name="backup_error_unreadable">The backup file could not be read</string>
+    <string name="backup_error_unwritable">The backup file could not be saved</string>
+</resources>

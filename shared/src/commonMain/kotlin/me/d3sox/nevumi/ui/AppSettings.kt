@@ -483,6 +483,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 SettingsLink(stringResource(Res.string.saved_queues), AppIcon.QUEUE, stringResource(Res.string.settings_saved_queues_description), savedQueues)
                 SettingsLink(stringResource(Res.string.about_nevumi), AppIcon.INFO, stringResource(Res.string.settings_about_nevumi_description)) { about = true }
                 }
+                BackupSettings(controller)
             }
         }
     })

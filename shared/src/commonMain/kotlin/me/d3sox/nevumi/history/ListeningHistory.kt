@@ -105,6 +105,15 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
         saved
     }
 
+    /** Adds listens recorded elsewhere, such as from a backup, skipping those already present; returns how many were added. */
+    suspend fun import(listens: List<Listen>): Int = recording.withLock {
+        require(listens.all { it.listenedMs >= 0 && it.playedMs >= 0 && it.durationMs >= 0 && it.startedAt >= 0 }) { "Invalid listening history" }
+        store.transaction {
+            listens.distinctBy { it.id }.count { listen ->
+                (store.read<Listen>("listen:${listen.id}") == null).also { missing -> if (missing) store.put("listen:${listen.id}", "listens", listen) }
+            }
+        }
+    }
     suspend fun all(): List<Listen> = load()
     suspend fun clear() = recording.withLock {
         store.transaction {
