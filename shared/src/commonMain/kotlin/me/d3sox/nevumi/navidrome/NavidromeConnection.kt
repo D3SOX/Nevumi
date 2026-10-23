@@ -60,9 +60,13 @@ class NavidromeConnection(private val store: MusicStore, private val http: HttpC
         }
         cachedClient
     }
+    /** The queue this device last saved to the server, so it does not offer to continue its own queue. */
+    suspend fun uploadedPlayQueue(): ServerPlayQueue? = store.read("server:play-queue")
+    suspend fun rememberUploadedPlayQueue(queue: ServerPlayQueue) = store.put("server:play-queue", "play-queue-uploads", queue)
     suspend fun disconnect() = access.withLock {
         vault.delete("navidrome")
         store.database.records().delete("server:navidrome")
+        store.database.records().delete("server:play-queue")
         cachedClient = null
         cachedProfile = null
         cachedPassword = null

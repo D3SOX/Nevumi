@@ -70,6 +70,8 @@ data class MusicSettings(
     val crossfadeDurationMs: Long = 0,
     val gaplessPlayback: Boolean = true,
     val replayGain: ReplayGain = ReplayGain(),
+    /** Shares the queue with the music server, so other devices and Subsonic apps can continue it. */
+    val syncPlayQueue: Boolean = true,
     val milkDrop: me.d3sox.nevumi.visualizer.MilkDropSettings = me.d3sox.nevumi.visualizer.MilkDropSettings(),
     val showRemainingTime: Boolean = false,
     val showPreviousQueueTracks: Boolean = true,

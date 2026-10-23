@@ -129,6 +129,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val discoveryController = DiscoveryController(context, queueController, discovery)
     val backupController = BackupController(context, loader, playbackController, fileEditController, queue, engine, backup)
     val lyricsController = LyricsController(context, lyrics)
+    val serverQueueController = ServerQueueController(context, playbackController, queue, engine, navidrome)
     private val shutdown = Mutex()
     private var shutdownFinished = false
     val state = context.state
@@ -163,6 +164,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             }
             loader.refreshDetails(loading = false)
             context.update { it.copy(loading = it.serverRefresh?.running == true, error = recoveryError ?: it.error) }
+            serverQueueController.start()
         }
     }
 
@@ -215,6 +217,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun cancelServerRefresh() = serverController.cancelServerRefresh()
     fun dismissServerRefresh() = serverController.dismissServerRefresh()
     fun disconnectServer() = serverController.disconnectServer()
+    fun checkServerQueue() = serverQueueController.checkServerQueue()
 
     // SoundCloud
     suspend fun testSoundCloud(address: String): ScGateCapabilities = soundCloudController.testSoundCloud(address)

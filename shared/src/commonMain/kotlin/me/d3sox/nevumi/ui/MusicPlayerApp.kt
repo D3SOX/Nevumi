@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -66,6 +67,9 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     val steadyState = remember(controller) { MutableStateFlow(controller.state.value.withoutProgress()) }
     LaunchedEffect(steadyState) { controller.state.collect { steadyState.value = it.withoutProgress() } }
     val state by steadyState.collectAsState()
+    // Returning to the app may follow listening elsewhere, so it looks for a queue another device saved on the server.
+    val focused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(focused) { if (focused) controller.checkServerQueue() }
     val waveformReader = audioWaveforms ?: rememberAudioWaveforms()
     val waveforms = remember(waveformReader) { me.d3sox.nevumi.playback.PreparedAudioWaveforms(waveformReader) }
     DisposableEffect(waveforms) { onDispose { waveforms.close() } }

@@ -30,6 +30,8 @@
     <string name="notice_soundcloud_check_tags">Check the tags of “%1$s” to finish</string>
     <string name="notice_soundcloud_failed">“%1$s” could not be downloaded</string>
     <string name="notice_soundcloud_added">Added “%1$s”</string>
+    <string name="notice_continue_queue_from">Continue “%1$s” from %2$s</string>
+    <string name="notice_continue_server_queue">Continue “%1$s” from your music server</string>
     <string name="notice_soundcloud_saved_outside">Saved “%1$s” outside your library folders</string>
     <string name="notice_soundcloud_downloading">Downloading “%1$s”</string>
 </resources>

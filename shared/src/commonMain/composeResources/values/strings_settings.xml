@@ -237,6 +237,7 @@
     <string name="settings_keywords_download_network">metered wifi unmetered</string>
     <string name="settings_keywords_manage_downloads">offline progress auto playlist</string>
     <string name="settings_keywords_music_server">navidrome subsonic address url username password connect refresh disconnect</string>
+    <string name="settings_keywords_sync_play_queue">play queue resume continue other devices subsonic apps</string>
     <string name="settings_keywords_record_listening_history">statistics recommendations</string>
     <string name="settings_keywords_clear_listening_history">delete statistics</string>
     <string name="settings_keywords_scrobble_after">threshold percentage percent lastfm listenbrainz server</string>

@@ -52,6 +52,8 @@ import me.d3sox.nevumi.resources.settings_keywords_connect_last_fm
 import me.d3sox.nevumi.resources.settings_keywords_connect_listenbrainz
 import me.d3sox.nevumi.resources.settings_keywords_crossfade
 import me.d3sox.nevumi.resources.settings_keywords_replay_gain
+import me.d3sox.nevumi.resources.settings_keywords_sync_play_queue
+import me.d3sox.nevumi.resources.sources_sync_play_queue
 import me.d3sox.nevumi.resources.settings_replay_gain
 import me.d3sox.nevumi.resources.settings_keywords_customize_home
 import me.d3sox.nevumi.resources.settings_keywords_download_network
@@ -171,6 +173,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             add(SettingEntry(Res.string.settings_manage_downloads, "Downloads & cache", AppIcon.DOWNLOAD, Res.string.settings_keywords_manage_downloads,
                 "Manage downloads"))
             add(SettingEntry(Res.string.music_server, "Music server", AppIcon.SERVER, Res.string.settings_keywords_music_server))
+            add(SettingEntry(Res.string.sources_sync_play_queue, "Music server", AppIcon.QUEUE, Res.string.settings_keywords_sync_play_queue))
             category("Listening & scrobbling", AppIcon.HISTORY, Res.string.record_listening_history to Res.string.settings_keywords_record_listening_history,
                 Res.string.settings_clear_listening_history to Res.string.settings_keywords_clear_listening_history)
             if (controller.scrobblingAvailable) {
