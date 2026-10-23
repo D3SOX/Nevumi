@@ -44,19 +44,22 @@ class BackupController internal constructor(private val context: ControllerConte
 
     fun restore(files: BackupFiles) = run(Res.string.backup_error_restore) {
         val text = files.open() ?: return@run
-        // Settings are not observed; reload them with the library and apply them as changing them in Settings does,
-        // also after a failure, because each restored part is saved as it goes.
-        val previous = context.state.value.preferences
-        val summary = try { requireNotNull(backup).restore(text) } finally {
-            withContext(NonCancellable) { context.operations.withLock {
-                loader.refresh()
-                playback.applyPreferences()
-                val settings = context.state.value.preferences
-                if (playback.queueLoaded && settings.sourcePriority != previous.sourcePriority)
-                    engine.updateQueue(playback.playableQueue(queue.snapshot()))
-                if (settings.undoRetentionDays != previous.undoRetentionDays || settings.undoBackupBytes != previous.undoBackupBytes)
-                    fileEditing.trimFileHistory()
-            } }
+        // The merge takes several steps, so it holds the operation lock against other changes, but only once the picker closed.
+        val summary = context.operations.withLock {
+            // Settings are not observed; reload them with the library and apply them as changing them in Settings does,
+            // also after a failure, because each restored part is saved as it goes.
+            val previous = context.state.value.preferences
+            try { requireNotNull(backup).restore(text) } finally {
+                withContext(NonCancellable) {
+                    loader.refresh()
+                    playback.applyPreferences()
+                    val settings = context.state.value.preferences
+                    if (playback.queueLoaded && settings.sourcePriority != previous.sourcePriority)
+                        engine.updateQueue(playback.playableQueue(queue.snapshot()))
+                    if (settings.undoRetentionDays != previous.undoRetentionDays || settings.undoBackupBytes != previous.undoBackupBytes)
+                        fileEditing.trimFileHistory()
+                }
+            }
         }
         mutableStatus.update { it.copy(summary = summary) }
         context.confirm(Res.string.backup_notice_restored)
@@ -64,7 +67,7 @@ class BackupController internal constructor(private val context: ControllerConte
 
     fun dismissSummary() = mutableStatus.update { it.copy(summary = null) }
 
-    /** Runs outside the operation lock: the picker waits for the user and the services keep their own transactions. */
+    /** Runs outside the operation lock, because the picker waits for the user; a restore takes the lock once it has its file. */
     private fun run(failure: org.jetbrains.compose.resources.StringResource, block: suspend () -> Unit) = context.action(serialized = false) {
         if (backup == null) throw IllegalStateException(getString(Res.string.backup_error_unavailable))
         // A backup taken or matched while songs are still importing would miss the songs imported later.
