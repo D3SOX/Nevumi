@@ -56,6 +56,8 @@ class FileLyricsTest {
             assertEquals(3_000, content.embedded(source)?.lines?.single()?.startMs)
             assertEquals(source.location, opened)
             assertNull(content.sidecar(source))
+            // Scoped storage can leave only the content URI; the audio's start still tells its format.
+            assertEquals(3_000, content.embedded(source.copy(filePath = null))?.lines?.single()?.startMs)
         } finally { directory.toFile().deleteRecursively() }
     }
 

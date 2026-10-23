@@ -22,13 +22,26 @@ class FileLyrics(private val openContent: ((String) -> InputStream?)? = null) : 
     override suspend fun embedded(source: TrackSource): Lyrics? = withContext(Dispatchers.IO) {
         file(source)?.let { return@withContext embedded(it) }
         val open = openContent ?: return@withContext null
-        // jaudiotagger picks its reader by extension, which only the file path still tells.
-        val extension = source.filePath?.substringAfterLast('.', "").orEmpty().ifBlank { return@withContext null }
-        val copy = File.createTempFile("nevumi-lyrics-", ".$extension")
-        try {
-            open(source.location)?.use { input -> copy.outputStream().use { input.copyTo(it) } } ?: return@withContext null
-            embedded(copy)
-        } finally { copy.delete() }
+        val input = open(source.location) ?: return@withContext null
+        input.buffered().use { stream ->
+            // jaudiotagger picks its reader by extension. The file path tells it when there is one; scoped storage can leave
+            // only a content URI, so the start of the audio tells it then.
+            stream.mark(HEADER_BYTES)
+            // InputStream.readNBytes(int) needs Android 13; minSdk is 31.
+            val header = ByteArray(HEADER_BYTES).let { buffer ->
+                var read = 0
+                while (read < buffer.size) { val count = stream.read(buffer, read, buffer.size - read); if (count < 0) break; read += count }
+                buffer.copyOf(read)
+            }
+            stream.reset()
+            val extension = source.filePath?.substringAfterLast('.', "")?.takeIf { it.isNotBlank() } ?: audioExtension(header)
+                ?: return@withContext null
+            val copy = File.createTempFile("nevumi-lyrics-", ".$extension")
+            try {
+                copy.outputStream().use { stream.copyTo(it) }
+                embedded(copy)
+            } finally { copy.delete() }
+        }
     }
 
     override suspend fun sidecar(source: TrackSource): Lyrics? = withContext(Dispatchers.IO) {
@@ -55,5 +68,21 @@ class FileLyrics(private val openContent: ((String) -> InputStream?)? = null) : 
         val vorbis = (tag as? FlacTag)?.vorbisCommentTag ?: tag as? VorbisCommentTag
         val text = read { tag.getFirst(FieldKey.LYRICS) }.ifBlank { read { vorbis?.getFirst("UNSYNCEDLYRICS") } }
         return LrcParser.parse(text, LyricsSource.EMBEDDED)
+    }
+}
+
+private const val HEADER_BYTES = 12
+
+/** The extension jaudiotagger reads [header]'s audio by, from the signatures of the formats it supports. */
+internal fun audioExtension(header: ByteArray): String? {
+    fun starts(text: String, at: Int = 0) = header.size >= at + text.length && text.indices.all { header[at + it] == text[it].code.toByte() }
+    return when {
+        starts("fLaC") -> "flac"
+        starts("ID3") || header.size >= 2 && header[0] == 0xFF.toByte() && header[1].toInt() and 0xE0 == 0xE0 -> "mp3"
+        starts("OggS") -> "ogg"
+        starts("RIFF") && starts("WAVE", 8) -> "wav"
+        starts("ftyp", 4) -> "m4a"
+        starts("FORM") -> "aif"
+        else -> null
     }
 }

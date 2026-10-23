@@ -50,16 +50,20 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 
     suspend fun export(appVersion: String = ""): String {
         val tracks = library.tracks().associateBy { it.id }
+        // Android names local folders relative to its storage, like "Music/Sky", which looks like a server folder; a folder that
+        // holds a song from this device is local however it is written.
+        val localFolders = tracks.values.filter { track -> track.sources.any { it.kind == SourceKind.LOCAL } }.mapNotNullTo(HashSet()) { it.metadata.folder.ifBlank { null } }
+        fun isDeviceFolder(folder: String) = isDevicePath(folder) || folder in localFolders
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
         val settings = preferences.load().let { it.copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap(),
-            libraryFilter = it.libraryFilter.copy(folder = it.libraryFilter.folder?.takeUnless(::isDevicePath)),
+            libraryFilter = it.libraryFilter.copy(folder = it.libraryFilter.folder?.takeUnless(::isDeviceFolder)),
             // A custom Folders order names local folders by their paths.
-            collectionLayouts = it.collectionLayouts.mapValues { (_, layout) -> layout.copy(order = layout.order.filterNot(::isDevicePath)) }) }
+            collectionLayouts = it.collectionLayouts.mapValues { (_, layout) -> layout.copy(order = layout.order.filterNot(::isDeviceFolder)) }) }
         val listened = history.all()
         val playlists = playlists.all().map { playlist ->
             val rule = playlist.rule
             // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
-            if (rule?.folder?.let(::isDevicePath) == true) BackupPlaylist(playlist.name,
+            if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name,
                 filterTracks(tracks.values.toList(), rule, listeningStatistics(listened)).map { it.id }, null,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
             else BackupPlaylist(playlist.name, if (rule == null) playlist.trackIds else emptyList(), rule,
@@ -67,7 +71,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         }
         val savedQueues = queue.saved().filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
             // A queue played from a local folder is named after its path, which device sync also replaces.
-            val folder = saved.snapshot.origin?.tab == LibraryTab.FOLDERS || isDevicePath(saved.snapshot.contextName)
+            val folder = saved.snapshot.origin?.tab == LibraryTab.FOLDERS || isDeviceFolder(saved.snapshot.contextName)
             BackupSavedQueue(saved.name, saved.snapshot.copy(selectedSavedQueueId = null, origin = null,
                 contextName = if (folder) "Library" else saved.snapshot.contextName), saved.kind, saved.capturedAt)
         }
