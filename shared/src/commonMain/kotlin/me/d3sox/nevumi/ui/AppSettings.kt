@@ -26,6 +26,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_gate_browser
 import me.d3sox.nevumi.resources.ssh_authentication
 import me.d3sox.nevumi.resources.statistics_grouping
 import me.d3sox.nevumi.resources.music_sources
@@ -518,7 +519,7 @@ internal fun <T> SettingChoice(label: StringResource, selected: T, choices: List
 @Composable
 internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T, String>>, card: Boolean = true, change: (T) -> Unit) {
     val key = settingKey(label)
-    SettingChoice(label, key, key?.let(::settingsIcon) ?: legacySettingsIcon(label) ?: AppIcon.SETTINGS, selected, choices, card, change)
+    SettingChoice(label, key, key?.let(::settingsIcon) ?: AppIcon.SETTINGS, selected, choices, card, change)
 }
 
 @Composable
@@ -553,7 +554,7 @@ private fun <T> SettingChoice(label: String, key: StringResource?, icon: AppIcon
         is Int -> if (key == Res.string.keep_undo_backups) AppIcon.YEAR else null
         is me.d3sox.nevumi.history.ListeningPeriod -> if (value.days == null) AppIcon.HISTORY else AppIcon.YEAR
         null -> when (key) { Res.string.on_launch -> AppIcon.HISTORY; Res.string.music_sources -> AppIcon.LIBRARY
-            else -> if (label == "Gate browser") AppIcon.SERVER else null }
+            Res.string.sources_gate_browser -> AppIcon.SERVER; else -> null }
         is String -> if (key == Res.string.statistics_grouping) when (value) {
             "Songs" -> AppIcon.MUSIC; "Artists" -> AppIcon.ARTIST; "Albums" -> AppIcon.ALBUM; "Genres" -> AppIcon.GENRE; else -> null
         } else if (key == Res.string.ssh_authentication) { if (value == "SSH private key") AppIcon.KEY else AppIcon.LOCK } else null

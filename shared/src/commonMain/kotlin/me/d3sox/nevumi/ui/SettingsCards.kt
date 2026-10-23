@@ -12,6 +12,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_gate_browser
+import me.d3sox.nevumi.resources.sources_when_you_pick_a_song
+import me.d3sox.nevumi.resources.sources_download_format
 import me.d3sox.nevumi.resources.colors
 import me.d3sox.nevumi.resources.download_network
 import me.d3sox.nevumi.resources.keep_undo_backups
@@ -108,6 +111,9 @@ internal fun settingsIcon(label: StringResource): AppIcon = when (label) {
     Res.string.statistics_grouping -> AppIcon.STATISTICS
     Res.string.ssh_authentication -> AppIcon.KEY
     Res.string.music_library -> AppIcon.FOLDER
+    Res.string.sources_download_format -> AppIcon.MUSIC
+    Res.string.sources_when_you_pick_a_song -> AppIcon.DOWNLOAD
+    Res.string.sources_gate_browser -> AppIcon.BROWSER
     else -> AppIcon.SETTINGS
 }
 
@@ -116,6 +122,7 @@ private val iconSettings = listOf(Res.string.theme, Res.string.colors, Res.strin
     Res.string.swipe_right, Res.string.swipe_left, Res.string.quick_action, Res.string.show_options_buttons, Res.string.library_tabs,
     Res.string.source_priority, Res.string.music_sources, Res.string.playback_cache, Res.string.undo_backup_storage,
     Res.string.download_network, Res.string.record_listening_history, Res.string.keep_undo_backups, Res.string.statistics_grouping,
+    Res.string.sources_download_format, Res.string.sources_when_you_pick_a_song, Res.string.sources_gate_browser,
     Res.string.ssh_authentication, Res.string.music_library)
 
 /** Finds the setting a resolved label belongs to by comparing it with the displayed, localized setting names. */
@@ -126,10 +133,3 @@ internal fun settingKey(label: String): StringResource? {
     return key
 }
 
-/** SoundCloud settings still pass English labels; these keep their icons until they move to string resources. */
-internal fun legacySettingsIcon(label: String): AppIcon? = when (label) {
-    "Download format" -> AppIcon.MUSIC
-    "When you pick a song" -> AppIcon.DOWNLOAD
-    "Gate browser" -> AppIcon.BROWSER
-    else -> null
-}
