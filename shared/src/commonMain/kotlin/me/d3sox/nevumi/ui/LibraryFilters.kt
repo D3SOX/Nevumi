@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +21,15 @@ import me.d3sox.nevumi.resources.album_artist
 import me.d3sox.nevumi.resources.artist
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.downloads
+import me.d3sox.nevumi.resources.library_all_sources
+import me.d3sox.nevumi.resources.library_clear_all_filters
+import me.d3sox.nevumi.resources.library_device
+import me.d3sox.nevumi.resources.library_filter_plays
+import me.d3sox.nevumi.resources.library_filter_range
+import me.d3sox.nevumi.resources.library_filter_seconds
+import me.d3sox.nevumi.resources.library_filter_year
+import me.d3sox.nevumi.resources.library_filter_value
+import me.d3sox.nevumi.resources.library_remove_filter
 import me.d3sox.nevumi.resources.matching_songs
 import me.d3sox.nevumi.resources.most_played
 import me.d3sox.nevumi.resources.music_sources
@@ -57,6 +67,7 @@ import me.d3sox.nevumi.resources.sources_song_order
 import me.d3sox.nevumi.resources.sources_year_from
 import me.d3sox.nevumi.resources.sources_year_to
 import me.d3sox.nevumi.resources.title
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -77,6 +88,86 @@ internal fun LibraryFiltersDialog(state: AppState, controller: MusicController, 
             TextButton(onClick = dismiss) { Text(stringResource(Res.string.cancel)) }
         }
     })
+}
+
+/**
+ * Shows the chosen [source] and each active library filter as chips. A chip opens its picker with [editSource] or [edit],
+ * and its close icon removes it through [changeSource] or [change].
+ */
+@Composable
+internal fun ActiveLibraryFilters(filter: LibraryQuery, source: SourceKind?, edit: () -> Unit, editSource: () -> Unit,
+    change: (LibraryQuery) -> Unit, changeSource: (SourceKind?) -> Unit) {
+    val active = activeFilters(filter)
+    if (active.isEmpty() && source == null) return
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        @Composable
+        fun FilterChip(label: String, open: () -> Unit, remove: () -> Unit, icon: AppIcon? = null) {
+            InputChip(true, open, label = { Text(label, maxLines = 1) }, leadingIcon = icon?.let { { Icon(it.vector, null, Modifier.size(InputChipDefaults.IconSize)) } },
+                // The default primary icon color fades on a selected chip; match the label instead.
+                colors = InputChipDefaults.inputChipColors(selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                trailingIcon = {
+                    Icon(AppIcon.CLOSE.vector, stringResource(Res.string.library_remove_filter, label),
+                        Modifier.size(InputChipDefaults.AvatarSize).clickable(onClick = remove))
+                })
+        }
+        if (source != null) FilterChip(stringResource(source.sourceName()), editSource, { changeSource(null) }, source.sourceIcon())
+        active.forEach { item ->
+            val name = stringResource(item.label)
+            val value = item.to?.let { stringResource(Res.string.library_filter_range, item.value.orEmpty(), it) } ?: item.value
+            FilterChip(value?.let { stringResource(Res.string.library_filter_value, name, it) } ?: name, edit, { change(item.clear(filter)) })
+        }
+        TextButton({ change(LibraryQuery()); changeSource(null) }) { Text(stringResource(Res.string.library_clear_all_filters)) }
+    }
+}
+
+internal fun LibraryQuery.hasActiveFilters() = activeFilters(this).isNotEmpty()
+
+internal fun SourceKind?.sourceName(): StringResource = when (this) {
+    SourceKind.LOCAL -> Res.string.library_device
+    SourceKind.SERVER -> Res.string.server
+    SourceKind.DOWNLOAD -> Res.string.downloads
+    null -> Res.string.library_all_sources
+}
+
+internal fun SourceKind?.sourceIcon(): AppIcon = when (this) {
+    SourceKind.LOCAL -> AppIcon.DEVICE
+    SourceKind.SERVER -> AppIcon.CLOUD
+    SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD
+    null -> AppIcon.LIBRARY
+}
+
+/** A filter chip; a range with both ends shows [value] to [to] in one chip. */
+private class ActiveFilter(val label: StringResource, val value: String?, val clear: (LibraryQuery) -> LibraryQuery, val to: String? = null)
+
+/** Lists the fields of [LibraryFiltersDialog] that differ from their defaults, in the dialog's order. */
+private fun activeFilters(filter: LibraryQuery): List<ActiveFilter> = buildList {
+    fun value(label: StringResource, value: Any?, clear: (LibraryQuery) -> LibraryQuery) { if (value != null) add(ActiveFilter(label, value.toString(), clear)) }
+    fun toggle(label: StringResource, on: Boolean, clear: (LibraryQuery) -> LibraryQuery) { if (on) add(ActiveFilter(label, null, clear)) }
+    fun range(label: StringResource, from: Pair<StringResource, Any?>, to: Pair<StringResource, Any?>,
+        clearFrom: (LibraryQuery) -> LibraryQuery, clearTo: (LibraryQuery) -> LibraryQuery) {
+        if (from.second != null && to.second != null) add(ActiveFilter(label, from.second.toString(), { clearTo(clearFrom(it)) }, to.second.toString()))
+        else { value(from.first, from.second, clearFrom); value(to.first, to.second, clearTo) }
+    }
+    value(Res.string.sources_genre, filter.genre) { it.copy(genre = null) }
+    value(Res.string.artist, filter.artist) { it.copy(artist = null) }
+    value(Res.string.album, filter.album) { it.copy(album = null) }
+    value(Res.string.album_artist, filter.albumArtist) { it.copy(albumArtist = null) }
+    value(Res.string.sources_folder, filter.folder) { it.copy(folder = null) }
+    range(Res.string.library_filter_year, Res.string.sources_year_from to filter.yearFrom, Res.string.sources_year_to to filter.yearTo,
+        { it.copy(yearFrom = null) }) { it.copy(yearTo = null) }
+    range(Res.string.library_filter_seconds, Res.string.sources_minimum_seconds to filter.durationFromMs?.div(1000),
+        Res.string.sources_maximum_seconds to filter.durationToMs?.div(1000), { it.copy(durationFromMs = null) }) { it.copy(durationToMs = null) }
+    range(Res.string.sources_rating, Res.string.sources_minimum_rating to filter.ratingFrom, Res.string.sources_maximum_rating to filter.ratingTo,
+        { it.copy(ratingFrom = null) }) { it.copy(ratingTo = null) }
+    range(Res.string.library_filter_plays, Res.string.sources_minimum_plays to filter.playCountFrom, Res.string.sources_maximum_plays to filter.playCountTo,
+        { it.copy(playCountFrom = null) }) { it.copy(playCountTo = null) }
+    value(Res.string.sources_played_within_days, filter.lastPlayedWithinDays) { it.copy(lastPlayedWithinDays = null) }
+    value(Res.string.sources_not_played_within_days, filter.notPlayedWithinDays) { it.copy(notPlayedWithinDays = null) }
+    toggle(Res.string.sources_available_sources_only, filter.availableOnly) { it.copy(availableOnly = false) }
+    toggle(Res.string.sources_not_on_server, filter.notOnServer) { it.copy(notOnServer = false) }
+    toggle(Res.string.sources_not_in_any_playlist, filter.notInPlaylist) { it.copy(notInPlaylist = false) }
+    value(Res.string.sources_song_limit, filter.limit) { it.copy(limit = null) }
 }
 
 @Composable

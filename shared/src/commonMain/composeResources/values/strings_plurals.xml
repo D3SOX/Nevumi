@@ -3,6 +3,11 @@
         <item quantity="one">%1$d song</item>
         <item quantity="other">%1$d songs</item>
     </plurals>
+    <!-- The song count while library filters hide songs, e.g. "4 of 12 songs" -->
+    <plurals name="songs_of_total">
+        <item quantity="one">%1$d of %2$d song</item>
+        <item quantity="other">%1$d of %2$d songs</item>
+    </plurals>
     <plurals name="server_songs">
         <item quantity="one">%1$d server song</item>
         <item quantity="other">%1$d server songs</item>

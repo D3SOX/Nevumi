@@ -11,6 +11,15 @@
     <string name="library_all_sources">All sources</string>
     <string name="library_device">Device</string>
     <string name="library_filters">Filters</string>
+    <!-- An active filter chip, e.g. "Genre: Ambient" -->
+    <string name="library_filter_value">%1$s: %2$s</string>
+    <!-- Both ends of a range filter, e.g. "2020–2024" -->
+    <string name="library_filter_range">%1$s–%2$s</string>
+    <string name="library_filter_year">Year</string>
+    <string name="library_filter_seconds">Seconds</string>
+    <string name="library_filter_plays">Plays</string>
+    <string name="library_remove_filter">Remove filter: %1$s</string>
+    <string name="library_clear_all_filters">Clear all</string>
     <string name="library_no_songs_yet">No songs here yet</string>
     <string name="library_scroll_library">Scroll library</string>
 

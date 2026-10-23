@@ -250,6 +250,7 @@ class LibraryUiTest {
                 onNodeWithText("Filters").performClick()
                 onNode(hasText("Genre") and hasSetTextAction()).performTextInput("Ambient")
                 onNodeWithText("Year from").performScrollTo().performTextInput("2020")
+                onNodeWithText("Year to").performScrollTo().performTextInput("2030")
                 onNodeWithText("Apply filters").performClick()
                 onNodeWithText("New ambient").assertIsDisplayed()
                 onNodeWithText("Old ambient").assertDoesNotExist()
@@ -257,11 +258,18 @@ class LibraryUiTest {
                 onNodeWithText("New ambient").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 assertEquals(listOf(expected), controller.state.value.queue.entries.map { it.trackId })
-                onNodeWithContentDescription("Music sources").performClick()
-                onNodeWithText("Filters").performClick()
+                onNodeWithText("Genre: Ambient").assertIsDisplayed()
+                onNodeWithText("1 of 3 songs").assertIsDisplayed()
+                onNodeWithContentDescription("Remove filter: Year: 2020–2030").performClick()
+                onNodeWithText("Year: 2020–2030").assertDoesNotExist()
+                onNodeWithText("2 of 3 songs").assertIsDisplayed()
+                onNodeWithText("Old ambient").assertIsDisplayed()
+                onNodeWithText("New rock").assertDoesNotExist()
+                onNodeWithText("Genre: Ambient").performClick()
                 onNodeWithText("Genre").assertTextContains("Ambient")
-                onNodeWithText("Year from").assertTextContains("2020")
                 onNodeWithText("Clear filters").performClick()
+                onNodeWithText("Genre: Ambient").assertDoesNotExist()
+                onNodeWithText("3 songs").assertIsDisplayed()
                 onNodeWithText("Old ambient").assertIsDisplayed()
                 onNodeWithText("New rock").assertIsDisplayed()
             }
@@ -336,6 +344,13 @@ class LibraryUiTest {
                 onNodeWithText("Mixed song").assertIsDisplayed()
                 onNodeWithText("Device song").assertDoesNotExist()
                 onNodeWithText("Downloaded song").assertDoesNotExist()
+                onNodeWithText("2 of 4 songs").assertIsDisplayed()
+                onNodeWithContentDescription("Remove filter: Server").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.sourceFilter == null }
+                onNodeWithText("4 songs").assertIsDisplayed()
+                onNodeWithContentDescription("Music sources").performClick()
+                onNodeWithText("Server").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.sourceFilter == SourceKind.SERVER }
                 onNodeWithContentDescription("Music sources").performClick()
                 onNodeWithText("Downloads").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.sourceFilter == SourceKind.DOWNLOAD }
