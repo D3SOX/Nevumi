@@ -4,6 +4,9 @@ import me.d3sox.nevumi.history.*
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.recentAt
 import me.d3sox.nevumi.playlists.Playlist
+import me.d3sox.nevumi.playlists.folder
+import me.d3sox.nevumi.playlists.folderPath
+import me.d3sox.nevumi.playlists.folderSegments
 import me.d3sox.nevumi.playlists.title
 import me.d3sox.nevumi.settings.CollectionLayout
 import kotlin.random.Random
@@ -67,11 +70,18 @@ internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, ran
     return HomeFeed(recent, top, rediscover, added, recentAlbums, recentArtists, topAlbums, topArtists, mixes)
 }
 
-/** Playlists in the order the Playlists page sorts them, so Home shows the same ones first. */
+/** Playlists in the order the Playlists page shows them, with each folder's contents where the folder sits. */
 internal fun homePlaylists(playlists: List<Playlist>, layout: CollectionLayout, recentAt: Map<String, Long>): List<Playlist> {
-    val byId = playlists.associateBy { it.id }
-    return playlists.map { playlist ->
-        CollectionItem(playlist.id, playlist.title, "", null, AppIcon.QUEUE, songCount = playlist.trackIds.size,
-            recentAt = playlist.trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0)
-    }.sortedWith(layout.comparator()).take(20).map { byId.getValue(it.id) }
+    val comparator = compareBy(layout.comparator()) { entry: Pair<CollectionItem, List<Playlist>> -> entry.first }
+    fun item(id: String, title: String, trackIds: List<String>) = CollectionItem(id, title, "", null, AppIcon.QUEUE,
+        songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0)
+    fun ordered(folder: List<String>, contents: List<Playlist>): List<Playlist> {
+        val (own, nested) = contents.partition { it.folder?.let(::folderSegments).orEmpty().size == folder.size }
+        return (own.map { item(it.id, it.title, it.trackIds) to listOf(it) } +
+            nested.groupBy { folderSegments(it.folder!!)[folder.size] }.map { (name, inside) ->
+                item(PLAYLIST_FOLDER_PREFIX + folderPath(folder + name), name, inside.flatMap(Playlist::trackIds).distinct()) to
+                    ordered(folder + name, inside)
+            }).sortedWith(comparator).flatMap { it.second }
+    }
+    return ordered(emptyList(), playlists).take(20)
 }

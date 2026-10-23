@@ -52,15 +52,17 @@ class HomeFeedTest {
 
     @Test fun playlistsFollowTheOrderOfThePlaylistsPage() {
         val road = Playlist("road", "Music ▸ Road", listOf("a", "b", "c"))
+        val alpha = Playlist("alpha", "Music ▸ Alpha", listOf("a"))
         val calm = Playlist("calm", "Calm", listOf("c"))
         val new = Playlist("new", "New", listOf("d"))
         val recentAt = mapOf("a" to 1L, "b" to 2L, "c" to 3L, "d" to 9L)
-        val playlists = listOf(road, calm, new)
+        val playlists = listOf(road, alpha, calm, new)
         fun order(layout: CollectionLayout) = homePlaylists(playlists, layout, recentAt).map { it.id }
-        assertEquals(listOf("calm", "new", "road"), order(CollectionLayout()), "Folders do not count towards the name")
-        assertEquals(listOf("road", "new", "calm"), order(CollectionLayout(sort = CollectionSort.NAME, descending = true)))
-        assertEquals(listOf("road", "new", "calm"), order(CollectionLayout(sort = CollectionSort.SONG_COUNT, descending = true)))
-        assertEquals(listOf("new", "road", "calm"), order(CollectionLayout(sort = CollectionSort.RECENT, descending = true)))
-        assertEquals(listOf("new", "road", "calm"), order(CollectionLayout(sort = CollectionSort.CUSTOM, order = listOf("new", "road"))))
+        assertEquals(listOf("calm", "alpha", "road", "new"), order(CollectionLayout()), "Folders sort by their own name and keep their playlists together")
+        assertEquals(listOf("new", "road", "alpha", "calm"), order(CollectionLayout(sort = CollectionSort.NAME, descending = true)))
+        assertEquals(listOf("road", "alpha", "new", "calm"), order(CollectionLayout(sort = CollectionSort.SONG_COUNT, descending = true)))
+        assertEquals(listOf("new", "road", "alpha", "calm"), order(CollectionLayout(sort = CollectionSort.RECENT, descending = true)))
+        assertEquals(listOf("road", "alpha", "new", "calm"), order(CollectionLayout(sort = CollectionSort.CUSTOM,
+            order = listOf(PLAYLIST_FOLDER_PREFIX + "Music", "new", "road", "alpha"))), "Custom order places folders like the Playlists page")
     }
 }
