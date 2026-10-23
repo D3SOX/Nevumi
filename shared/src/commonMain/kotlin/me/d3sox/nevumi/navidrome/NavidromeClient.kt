@@ -122,19 +122,23 @@ internal const val CONCURRENT_REQUESTS = 6
 
 /** Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server. */
 class NavidromeClient(
-    http: HttpClient,
+    private val http: HttpClient,
     baseUrl: String,
     private val credentials: ServerCredentials,
     requestUrl: String = baseUrl,
     private val requestTimeoutMillis: Long = 30_000,
 ) {
-    // OkHttp gives up on a response that takes more than ten seconds to start, long before a busy server answers.
-    private val http = http.config { install(HttpTimeout) { socketTimeoutMillis = this@NavidromeClient.requestTimeoutMillis } }
     private val baseUrl = normalizeServerAddress(requestUrl)
     val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username).serverId
     val username: String get() = credentials.username
     private val nativeAccess = Mutex()
     private var nativeToken: String? = null
+
+    // OkHttp gives up on a response that takes more than ten seconds to start, long before a busy server answers.
+    private fun client(followRedirects: Boolean = true) = http.config {
+        this.followRedirects = followRedirects
+        install(HttpTimeout) { socketTimeoutMillis = this@NavidromeClient.requestTimeoutMillis }
+    }
 
     private suspend fun <T : Any> timedRequest(block: suspend () -> T): T =
         withTimeoutOrNull(requestTimeoutMillis) { block() }
@@ -235,7 +239,7 @@ class NavidromeClient(
 
     private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject = serverRequest { timedRequest {
         val salt = Uuid.random().toString()
-        val response = http.get("${baseUrl.trimEnd('/')}/rest/$endpoint.view") {
+        val response = client().use { it.get("${baseUrl.trimEnd('/')}/rest/$endpoint.view") {
             parameter("u", credentials.username)
             parameter("t", passwordToken(credentials.password, salt))
             parameter("s", salt)
@@ -243,7 +247,7 @@ class NavidromeClient(
             parameter("c", "Nevumi")
             parameter("f", "json")
             parameters.forEach { (key, value) -> url.parameters.append(key, value) }
-        }
+        } }
         checkResponse(response)
         val envelope = Json.parseToJsonElement(response.bodyAsText()).jsonObject.getValue("subsonic-response").jsonObject
         if (envelope["status"]?.jsonPrimitive?.content != "ok") {
@@ -270,7 +274,7 @@ class NavidromeClient(
     /** Downloads a cover scaled to [size] pixels, or the original image when [size] is null. */
     suspend fun coverArt(coverId: String, size: Int? = 1024): ByteArray = serverRequest { timedRequest {
         val salt = Uuid.random().toString()
-        http.prepareGet("${baseUrl.trimEnd('/')}/rest/getCoverArt.view") {
+        client().use { it.prepareGet("${baseUrl.trimEnd('/')}/rest/getCoverArt.view") {
             parameter("u", credentials.username)
             parameter("t", passwordToken(credentials.password, salt))
             parameter("s", salt)
@@ -294,7 +298,7 @@ class NavidromeClient(
                 if (count > 0) bytes.write(buffer, 0, count)
             }
             bytes.readByteArray()
-        }
+        } }
     } }
 
     fun streamUrl(songId: String): String {
@@ -323,7 +327,7 @@ class NavidromeClient(
     }
 
     private suspend fun nativeRequest(send: suspend HttpClient.(token: String) -> HttpResponse): HttpResponse = nativeAccess.withLock {
-        http.config { followRedirects = false }.use { nativeHttp ->
+        client(followRedirects = false).use { nativeHttp ->
             var response = nativeHttp.send(nativeSession(nativeHttp))
             if (response.status.value == 401) {
                 response.bodyAsText()
@@ -368,7 +372,7 @@ class NavidromeClient(
     /** Looks up one song's music file without downloading the file catalogue; null once the server no longer has the song. */
     suspend fun musicFile(songId: String): NavidromeMusicFile? = serverRequest {
         nativeAccess.withLock {
-            http.config { followRedirects = false }.use { nativeHttp ->
+            client(followRedirects = false).use { nativeHttp ->
                 val body = timedRequest {
                     val response = nativeGet(nativeHttp, "$baseUrl/api/song/${songId.encodeURLPathPart()}")
                     when (response.status.value) {
@@ -406,7 +410,7 @@ class NavidromeClient(
         if (!isNavidrome())
             throw NavidromeRequestException("Remote file editing requires Navidrome's file catalogue. Other Subsonic servers support streaming and library actions.")
         nativeAccess.withLock {
-            http.config { followRedirects = false }.use { nativeHttp ->
+            client(followRedirects = false).use { nativeHttp ->
                 val files = mutableListOf<NavidromeMusicFile>()
                 val seen = mutableSetOf<String>()
                 var offset = 0
@@ -571,7 +575,7 @@ class NavidromeClient(
         onValidator: suspend (String?) -> Unit = {},
         onStart: suspend (Long) -> Unit = {}, onChunk: suspend (ByteArray) -> Unit): Long = serverRequest {
         val salt = Uuid.random().toString()
-        http.prepareGet("${baseUrl.trimEnd('/')}/rest/download.view") {
+        client().use { it.prepareGet("${baseUrl.trimEnd('/')}/rest/download.view") {
             parameter("u", credentials.username)
             parameter("t", passwordToken(credentials.password, salt))
             parameter("s", salt)
@@ -621,7 +625,7 @@ class NavidromeClient(
                 }
             }
             received
-        }
+        } }
     }
 
     // Discovery: these endpoints are optional, so each returns null when the server does not offer it.
