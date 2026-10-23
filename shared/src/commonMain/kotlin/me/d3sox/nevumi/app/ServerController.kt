@@ -19,7 +19,7 @@ import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeConnection
-import me.d3sox.nevumi.navidrome.CONCURRENT_REQUESTS
+import me.d3sox.nevumi.navidrome.CONCURRENT_COVERS
 import me.d3sox.nevumi.navidrome.NavidromeRequestException
 import me.d3sox.nevumi.navidrome.ServerCredentials
 import me.d3sox.nevumi.navidrome.ServerRefreshProgress
@@ -202,7 +202,7 @@ class ServerController internal constructor(private val context: ControllerConte
             val pending = Channel<Pair<String, List<String>>>(Channel.UNLIMITED)
             covers.entries.sortedBy { (_, trackIds) -> trackIds.all { it in present } }.forEach { pending.trySend(it.key to it.value) }
             pending.close()
-            coroutineScope { repeat(CONCURRENT_REQUESTS) { launch {
+            coroutineScope { repeat(CONCURRENT_COVERS) { launch {
                 for ((coverId, trackIds) in pending) {
                     try { if (versioned) artwork.fetchChanged(trackIds, client, coverId) else artwork.fetch(trackIds, client, coverId) }
                     catch (cancelled: CancellationException) { throw cancelled }

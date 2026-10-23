@@ -120,6 +120,9 @@ private suspend fun downloadCallback(block: suspend () -> Unit) {
 
 internal const val CONCURRENT_REQUESTS = 6
 
+// Navidrome draws covers for half as many requests as it has CPU cores, at least two, and queues the rest; on a small server more would wait out their timeout.
+internal const val CONCURRENT_COVERS = 2
+
 /** Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server. */
 class NavidromeClient(
     private val http: HttpClient,
