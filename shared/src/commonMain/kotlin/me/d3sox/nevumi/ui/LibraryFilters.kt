@@ -117,7 +117,8 @@ internal fun ActiveLibraryFilters(filter: LibraryQuery, source: SourceKind?, edi
             val value = item.to?.let { stringResource(Res.string.library_filter_range, item.value.orEmpty(), it) } ?: item.value
             FilterChip(value?.let { stringResource(Res.string.library_filter_value, name, it) } ?: name, edit, { change(item.clear(filter)) })
         }
-        TextButton({ change(LibraryQuery()); changeSource(null) }) { Text(stringResource(Res.string.library_clear_all_filters)) }
+        // Clear all leaves alone library filters that this screen does not show.
+        TextButton({ if (active.isNotEmpty()) change(LibraryQuery()); changeSource(null) }) { Text(stringResource(Res.string.library_clear_all_filters)) }
     }
 }
 

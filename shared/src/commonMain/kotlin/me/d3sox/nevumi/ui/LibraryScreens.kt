@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
+import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.LibrarySort
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.playlists.playlistedTrackIds
@@ -158,13 +159,15 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages, LocalDerivedResults provides derived) {
     Column(modifier.fillMaxWidth()) {
+        // Search ignores the source and library filters, and Playlists only follow the source.
+        val libraryFiltersApply = tabs[currentIndex] !in setOf(LibraryTab.SEARCH, LibraryTab.PLAYLISTS)
         if (selection.active) SongSelectionHeader(selection, controller)
         else if (tabs[currentIndex] != LibraryTab.SEARCH) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 64.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.foundation.Image(org.jetbrains.compose.resources.painterResource(me.d3sox.nevumi.resources.Res.drawable.nevumi_logo),
                     stringResource(Res.string.library_nevumi_logo), Modifier.size(40.dp))
-                if (tabs[currentIndex] != LibraryTab.HOME && (sources != null || filter.hasActiveFilters())) Row(Modifier.clickable(onClickLabel = stringResource(Res.string.library_filters)) { filters = true },
+                if (libraryFiltersApply && tabs[currentIndex] != LibraryTab.HOME && (sources != null || filter.hasActiveFilters())) Row(Modifier.clickable(onClickLabel = stringResource(Res.string.library_filters)) { filters = true },
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(AppIcon.FILTER.vector, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     Text(pluralStringResource(Res.plurals.songs_of_total, unfilteredCount, tracks.size, unfilteredCount),
@@ -213,8 +216,8 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 }
             }
         }
-        // Search and Playlists ignore the source and library filters.
-        if (tabs[currentIndex] !in setOf(LibraryTab.SEARCH, LibraryTab.PLAYLISTS)) ActiveLibraryFilters(filter, sources, edit = { filters = true },
+        // The selection header replaces the source menu that the source chip opens.
+        if (!selection.active && tabs[currentIndex] != LibraryTab.SEARCH) ActiveLibraryFilters(if (libraryFiltersApply) filter else LibraryQuery(), sources, edit = { filters = true },
             editSource = { sourceMenu = true }, change = { value -> controller.updatePreferences { it.copy(libraryFilter = value) } },
             changeSource = { value -> controller.updatePreferences { it.copy(sourceFilter = value) } })
         // Like Namida, slide the incoming tab over the stationary previous page, skipping intermediate tabs.
