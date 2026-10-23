@@ -134,12 +134,21 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             }
             if (existing != null) {
                 matched += existing.id
+                if (existing.server != null) continue
+                // The backup wins for the description, shuffle and order it sets, as it does for a playlist it creates.
+                var changed = false
+                if (backup.description.isNotBlank() && backup.description != existing.description) {
+                    playlists.edit(existing.id, existing.name, backup.description); changed = true
+                }
+                if (backup.shuffle != existing.shuffle) { playlists.setShuffle(existing.id, backup.shuffle); changed = true }
+                if (backup.sort != existing.sort || backup.descending != existing.descending) {
+                    playlists.setSort(existing.id, backup.sort, backup.descending); changed = true
+                }
                 val additions = songs.filterNot { it in existing.trackIds }
-                if (backup.rule != null || existing.server != null || additions.isEmpty()) continue
-                try { playlists.append(existing.id, additions) }
-                // Server playlists only take songs from their server.
-                catch (_: IllegalArgumentException) { continue }
-                playlistsMerged++
+                if (backup.rule == null && additions.isNotEmpty()) {
+                    playlists.append(existing.id, additions); changed = true
+                }
+                if (changed) playlistsMerged++
                 continue
             }
             val created = if (backup.rule != null) playlists.createSmart(name, backup.rule) else playlists.create(name, songs)

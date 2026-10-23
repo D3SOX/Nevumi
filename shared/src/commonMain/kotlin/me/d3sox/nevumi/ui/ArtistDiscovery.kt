@@ -63,8 +63,8 @@ internal fun ArtistDiscovery(artist: String, tab: LibraryTab, state: AppState, c
             if (info.similarInLibrary.isNotEmpty() || info.similarElsewhere.isNotEmpty()) {
                 Text(stringResource(Res.string.discovery_similar_artists), style = MaterialTheme.typography.titleMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    info.similarInLibrary.forEach { name ->
-                        SuggestionChip({ navigate(LibraryTab.ARTISTS, name) }, { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    info.similarInLibrary.forEach { artist ->
+                        SuggestionChip({ navigate(artist.tab, artist.name) }, { Text(artist.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             icon = { Icon(AppIcon.ARTIST.vector, null) })
                     }
                     info.similarElsewhere.forEach { name ->

@@ -210,6 +210,14 @@ class MusicBackupTest {
         assertEquals(2, roads.count { it.rule == null })
         assertEquals(1, roads.count { it.rule != null })
         assertTrue(target.history.all().isNotEmpty() && target.history.all().all { it.originDeviceId != null })
+        // A matched playlist takes the backed-up description, shuffle and order.
+        val road = target.playlists.all().first { it.name == "Road" && it.rule == null && it.description == "Driving songs" }
+        target.playlists.edit(road.id, "Road", "Mine")
+        target.playlists.setSort(road.id, PlaylistSort.CUSTOM, false)
+        target.backup.restore(text)
+        target.playlists.all().single { it.id == road.id }.let {
+            assertEquals("Driving songs", it.description); assertEquals(PlaylistSort.ARTIST, it.sort); assertTrue(it.descending)
+        }
         // A same-named smart playlist with another rule does not stand in for the backed-up one.
         target.playlists.createSmart("Mix", LibraryQuery(ratingFrom = 4))
         source.playlists.createSmart("Mix", LibraryQuery(favoritesOnly = true))

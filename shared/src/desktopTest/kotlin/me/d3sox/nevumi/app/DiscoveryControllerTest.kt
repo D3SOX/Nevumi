@@ -68,7 +68,7 @@ class DiscoveryControllerTest {
             val artist = player.discoveryController.artistInfo("Main Artist")!!
             assertEquals("Biography", artist.biography)
             assertEquals("https://www.last.fm/music/Main", artist.lastFmUrl)
-            assertEquals(listOf("Library Friend"), artist.similarInLibrary)
+            assertEquals(listOf(LibraryArtist("Library Friend", LibraryTab.ARTISTS)), artist.similarInLibrary)
             assertEquals(listOf("Stranger"), artist.similarElsewhere)
             assertEquals(listOf(third.id, seed.id), artist.topSongs.map { it.id })
 

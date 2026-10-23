@@ -19,7 +19,10 @@ import org.jetbrains.compose.resources.getString
  * What the server knows about an artist, matched against the library: similar artists split by whether the library has them,
  * by their library names, and the artist's top songs that the library has.
  */
-data class ArtistDiscovery(val biography: String = "", val lastFmUrl: String? = null, val similarInLibrary: List<String> = emptyList(),
+/** An artist in the library, with the tab whose collection holds it: Artists, or Album artists for artists only credited on albums. */
+data class LibraryArtist(val name: String, val tab: me.d3sox.nevumi.library.LibraryTab)
+
+data class ArtistDiscovery(val biography: String = "", val lastFmUrl: String? = null, val similarInLibrary: List<LibraryArtist> = emptyList(),
     val similarElsewhere: List<String> = emptyList(), val topSongs: List<Track> = emptyList())
 
 /** Finds music related to an artist or a song through the music server and plays what of it the library has. */
@@ -35,7 +38,11 @@ class DiscoveryController internal constructor(private val context: ControllerCo
         val serverId = discovery.serverId() ?: return null
         val tracks = context.state.value.tracks
         val details = discovery.artist(artistName, serverSongIds(tracks, serverId, artistName)) ?: return null
-        val libraryArtists = tracks.map { it.metadata.artist }.filter { it.isNotBlank() }.associateBy { it.lowercase() }
+        // Track artists first, then artists only credited as album artists, such as on compilations.
+        val libraryArtists = tracks.map { it.metadata.albumArtist }.filter { it.isNotBlank() }
+            .associate { it.lowercase() to LibraryArtist(it, me.d3sox.nevumi.library.LibraryTab.ALBUM_ARTISTS) } +
+            tracks.map { it.metadata.artist }.filter { it.isNotBlank() }
+                .associate { it.lowercase() to LibraryArtist(it, me.d3sox.nevumi.library.LibraryTab.ARTISTS) }
         val (inLibrary, elsewhere) = details.info?.similarArtists.orEmpty().map { it.name }
             .filterNot { it.equals(artistName, ignoreCase = true) }.distinctBy { it.lowercase() }
             .partition { it.lowercase() in libraryArtists }
@@ -80,6 +87,6 @@ class DiscoveryController internal constructor(private val context: ControllerCo
         tracks.flatMap { track -> track.sources.mapNotNull { it.serverSongId(serverId) }.map { it to track } }.toMap()
 
     private fun serverSongIds(tracks: List<Track>, serverId: String, artistName: String) =
-        tracks.filter { it.metadata.artist.equals(artistName, ignoreCase = true) }
+        tracks.filter { it.metadata.artist.equals(artistName, ignoreCase = true) || it.metadata.albumArtist.equals(artistName, ignoreCase = true) }
             .flatMap { track -> track.sources.mapNotNull { it.serverSongId(serverId) } }.take(1)
 }
