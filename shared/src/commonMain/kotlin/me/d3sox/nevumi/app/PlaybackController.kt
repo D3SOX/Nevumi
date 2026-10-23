@@ -29,7 +29,9 @@ import me.d3sox.nevumi.queue.QueueSnapshot
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.queue.QueueEntry
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.notice_paired_device
 import me.d3sox.nevumi.resources.notice_playback_moved
+import org.jetbrains.compose.resources.getString
 import me.d3sox.nevumi.resources.notice_playback_moved_skipped_song
 import me.d3sox.nevumi.resources.notice_playback_moved_skipped_songs
 import me.d3sox.nevumi.settings.MusicPreferences
@@ -298,7 +300,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
             try { devices.cancelPlaybackTransfer(deviceId, transfer.id) } catch (_: Exception) { }
             throw error
         }
-        val name = devices.state.value.peers.firstOrNull { it.deviceId == deviceId }?.name ?: "paired device"
+        val name = devices.state.value.peers.firstOrNull { it.deviceId == deviceId }?.name ?: getString(Res.string.notice_paired_device)
         val (message, arguments) = when {
             skippedSongs <= 0 -> Res.string.notice_playback_moved to listOf(name)
             skippedSongs == 1 -> Res.string.notice_playback_moved_skipped_song to listOf(name, skippedSongs)

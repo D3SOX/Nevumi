@@ -287,6 +287,8 @@
     <string name="sources_statistics_empty">Play some music to build your statistics.</string>
     <string name="sources_statistics_genres_hint">Songs with multiple genres contribute to each genre.</string>
     <string name="sources_recommendations_intro">From your listening history. Songs played in the last 7 days are left out.</string>
+    <string name="sources_recommendation_artist">More from %1$s</string>
+    <string name="sources_recommendation_genre">Because you listen to %1$s</string>
     <string name="sources_recommendations_empty">Play some music to discover more from your library.</string>
     <string name="sources_listening_statistics">%1$s · %2$s listened</string>
 

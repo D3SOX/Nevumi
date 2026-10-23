@@ -23,6 +23,11 @@ import me.d3sox.nevumi.resources.genres
 import me.d3sox.nevumi.resources.most_played
 import me.d3sox.nevumi.resources.plays
 import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.library_unknown_album
+import me.d3sox.nevumi.resources.library_unknown_genre
+import me.d3sox.nevumi.resources.sources_recommendation_artist
+import me.d3sox.nevumi.resources.sources_recommendation_genre
+import me.d3sox.nevumi.resources.unknown_artist
 import me.d3sox.nevumi.resources.sources_history_empty
 import me.d3sox.nevumi.resources.sources_history_entry_partial
 import me.d3sox.nevumi.resources.sources_history_entry_played
@@ -65,6 +70,10 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
     val report = rememberDerived("statistics-report", listOf(period), listOf(tracks, state.listens, now)) { listeningReport(state.listens, tracks, period, now) }
     val ranks = when (grouping) { "Artists" -> report.artists; "Albums" -> report.albums; "Genres" -> report.genres; else -> report.songs }
     val catalog = rememberDerived("statistics-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
+    val unknownName = when (grouping) {
+        "Artists" -> Res.string.unknown_artist; "Albums" -> Res.string.library_unknown_album; "Genres" -> Res.string.library_unknown_genre; else -> null
+    }?.let { stringResource(it) }
+    fun ListeningRank.displayName() = name.ifBlank { unknownName ?: name }
     val songStatistics = remember(report) { report.songs.associate { it.trackIds.single() to ListeningStatistics(it.playCount, it.listenedMs, 0) } }
     AnimatedNavigation(selected, null, canGoBack = backEnabled && selected != null,
         onBack = { selected = null }, depth = { if (it == null) 0 else 1 }) { page ->
@@ -81,17 +90,17 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
         }
     }
     Column(Modifier.fillMaxSize()) {
-    if (group != null) CollectionHeader(group.name) { selected = null }
+    if (group != null) CollectionHeader(group.displayName()) { selected = null }
     if (grouping == "Songs" || group != null) SongList((group?.trackIds ?: report.songs.flatMap { it.trackIds }).mapNotNull(catalog::get),
-        controller, Modifier.weight(1f).fillMaxWidth().testTag("statistics-most-played"), statistics = songStatistics, scrollSort = me.d3sox.nevumi.library.LibrarySort.PLAY_COUNT, header = header, contextName = group?.name ?: "Statistics")
+        controller, Modifier.weight(1f).fillMaxWidth().testTag("statistics-most-played"), statistics = songStatistics, scrollSort = me.d3sox.nevumi.library.LibrarySort.PLAY_COUNT, header = header, contextName = group?.displayName() ?: "Statistics")
     else LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("statistics-ranking"), state = rememberLibraryListState(controller, "statistics:$grouping:$period")) {
             item(key = "statistics-header") { header() }
             if (ranks.isEmpty()) item { Text(stringResource(Res.string.sources_statistics_empty), Modifier.padding(24.dp)) }
             if (grouping == "Genres") item { Text(stringResource(Res.string.sources_statistics_genres_hint), Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.bodySmall) }
             items(ranks, key = { "${it.name.length}:${it.name}${it.detail}" }) { rank ->
-                ListItem(modifier = Modifier.clickable { selected = "${rank.name.length}:${rank.name}${rank.detail}" }, headlineContent = { Text(rank.name) },
-                    leadingContent = { CollectionArtwork(rank.trackIds.firstNotNullOfOrNull { state.artwork[it] }, rank.name,
+                ListItem(modifier = Modifier.clickable { selected = "${rank.name.length}:${rank.name}${rank.detail}" }, headlineContent = { Text(rank.displayName()) },
+                    leadingContent = { CollectionArtwork(rank.trackIds.firstNotNullOfOrNull { state.artwork[it] }, rank.displayName(),
                         when (grouping) { "Artists" -> AppIcon.ARTIST; "Albums" -> AppIcon.ALBUM; else -> AppIcon.GENRE }, Modifier.size(48.dp)) },
                     supportingContent = { Column {
                         if (rank.detail.isNotBlank()) Text(rank.detail)
@@ -106,6 +115,8 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
 @Composable
 internal fun ListeningRecommendationsScreen(state: AppState, controller: MusicController, tracks: List<Track>) {
     val now = rememberLibraryTime()
+    val fromArtist = stringResource(Res.string.sources_recommendation_artist)
+    val fromGenre = stringResource(Res.string.sources_recommendation_genre)
     val suggestions = rememberDerived("recommendations", emptyList(), listOf(tracks, state.listens, now)) { listeningRecommendations(state.listens, tracks, now = now) }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -114,7 +125,7 @@ internal fun ListeningRecommendationsScreen(state: AppState, controller: MusicCo
         }
         if (suggestions.isEmpty()) Text(stringResource(Res.string.sources_recommendations_empty), Modifier.padding(24.dp))
         else SongList(suggestions.map { it.track }, controller, Modifier.weight(1f).testTag("listening-recommendations"),
-            extraInfo = suggestions.associate { it.track.id to it.reason }, scrollIndicator = { "${it + 1} / ${suggestions.size}" }, contextName = "Recommendations")
+            extraInfo = suggestions.associate { it.track.id to (if (it.reason == ListeningRecommendation.Reason.ARTIST) fromArtist else fromGenre).withArgs(it.name) }, scrollIndicator = { "${it + 1} / ${suggestions.size}" }, contextName = "Recommendations")
     }
 }
 

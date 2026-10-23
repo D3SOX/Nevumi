@@ -20,6 +20,7 @@
     <string name="notice_added_to_play_next">Added to play next</string>
     <string name="notice_added_to_play_after">Added to play after</string>
     <string name="notice_added_to_queue">Added to queue</string>
+    <string name="notice_paired_device">paired device</string>
     <string name="notice_playback_moved">Playback moved to %1$s</string>
     <string name="notice_playback_moved_skipped_song">Playback moved to %1$s; skipped %2$s unavailable song</string>
     <string name="notice_playback_moved_skipped_songs">Playback moved to %1$s; skipped %2$s unavailable songs</string>
