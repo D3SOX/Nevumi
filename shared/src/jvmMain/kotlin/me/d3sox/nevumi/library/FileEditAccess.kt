@@ -5,6 +5,7 @@ import java.io.InputStream
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 
 interface FileEditAccess {
     val providerId: String get() = "local"
@@ -20,8 +21,18 @@ interface FileEditAccess {
     fun exists(location: String): Boolean
     fun open(location: String): InputStream
     fun copy(location: String, destination: File)
+    /** Whether [image] copies only a file's tags; [replaceTags] then takes the audio from the file it replaces. */
+    val partialCopies: Boolean get() = false
+    /** Copies what a tag edit needs, which is the whole file unless [partialCopies]. */
+    fun image(location: String, destination: File) = copy(location, destination)
+    fun contentHash(location: String): String = open(location).use(::contentHash)
+    fun contentHash(file: File, location: String): String = file.inputStream().use(::contentHash)
+    /** Whether [hash] came from this access's [contentHash], since older versions hashed differently. */
+    fun recognizes(hash: String) = true
     fun stagingDirectory(location: String): File
     suspend fun replace(location: String, staged: File, originalHash: String? = null)
+    /** Replaces the file with a tag edit of an [image]. */
+    suspend fun replaceTags(location: String, staged: File, originalHash: String) = replace(location, staged, originalHash)
     fun renamedLocation(location: String, name: String): String
     suspend fun rename(location: String, name: String)
     fun scanLocation(location: String): String
@@ -30,6 +41,17 @@ interface FileEditAccess {
     suspend fun restoreDeleted(location: String, original: File, name: String, folder: String,
         reserve: suspend (String) -> Unit): String { throw UnsupportedOperationException("Restoring this file is unavailable") }
     suspend fun completeRestoration(location: String) {}
+}
+
+fun contentHash(input: InputStream): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val buffer = ByteArray(64 * 1024)
+    while (true) {
+        val size = input.read(buffer)
+        if (size < 0) break
+        digest.update(buffer, 0, size)
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
 object FileSystemEditAccess : FileEditAccess {

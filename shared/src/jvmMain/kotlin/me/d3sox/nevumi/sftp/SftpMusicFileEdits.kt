@@ -18,8 +18,13 @@ class SftpMusicFileEdits private constructor(private val access: SftpFileEditAcc
     backupDirectory: String) : MusicFileEdits by LocalFileEdits(store, library, backupDirectory, files = access, localSources = access) {
     constructor(store: MusicStore, library: MusicLibrary, client: NavidromeClient, profile: SftpProfile, authentication: SftpAuthentication,
         backupDirectory: String, libraryId: Long = 1, changes: NavidromeChanges = NavidromeChanges(store, library) { client },
-        artwork: ArtworkLibrary? = null, tailscale: Tailscale? = null) : this(SftpFileEditAccess(SftpFiles(profile, authentication, tailscale),
-            profile, File(backupDirectory, ".staging"), client, libraryId, library, changes, artwork), store, library, backupDirectory)
+        artwork: ArtworkLibrary? = null, tailscale: Tailscale? = null) :
+        this(store, library, client, SftpFiles(profile, authentication, tailscale), profile, backupDirectory, libraryId, changes, artwork)
+
+    /** Uses [files], whose connection outlives this editor, so the next edit can reuse it. */
+    constructor(store: MusicStore, library: MusicLibrary, client: NavidromeClient, files: SftpFiles, profile: SftpProfile,
+        backupDirectory: String, libraryId: Long, changes: NavidromeChanges, artwork: ArtworkLibrary?) :
+        this(SftpFileEditAccess(files, profile, File(backupDirectory, ".staging"), client, libraryId, library, changes, artwork), store, library, backupDirectory)
 
     /** Runs [block] with one SSH connection for all of its file steps. */
     suspend fun <T> session(block: suspend MusicFileEdits.() -> T): T = access.remote.session { block() }
@@ -33,7 +38,7 @@ private class SftpFileEditAccess(val remote: SftpFiles, profile: SftpProfile, pr
     private var written: Pair<String, File>? = null
 
     override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> {
-        client.rescan()
+        client.rescan(folder = libraryId to folder(location))
         val songs = changedSong(location)?.let { listOf(serverChanges.refreshSong(client, it) to it) }
             ?: serverChanges.refreshLibrary(client, includeFilePaths = true)
         songs.firstOrNull { (_, song) -> song.filePath == location && song.fileLibraryId == libraryId }?.let { (track, _) -> readArtwork(track, location) }
@@ -56,7 +61,7 @@ private class SftpFileEditAccess(val remote: SftpFiles, profile: SftpProfile, pr
         val local = written?.takeIf { (path, file) -> path == location && file.isFile }?.second
         val temporary = if (local == null) Files.createTempFile(Files.createDirectories(staging.toPath()), "read-artwork-", ".part") else null
         try {
-            if (temporary != null) remote.download(location, temporary.toFile())
+            if (temporary != null) remote.image(location, temporary.toFile())
             val bytes = AudioFileIO.readAs(local ?: temporary!!.toFile(), location.substringAfterLast('.')).tag?.firstArtwork?.binaryData
             if (bytes != null) artwork.save(track.id, bytes) else artwork.remove(track.id)
         } finally { temporary?.let(Files::deleteIfExists) }
@@ -87,12 +92,22 @@ private class SftpFileEditAccess(val remote: SftpFiles, profile: SftpProfile, pr
         } catch (failure: Exception) { Files.deleteIfExists(file); throw failure }
     }
     override fun copy(location: String, destination: File) = remote.download(normalize(location), destination)
+    // Tag edits copy only the tags, so opening the editor or saving never moves the audio through the tunnel.
+    override val partialCopies = true
+    override fun image(location: String, destination: File) = remote.image(normalize(location), destination)
+    override fun contentHash(location: String) = remote.fingerprint(normalize(location))
+    override fun contentHash(file: File, location: String) = tagFingerprint(file, name(location))
+    override fun recognizes(hash: String) = hash.startsWith(TagLayout.FINGERPRINT)
     override fun stagingDirectory(location: String) = staging
     override suspend fun replace(location: String, staged: File, originalHash: String?) {
         // An expected original must still be there, so a file deleted meanwhile is not recreated.
         if (originalHash != null) remote.replace(normalize(location), staged, originalHash)
-        else if (exists(location)) remote.replace(normalize(location), staged, remote.hash(normalize(location)))
+        else if (exists(location)) remote.replace(normalize(location), staged, remote.fingerprint(normalize(location)))
         else remote.upload(normalize(location), staged)
+        written = normalize(location) to staged
+    }
+    override suspend fun replaceTags(location: String, staged: File, originalHash: String) {
+        remote.replaceTags(normalize(location), staged, originalHash)
         written = normalize(location) to staged
     }
     override fun scanLocation(location: String) = normalize(location)

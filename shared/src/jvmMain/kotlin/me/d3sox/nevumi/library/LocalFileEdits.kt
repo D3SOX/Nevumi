@@ -17,8 +17,6 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
-import java.security.MessageDigest
-import java.io.InputStream
 import java.io.IOException
 
 class LocalFileEdits(private val store: MusicStore, private val library: MusicLibrary, backupDirectory: String,
@@ -34,7 +32,11 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
 
     private suspend fun readEdit(id: String): LocalFileEdit? = store.read<LocalFileEdit>("file-edit:$id")?.also {
         check(it.providerId == files.providerId) { "Reconnect to the original file location before using this edit" }
+        check(files.recognizes(it.originalHash)) { "This edit was saved by an older version of Nevumi and can no longer be undone" }
     }
+
+    // A tag edit's copies may hold only the tags, so writing one needs the file it replaces; a deletion keeps the whole file.
+    private val LocalFileEdit.partial get() = files.partialCopies && operation != FileEditOperation.DELETE
 
     override suspend fun linkTracks(keepId: String, otherId: String): Track = edits.withLock { library.linkTracks(keepId, otherId) }
 
@@ -47,7 +49,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         val id = UUID.randomUUID().toString()
         val backup = backups.resolve("$id.${files.name(location).substringAfterLast('.')}")
         files.copy(location, backup)
-        val hash = fileHash(backup)
+        val hash = fileHash(backup, location)
         check(sourceHash(location) == hash) { "The music file changed while its backup was made" }
         val edit = LocalFileEdit(id, trackId, location, backup.path, hash, hash, "", now(), writing = true,
             operation = FileEditOperation.DELETE, sourceId = source.id, originalName = files.name(location), originalFolder = files.folder(location), providerId = files.providerId)
@@ -72,9 +74,9 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         val location = files.normalize(requireNotNull(files.sourceLocation(source)))
         val name = files.name(location)
         val directory = Files.createDirectories(backups.resolve(".read-tags").toPath())
-        val staged = Files.createTempFile(directory, "read-tags-", ".${name.substringAfterLast('.')}")
+        val staged = directory.resolve("read-tags-${UUID.randomUUID()}.${name.substringAfterLast('.')}")
         try {
-            files.open(location).use { input -> Files.newOutputStream(staged).use { input.copyTo(it) } }
+            files.image(location, staged.toFile())
             val audio = AudioFileIO.read(staged.toFile())
             val container = audio.tag
             val tag = if (container is WavTag && container.isExistingId3Tag) container.getID3Tag() else container
@@ -188,15 +190,17 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 files.reserveMove(library, edit.trackId, edit.sourcePath)
             }
             val backup = File(edit.backupPath)
-            check(backup.isFile && fileHash(backup) == edit.originalHash) { "The original backup is unavailable or damaged" }
+            check(backup.isFile && fileHash(backup, edit.sourcePath) == edit.originalHash) { "The original backup is unavailable or damaged" }
             val directory = Files.createDirectories(files.stagingDirectory(location).toPath())
             val staged = Files.createTempFile(directory, "restore-", ".part")
             val previous = directory.resolve("before-restore-${UUID.randomUUID()}.part").toFile()
             try {
-                if (hash != null) files.copy(location, previous)
+                if (hash != null) files.image(location, previous)
                 Files.copy(backup.toPath(), staged, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
-                if (hash == null) files.replace(location, staged.toFile())
-                else replaceSafely(location, staged.toFile(), previous, hash)
+                if (hash == null) {
+                    check(!edit.partial) { "The music file is missing, and its backup holds only the tags" }
+                    files.replace(location, staged.toFile())
+                } else replaceSafely(location, staged.toFile(), previous, hash, edit.partial)
                 if (edit.operation == FileEditOperation.DELETE) {
                     files.completeRestoration(location)
                     files.relocate(library, edit.trackId, edit.sourceId, edit.sourcePath, location)
@@ -235,9 +239,9 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                     "The music file changed outside Nevumi. Applying this edit would overwrite those changes."
                 }
                 val staged = File(edit.stagedPath)
-                check(staged.isFile && fileHash(staged) == edit.editedHash) { "The prepared edit is unavailable or damaged" }
+                check(staged.isFile && fileHash(staged, edit.sourcePath) == edit.editedHash) { "The prepared edit is unavailable or damaged" }
                 store.put("file-edit:$editId", "file-edits", edit.copy(writing = true))
-                replaceSafely(edit.sourcePath, staged, File(edit.backupPath), edit.originalHash)
+                replaceSafely(edit.sourcePath, staged, File(edit.backupPath), edit.originalHash, edit.partial)
             }
             val completed = edit.copy(applied = true, writing = false, needsRecovery = false, recoveryHash = null)
             store.put("file-edit:$editId", "file-edits", completed)
@@ -255,7 +259,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 check(files.deleted(edit.sourcePath)) { "A music file already exists there. Undo would overwrite it." }
                 check(!files.exists(edit.sourcePath) || sourceHash(edit.sourcePath) == edit.originalHash) { "The trashed music file changed outside Nevumi." }
                 val backup = File(edit.backupPath)
-                check(backup.isFile && fileHash(backup) == edit.originalHash) { "The original backup is unavailable or damaged" }
+                check(backup.isFile && fileHash(backup, edit.sourcePath) == edit.originalHash) { "The original backup is unavailable or damaged" }
                 store.put("file-edit:$editId", "file-edits", edit.copy(writing = true))
                 val restored = files.restoreDeleted(edit.sourcePath, backup, edit.originalName, edit.originalFolder) { location ->
                     store.put("file-edit:$editId", "file-edits", edit.copy(writing = true, destinationPath = location))
@@ -274,15 +278,15 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 "The music file changed outside Nevumi. Undo would overwrite those changes."
             }
             val backup = File(edit.backupPath)
-            check(backup.isFile && fileHash(backup) == edit.originalHash) { "The original backup is unavailable or damaged" }
+            check(backup.isFile && fileHash(backup, edit.sourcePath) == edit.originalHash) { "The original backup is unavailable or damaged" }
             val stagingDirectory = Files.createDirectories(files.stagingDirectory(edit.sourcePath).toPath())
             val staged = Files.createTempFile(stagingDirectory, "undo-", ".${files.name(edit.sourcePath).substringAfterLast('.')}")
             val previous = stagingDirectory.resolve("before-undo-${UUID.randomUUID()}.part").toFile()
             try {
-                files.copy(edit.sourcePath, previous)
+                files.image(edit.sourcePath, previous)
                 Files.copy(backup.toPath(), staged, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
                 store.put("file-edit:$editId", "file-edits", edit.copy(writing = true))
-                replaceSafely(edit.sourcePath, staged.toFile(), previous, edit.editedHash)
+                replaceSafely(edit.sourcePath, staged.toFile(), previous, edit.editedHash, edit.partial)
                 localSources.scan(files.scanLocation(edit.sourcePath), force = true)
                 store.put("file-edit:$editId", "file-edits", edit.copy(undone = true, writing = false, needsRecovery = false, recoveryHash = null))
             } finally { Files.deleteIfExists(staged); Files.deleteIfExists(previous.toPath()) }
@@ -305,8 +309,8 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         Files.createDirectories(backups.toPath())
         val id = UUID.randomUUID().toString()
         val backup = backups.resolve("$id.$extension")
-        files.copy(location, backup)
-        val hash = fileHash(backup)
+        files.image(location, backup)
+        val hash = fileHash(backup, location)
         check(sourceHash(location) == hash) { "The music file changed while its backup was made" }
         val edit = LocalFileEdit(id, trackId, location, backup.path, hash, hash, "", now(), writing = true,
             operation = FileEditOperation.RENAME, sourceId = source.id, destinationPath = destination, originalName = previousName, changedName = name, providerId = files.providerId)
@@ -439,7 +443,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             val staged = Files.createTempFile(stagingDirectory, "edit-", ".$extension")
             var prepared = false
             try {
-                files.copy(location, backup)
+                files.image(location, backup)
                 Files.copy(backup.toPath(), staged, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
                 val audio = AudioFileIO.read(staged.toFile())
                 val containerTag = audio.tagOrCreateAndSetDefault
@@ -452,7 +456,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 if (containerTag is WavTag) containerTag.syncToInfoFromId3Overwrite()
                 audio.commit()
                 AudioFileIO.read(staged.toFile())
-                val result = LocalFileEdit(id, trackId, location, backup.path, fileHash(backup), fileHash(staged.toFile()), staged.toString(), now(), sourceId = source.id, providerId = files.providerId)
+                val result = LocalFileEdit(id, trackId, location, backup.path, fileHash(backup, location), fileHash(staged.toFile(), location), staged.toString(), now(), sourceId = source.id, providerId = files.providerId)
                 store.put("file-edit:$id", "file-edits", result)
                 prepared = true
                 result
@@ -462,12 +466,12 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         }
     }
 
-    private fun sourceHash(location: String) = files.open(location).use(::streamHash)
-    private fun fileHash(file: File) = file.inputStream().use(::streamHash)
+    private fun sourceHash(location: String) = files.contentHash(location)
+    private fun fileHash(file: File, location: String) = files.contentHash(file, location)
 
-    private suspend fun replaceSafely(location: String, staged: File, original: File, originalHash: String) {
-        check(original.isFile && fileHash(original) == originalHash) { "The original backup is unavailable or damaged" }
-        try { files.replace(location, staged, originalHash) } catch (error: IOException) {
+    private suspend fun replaceSafely(location: String, staged: File, original: File, originalHash: String, partial: Boolean) {
+        check(original.isFile && fileHash(original, location) == originalHash) { "The original backup is unavailable or damaged" }
+        try { if (partial) files.replaceTags(location, staged, originalHash) else files.replace(location, staged, originalHash) } catch (error: IOException) {
             if (files.atomicWrites) throw error
             withContext(NonCancellable) {
                 try {
@@ -482,16 +486,5 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             }
             throw error
         }
-    }
-
-    private fun streamHash(input: InputStream): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val buffer = ByteArray(64 * 1024)
-        while (true) {
-            val size = input.read(buffer)
-            if (size < 0) break
-            digest.update(buffer, 0, size)
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

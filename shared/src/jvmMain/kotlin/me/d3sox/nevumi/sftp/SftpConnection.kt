@@ -148,9 +148,13 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         val secret = vault.read(configuration.id)
         check(secret != null || !credentialsRequired) { "Unlock your credential store or reconnect to the original SFTP directory" }
         val authentication = secret?.let { store.json.decodeFromString<SftpAuthentication>(it) } ?: SftpAuthentication()
-        return SftpMusicFileEdits(store, library, server, configuration.connection, authentication,
-            File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork, tailscale())
+        val key = Triple(configuration.connection, secret, tailscale())
+        val files = remote?.takeIf { it.first == key }?.second ?: SftpFiles(key.first, authentication, key.third).also { remote = key to it }
+        return SftpMusicFileEdits(store, library, server, files, configuration.connection,
+            File(backupDirectory, configuration.id.substringAfter(':')).path, configuration.libraryId, changes, artwork)
     }
+    // Kept across editors, so saving reuses the connection the tag editor just opened.
+    private var remote: Pair<Triple<SftpProfile, String?, Tailscale?>, SftpFiles>? = null
 
     private suspend fun currentEditor(): SftpMusicFileEdits = editor(checkNotNull(configuration()) { "Connect to SFTP first" })
     private suspend fun journalEditor(id: String): SftpMusicFileEdits {
