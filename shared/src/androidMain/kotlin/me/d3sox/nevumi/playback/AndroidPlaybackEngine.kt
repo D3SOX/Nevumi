@@ -49,11 +49,16 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) { requestStatus() }
     }
+    // Only a playing song moves its position; a paused one is polled slowly and refreshed by player events and commands.
     private val progress = object : Runnable {
         override fun run() {
-            if (!closed) { requestStatus(); main.postDelayed(this, 100) }
+            if (!closed) {
+                requestStatus()
+                main.postDelayed(this, if (mutableStatus.value.let { it.playWhenReady || it.playing } || pendingPlayback.get() != null) 100 else 1_000)
+            }
         }
     }
+    private fun wakeProgress() { if (player != null) { main.removeCallbacks(progress); progress.run() } }
     init {
         onMain {
             val connection = MediaController.Builder(context.applicationContext,
@@ -230,7 +235,10 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
         }
     }
     private fun command(operation: MediaController.() -> Unit) = onMain {
-        if (!closed) player?.let(operation) ?: run { pending += operation }
+        if (!closed) {
+            player?.let(operation) ?: run { pending += operation }
+            wakeProgress()
+        }
     }
     private fun onMain(operation: () -> Unit) {
         if (Looper.myLooper() == main.looper) operation() else main.post { operation() }

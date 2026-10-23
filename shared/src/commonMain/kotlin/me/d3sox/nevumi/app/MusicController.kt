@@ -112,7 +112,10 @@ data class AppState(
     val sleepTimerEndsAt: Long? = null,
     val soundCloud: SoundCloudProfile? = null,
     val soundCloudJobs: List<SoundCloudJob> = emptyList(),
-)
+) {
+    /** Every song in any playlist; rows ask for membership, and scanning each playlist per row does not scale. */
+    val playlistTrackIds: Set<String> by lazy { playlists.flatMapTo(HashSet()) { it.trackIds } }
+}
 
 data class PlaybackSeek(val entryId: String, val positionMs: Long)
 data class PlaybackConfirmation(val title: String, val play: () -> kotlinx.coroutines.Job)
@@ -159,6 +162,10 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private var shutdownFinished = false
     private var queueLoaded = false
     private var cachedEntryId: String? = null
+    private val clock = kotlin.time.TimeSource.Monotonic.markNow()
+    // Starts one interval in the past so the first checkpoint is not delayed; Long.MIN_VALUE would overflow the subtraction.
+    private var positionCheckpointAt = -POSITION_CHECKPOINT_MS
+    /** The entry IDs the decoder currently holds, and whether that is the whole queue. */
     private data class IncomingPlayback(val peerId: String, val id: String, val previous: PlaybackTransfer,
         val preparedQueue: QueueSnapshot, val revision: Long)
     private var incomingPlayback: IncomingPlayback? = null
@@ -382,7 +389,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         scope.launch { library.observe().collect {
             operations.withLock {
                 val tracks = library.tracks()
-                mutableState.update { it.copy(tracks = tracks) }
+                // An equal list keeps its identity, so the screens do not derive their contents again.
+                mutableState.update { if (it.tracks == tracks) it else it.copy(tracks = tracks) }
             }
         } }
         playlists?.let { collections -> scope.launch {
@@ -474,14 +482,19 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             operations.withLock {
                 val playback = engine.status.value
                 var snapshot = queue.snapshot()
-                if (snapshot.entries.any { it.id == playback.entryId }) {
+                if (snapshot.indexOf(playback.entryId) >= 0) {
                     if (snapshot.repeatPlays != null && snapshot.currentEntryId == playback.entryId &&
                         (snapshot.repeatMode != playback.repeatMode || snapshot.repeatPlays != playback.repeatPlays))
                         queue.setRepeat(playback.repeatMode, playback.repeatPlays)
                     if (snapshot.currentEntryId != playback.entryId) queue.select(requireNotNull(playback.entryId))
-                    if (snapshot.currentEntryId != playback.entryId || abs(snapshot.positionMs - playback.positionMs) >= 1_000 ||
-                        !playback.playing && snapshot.positionMs != playback.positionMs)
+                    // Every write wakes every database observer, so a playing song checkpoints its position only every
+                    // half minute; a pause or a song change saves it at once, and so does closing the app.
+                    val now = clock.elapsedNow().inWholeMilliseconds
+                    if (snapshot.currentEntryId != playback.entryId || !playback.playing && snapshot.positionMs != playback.positionMs ||
+                        abs(snapshot.positionMs - playback.positionMs) >= 1_000 && now - positionCheckpointAt >= POSITION_CHECKPOINT_MS) {
                         queue.setPosition(playback.positionMs)
+                        positionCheckpointAt = now
+                    }
                     snapshot = queue.snapshot()
                 }
                 var recovered = false
@@ -1448,7 +1461,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         persistPlaybackPosition()
         failedSources.clear()
         val saved = requireNotNull(queue.saved().firstOrNull { it.id == id }) { "Saved queue is missing" }
-        if (saved.snapshot.currentIndex >= 0) require(playableQueue(saved.snapshot).any { it.entryId == saved.snapshot.currentEntryId }) {
+        if (saved.snapshot.currentIndex >= 0) require(playableQueue(saved.snapshot, listOf(saved.snapshot.entries[saved.snapshot.currentIndex])).isNotEmpty()) {
             "This saved queue's current track has no available audio source"
         }
         queue.restoreSaved(id)
@@ -1485,14 +1498,16 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             fun step(index: Int) = (index + direction).let { if (wraps) it.mod(snapshot.entries.size) else it }
             // Pass over songs that cannot play right now, such as server songs while offline or files marked missing.
             // Without a current entry no file access is checked here; loading the chosen song still verifies its file.
-            val playableIds = playableQueue(snapshot.copy(currentEntryId = null)).mapTo(HashSet()) { it.entryId }
+            val unchecked = snapshot.copy(currentEntryId = null)
+            val lookup = SourceLookup(library.tracks().associateBy { it.id })
+            suspend fun playable(index: Int) = playableQueue(unchecked, listOf(snapshot.entries[index]), lookup = lookup).isNotEmpty()
             var destination = step(snapshot.currentIndex)
             var passed = 0
-            while (destination in snapshot.entries.indices && snapshot.entries[destination].id !in playableIds && passed < snapshot.entries.size) {
+            while (destination in snapshot.entries.indices && !playable(destination) && passed < snapshot.entries.size) {
                 destination = step(destination); passed++
             }
             if (destination in snapshot.entries.indices) {
-                require(snapshot.entries[destination].id in playableIds) { "No upcoming song has an available audio source" }
+                require(playable(destination)) { "No upcoming song has an available audio source" }
                 queue.select(snapshot.entries[destination].id)
                 val selected = queue.snapshot()
                 loadSnapshot(selected, play = playing)
@@ -1599,33 +1614,44 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         }
     }
 
-    private suspend fun playableQueue(snapshot: QueueSnapshot, checkAllSources: Boolean = false): List<PlayableTrack> {
-        var connection: me.d3sox.nevumi.navidrome.NavidromeClient? = null
-        var checkedConnection = false
-        val tracks = library.tracks().associateBy { it.id }
-        return snapshot.entries.mapNotNull { entry ->
-            val track = tracks[entry.trackId] ?: return@mapNotNull null
-            val sources = track.sources.filterNot { it.id in failedSources[entry.id].orEmpty() }.map { source ->
-                if (source.kind == SourceKind.SERVER) source
-                else source.copy(available = source.available && ((!checkAllSources && entry.id != snapshot.currentEntryId) || withContext(Dispatchers.IO) { sourceAccessible(source.location) }))
+    /** Resolves sources against one library catalogue and one server connection lookup for a whole pass. */
+    private inner class SourceLookup(val catalog: Map<String, Track>) {
+        private var connection: me.d3sox.nevumi.navidrome.NavidromeClient? = null
+        private var checked = false
+        suspend fun connection(): me.d3sox.nevumi.navidrome.NavidromeClient? {
+            if (!checked) {
+                checked = true
+                connection = try { navidrome?.client() }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null }
             }
-            var source = SourceResolver.resolve(sources, state.value.preferences.sourcePriority) ?: return@mapNotNull null
-            val location = if (source.kind == SourceKind.SERVER) {
-                if (!checkedConnection) {
-                    checkedConnection = true
-                    connection = try { navidrome?.client() }
-                        catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { null }
-                }
-                val connectedSources = sources.filter { candidate ->
-                    candidate.kind != SourceKind.SERVER || connection != null &&
-                        candidate.id.startsWith("server:${requireNotNull(connection).serverId}:")
-                }
-                source = SourceResolver.resolve(connectedSources, state.value.preferences.sourcePriority) ?: return@mapNotNull null
-                if (source.kind == SourceKind.SERVER) requireNotNull(connection).streamUrl(source.location) else source.location
-            } else source.location
-            PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id)
+            return connection
         }
+    }
+
+    private suspend fun playableQueue(snapshot: QueueSnapshot, entries: List<me.d3sox.nevumi.queue.QueueEntry> = snapshot.entries,
+        checkAllSources: Boolean = false, lookup: SourceLookup? = null): List<PlayableTrack> {
+        val sources = lookup ?: SourceLookup(library.tracks().associateBy { it.id })
+        return entries.mapNotNull { entry -> playable(entry, snapshot, checkAllSources, sources) }
+    }
+
+    private suspend fun playable(entry: me.d3sox.nevumi.queue.QueueEntry, snapshot: QueueSnapshot, checkAllSources: Boolean,
+        lookup: SourceLookup): PlayableTrack? {
+        val track = lookup.catalog[entry.trackId] ?: return null
+        val sources = track.sources.filterNot { it.id in failedSources[entry.id].orEmpty() }.map { source ->
+            if (source.kind == SourceKind.SERVER) source
+            else source.copy(available = source.available && ((!checkAllSources && entry.id != snapshot.currentEntryId) || withContext(Dispatchers.IO) { sourceAccessible(source.location) }))
+        }
+        var source = SourceResolver.resolve(sources, state.value.preferences.sourcePriority) ?: return null
+        val location = if (source.kind == SourceKind.SERVER) {
+            val connection = lookup.connection()
+            val connectedSources = sources.filter { candidate ->
+                candidate.kind != SourceKind.SERVER || connection != null && candidate.id.startsWith("server:${connection.serverId}:")
+            }
+            source = SourceResolver.resolve(connectedSources, state.value.preferences.sourcePriority) ?: return null
+            if (source.kind == SourceKind.SERVER) requireNotNull(connection).streamUrl(source.location) else source.location
+        } else source.location
+        return PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id)
     }
 
     private fun action(serialized: Boolean = true, block: suspend () -> Unit) = scope.launch {
@@ -1639,6 +1665,10 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     }
 
     override fun close() { scope.cancel(); pairedDevices?.close(); serverChanges?.close(); offline?.close(); scrobbling?.close(); soundCloud?.close(); engine.close() }
+
+    private companion object {
+        const val POSITION_CHECKPOINT_MS = 30_000L
+    }
 
     suspend fun closeAndJoin() = withContext(NonCancellable) {
         shutdown.withLock {

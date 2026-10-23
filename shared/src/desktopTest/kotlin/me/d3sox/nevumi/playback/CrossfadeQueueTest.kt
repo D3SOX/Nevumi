@@ -151,7 +151,8 @@ class CrossfadeQueueTest {
             val decoder = MpvPlaybackEngine("null")
             object : PlaybackEngine by decoder {
                 override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
-                    check(tracks[startIndex].entryId != "broken") { "The decoder rejected this song" }
+                    // A real decoder takes a moment before it rejects a song; the requested song is reported meanwhile.
+                    if (tracks[startIndex].entryId == "broken") { Thread.sleep(100); error("The decoder rejected this song") }
                     decoder.loadQueue(tracks, startIndex, positionMs, play)
                 }
             }

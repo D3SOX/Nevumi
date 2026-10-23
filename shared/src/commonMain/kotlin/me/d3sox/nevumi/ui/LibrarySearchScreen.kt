@@ -45,7 +45,9 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
         state.tracks.filter { track -> track.sources.any { it.available } && (track.sources.any { it.kind != SourceKind.LOCAL } ||
             folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))) }
     }
-    val results = remember(visible, state.playlists, query) { searchLibrary(visible, state.playlists, query) }
+    // Grouping the library is the expensive part; it happens once per library change, off the main thread for large ones.
+    val index = rememberDerived(null, emptyList(), listOf(visible, state.playlists)) { LibrarySearchIndex(visible, state.playlists) }
+    val results = remember(index, query) { index.search(query) }
     val songIds = remember(results.songs) { results.songs.map { it.id } }
     val opened = results.collections[openedType].orEmpty().firstOrNull { it.id == openedId }
     val active = LocalNavigationActive.current

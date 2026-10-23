@@ -71,7 +71,7 @@ class AudioDownloads(
     }
     suspend fun pin(trackId: String, owner: String) = store.transaction {
         val pins = store.read<TrackPins>("pins:$trackId") ?: TrackPins(trackId)
-        store.put("pins:$trackId", "pins", pins.copy(owners = pins.owners + owner))
+        if (owner !in pins.owners) store.put("pins:$trackId", "pins", pins.copy(owners = pins.owners + owner))
     }
     suspend fun unpinOwner(owner: String) = store.transaction {
         store.list<TrackPins>("pins").filter { owner in it.owners }.forEach {
@@ -86,9 +86,11 @@ class AudioDownloads(
                 desired[trackId] = desired[trackId].orEmpty() + "playlist:${playlist.id}"
             }
         }
+        // This runs on every download pass; unchanged pins are not written again.
         (existing.keys + desired.keys).forEach { trackId ->
             val retained = existing[trackId]?.owners.orEmpty().filterNot { it.startsWith("playlist:") }.toSet()
-            store.put("pins:$trackId", "pins", TrackPins(trackId, retained + desired[trackId].orEmpty()))
+            val owners = retained + desired[trackId].orEmpty()
+            if (existing[trackId]?.owners != owners) store.put("pins:$trackId", "pins", TrackPins(trackId, owners))
         }
     }
     suspend fun enforceCacheBudget(bytes: Long, inUse: Set<String> = emptySet()) = withContext(Dispatchers.IO) {

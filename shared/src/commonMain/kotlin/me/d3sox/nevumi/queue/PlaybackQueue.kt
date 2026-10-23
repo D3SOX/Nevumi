@@ -60,16 +60,26 @@ data class QueueSnapshot(
     val origin: QueueOrigin? = null,
     val selectedSavedQueueId: String? = null,
 ) {
-    val currentIndex: Int get() = entries.indexOfFirst { it.id == currentEntryId }
+    // Playback asks for the current index many times per second; a delegated property stays out of serialization and equality.
+    private val positions: Map<String, Int> by lazy { entries.withIndex().associate { it.value.id to it.index } }
+    /** The index of the entry with [entryId], or -1. */
+    fun indexOf(entryId: String?): Int = entryId?.let { positions[it] } ?: -1
+    val currentIndex: Int get() = indexOf(currentEntryId)
     val currentTrackId: String? get() = entries.getOrNull(currentIndex)?.trackId
     val upNext: List<QueueEntry> get() = entries.drop(currentIndex + 1).filter { it.section == QueueSection.MANUAL }
     val context: List<QueueEntry> get() = entries.drop(currentIndex + 1).filter { it.section == QueueSection.CONTEXT }
 }
 
+private data class DecodedQueue(val revision: Long, val json: String?, val snapshot: QueueSnapshot, val verified: Boolean)
+
 class PlaybackQueue(private val store: MusicStore, private val queueId: String = "main") {
     private val key = "queue:$queueId"
-    /** The last decoded queue with its stored JSON; playback reads the queue many times per second. */
-    @Volatile private var decoded: Pair<String, QueueSnapshot>? = null
+    /**
+     * The last decoded queue with its stored JSON and the revision of the stored queues. Playback reads the queue many
+     * times per second, so a verified entry is trusted while the revision is unchanged. An entry written or read inside a
+     * transaction is compared against the stored JSON first, because the transaction may still be rolled back.
+     */
+    @Volatile private var decoded: DecodedQueue? = null
     /** Counts queue replacements in this process, so the queue list can swap queues without animating between them. */
     @Volatile var replacements = 0
         private set
@@ -89,7 +99,7 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         val live = if (selected == null) snapshot.copy(selectedSavedQueueId = null) else snapshot
         val json = store.json.encodeToString(live)
         store.database.records().put(key, "queues", json)
-        decoded = json to live
+        decoded = DecodedQueue(store.revision("queues"), json, live, verified = false)
         if (replacement) replacements++
         if (selected != null) store.put("saved-queue:${selected.id}", "saved-queues",
             selected.copy(snapshot = live.copy(selectedSavedQueueId = null)))
@@ -243,9 +253,18 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
 
     suspend fun playAfter(trackId: String) = enqueue(listOf(trackId), QueueAction.PLAY_AFTER)
     suspend fun snapshot(): QueueSnapshot {
-        val json = store.database.records().read(key) ?: return QueueSnapshot()
-        decoded?.let { (stored, snapshot) -> if (stored == json) return snapshot }
-        return store.json.decodeFromString<QueueSnapshot>(json).also { decoded = json to it }
+        val revision = store.revision("queues")
+        val cached = decoded
+        if (cached != null && cached.verified && cached.revision == revision) return cached.snapshot
+        val json = store.database.records().read(key)
+        val committed = !store.inTransaction()
+        if (cached != null && json == cached.json) {
+            if (committed && cached.revision == revision) decoded = cached.copy(verified = true)
+            return cached.snapshot
+        }
+        val snapshot = json?.let { store.json.decodeFromString<QueueSnapshot>(it) } ?: QueueSnapshot()
+        decoded = DecodedQueue(revision, json, snapshot, verified = committed)
+        return snapshot
     }
 
     suspend fun playNow(trackId: String) = store.transaction {

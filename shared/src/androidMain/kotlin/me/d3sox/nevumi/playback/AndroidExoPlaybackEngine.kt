@@ -68,11 +68,12 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
             publish(player)
         }
     }
+    // Only a playing song moves its position; a paused decoder is polled slowly and published by events and commands.
     private val progress = object : Runnable {
         override fun run() {
             if (!closed) {
-                player?.let(::publish)
-                main.postDelayed(this, 50)
+                val current = player?.also(::publish)
+                main.postDelayed(this, if (current == null || current.isPlaying || current.playWhenReady) 50 else 500)
             }
         }
     }

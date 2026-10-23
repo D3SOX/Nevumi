@@ -70,7 +70,10 @@ internal suspend fun remapPlaylistTracks(store: MusicStore, from: String, to: St
 }
 
 class Playlists(private val store: MusicStore, private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
-    private val refreshEveryMs: Long = 60_000) {
+    private val refreshEveryMs: Long = 60_000,
+    /** Smart playlists read the whole library; sharing the app's instances reuses their decoded records. */
+    private val library: MusicLibrary = MusicLibrary(store),
+    private val history: me.d3sox.nevumi.history.ListeningHistory = me.d3sox.nevumi.history.ListeningHistory(store, library)) {
     init { require(refreshEveryMs > 0) { "Playlist refresh interval must be positive" } }
     suspend fun createSmart(name: String, rule: LibraryQuery): Playlist {
         val playlist = clock().let { Playlist(Uuid.random().toString(), name.trim(), emptyList(), rule = rule, createdAt = it, updatedAt = it) }
@@ -99,8 +102,8 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     suspend fun all(): List<Playlist> = evaluate(store.list("playlists"))
     private suspend fun evaluate(playlists: List<Playlist>): List<Playlist> {
         if (playlists.none { it.rule != null }) return playlists
-        val tracks = MusicLibrary(store).tracks()
-        val statistics = listeningStatistics(store.list<Listen>("listens"))
+        val tracks = library.tracks()
+        val statistics = history.statistics()
         return playlists.map { playlist -> playlist.rule?.let { rule ->
             playlist.copy(trackIds = filterTracks(tracks, rule, statistics, clock()).map { it.id })
         } ?: playlist }
@@ -109,7 +112,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     fun observe(): Flow<List<Playlist>> = store.database.records().observe("playlists").distinctUntilChanged().flatMapLatest { records ->
         val playlists = records.map { store.json.decodeFromString<Playlist>(it.value) }
         if (playlists.none { it.rule != null }) flowOf(playlists)
-        else combine(MusicLibrary(store).observe(), me.d3sox.nevumi.history.ListeningHistory(store, MusicLibrary(store)).observe().map { listens -> listeningStatistics(listens) }.distinctUntilChanged(),
+        else combine(library.observe(), history.observe().map { listens -> listeningStatistics(listens) }.distinctUntilChanged(),
         flow { while (true) { emit(clock()); delay(refreshEveryMs) } }) { tracks, statistics, now ->
         playlists.map { playlist ->
             playlist.rule?.let { rule -> playlist.copy(trackIds = filterTracks(tracks, rule, statistics, now).map { it.id }) } ?: playlist
@@ -210,7 +213,6 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     private suspend fun validateServerTracks(playlist: Playlist, trackIds: List<String>) {
         requireEditable(playlist)
         val server = playlist.server ?: return
-        val library = MusicLibrary(store)
         for (trackId in trackIds) require(library.findTrack(trackId)?.sources?.any {
             it.kind == SourceKind.SERVER && it.id.startsWith("server:${server.serverId}:")
         } == true) { "Server playlists can only contain tracks from their server. Use an app playlist for mixed sources." }

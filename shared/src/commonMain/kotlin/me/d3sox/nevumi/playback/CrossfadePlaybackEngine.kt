@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -43,19 +45,27 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var fadeDurationMs = 0.0
     private val clock = TimeSource.Monotonic.markNow()
     private var lastTickMs = 0L
+    // Starts before the recent-command window; Long.MIN_VALUE would overflow the subtraction and keep the fast cadence.
+    private var commandedAtMs = -COMMAND_CADENCE_MS
+    /** Fades and loads need the fast cadence; a paused or idle player only has to notice commands, which wake it at once. */
+    private fun tickDelayMs(): Long = if (requestedPlaying.value || outgoing != null || pendingLoad != null || active.status.value.playing ||
+        clock.elapsedNow().inWholeMilliseconds - commandedAtMs < COMMAND_CADENCE_MS) 25 else 250
     private val worker = scope.launch {
         try {
             while (isActive) {
-                while (true) {
-                    val operation = commands.tryReceive().getOrNull() ?: break
+                // A select never loses a command that arrives as the wait ends, unlike cancelling a receive.
+                @OptIn(ExperimentalCoroutinesApi::class)
+                var operation = select<(suspend () -> Unit)?> { commands.onReceive { it }; onTimeout(tickDelayMs()) { null } }
+                while (operation != null) {
+                    commandedAtMs = clock.elapsedNow().inWholeMilliseconds
                     try { operation() }
                     catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { mutableStatus.update { it.copy(error = "Could not complete this playback operation") } }
+                    operation = commands.tryReceive().getOrNull()
                 }
                 try { tick() }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { mutableStatus.update { it.copy(error = "Could not continue playback") } }
-                delay(25)
             }
         } finally {
             active.close()
@@ -319,3 +329,6 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         }
     }
 }
+
+/** How long after a command the worker keeps the fast cadence. */
+private const val COMMAND_CADENCE_MS = 500L

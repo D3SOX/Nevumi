@@ -131,7 +131,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     // It changes together with the rows, so the fresh list never animates the old rows away.
     var rowsReplacement by remember { mutableIntStateOf(controller.queue.replacements) }
     val displayedEntries = remember(rows, state.queue) { queueEntries(rows, state.queue) }
-    val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
+    val catalog = rememberDerived(null, emptyList(), listOf(state.tracks)) { state.tracks.associateBy { it.id } }
     LaunchedEffect(state.queue.entries, state.queue.currentEntryId, state.queue.contextName, previousTrackLimit, draggingEntry, committingDrag) {
         if (draggingEntry == null && !committingDrag) {
             rows = queueRows(state.queue, previousTrackLimit)

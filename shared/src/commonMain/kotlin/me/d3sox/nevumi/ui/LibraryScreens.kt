@@ -109,8 +109,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         filter.playCountTo != null || filter.lastPlayedWithinDays != null || filter.notPlayedWithinDays != null
     // Playback adds listened time every few seconds, which never changes the order; play counts and play times can.
     val rankedStatistics = rememberDerived(null, listOf(ranked), listOf(statistics)) { if (ranked) statistics.mapValues { (_, it) -> it.playCount to it.lastPlayedAt } else null }
-    val tracks = rememberDerived(null, listOf(state.tracks, order, reversed, sources, filter, state.preferences.includeFolders,
-        state.preferences.excludeFolders), listOf(rankedStatistics, filterTime)) {
+    // Sort and filter choices answer at once; a library change, such as one song's favorite, re-sorts in the background.
+    val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders)
+    val tracks = rememberDerived(null, trackChoices, listOf(state.tracks, rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         val visible = state.tracks.filter { track ->
             val localAllowed = folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
@@ -195,7 +196,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 LibraryTab.HOME -> HomeScreen(state, controller, tracks, destination, handleBack, onSettings)
                 LibraryTab.SONGS -> SongList(tracks, controller, statistics = statistics, scrollSort = order)
                 LibraryTab.ALBUMS -> {
-                    val albums = rememberDerived("albums", listOf(tracks)) { tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
+                    val albums = rememberDerived("albums", trackChoices, listOf(tracks)) { tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
                         .entries.sortedBy { it.key.first.lowercase() }.map { (key, songs) ->
                             TrackCollection("${key.first.length}:${key.first}${key.second}", key.first.ifBlank { "Unknown album" },
                                 songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }), key.second)
@@ -203,7 +204,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                     TrackCollections(albums, LibraryTab.ALBUMS, state, controller, statistics, handleBack, destination)
                 }
                 LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS -> {
-                    val collections = rememberDerived(tab.name, listOf(tracks)) {
+                    val collections = rememberDerived(tab.name, trackChoices, listOf(tracks)) {
                         groupedCollections(tracks, tab) { track ->
                             when (tab) {
                                 LibraryTab.ARTISTS -> listOf(track.metadata.artist)
@@ -215,9 +216,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                     }
                     TrackCollections(collections, tab, state, controller, statistics, handleBack, destination)
                 }
-                LibraryTab.FAVORITES -> SongList(rememberDerived("favorites", listOf(tracks)) { tracks.filter { it.favorite } }, controller,
+                LibraryTab.FAVORITES -> SongList(rememberDerived("favorites", trackChoices, listOf(tracks)) { tracks.filter { it.favorite } }, controller,
                     statistics = statistics, scrollSort = order, contextName = "Favorites")
-                LibraryTab.RECENT -> SongList(rememberDerived("recent", listOf(tracks)) {
+                LibraryTab.RECENT -> SongList(rememberDerived("recent", trackChoices, listOf(tracks)) {
                     tracks.map { it to it.recentAt }.sortedByDescending { it.second }.map { it.first }
                 }, controller, scrollSort = LibrarySort.RECENT, contextName = "Recently added")
                 LibraryTab.PLAYLISTS -> PlaylistsScreen(state, controller, backEnabled = handleBack, destination = destination,

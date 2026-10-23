@@ -104,7 +104,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
                 TrackAction.SELECT, TrackAction.DOWNLOAD)
             val availableOffline = track.sources.any { it.kind == SourceKind.LOCAL && it.available }
             primary.filter { it != hiddenAction && available(it) }.forEach { action -> option(action.label(track.favorite, availableOffline), action.icon(track.favorite, track.rating,
-                state.playlists.any { track.id in it.trackIds }, availableOffline),
+                track.id in state.playlistTrackIds, availableOffline),
                 if (action == TrackAction.RATE && track.rating > 0) "${track.rating} / 5" else null) { perform(action) } }
             if (queueEntryId != null) {
                 option("Remove from queue", AppIcon.REMOVE) { controller.removeQueueEntry(queueEntryId) }

@@ -45,6 +45,22 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
     private val wallClock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val elapsedClock: () -> Long = createElapsedClock()) {
     private val recording = Mutex()
+    // Only the running listen changes between reads; keep the decoded history and decode changed records.
+    private val decoding = Mutex()
+    private val decoded = me.d3sox.nevumi.storage.decodedRecords<Listen>(store.json)
+    private var loadedRevision: Long? = null
+    private var loaded = false
+    private var sorted = emptyList<Listen>()
+    private fun List<Listen>.newestFirst() = sortedWith(compareByDescending<Listen> { it.startedAt }.thenBy { it.id })
+    private suspend fun load(): List<Listen> = decoding.withLock {
+        val revision = store.revision("listens")
+        if (loaded && revision == loadedRevision) return@withLock sorted
+        sorted = decoded.update(store.database.records().list("listens")).all.newestFirst()
+        loadedRevision = revision
+        // A transaction may roll back after this read, so its result is checked against the store again outside it.
+        loaded = !store.inTransaction()
+        sorted
+    }
     private data class Recording(var listen: Listen, var previous: PlaybackStatus,
         var observedAt: Long, var writtenAt: Long)
     private val sessions = mutableMapOf<String, Recording>()
@@ -89,7 +105,7 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
         saved
     }
 
-    suspend fun all(): List<Listen> = store.list<Listen>("listens").sortedWith(compareByDescending<Listen> { it.startedAt }.thenBy { it.id })
+    suspend fun all(): List<Listen> = load()
     suspend fun clear() = recording.withLock {
         store.transaction {
             val received = store.list<me.d3sox.nevumi.sync.SyncSnapshot>("sync-received")
@@ -100,16 +116,7 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
         }
         sessions.clear()
     }
-    fun observe(): kotlinx.coroutines.flow.Flow<List<Listen>> {
-        // Only the running listen changes between emissions; keep the decoded history and decode changed records.
-        var decoded = emptyMap<String, Pair<String, Listen>>()
-        return store.database.records().observe("listens").distinctUntilChanged().map { records ->
-            decoded = records.associate { record ->
-                record.key to (decoded[record.key]?.takeIf { it.first == record.value } ?: (record.value to store.json.decodeFromString<Listen>(record.value)))
-            }
-            decoded.values.map { it.second }.sortedWith(compareByDescending<Listen> { it.startedAt }.thenBy { it.id })
-        }
-    }
+    fun observe(): kotlinx.coroutines.flow.Flow<List<Listen>> = store.database.records().observeRevision("listens").distinctUntilChanged().map { load() }
     suspend fun statistics(): Map<String, ListeningStatistics> = listeningStatistics(all())
     suspend fun report(tracks: List<Track>, period: ListeningPeriod = ListeningPeriod.ALL_TIME): ListeningReport =
         listeningReport(all(), tracks, period, wallClock())

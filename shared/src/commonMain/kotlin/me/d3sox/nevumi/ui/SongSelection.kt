@@ -32,8 +32,8 @@ internal val LocalSongSelection = compositionLocalOf<SongSelection?> { null }
 
 @Composable
 internal fun SongSelectionHeader(selection: SongSelection, controller: MusicController) {
-    val state by controller.state.collectAsState()
-    val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
+    val state by (LocalSteadyState.current ?: controller.state).collectAsState()
+    val catalog = rememberDerived(null, emptyList(), listOf(state.tracks)) { state.tracks.associateBy { it.id } }
     val tracks = selection.selectedIds.mapNotNull(catalog::get)
     var actions by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
@@ -54,7 +54,7 @@ internal fun SongSelectionHeader(selection: SongSelection, controller: MusicCont
                 AppMenuItem(text = { Text("Play after") }, leadingIcon = { Icon(AppIcon.PLAY_AFTER.vector, null) },
                     onClick = { actions = false; enqueue(QueueAction.PLAY_AFTER) })
                 AppMenuItem(text = { Text("Add to playlist") }, leadingIcon = { Icon((if (tracks.all { track ->
-                    state.playlists.any { track.id in it.trackIds } }) AppIcon.PLAYLIST_CHECK else AppIcon.PLAYLIST_PLUS).vector, null) },
+                    track.id in state.playlistTrackIds }) AppIcon.PLAYLIST_CHECK else AppIcon.PLAYLIST_PLUS).vector, null) },
                     onClick = { playlistPicker = true; actions = false })
                 val favorite = !tracks.all { it.favorite }
                 AppMenuItem(text = { Text(if (favorite) "Add to favorites" else "Remove from favorites") },

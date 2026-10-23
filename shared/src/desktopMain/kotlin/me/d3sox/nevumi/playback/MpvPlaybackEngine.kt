@@ -114,6 +114,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         checked(native.mpv_initialize(handle))
         scope.launch {
             while (isActive) {
+                var busy = true
                 synchronized(lock) {
                     if (!closed) {
                         drainEvents()
@@ -137,6 +138,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                             (playWhenReady || mutableStatus.value.ended) &&
                             (duration <= 0 || pausedSeekPosition == null || pausedSeekPosition!! / 1_000.0 >= duration - 0.002)
                         if (!paused) pausedSeekPosition = null
+                        busy = !paused || playWhenReady || System.nanoTime() - commandedAtNanos < 500_000_000L
                         val failure = failedLoad
                         val currentTrack = failure?.track ?: tracks.getOrNull(longProperty("playlist-pos").toInt())
                         if (repeatPlays != null && currentTrack != null) {
@@ -170,15 +172,20 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                             } else null)
                     }
                 }
-                delay(50)
+                // A paused player's properties only change through commands, which are applied at once; poll it slowly.
+                delay(if (busy) 50 else 250)
             }
         }
     }
+
+    @Volatile private var commandedAtNanos = Long.MIN_VALUE / 2
+    private fun commanded() { commandedAtNanos = System.nanoTime() }
 
     override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
 
     override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) = synchronized(lock) {
         check(!closed)
+        commanded()
         require(startIndex in tracks.indices)
         val selected = tracks[startIndex]
         val previous = mutableStatus.value
@@ -210,6 +217,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
 
     override fun play() = synchronized(lock) {
         check(!closed)
+        commanded()
         playWhenReady = true
         pendingLoad = pendingLoad?.copy(play = true)
         if (pendingLoad == null) {
@@ -249,6 +257,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
     }
     override fun pause() = synchronized(lock) {
         check(!closed)
+        commanded()
         playWhenReady = false
         mutableAudioLevel.value = 0f
         pendingLoad = pendingLoad?.copy(play = false)
@@ -264,6 +273,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         mutableStatus.update { it.copy(playing = false, playWhenReady = false) }
     }
     override fun seek(positionMs: Long) = synchronized(lock) {
+        commanded()
         check(!closed)
         bufferedRepeatId = null
         if (pendingLoad != null) {

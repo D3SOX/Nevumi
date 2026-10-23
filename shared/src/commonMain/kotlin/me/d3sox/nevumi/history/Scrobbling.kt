@@ -82,6 +82,13 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
     private val nowPlayingRetryAt = mutableMapOf<String, Long>()
     private val mutableError = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = mutableError
+    // The history and the journal grow for years; decode only the records that changed since the previous pass.
+    private val decoding = Mutex()
+    private val listens = me.d3sox.nevumi.storage.decodedRecords<Listen>(store.json)
+    private val journal = me.d3sox.nevumi.storage.decodedRecords<ScrobbleSubmission>(store.json)
+    private var eligibilityRules: Any? = null
+    /** Listens whose song had no source on a Navidrome profile's server yet; a later library refresh can link them. */
+    private var unlinked = emptyList<Listen>()
     fun onPlayback(status: PlaybackStatus) { playback.value = status }
 
     fun start() {
@@ -179,11 +186,11 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
     }
 
     suspend fun profiles(): List<ScrobblingProfile> = store.list("scrobbling-profiles")
-    suspend fun submissions(): List<ScrobbleSubmission> = store.list("scrobble-submissions")
+    suspend fun submissions(): List<ScrobbleSubmission> = decoding.withLock { journal.update(store.database.records().list("scrobble-submissions")).all }
     fun observe() = combine(store.database.records().observe("scrobbling-profiles").distinctUntilChanged(),
         store.database.records().observe("scrobble-submissions").distinctUntilChanged(), error) { profiles, submissions, error ->
         ScrobblingStatus(profiles.map { store.json.decodeFromString<ScrobblingProfile>(it.value) },
-            submissions.map { store.json.decodeFromString<ScrobbleSubmission>(it.value) }, error)
+            decoding.withLock { journal.update(submissions).all }, error)
     }.distinctUntilChanged()
 
     suspend fun setEnabled(id: String, enabled: Boolean) = sending.withLock {
@@ -237,21 +244,36 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
 
     suspend fun enqueueEligible() = sending.withLock {
         val settings = MusicPreferences(store).load()
-        val listens = store.list<Listen>("listens").filter { it.qualifiesForScrobbling(settings) && it.originDeviceId == null }
         val profiles = profiles().filter { it.enabled }
+        // Thresholds and accounts decide eligibility, so a change to them re-examines the whole history; otherwise only listens
+        // written since the previous pass can have become eligible.
+        val rules = listOf(settings.scrobblePercent, settings.scrobbleMaxSeconds, profiles.map { it.id to it.enabledSince })
+        val update = decoding.withLock { listens.update(store.database.records().list("listens")) }
+        // Deferred listens are taken from the current records, so a cleared or edited listen is not scrobbled as it was.
+        val stored = if (unlinked.isEmpty()) emptyMap() else update.all.associateBy { it.id }
+        val candidates = ((if (rules != eligibilityRules) update.all else update.changed) + unlinked.mapNotNull { stored[it.id] })
+            .distinctBy { it.id }
+            .filter { it.qualifiesForScrobbling(settings) && it.originDeviceId == null }
+        eligibilityRules = null
+        val receipts = store.database.records().keys("scrobble-submissions").toHashSet()
+        val catalogue = if (candidates.size > 20 && profiles.any { it.service == ScrobblingService.NAVIDROME })
+            library.tracks().associateBy { it.id } else null
+        val skipped = LinkedHashMap<String, Listen>()
         store.transaction {
-            for (profile in profiles) for (listen in listens.filter { it.startedAt >= profile.enabledSince }) {
+            for (profile in profiles) for (listen in candidates.filter { it.startedAt >= profile.enabledSince }) {
                 if (profile.service != ScrobblingService.NAVIDROME && (listen.metadata.title.isBlank() || listen.metadata.artist.isBlank())) continue
                 if (profile.service == ScrobblingService.LASTFM && listen.durationMs <= 30_000) continue
                 val songId = if (profile.service == ScrobblingService.NAVIDROME)
-                    library.findTrack(listen.trackId)?.sources?.firstOrNull {
+                    (catalogue?.get(listen.trackId) ?: library.findTrack(listen.trackId))?.sources?.firstOrNull {
                         it.kind == SourceKind.SERVER && it.id.startsWith("server:${profile.serverId}:")
-                    }?.location ?: continue else null
+                    }?.location ?: run { skipped[listen.id] = listen; continue } else null
                 val id = "${profile.id}\u0000${listen.playbackId}".encodeUtf8().sha256().hex()
-                if (store.read<ScrobbleSubmission>("scrobble-submission:$id") == null)
+                if (receipts.add("scrobble-submission:$id"))
                     store.put("scrobble-submission:$id", "scrobble-submissions", ScrobbleSubmission(id, profile.id, listen.playbackId, listen, songId = songId))
             }
         }
+        eligibilityRules = rules
+        unlinked = skipped.values.toList()
     }
 
     private suspend fun reportNowPlaying(): String? = sending.withLock {
@@ -303,12 +325,13 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
     }
 
     suspend fun runPending() = sending.withLock {
-        for (entry in submissions().filter { it.state == ScrobbleState.IN_FLIGHT })
+        val journal = submissions()
+        for (entry in journal.filter { it.state == ScrobbleState.IN_FLIGHT })
             save(entry.copy(state = ScrobbleState.UNCERTAIN, error = "The previous submission was interrupted before confirmation"))
         if (!network.value.connected) return@withLock
         val profiles = profiles().filter { it.enabled }.associateBy { it.id }
-        val unauthorized = submissions().filter { it.state == ScrobbleState.AUTHORIZATION }.map { it.profileId }.toMutableSet()
-        for (entry in submissions().filter { it.state == ScrobbleState.PENDING && it.retryAt <= now() }) {
+        val unauthorized = journal.filter { it.state == ScrobbleState.AUTHORIZATION }.map { it.profileId }.toMutableSet()
+        for (entry in journal.filter { it.state == ScrobbleState.PENDING && it.retryAt <= now() }) {
             val profile = profiles[entry.profileId] ?: continue
             if (profile.id in unauthorized) continue
             val listen = entry.listen ?: continue

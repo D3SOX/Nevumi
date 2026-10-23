@@ -36,7 +36,7 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     destination: LibraryDestination?, backEnabled: Boolean, settings: () -> Unit) {
     val now = rememberLibraryTime()
     var seed by rememberSaveable { mutableIntStateOf(Random.nextInt()) }
-    val feed = rememberDerived("home-feed", listOf(tracks, seed), listOf(state.listens, now)) {
+    val feed = rememberDerived("home-feed", listOf(seed), listOf(tracks, state.listens, now)) {
         // The minute clock can predate a listen that has just arrived.
         homeFeed(tracks, state.listens, kotlin.time.Clock.System.now().toEpochMilliseconds(), seed)
     }
@@ -49,7 +49,7 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     }
     val navigate = LocalLibraryNavigate.current
     val homeQueues = remember(state.savedQueues) { state.savedQueues.filter { it.kind != me.d3sox.nevumi.queue.SavedQueueKind.RECOVERY } }
-    val catalog = rememberDerived("home-catalog", listOf(tracks)) { tracks.associateBy { it.id } }
+    val catalog = rememberDerived("home-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
     val playlistLayout = state.preferences.collectionLayout(LibraryTab.PLAYLISTS)
     val playlists = remember(state.playlists, state.tracks, playlistLayout) {
         homePlaylists(state.playlists, playlistLayout, state.tracks.associate { it.id to it.recentAt })

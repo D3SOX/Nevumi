@@ -20,9 +20,10 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
         downloads.replacePlaylistPins(collections, excluded)
         val missing = linkedMapOf<String, String>()
         val wanted = collections.filter { it.autoDownload }.flatMap { it.trackIds }.distinct().filterNot { it in excluded }
+        val tracks = library.tracks().associateBy { it.id }
         withContext(Dispatchers.IO) {
             for (trackId in wanted) {
-                val track = library.findTrack(trackId) ?: continue
+                val track = tracks[trackId] ?: continue
                 if (track.sources.any { it.kind != SourceKind.SERVER && it.available && accessible(it) }) continue
                 val remote = track.sources.firstOrNull {
                     it.kind == SourceKind.SERVER && it.id.startsWith("server:${client.serverId}:")

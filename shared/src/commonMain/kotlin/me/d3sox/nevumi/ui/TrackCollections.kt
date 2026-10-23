@@ -32,7 +32,7 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
         }
     }
     val selecting = LocalSongSelection.current?.active == true
-    val entries = rememberDerived("collections:${tab.name}", listOf(collections, state.artwork)) {
+    val entries = rememberDerived("collections:${tab.name}", emptyList(), listOf(collections, state.artwork)) {
         collections.map { entry ->
             CollectionItem(entry.id, entry.title, listOf(entry.subtitle, countLabel(entry.tracks.size, "song")).filter { it.isNotBlank() }.joinToString(" · "),
                 entry.tracks.firstNotNullOfOrNull { state.artwork[it.id] }, tab.icon(),
