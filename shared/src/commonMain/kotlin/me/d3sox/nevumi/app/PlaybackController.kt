@@ -350,6 +350,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
             engine.setAudioEffects(context.state.value.preferences.audioEffects)
             engine.setCrossfadeDuration(context.state.value.preferences.crossfadeDurationMs)
             engine.setGaplessPlayback(context.state.value.preferences.gaplessPlayback)
+            engine.setReplayGain(context.state.value.preferences.replayGain)
         }
     }
 

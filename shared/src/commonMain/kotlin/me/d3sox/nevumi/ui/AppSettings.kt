@@ -16,6 +16,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.settings.ThemeMode
+import me.d3sox.nevumi.playback.ReplayGainMode
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.settings.ColorMode
 import me.d3sox.nevumi.settings.TrackAction
@@ -100,6 +101,10 @@ import me.d3sox.nevumi.resources.settings_files_recovery_description
 import me.d3sox.nevumi.resources.settings_folder_rules_note
 import me.d3sox.nevumi.resources.settings_gapless_playback
 import me.d3sox.nevumi.resources.settings_gapless_playback_description
+import me.d3sox.nevumi.resources.settings_replay_gain
+import me.d3sox.nevumi.resources.settings_replay_gain_album
+import me.d3sox.nevumi.resources.settings_replay_gain_preamp
+import me.d3sox.nevumi.resources.settings_replay_gain_track
 import me.d3sox.nevumi.resources.settings_include_folders
 import me.d3sox.nevumi.resources.settings_include_folders_empty
 import me.d3sox.nevumi.resources.settings_last_opened_page
@@ -356,6 +361,17 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             }
             SettingsToggle(stringResource(Res.string.settings_gapless_playback), AppIcon.MUSIC, stringResource(Res.string.settings_gapless_playback_description), settings.gaplessPlayback) {
                 enabled -> controller.updatePreferences { it.copy(gaplessPlayback = enabled) }
+            }
+            SettingChoice(Res.string.settings_replay_gain, settings.replayGain.mode, listOf(ReplayGainMode.OFF to stringResource(Res.string.off),
+                ReplayGainMode.TRACK to stringResource(Res.string.settings_replay_gain_track),
+                ReplayGainMode.ALBUM to stringResource(Res.string.settings_replay_gain_album))) { mode ->
+                controller.updatePreferences { it.copy(replayGain = it.replayGain.copy(mode = mode)) }
+            }
+            if (settings.replayGain.mode != ReplayGainMode.OFF) {
+                SettingsSlider(stringResource(Res.string.settings_replay_gain_preamp), AppIcon.VOLUME, settings.replayGain.preampDb.toFloat(), -15f..15f, 29,
+                    { value -> "${value.roundToInt()} dB" }) { value ->
+                    controller.updatePreferences { it.copy(replayGain = it.replayGain.copy(preampDb = value.roundToInt().toDouble())) }
+                }
             }
             SettingsToggle(stringResource(Res.string.settings_show_previous_tracks), AppIcon.HISTORY, stringResource(Res.string.settings_show_previous_tracks_description), settings.showPreviousQueueTracks) {
                 enabled -> controller.updatePreferences { it.copy(showPreviousQueueTracks = enabled) }

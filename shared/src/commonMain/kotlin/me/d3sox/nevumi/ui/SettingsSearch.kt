@@ -51,6 +51,8 @@ import me.d3sox.nevumi.resources.settings_keywords_confirm_up_next_interruption
 import me.d3sox.nevumi.resources.settings_keywords_connect_last_fm
 import me.d3sox.nevumi.resources.settings_keywords_connect_listenbrainz
 import me.d3sox.nevumi.resources.settings_keywords_crossfade
+import me.d3sox.nevumi.resources.settings_keywords_replay_gain
+import me.d3sox.nevumi.resources.settings_replay_gain
 import me.d3sox.nevumi.resources.settings_keywords_customize_home
 import me.d3sox.nevumi.resources.settings_keywords_download_network
 import me.d3sox.nevumi.resources.settings_keywords_exclude_folders
@@ -153,6 +155,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             category("Playback", AppIcon.PLAY, Res.string.settings_playback_speed to Res.string.settings_keywords_playback_speed,
                 Res.string.settings_playback_pitch to Res.string.settings_keywords_playback_pitch,
                 Res.string.crossfade to Res.string.settings_keywords_crossfade,
+                Res.string.settings_replay_gain to Res.string.settings_keywords_replay_gain,
                 Res.string.settings_show_audio_info to Res.string.settings_keywords_show_audio_info,
                 Res.string.lyrics_setting_online to Res.string.lyrics_keywords_online,
                 Res.string.settings_show_previous_tracks to Res.string.settings_keywords_show_previous_tracks,

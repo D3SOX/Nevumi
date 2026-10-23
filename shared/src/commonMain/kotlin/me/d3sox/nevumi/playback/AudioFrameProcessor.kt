@@ -2,8 +2,9 @@ package me.d3sox.nevumi.playback
 
 import kotlin.math.*
 
-internal class AudioFrameProcessor(sampleRateHz: Int, private val channels: Int, private val effects: AudioEffects) {
-    private val gain = 10.0.pow(effects.effectivePreampDb / 20)
+internal class AudioFrameProcessor(sampleRateHz: Int, private val channels: Int, private val effects: AudioEffects,
+    replayGainDb: Double = 0.0) {
+    private val gain = 10.0.pow((effects.effectivePreampDb + replayGainDb) / 20)
     private val filters: List<Biquad>
 
     init {

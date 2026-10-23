@@ -94,6 +94,10 @@
     <string name="settings_audio_effects_description">Equalizer, headphone profiles and mono audio</string>
     <string name="settings_gapless_playback">Gapless playback</string>
     <string name="settings_gapless_playback_description">Play adjacent tracks without a break when crossfade is off.</string>
+    <string name="settings_replay_gain">ReplayGain</string>
+    <string name="settings_replay_gain_track">Song</string>
+    <string name="settings_replay_gain_album">Album</string>
+    <string name="settings_replay_gain_preamp">ReplayGain preamp</string>
     <string name="settings_show_previous_tracks">Show previous tracks in queue</string>
     <string name="settings_show_previous_tracks_description">Display songs before the current track</string>
     <string name="settings_confirm_queue_jumps">Confirm queue jumps</string>
@@ -219,6 +223,7 @@
     <string name="settings_keywords_playback_speed">tempo</string>
     <string name="settings_keywords_playback_pitch">semitones</string>
     <string name="settings_keywords_crossfade">transition seconds</string>
+    <string name="settings_keywords_replay_gain">volume normalization loudness level r128 tags</string>
     <string name="settings_keywords_show_audio_info">format bitrate sample rate kb/s kHz quality</string>
     <string name="settings_keywords_show_previous_tracks">history previously played</string>
     <string name="settings_keywords_previous_track_limit">queue history count</string>

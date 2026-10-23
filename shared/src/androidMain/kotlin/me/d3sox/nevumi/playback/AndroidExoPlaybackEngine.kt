@@ -32,6 +32,7 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
     private var fileAudioInfo: AudioInfo? = null
     private val main = Handler(Looper.getMainLooper())
     private val effects = AtomicReference(AudioEffects())
+    private val replayGain = AtomicReference(ReplayGain())
     private val mutableStatus = MutableStateFlow(PlaybackStatus())
     override val status = mutableStatus.asStateFlow()
     private val mutableAudioLevel = MutableStateFlow(0f)
@@ -82,7 +83,7 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
         onMain {
             if (!closed) try {
                 val created = ExoPlayer.Builder(context.applicationContext,
-                    NevumiAudioRenderersFactory(context.applicationContext, outputMonitor, effects::get, meter))
+                    NevumiAudioRenderersFactory(context.applicationContext, outputMonitor, effects::get, meter, replayGain::get))
                     .setAudioAttributes(AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                         .setUsage(C.USAGE_MEDIA).build(), false).build()
                 player = created
@@ -207,6 +208,10 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
         effects.validate()
         this.effects.set(effects)
         mutableStatus.update { it.copy(audioEffects = effects) }
+    }
+    override fun setReplayGain(replayGain: ReplayGain) {
+        replayGain.validate()
+        this.replayGain.set(replayGain)
     }
     override fun setRepeat(mode: RepeatMode, playCount: Int?) {
         require(playCount == null || mode == RepeatMode.ONE && playCount > 0)

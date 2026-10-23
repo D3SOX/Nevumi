@@ -10,8 +10,9 @@ import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
 @UnstableApi
-internal class EffectsAudioProcessor(private val effects: () -> AudioEffects) : BaseAudioProcessor() {
-    private var applied: AudioEffects? = null
+internal class EffectsAudioProcessor(private val effects: () -> AudioEffects, private val replayGainDb: () -> Double = { 0.0 }) :
+    BaseAudioProcessor() {
+    private var applied: Pair<AudioEffects, Double>? = null
     private var processor: AudioFrameProcessor? = null
     private var frame = DoubleArray(0)
 
@@ -29,9 +30,9 @@ internal class EffectsAudioProcessor(private val effects: () -> AudioEffects) : 
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val settings = effects()
+        val settings = effects() to replayGainDb()
         if (settings != applied) {
-            processor = AudioFrameProcessor(inputAudioFormat.sampleRate, inputAudioFormat.channelCount, settings)
+            processor = AudioFrameProcessor(inputAudioFormat.sampleRate, inputAudioFormat.channelCount, settings.first, settings.second)
             applied = settings
         }
         val output = replaceOutputBuffer(inputBuffer.remaining()).order(ByteOrder.LITTLE_ENDIAN)

@@ -69,6 +69,7 @@ class PlaybackService : MediaSessionService() {
                         when (command.customAction) {
                             AudioEffectsCommand.ACTION -> player.engine.setAudioEffects(AudioEffectsCommand.decode(arguments))
                             SessionPlaybackCommands.GAPLESS -> player.engine.setGaplessPlayback(arguments.getBoolean("enabled", true))
+                            SessionPlaybackCommands.REPLAY_GAIN -> player.engine.setReplayGain(SessionPlaybackCommands.decodeReplayGain(arguments))
                             SessionPlaybackCommands.CROSSFADE -> {
                                 val duration = arguments.getLong("durationMs", -1)
                                 player.engine.setCrossfadeDuration(duration)

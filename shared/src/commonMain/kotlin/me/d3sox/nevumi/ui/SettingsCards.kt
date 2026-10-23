@@ -26,6 +26,7 @@ import me.d3sox.nevumi.resources.playback_cache
 import me.d3sox.nevumi.resources.quick_action
 import me.d3sox.nevumi.resources.record_listening_history
 import me.d3sox.nevumi.resources.settings_equalizer_profile
+import me.d3sox.nevumi.resources.settings_replay_gain
 import me.d3sox.nevumi.resources.show_options_buttons
 import me.d3sox.nevumi.resources.source_priority
 import me.d3sox.nevumi.resources.ssh_authentication
@@ -95,6 +96,7 @@ internal fun settingsIcon(label: StringResource): AppIcon = when (label) {
     Res.string.theme -> AppIcon.THEME
     Res.string.colors -> AppIcon.ARTWORK_COLORS
     Res.string.settings_equalizer_profile -> AppIcon.HEADPHONES
+    Res.string.settings_replay_gain -> AppIcon.VOLUME
     Res.string.on_launch -> AppIcon.STARTUP
     Res.string.swipe_right -> AppIcon.SWIPE_RIGHT
     Res.string.swipe_left -> AppIcon.SWIPE_LEFT
