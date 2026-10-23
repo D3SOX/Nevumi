@@ -109,20 +109,22 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 
         var playlistsAdded = 0
         var playlistsMerged = 0
-        val existingPlaylists = playlists.all().toMutableList()
+        val existingPlaylists = playlists.all()
+        // Each playlist already here stands in for one backed-up playlist of its name and kind, so same-named playlists stay separate.
+        val matched = mutableSetOf<String>()
         for (backup in document.playlists) {
             val name = backup.name.trim().takeIf { it.isNotEmpty() } ?: continue
-            val existing = existingPlaylists.firstOrNull { it.name.trim() == name }
+            val existing = existingPlaylists.firstOrNull { it.id !in matched && it.name.trim() == name && (it.rule != null) == (backup.rule != null) }
             if (existing != null) {
+                matched += existing.id
                 // Merging into a server playlist would push songs removed since the backup back to the server.
-                if (backup.rule != null || existing.rule != null || existing.server != null) continue
+                if (backup.rule != null || existing.server != null) continue
                 val additions = backup.trackKeys.mapNotNull(::localId).filterNot { it in existing.trackIds }
                 if (additions.isEmpty()) continue
                 try { playlists.append(existing.id, additions) }
                 // Server playlists only take songs from their server.
                 catch (_: IllegalArgumentException) { continue }
                 playlistsMerged++
-                existingPlaylists[existingPlaylists.indexOf(existing)] = existing.copy(trackIds = existing.trackIds + additions)
                 continue
             }
             val created = if (backup.rule != null) playlists.createSmart(name, backup.rule)
@@ -130,7 +132,6 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             if (backup.description.isNotBlank()) playlists.edit(created.id, name, backup.description)
             if (backup.shuffle) playlists.setShuffle(created.id, true)
             if (backup.sort != PlaylistSort.CUSTOM || backup.descending) playlists.setSort(created.id, backup.sort, backup.descending)
-            existingPlaylists += created
             playlistsAdded++
         }
 
@@ -155,7 +156,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         // Listens keep their song's tags, so songs no longer in the backup's library can still be matched.
         val listens = history.import(document.listens.mapNotNull { listen ->
             (local[listen.trackId] ?: matches.find(listen.metadata.toBackup()) ?: null.also { unmatched++ })
-                ?.let { listen.copy(trackId = it, importedAt = null) }
+                // An origin keeps restored listens from being scrobbled again; the import time shares them with paired devices.
+                ?.let { listen.copy(trackId = it, originDeviceId = listen.originDeviceId ?: BACKUP_ORIGIN, importedAt = clock()) }
         })
 
         val equalizerProfiles = equalizer?.let { profiles -> document.equalizerProfiles.count { profiles.restore(it) } } ?: 0
@@ -198,6 +200,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         catch (_: IllegalArgumentException) { throw BackupFormatException() }
     }
 }
+
+/** The origin of listens restored from a backup, which were already scrobbled where they were played. */
+private const val BACKUP_ORIGIN = "backup"
 
 /** Local folders are absolute paths or content URIs; server folders are relative to the music library. */
 private fun isDevicePath(folder: String) = folder.startsWith("/") || "://" in folder || Regex("^[A-Za-z]:").containsMatchIn(folder)

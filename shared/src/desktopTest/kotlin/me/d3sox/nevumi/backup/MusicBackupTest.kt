@@ -191,6 +191,23 @@ class MusicBackupTest {
     }
 
     @Test
+    fun playlistsSharingANameStaySeparateAndRestoredListensAreNotScrobbledAgain() = devices { source, target ->
+        source.fill()
+        source.playlists.create("Road", listOf(source.id(nightWalk.title)))
+        source.playlists.createSmart("Road", LibraryQuery(favoritesOnly = true))
+        val text = source.backup.export()
+        target.sameSongs()
+        target.backup.restore(text)
+        val roads = target.playlists.all().filter { it.name == "Road" }
+        assertEquals(2, roads.count { it.rule == null })
+        assertEquals(1, roads.count { it.rule != null })
+        assertTrue(target.history.all().isNotEmpty() && target.history.all().all { it.originDeviceId != null })
+        // A second restore matches each playlist once instead of adding more.
+        target.backup.restore(text)
+        assertEquals(3, target.playlists.all().count { it.name == "Road" })
+    }
+
+    @Test
     fun unknownVersionsAndOtherFilesAreRejected() = devices { _, target ->
         assertEquals(2, assertFailsWith<BackupFormatException> {
             target.backup.restore("""{"format":"nevumi-backup","version":2,"createdAt":0,"somethingNew":true}""")
