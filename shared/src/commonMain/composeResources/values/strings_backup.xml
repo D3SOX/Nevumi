@@ -42,6 +42,7 @@
     <string name="backup_error_restore">Could not restore the backup. %1$s</string>
     <string name="backup_error_invalid">This file is not a Nevumi backup</string>
     <string name="backup_error_version">This backup uses format %1$d, which this version of Nevumi cannot read. Update Nevumi and try again.</string>
+    <string name="backup_error_importing">Wait until your library finishes updating, then try again</string>
     <string name="backup_error_unavailable">Backups are unavailable</string>
     <string name="backup_error_picker_open">A file picker is already open</string>
     <string name="backup_error_unreadable">The backup file could not be read</string>

@@ -17,6 +17,7 @@ import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.backup_error_export
 import me.d3sox.nevumi.resources.backup_error_invalid
 import me.d3sox.nevumi.resources.backup_error_restore
+import me.d3sox.nevumi.resources.backup_error_importing
 import me.d3sox.nevumi.resources.backup_error_unavailable
 import me.d3sox.nevumi.resources.backup_error_version
 import me.d3sox.nevumi.resources.backup_notice_exported
@@ -66,6 +67,9 @@ class BackupController internal constructor(private val context: ControllerConte
     /** Runs outside the operation lock: the picker waits for the user and the services keep their own transactions. */
     private fun run(failure: org.jetbrains.compose.resources.StringResource, block: suspend () -> Unit) = context.action(serialized = false) {
         if (backup == null) throw IllegalStateException(getString(Res.string.backup_error_unavailable))
+        // A backup taken or matched while songs are still importing would miss the songs imported later.
+        val state = context.state.value
+        if (state.localScan != null || state.serverRefresh?.running == true) throw IllegalStateException(getString(Res.string.backup_error_importing))
         // One step, so two quick taps cannot both start.
         if (mutableStatus.getAndUpdate { it.copy(working = true) }.working) return@action
         try { block() }
