@@ -99,7 +99,8 @@ private fun Content(playing: NowPlaying, artwork: Bitmap?) {
     Box(GlanceModifier.fillMaxSize().appWidgetBackground().background(GlanceTheme.colors.widgetBackground)
         .cornerRadius(android.R.dimen.system_app_widget_background_radius).padding(horizontal = 12.dp, vertical = 4.dp)
         .clickable(actionStartActivity<MainActivity>()), Alignment.Center) {
-        if (size.width < wide.width) Controls(playing.playing)
+        // Three buttons do not fit the smallest size, so it only plays and pauses.
+        if (size.width < wide.width) Controls(playing.playing, skips = false)
         else Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Artwork(artwork, GlanceModifier.size(if (size.height >= tall.height) 80.dp else 48.dp).cornerRadius(8.dp))
             Column(GlanceModifier.defaultWeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -122,15 +123,15 @@ private fun Artwork(bitmap: Bitmap?, modifier: GlanceModifier) {
 }
 
 @Composable
-private fun Controls(playing: Boolean) {
+private fun Controls(playing: Boolean, skips: Boolean = true) {
     val context = LocalContext.current
     Row(verticalAlignment = Alignment.CenterVertically) {
-        CircleIconButton(ImageProvider(R.drawable.ic_skip_previous), context.getString(R.string.playback_previous), PlaybackAction.action("previous"),
+        if (skips) CircleIconButton(ImageProvider(R.drawable.ic_skip_previous), context.getString(R.string.playback_previous), PlaybackAction.action("previous"),
             backgroundColor = null, contentColor = GlanceTheme.colors.onSurface)
         CircleIconButton(ImageProvider(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
             context.getString(if (playing) R.string.playback_pause else R.string.playback_play), PlaybackAction.action("toggle"),
             backgroundColor = GlanceTheme.colors.primary, contentColor = GlanceTheme.colors.onPrimary)
-        CircleIconButton(ImageProvider(R.drawable.ic_skip_next), context.getString(R.string.playback_next), PlaybackAction.action("next"),
+        if (skips) CircleIconButton(ImageProvider(R.drawable.ic_skip_next), context.getString(R.string.playback_next), PlaybackAction.action("next"),
             backgroundColor = null, contentColor = GlanceTheme.colors.onSurface)
     }
 }

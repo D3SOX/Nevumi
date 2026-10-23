@@ -30,7 +30,9 @@ class DesktopBackupFiles(address: String? = null) : BackupFiles {
             val temporary = Files.createTempFile(file.absoluteFile.parentFile.toPath(), ".nevumi-backup-", ".tmp")
             try {
                 Files.writeString(temporary, text, Charsets.UTF_8)
-                Files.move(temporary, file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                // Some network and FUSE file systems cannot replace a file atomically; a plain replace still keeps the export whole.
+                try { Files.move(temporary, file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING) }
+                catch (_: java.nio.file.AtomicMoveNotSupportedException) { Files.move(temporary, file.toPath(), StandardCopyOption.REPLACE_EXISTING) }
             } finally { Files.deleteIfExists(temporary) }
         }
         return true

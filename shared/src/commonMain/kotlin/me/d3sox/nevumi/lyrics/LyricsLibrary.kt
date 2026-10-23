@@ -72,10 +72,12 @@ class LyricsSources(private val store: MusicStore?, private val files: LyricsFil
 
     companion object {
         const val KIND = "lyrics"
-        /** MusicBrainz identifiers when the song has them, otherwise its artist, title and album; null for untagged files, whose names collide. */
+        /** MusicBrainz identifiers when the song has them, otherwise its artist, title, album and length in seconds; null for untagged files, whose names collide. */
         fun cacheKey(metadata: TrackMetadata): String? = LibrarySync.identity(metadata)
             ?: if (metadata.artist.isBlank() || metadata.title.isBlank()) null
-            else "text:" + listOf(metadata.artist, metadata.title, metadata.album).joinToString("|") { it.trim().lowercase() }
+            // The length tells live, remastered and extended versions with the same tags apart, as it does for LRCLIB.
+            else "text:" + listOf(metadata.artist, metadata.title, metadata.album).joinToString("|") { it.trim().lowercase() } +
+                "|" + (metadata.durationMs + 500) / 1_000
     }
 }
 
