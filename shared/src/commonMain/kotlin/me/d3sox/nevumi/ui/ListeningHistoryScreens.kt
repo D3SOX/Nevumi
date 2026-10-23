@@ -16,17 +16,43 @@ import me.d3sox.nevumi.history.*
 import me.d3sox.nevumi.library.Track
 import kotlin.time.Clock
 import kotlinx.coroutines.delay
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.albums
+import me.d3sox.nevumi.resources.artists
+import me.d3sox.nevumi.resources.genres
+import me.d3sox.nevumi.resources.most_played
+import me.d3sox.nevumi.resources.plays
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.sources_history_empty
+import me.d3sox.nevumi.resources.sources_history_entry_partial
+import me.d3sox.nevumi.resources.sources_history_entry_played
+import me.d3sox.nevumi.resources.sources_listening_statistics
+import me.d3sox.nevumi.resources.sources_listening_time
+import me.d3sox.nevumi.resources.sources_period_all_time
+import me.d3sox.nevumi.resources.sources_period_last_30_days
+import me.d3sox.nevumi.resources.sources_period_last_365_days
+import me.d3sox.nevumi.resources.sources_period_last_7_days
+import me.d3sox.nevumi.resources.sources_recommendations_empty
+import me.d3sox.nevumi.resources.sources_recommendations_intro
+import me.d3sox.nevumi.resources.sources_statistics_empty
+import me.d3sox.nevumi.resources.sources_statistics_genres_hint
+import me.d3sox.nevumi.resources.sources_statistics_period
+import me.d3sox.nevumi.resources.statistics_grouping
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun ListeningHistoryScreen(state: AppState, controller: MusicController, tracks: List<Track>) {
     val catalog = rememberDerived("history-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
     val events = remember(state.listens, catalog) { state.listens.filter { it.trackId in catalog } }
     val songs = remember(events, catalog) { events.map { catalog.getValue(it.trackId) } }
-    if (events.isEmpty()) Text("Your listening history will appear here.", Modifier.padding(24.dp))
+    // Resolved here because the entry text is built outside composition.
+    val played = stringResource(Res.string.sources_history_entry_played)
+    val partial = stringResource(Res.string.sources_history_entry_partial)
+    if (events.isEmpty()) Text(stringResource(Res.string.sources_history_empty), Modifier.padding(24.dp))
     else SongList(songs, controller, Modifier.testTag("listening-history"),
         entryInfo = { index ->
             val event = events[index]
-            "${formatListenTime(event.startedAt)} · ${formatListeningDuration(event.listenedMs)} listened · ${if (event.qualified) "Played" else "Partial listen"}"
+            (if (event.qualified) played else partial).withArgs(formatListenTime(event.startedAt), formatListeningDuration(event.listenedMs))
         }, scrollIndicator = { formatListenTime(events[it].startedAt) }, contextName = "History")
 }
 
@@ -45,13 +71,13 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
     val group = ranks.firstOrNull { "${it.name.length}:${it.name}${it.detail}" == page }
     val header: @Composable () -> Unit = {
         Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SettingChoice("Statistics period", period, listOf(ListeningPeriod.ALL_TIME to "All time",
-                ListeningPeriod.LAST_7_DAYS to "Last 7 days", ListeningPeriod.LAST_30_DAYS to "Last 30 days",
-                ListeningPeriod.LAST_365_DAYS to "Last 365 days")) { period = it }
-            SettingChoice("Statistics grouping", grouping, listOf("Songs", "Artists", "Albums", "Genres").map { it to it }) { grouping = it }
-            Text(if (report.playCount == 1) "1 play" else "${report.playCount} plays", style = MaterialTheme.typography.titleLarge)
-            Text("Listening time: ${formatListeningDuration(report.listenedMs)}")
-            Text("Most played", style = MaterialTheme.typography.titleMedium)
+            SettingChoice(stringResource(Res.string.sources_statistics_period), period, listOf(ListeningPeriod.ALL_TIME to stringResource(Res.string.sources_period_all_time),
+                ListeningPeriod.LAST_7_DAYS to stringResource(Res.string.sources_period_last_7_days), ListeningPeriod.LAST_30_DAYS to stringResource(Res.string.sources_period_last_30_days),
+                ListeningPeriod.LAST_365_DAYS to stringResource(Res.string.sources_period_last_365_days))) { period = it }
+            SettingChoice(stringResource(Res.string.statistics_grouping), grouping, listOf("Songs" to stringResource(Res.string.songs), "Artists" to stringResource(Res.string.artists), "Albums" to stringResource(Res.string.albums), "Genres" to stringResource(Res.string.genres))) { grouping = it }
+            Text(countLabel(report.playCount, Res.plurals.plays), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(Res.string.sources_listening_time, formatListeningDuration(report.listenedMs)))
+            Text(stringResource(Res.string.most_played), style = MaterialTheme.typography.titleMedium)
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -60,8 +86,8 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
         controller, Modifier.weight(1f).fillMaxWidth().testTag("statistics-most-played"), statistics = songStatistics, scrollSort = me.d3sox.nevumi.library.LibrarySort.PLAY_COUNT, header = header, contextName = group?.name ?: "Statistics")
     else LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("statistics-ranking"), state = rememberLibraryListState(controller, "statistics:$grouping:$period")) {
             item(key = "statistics-header") { header() }
-            if (ranks.isEmpty()) item { Text("Play some music to build your statistics.", Modifier.padding(24.dp)) }
-            if (grouping == "Genres") item { Text("Songs with multiple genres contribute to each genre.", Modifier.padding(horizontal = 24.dp),
+            if (ranks.isEmpty()) item { Text(stringResource(Res.string.sources_statistics_empty), Modifier.padding(24.dp)) }
+            if (grouping == "Genres") item { Text(stringResource(Res.string.sources_statistics_genres_hint), Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.bodySmall) }
             items(ranks, key = { "${it.name.length}:${it.name}${it.detail}" }) { rank ->
                 ListItem(modifier = Modifier.clickable { selected = "${rank.name.length}:${rank.name}${rank.detail}" }, headlineContent = { Text(rank.name) },
@@ -83,10 +109,10 @@ internal fun ListeningRecommendationsScreen(state: AppState, controller: MusicCo
     val suggestions = rememberDerived("recommendations", emptyList(), listOf(tracks, state.listens, now)) { listeningRecommendations(state.listens, tracks, now = now) }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("From your listening history. Songs played in the last 7 days are left out.",
+            Text(stringResource(Res.string.sources_recommendations_intro),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (suggestions.isEmpty()) Text("Play some music to discover more from your library.", Modifier.padding(24.dp))
+        if (suggestions.isEmpty()) Text(stringResource(Res.string.sources_recommendations_empty), Modifier.padding(24.dp))
         else SongList(suggestions.map { it.track }, controller, Modifier.weight(1f).testTag("listening-recommendations"),
             extraInfo = suggestions.associate { it.track.id to it.reason }, scrollIndicator = { "${it + 1} / ${suggestions.size}" }, contextName = "Recommendations")
     }
@@ -99,8 +125,13 @@ internal fun rememberLibraryTime(): Long {
     return now
 }
 
+@Composable
 internal fun formatListeningStatistics(plays: Int, milliseconds: Long): String =
-    (if (plays == 1) "1 play" else "$plays plays") + " · ${formatListeningDuration(milliseconds)} listened"
+    stringResource(Res.string.sources_listening_statistics, countLabel(plays, Res.plurals.plays), formatListeningDuration(milliseconds))
+
+/** Fills the `%1$s`-style placeholders of a string resolved without arguments, for text built outside composition. */
+private fun String.withArgs(vararg args: String) =
+    args.foldIndexed(this) { index, text, arg -> text.replace("%${index + 1}\$s", arg) }
 
 internal fun formatListeningDuration(milliseconds: Long): String {
     val seconds = milliseconds.coerceAtLeast(0) / 1_000

@@ -20,6 +20,43 @@ import me.d3sox.nevumi.sync.SyncFolderRequest
 import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.done
+import me.d3sox.nevumi.resources.paired_devices
+import me.d3sox.nevumi.resources.remove
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.sources_all_shared_songs_matched
+import me.d3sox.nevumi.resources.sources_cancel_invitation
+import me.d3sox.nevumi.resources.sources_choose_folder_for_playlist
+import me.d3sox.nevumi.resources.sources_choose_folder_for_playlist_description
+import me.d3sox.nevumi.resources.sources_choose_smart_playlist_folder
+import me.d3sox.nevumi.resources.sources_create_invitation
+import me.d3sox.nevumi.resources.sources_device_network_address
+import me.d3sox.nevumi.resources.sources_device_sync_failed
+import me.d3sox.nevumi.resources.sources_enter_code
+import me.d3sox.nevumi.resources.sources_enter_pairing_code
+import me.d3sox.nevumi.resources.sources_folder_for_playlist
+import me.d3sox.nevumi.resources.sources_invitation_hint
+import me.d3sox.nevumi.resources.sources_library_synced
+import me.d3sox.nevumi.resources.sources_pair_another_device
+import me.d3sox.nevumi.resources.sources_pair_device
+import me.d3sox.nevumi.resources.sources_pairing_intro
+import me.d3sox.nevumi.resources.sources_pairing_invitation
+import me.d3sox.nevumi.resources.sources_pairing_sync_hint
+import me.d3sox.nevumi.resources.sources_paste_pairing_invitation
+import me.d3sox.nevumi.resources.sources_ready_to_sync
+import me.d3sox.nevumi.resources.sources_remove_device
+import me.d3sox.nevumi.resources.sources_remove_device_description
+import me.d3sox.nevumi.resources.sources_remove_device_named
+import me.d3sox.nevumi.resources.sources_remove_device_question
+import me.d3sox.nevumi.resources.sources_scan_qr_code
+import me.d3sox.nevumi.resources.sources_songs_need_your_copy
+import me.d3sox.nevumi.resources.sources_songs_to_match
+import me.d3sox.nevumi.resources.sources_sync_now
+import me.d3sox.nevumi.resources.sources_sync_with_device
+import me.d3sox.nevumi.resources.sources_your_invitation
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismiss: () -> Unit, artwork: Map<String, String> = emptyMap()) {
@@ -35,63 +72,67 @@ internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismis
     var remove by remember { mutableStateOf<SyncPeer?>(null) }
     var matching by rememberSaveable { mutableStateOf(false) }
     var folder by remember { mutableStateOf<SyncFolderRequest?>(null) }
+    val syncFailed = stringResource(Res.string.sources_device_sync_failed)
     fun run(block: suspend () -> Unit) {
         error = null
         scope.launch {
             try { block() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { error = devices.state.value.error ?: failure.message ?: "Device sync failed" }
+            catch (failure: Exception) { error = devices.state.value.error ?: failure.message ?: syncFailed }
         }
     }
     AnimatedNavigation(matching, false, canGoBack = matching, onBack = { matching = false }, depth = { if (it) 1 else 0 }) { matchingPage ->
     if (matchingPage) SongsToMatch(devices, unmatched, tracks, artwork) { matching = false }
-    else SettingsScreen(onDismissRequest = dismiss, title = { Text("Paired devices") }, text = {
+    else SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.paired_devices)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Share favorites, ratings, listening history, app playlists and saved queues over an encrypted connection. Music files, credentials and playback position stay on each device.")
-            Text("Open Nevumi on both devices, then choose Sync now.")
+            Text(stringResource(Res.string.sources_pairing_intro))
+            Text(stringResource(Res.string.sources_pairing_sync_hint))
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             (error ?: state.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             state.peers.forEach { peer ->
+                val syncDescription = stringResource(Res.string.sources_sync_with_device, peer.name)
+                val removeDescription = stringResource(Res.string.sources_remove_device_named, peer.name)
                 Text(peer.name, style = MaterialTheme.typography.titleMedium)
-                Text(if (peer.lastSyncedAt == null) "Ready to sync" else "Library synced", style = MaterialTheme.typography.bodySmall)
+                Text(if (peer.lastSyncedAt == null) stringResource(Res.string.sources_ready_to_sync) else stringResource(Res.string.sources_library_synced), style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton("Sync now", AppIcon.SYNC, Modifier.semantics { contentDescription = "Sync with ${peer.name}" },
+                    ActionButton(stringResource(Res.string.sources_sync_now), AppIcon.SYNC, Modifier.semantics { contentDescription = syncDescription },
                         enabled = !state.busy) { run { devices.synchronize(peer.deviceId) } }
-                    ActionButton("Remove", AppIcon.REMOVE, Modifier.semantics { contentDescription = "Remove ${peer.name}" },
+                    ActionButton(stringResource(Res.string.remove), AppIcon.REMOVE, Modifier.semantics { contentDescription = removeDescription },
                         enabled = !state.busy, style = ActionStyle.DESTRUCTIVE) { remove = peer }
                 }
             }
-            SettingsLink("Songs to match", AppIcon.LINK,
-                if (unmatched.isEmpty()) "All shared songs matched" else "${countLabel(unmatched.size, "song")} need your copy") { matching = true }
+            SettingsLink(stringResource(Res.string.sources_songs_to_match), AppIcon.LINK,
+                if (unmatched.isEmpty()) stringResource(Res.string.sources_all_shared_songs_matched) else stringResource(Res.string.sources_songs_need_your_copy, countLabel(unmatched.size, Res.plurals.songs))) { matching = true }
             folders.forEach { request ->
-                ActionButton("Choose folder: ${request.playlistName}", AppIcon.FOLDER, Modifier.semantics {
-                    contentDescription = "Choose folder for ${request.playlistName}"
+                val chooseFolderDescription = stringResource(Res.string.sources_choose_folder_for_playlist_description, request.playlistName)
+                ActionButton(stringResource(Res.string.sources_choose_folder_for_playlist, request.playlistName), AppIcon.FOLDER, Modifier.semantics {
+                    contentDescription = chooseFolderDescription
                 }, style = ActionStyle.OUTLINED) { folder = request }
             }
-            Text("Pair another device", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.sources_pair_another_device), style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = !state.busy, onClick = { scanning = true }) {
-                    Icon(AppIcon.QR_SCAN.vector, null); Spacer(Modifier.width(8.dp)); Text("Scan QR code")
+                    Icon(AppIcon.QR_SCAN.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.sources_scan_qr_code))
                 }
                 OutlinedButton(enabled = !state.busy, onClick = { error = null; enteringCode = true }) {
-                    Icon(AppIcon.EDIT.vector, null); Spacer(Modifier.width(8.dp)); Text("Enter code")
+                    Icon(AppIcon.EDIT.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.sources_enter_code))
                 }
             }
-            OutlinedTextField(address, { address = it }, label = { Text("This device’s network address") },
+            OutlinedTextField(address, { address = it }, label = { Text(stringResource(Res.string.sources_device_network_address)) },
                 singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth())
-            if (state.invitation == null) ActionButton("Create invitation", AppIcon.PLUS,
+            if (state.invitation == null) ActionButton(stringResource(Res.string.sources_create_invitation), AppIcon.PLUS,
                 enabled = address.isNotBlank() && !state.busy) { run { devices.createInvitation(address.trim()) } }
             else {
-                Text("Scan this QR code or copy the invitation to your other device. It expires in five minutes.")
+                Text(stringResource(Res.string.sources_invitation_hint))
                 Box(Modifier.fillMaxWidth(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                     PairingQr(requireNotNull(state.invitation))
                 }
-                OutlinedTextField(requireNotNull(state.invitation), {}, readOnly = true, label = { Text("Your invitation") },
+                OutlinedTextField(requireNotNull(state.invitation), {}, readOnly = true, label = { Text(stringResource(Res.string.sources_your_invitation)) },
                     maxLines = 3, modifier = Modifier.fillMaxWidth())
-                ActionButton("Cancel invitation", AppIcon.CLOSE, style = ActionStyle.OUTLINED) { run { devices.cancelInvitation() } }
+                ActionButton(stringResource(Res.string.sources_cancel_invitation), AppIcon.CLOSE, style = ActionStyle.OUTLINED) { run { devices.cancelInvitation() } }
             }
         }
-    }, confirmButton = { PageAction("Done", onClick = dismiss) })
+    }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })
     }
     if (scanning) PairingScanner(onScanned = { code ->
         scanning = false
@@ -100,11 +141,11 @@ internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismis
     }, dismiss = { scanning = false }, useManualCode = { scanning = false; error = null; enteringCode = true })
     if (enteringCode) {
         val focus = remember { FocusRequester() }
-        KeyboardAlertDialog(onDismissRequest = { enteringCode = false }, title = { Text("Enter pairing code") }, text = {
+        KeyboardAlertDialog(onDismissRequest = { enteringCode = false }, title = { Text(stringResource(Res.string.sources_enter_pairing_code)) }, text = {
             LaunchedEffect(Unit) { focus.requestFocus() }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Paste the pairing invitation from your other device.")
-                OutlinedTextField(invitation, { invitation = it; error = null }, label = { Text("Pairing invitation") },
+                Text(stringResource(Res.string.sources_paste_pairing_invitation))
+                OutlinedTextField(invitation, { invitation = it; error = null }, label = { Text(stringResource(Res.string.sources_pairing_invitation)) },
                     enabled = !state.busy, isError = error != null, maxLines = 3,
                     modifier = Modifier.fillMaxWidth().focusRequester(focus))
                 if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -113,25 +154,25 @@ internal fun PairingSettings(devices: PairedDevices, tracks: List<Track>, dismis
         }, confirmButton = {
             TextButton(enabled = invitation.isNotBlank() && !state.busy, onClick = { run {
                 devices.pair(invitation.trim()); invitation = ""; enteringCode = false
-            } }) { Text("Pair device") }
-        }, dismissButton = { TextButton(onClick = { enteringCode = false }) { Text("Cancel") } })
+            } }) { Text(stringResource(Res.string.sources_pair_device)) }
+        }, dismissButton = { TextButton(onClick = { enteringCode = false }) { Text(stringResource(Res.string.cancel)) } })
     }
     remove?.let { peer ->
-        AlertDialog(onDismissRequest = { remove = null }, title = { Text("Remove ${peer.name}?") },
-            text = { Text("This device will no longer accept sync from ${peer.name}. Your library changes remain on both devices.") },
-            confirmButton = { TextButton(onClick = { run { devices.forget(peer.deviceId); remove = null } }) { Text("Remove device") } },
-            dismissButton = { TextButton(onClick = { remove = null }) { Text("Cancel") } })
+        AlertDialog(onDismissRequest = { remove = null }, title = { Text(stringResource(Res.string.sources_remove_device_question, peer.name)) },
+            text = { Text(stringResource(Res.string.sources_remove_device_description, peer.name)) },
+            confirmButton = { TextButton(onClick = { run { devices.forget(peer.deviceId); remove = null } }) { Text(stringResource(Res.string.sources_remove_device)) } },
+            dismissButton = { TextButton(onClick = { remove = null }) { Text(stringResource(Res.string.cancel)) } })
     }
     folder?.let { request ->
-        AlertDialog(onDismissRequest = { folder = null }, title = { Text("Folder for ${request.playlistName}") }, text = {
+        AlertDialog(onDismissRequest = { folder = null }, title = { Text(stringResource(Res.string.sources_folder_for_playlist, request.playlistName)) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Choose the folder this smart playlist should use on this device.")
+                Text(stringResource(Res.string.sources_choose_smart_playlist_folder))
                 LazyColumn(Modifier.heightIn(max = 320.dp)) {
                     items(tracks.map { it.metadata.folder }.filter { it.isNotBlank() }.distinct().sorted()) { path ->
                         TextButton(onClick = { run { devices.library.mapFolder(request.folderToken, path); folder = null } }) { Text(path) }
                     }
                 }
             }
-        }, confirmButton = { TextButton(onClick = { folder = null }) { Text("Cancel") } })
+        }, confirmButton = { TextButton(onClick = { folder = null }) { Text(stringResource(Res.string.cancel)) } })
     }
 }

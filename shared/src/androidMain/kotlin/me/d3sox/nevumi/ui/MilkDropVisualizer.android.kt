@@ -35,6 +35,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_close_visualizer
+import me.d3sox.nevumi.resources.sources_lock_preset
+import me.d3sox.nevumi.resources.sources_milkdrop_visualization
+import me.d3sox.nevumi.resources.sources_preparing_milkdrop
+import me.d3sox.nevumi.resources.sources_presets_open_failed
+import me.d3sox.nevumi.resources.sources_unlock_preset
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal actual fun MilkDropVisualizer(state: AppState, controller: MusicController, close: () -> Unit) {
@@ -53,7 +62,7 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         try { library = withContext(Dispatchers.IO) { milkDropLibrary(File(context.filesDir, "milkdrop")) } }
-        catch (failure: Exception) { error = failure.message ?: "Could not open the presets" }
+        catch (failure: Exception) { error = failure.message ?: getString(Res.string.sources_presets_open_failed) }
     }
     val surface = remember(context, library) {
         library?.let { MilkDropSurface(context, it, selected, settings.automatic, eligible, { index ->
@@ -94,19 +103,20 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
         Surface(Modifier.fillMaxSize()) {
             Column {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    ActionButton("Close visualizer", AppIcon.CLOSE, style = ActionStyle.OUTLINED, onClick = close)
-                    ActionButton(if (settings.automatic) "Lock preset" else "Unlock preset", if (settings.automatic) AppIcon.LOCK else AppIcon.UNLOCK) {
+                    ActionButton(stringResource(Res.string.sources_close_visualizer), AppIcon.CLOSE, style = ActionStyle.OUTLINED, onClick = close)
+                    ActionButton(if (settings.automatic) stringResource(Res.string.sources_lock_preset) else stringResource(Res.string.sources_unlock_preset), if (settings.automatic) AppIcon.LOCK else AppIcon.UNLOCK) {
                         change { it.copy(automatic = !it.automatic) }
                     }
                 }
                 Box(Modifier.fillMaxWidth().weight(1f)) {
+                    val visualizationDescription = stringResource(Res.string.sources_milkdrop_visualization)
                     surface?.let { view -> AndroidView(factory = { view }, modifier = Modifier.fillMaxSize()
-                        .semantics { contentDescription = "MilkDrop visualization" }) }
+                        .semantics { contentDescription = visualizationDescription }) }
                     if (presets.isEmpty() && error == null) Column(Modifier.align(androidx.compose.ui.Alignment.Center),
                         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         CircularProgressIndicator()
-                        Text("Preparing the MilkDrop library…")
+                        Text(stringResource(Res.string.sources_preparing_milkdrop))
                     }
                     error?.let { message -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                         Text(message, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)

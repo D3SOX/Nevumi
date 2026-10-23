@@ -13,6 +13,16 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_close_visualizer
+import me.d3sox.nevumi.resources.sources_milkdrop_load_failed
+import me.d3sox.nevumi.resources.sources_milkdrop_open_failed
+import me.d3sox.nevumi.resources.sources_milkdrop_render_failed
+import me.d3sox.nevumi.resources.sources_milkdrop_window_hint
+import me.d3sox.nevumi.resources.sources_preparing_milkdrop
+import me.d3sox.nevumi.resources.sources_preset_load_failed
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal actual fun MilkDropVisualizer(state: AppState, controller: MusicController, close: () -> Unit) {
@@ -53,8 +63,8 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
                 val base = System.getenv("XDG_DATA_HOME") ?: "${System.getProperty("user.home")}/.local/share"
                 milkDropLibrary(File(base, "me.d3sox.nevumi/milkdrop"))
             }
-        } catch (_: LinkageError) { error = "Could not load MilkDrop. Reinstall Nevumi's visualizer libraries." }
-        catch (failure: Exception) { error = failure.message ?: "Could not open MilkDrop" }
+        } catch (_: LinkageError) { error = getString(Res.string.sources_milkdrop_load_failed) }
+        catch (failure: Exception) { error = failure.message ?: getString(Res.string.sources_milkdrop_open_failed) }
     }
     DisposableEffect(library) {
         val running = AtomicBoolean(true)
@@ -77,7 +87,7 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
                             ProjectMNative.loadPreset(handle, presets[next].file, current >= 0)
                             scope.launch { error = null }
                         } catch (failure: IllegalStateException) {
-                            scope.launch { error = "${presets[next].name} could not be loaded. Choose another preset." }
+                            scope.launch { error = getString(Res.string.sources_preset_load_failed, presets[next].name) }
                         }
                         current = next; changedAt = System.nanoTime()
                         scope.launch {
@@ -94,7 +104,7 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
                     if (wait > 0) Thread.sleep(wait / 1_000_000, (wait % 1_000_000).toInt())
                 }
             } catch (_: InterruptedException) { /* Closing the visualizer wakes its render loop. */ }
-            catch (failure: Exception) { scope.launch { error = failure.message ?: "Could not render MilkDrop" } }
+            catch (failure: Exception) { scope.launch { error = failure.message ?: getString(Res.string.sources_milkdrop_render_failed) } }
             finally { if (handle != 0L) ProjectMNative.destroy(handle) }
         }, "Nevumi MilkDrop").apply { isDaemon = true; start() } else null
         onDispose {
@@ -105,16 +115,16 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
     }
     AlertDialog(onDismissRequest = close, title = { Text("MilkDrop") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("The visualizer opens in a separate window. N and P switch presets, F toggles fullscreen, and Esc closes it.")
+            Text(stringResource(Res.string.sources_milkdrop_window_hint))
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (presets.isEmpty() && error == null) {
-                Text("Preparing the MilkDrop library…")
+                Text(stringResource(Res.string.sources_preparing_milkdrop))
                 CircularProgressIndicator()
             }
             notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             MilkDropControls(choices, selected, { index -> wanted.set(index); change { it.copy(selectedPresetId = choices[index].id) } }, settings, ::change)
         }
-    }, confirmButton = { TextButton(onClick = close) { Text("Close visualizer") } })
+    }, confirmButton = { TextButton(onClick = close) { Text(stringResource(Res.string.sources_close_visualizer)) } })
 }
 
 // The desktop visualizer draws in its own native window, so it can't sit behind Compose content.

@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.rememberTextMeasurer
 import me.d3sox.nevumi.library.LibraryTab
 import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.more
+import me.d3sox.nevumi.resources.sources_recent
 
 internal class LibraryNavigationSizing(private val widths: Map<LibraryTab, Float>, private val moreWidth: Float) {
     fun primary(tabs: List<LibraryTab>, preferred: Set<LibraryTab>?, width: Int): List<LibraryTab> {
@@ -38,11 +41,12 @@ internal fun rememberLibraryNavigationSizing(): LibraryNavigationSizing {
     val padding = with(LocalDensity.current) { 8.dp.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium
-    val labels = LibraryTab.entries.associateWith { if (it == LibraryTab.RECENT) "Recent" else stringResource(it.label) }
-    return remember(labels, measurer, labelStyle, minimumWidth, padding) {
+    val labels = LibraryTab.entries.associateWith { if (it == LibraryTab.RECENT) stringResource(Res.string.sources_recent) else stringResource(it.label) }
+    val more = stringResource(Res.string.more)
+    return remember(labels, more, measurer, labelStyle, minimumWidth, padding) {
         fun itemWidth(label: String) = maxOf(minimumWidth,
             label.split(' ').maxOf { measurer.measure(it, labelStyle).size.width } + padding)
-        LibraryNavigationSizing(labels.mapValues { itemWidth(it.value) }, itemWidth("More"))
+        LibraryNavigationSizing(labels.mapValues { itemWidth(it.value) }, itemWidth(more))
     }
 }
 
@@ -66,10 +70,10 @@ internal fun LibraryNavigation(tabs: List<LibraryTab>, current: LibraryTab, modi
             val pageLabel = stringResource(page.label)
             NavigationBarItem(selected = current == page, onClick = { select(page) }, colors = itemColors,
                 modifier = Modifier.semantics { contentDescription = pageLabel },
-                icon = { Icon(page.icon().vector, null) }, label = { Text(if (page == LibraryTab.RECENT) "Recent" else pageLabel, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) })
+                icon = { Icon(page.icon().vector, null) }, label = { Text(if (page == LibraryTab.RECENT) stringResource(Res.string.sources_recent) else pageLabel, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) })
         } }
         if (overflow.isNotEmpty()) NavigationBarItem(selected = current !in primary, onClick = { more = true }, colors = itemColors,
-            icon = { Icon(AppIcon.MORE_PAGES.vector, null) }, label = { Text("More") })
+            icon = { Icon(AppIcon.MORE_PAGES.vector, null) }, label = { Text(stringResource(Res.string.more)) })
     }
     if (more && overflow.isNotEmpty()) AppBottomSheet(onDismissRequest = { more = false }) {
         LazyColumn(Modifier.fillMaxWidth().testTag("library-more-pages")) {

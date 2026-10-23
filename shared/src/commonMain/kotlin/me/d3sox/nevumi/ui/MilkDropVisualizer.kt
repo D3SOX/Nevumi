@@ -34,9 +34,39 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.ExperimentalResourceApi
+import me.d3sox.nevumi.resources.all
+import me.d3sox.nevumi.resources.close
+import me.d3sox.nevumi.resources.library_tab_favorites
+import me.d3sox.nevumi.resources.next
+import me.d3sox.nevumi.resources.previous
+import me.d3sox.nevumi.resources.sources_all_categories
+import me.d3sox.nevumi.resources.sources_category
+import me.d3sox.nevumi.resources.sources_change_preset_every_20_seconds
+import me.d3sox.nevumi.resources.sources_change_presets_automatically
+import me.d3sox.nevumi.resources.sources_choose_a_preset
+import me.d3sox.nevumi.resources.sources_choose_milkdrop_preset
+import me.d3sox.nevumi.resources.sources_favorite_current_preset
+import me.d3sox.nevumi.resources.sources_favorite_preset
+import me.d3sox.nevumi.resources.sources_favorite_preset_to_start
+import me.d3sox.nevumi.resources.sources_milkdrop_presets
+import me.d3sox.nevumi.resources.sources_milkdrop_visualizer
+import me.d3sox.nevumi.resources.sources_next_preset
+import me.d3sox.nevumi.resources.sources_no_presets_match
+import me.d3sox.nevumi.resources.sources_only_play_favorite_presets
+import me.d3sox.nevumi.resources.sources_preset_credits
+import me.d3sox.nevumi.resources.sources_presets
+import me.d3sox.nevumi.resources.sources_previous_preset
+import me.d3sox.nevumi.resources.sources_random
+import me.d3sox.nevumi.resources.sources_random_preset
+import me.d3sox.nevumi.resources.sources_scroll_milkdrop_presets
+import me.d3sox.nevumi.resources.sources_search_presets
+import me.d3sox.nevumi.resources.sources_selected_preset
+import me.d3sox.nevumi.resources.sources_unfavorite_current_preset
+import me.d3sox.nevumi.resources.sources_unfavorite_preset
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun MilkDropButton(open: () -> Unit) = AppIconButton(AppIcon.WAVEFORM, "MilkDrop visualizer", onClick = open)
+internal fun MilkDropButton(open: () -> Unit) = AppIconButton(AppIcon.WAVEFORM, stringResource(Res.string.sources_milkdrop_visualizer), onClick = open)
 
 @Composable
 internal expect fun MilkDropVisualizer(state: AppState, controller: MusicController, close: () -> Unit)
@@ -54,18 +84,19 @@ internal fun MilkDropControls(presets: List<MilkDropPresetInfo>, selected: Int, 
     val eligible = remember(presets, settings.favoritesOnly, settings.favorites) { milkDropPlaybackIndices(presets, settings) }
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (presets.isNotEmpty()) {
+            val chooseDescription = stringResource(Res.string.sources_choose_milkdrop_preset)
             OutlinedCard(onClick = { browse = true }, modifier = Modifier.fillMaxWidth()
-                .semantics { contentDescription = "Choose MilkDrop preset" }) {
+                .semantics { contentDescription = chooseDescription }) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(presets.getOrNull(selected)?.name ?: "Choose a preset", maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text("${presets.getOrNull(selected)?.collection.orEmpty()} · ${presets.size} presets", style = MaterialTheme.typography.bodySmall,
+                        Text(presets.getOrNull(selected)?.name ?: stringResource(Res.string.sources_choose_a_preset), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("${presets.getOrNull(selected)?.collection.orEmpty()} · ${countLabel(presets.size, Res.plurals.sources_presets)}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     presets.getOrNull(selected)?.let { preset ->
                         val favorite = preset.id in settings.favorites
                         AppIconButton(if (favorite) AppIcon.FAVORITE_FILLED else AppIcon.FAVORITE,
-                            if (favorite) "Unfavorite current preset: ${preset.name}" else "Favorite current preset: ${preset.name}") {
+                            if (favorite) stringResource(Res.string.sources_unfavorite_current_preset, preset.name) else stringResource(Res.string.sources_favorite_current_preset, preset.name)) {
                             change { it.copy(favorites = if (preset.id in it.favorites) it.favorites - preset.id else it.favorites + preset.id) }
                         }
                     }
@@ -73,13 +104,14 @@ internal fun MilkDropControls(presets: List<MilkDropPresetInfo>, selected: Int, 
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf<Triple<String, AppIcon, () -> Int?>>(
-                    Triple("Previous", AppIcon.PREVIOUS) { milkDropNextPreset(eligible, selected, -1) },
-                    Triple("Random", AppIcon.SHUFFLE) { milkDropRandomPreset(eligible, selected) },
-                    Triple("Next", AppIcon.NEXT) { milkDropNextPreset(eligible, selected) },
-                ).forEach { (label, icon, target) ->
+                listOf<Triple<Pair<String, String>, AppIcon, () -> Int?>>(
+                    Triple(stringResource(Res.string.previous) to stringResource(Res.string.sources_previous_preset), AppIcon.PREVIOUS) { milkDropNextPreset(eligible, selected, -1) },
+                    Triple(stringResource(Res.string.sources_random) to stringResource(Res.string.sources_random_preset), AppIcon.SHUFFLE) { milkDropRandomPreset(eligible, selected) },
+                    Triple(stringResource(Res.string.next) to stringResource(Res.string.sources_next_preset), AppIcon.NEXT) { milkDropNextPreset(eligible, selected) },
+                ).forEach { (labels, icon, target) ->
+                    val (label, description) = labels
                     OutlinedButton(onClick = { target()?.let(select) }, enabled = eligible.isNotEmpty(),
-                        modifier = Modifier.weight(1f).semantics { contentDescription = "$label preset" },
+                        modifier = Modifier.weight(1f).semantics { contentDescription = description },
                         contentPadding = PaddingValues(horizontal = 8.dp)) {
                         Icon(icon.vector, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(label, maxLines = 1)
                     }
@@ -93,13 +125,13 @@ internal fun MilkDropControls(presets: List<MilkDropPresetInfo>, selected: Int, 
                 Text(label, Modifier.weight(1f))
                 Switch(checked, null)
             }
-        SwitchRow("Change preset every 20 seconds", "Change presets automatically", settings.automatic) { enabled ->
+        SwitchRow(stringResource(Res.string.sources_change_preset_every_20_seconds), stringResource(Res.string.sources_change_presets_automatically), settings.automatic) { enabled ->
             change { it.copy(automatic = enabled) }
         }
-        SwitchRow("Only play favorite presets", "Only play favorite presets", settings.favoritesOnly) { enabled ->
+        SwitchRow(stringResource(Res.string.sources_only_play_favorite_presets), stringResource(Res.string.sources_only_play_favorite_presets), settings.favoritesOnly) { enabled ->
             change { it.copy(favoritesOnly = enabled) }
         }
-        if (settings.favoritesOnly && eligible.isEmpty()) Text("Favorite a preset to start the visualizer.", style = MaterialTheme.typography.bodySmall)
+        if (settings.favoritesOnly && eligible.isEmpty()) Text(stringResource(Res.string.sources_favorite_preset_to_start), style = MaterialTheme.typography.bodySmall)
     }
     if (browse) MilkDropPresetPicker(presets, selected, settings, change, { select(it); browse = false }, { browse = false })
 }
@@ -144,18 +176,18 @@ private fun MilkDropPresetPicker(presets: List<MilkDropPresetInfo>, selected: In
             }
         }
     }
-    KeyboardAlertDialog(onDismissRequest = close, title = { Text("MilkDrop presets") }, text = {
+    KeyboardAlertDialog(onDismissRequest = close, title = { Text(stringResource(Res.string.sources_milkdrop_presets)) }, text = {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search presets") }, singleLine = true)
+            OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_search_presets)) }, singleLine = true)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(collection == null, { change { it.copy(collection = null, category = null) } }, label = { Text("All") })
-                FilterChip(collection == "@favorites", { change { it.copy(collection = "@favorites", category = null) } }, label = { Text("Favorites") })
+                FilterChip(collection == null, { change { it.copy(collection = null, category = null) } }, label = { Text(stringResource(Res.string.all)) })
+                FilterChip(collection == "@favorites", { change { it.copy(collection = "@favorites", category = null) } }, label = { Text(stringResource(Res.string.library_tab_favorites)) })
                 collections.forEach { name -> FilterChip(collection == name, { change { it.copy(collection = name, category = null) } }, label = { Text(name) }) }
             }
-            if (categories.size > 1) SettingChoice("Category", category,
-                listOf(null to "All categories") + categories.map { it to it }, card = false) { selectedCategory -> change { it.copy(category = selectedCategory) } }
-            Text("${matches.size} presets", style = MaterialTheme.typography.bodySmall)
-            if (matches.isEmpty()) Text("No presets match your search.")
+            if (categories.size > 1) SettingChoice(stringResource(Res.string.sources_category), category,
+                listOf(null to stringResource(Res.string.sources_all_categories)) + categories.map { it to it }, card = false) { selectedCategory -> change { it.copy(category = selectedCategory) } }
+            Text(countLabel(matches.size, Res.plurals.sources_presets), style = MaterialTheme.typography.bodySmall)
+            if (matches.isEmpty()) Text(stringResource(Res.string.sources_no_presets_match))
             Box(Modifier.weight(1f)) {
             LazyColumn(Modifier.fillMaxSize().padding(end = 20.dp), state = list) {
                 items(matches, key = { it }) { index ->
@@ -164,10 +196,10 @@ private fun MilkDropPresetPicker(presets: List<MilkDropPresetInfo>, selected: In
                         Text(listOf(preset.collection, preset.category).filter { it.isNotEmpty() }.joinToString(" · "))
                     }, trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (index == selected) Icon(AppIcon.CHECK.vector, "Selected preset")
+                            if (index == selected) Icon(AppIcon.CHECK.vector, stringResource(Res.string.sources_selected_preset))
                             val favorite = preset.id in settings.favorites
                             AppIconButton(if (favorite) AppIcon.FAVORITE_FILLED else AppIcon.FAVORITE,
-                                if (favorite) "Unfavorite preset: ${preset.name}" else "Favorite preset: ${preset.name}") {
+                                if (favorite) stringResource(Res.string.sources_unfavorite_preset, preset.name) else stringResource(Res.string.sources_favorite_preset, preset.name)) {
                                 change { it.copy(favorites = if (preset.id in it.favorites) it.favorites - preset.id else it.favorites + preset.id) }
                             }
                         }
@@ -181,12 +213,12 @@ private fun MilkDropPresetPicker(presets: List<MilkDropPresetInfo>, selected: In
                             role = Role.RadioButton) { select(index) })
                 }
             }
-            LibraryScrollbar(list, matches.size, "Scroll MilkDrop presets") { presets[matches[it]].name }
+            LibraryScrollbar(list, matches.size, stringResource(Res.string.sources_scroll_milkdrop_presets)) { presets[matches[it]].name }
             }
         }
-    }, dismissButton = { TextButton(onClick = { credits = true }) { Text("Preset credits") } },
-        confirmButton = { TextButton(onClick = close) { Text("Close") } })
-    if (credits) AlertDialog(onDismissRequest = { credits = false }, title = { Text("Preset credits") },
+    }, dismissButton = { TextButton(onClick = { credits = true }) { Text(stringResource(Res.string.sources_preset_credits)) } },
+        confirmButton = { TextButton(onClick = close) { Text(stringResource(Res.string.close)) } })
+    if (credits) AlertDialog(onDismissRequest = { credits = false }, title = { Text(stringResource(Res.string.sources_preset_credits)) },
         text = { Text(notices, Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) },
-        confirmButton = { TextButton(onClick = { credits = false }) { Text("Close") } })
+        confirmButton = { TextButton(onClick = { credits = false }) { Text(stringResource(Res.string.close)) } })
 }

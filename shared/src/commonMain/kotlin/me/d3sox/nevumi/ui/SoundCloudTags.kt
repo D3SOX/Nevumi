@@ -27,9 +27,49 @@ import me.d3sox.nevumi.soundcloud.SoundCloudJob
 import me.d3sox.nevumi.soundcloud.SoundCloudTagReview
 import me.d3sox.nevumi.soundcloud.taggedFileName
 import me.d3sox.nevumi.soundcloud.withoutPromo
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.album
+import me.d3sox.nevumi.resources.artist
+import me.d3sox.nevumi.resources.sources_change_cover
+import me.d3sox.nevumi.resources.sources_check_the_tags
+import me.d3sox.nevumi.resources.sources_chosen_cover
+import me.d3sox.nevumi.resources.sources_copy_album_into_form
+import me.d3sox.nevumi.resources.sources_copy_artist_into_form
+import me.d3sox.nevumi.resources.sources_copy_cover_into_form
+import me.d3sox.nevumi.resources.sources_copy_genre_into_form
+import me.d3sox.nevumi.resources.sources_copy_title_into_form
+import me.d3sox.nevumi.resources.sources_cover
+import me.d3sox.nevumi.resources.sources_cover_in_file
+import me.d3sox.nevumi.resources.sources_file_cover_unavailable
+import me.d3sox.nevumi.resources.sources_file_has_tags
+import me.d3sox.nevumi.resources.sources_file_has_tags_description
+import me.d3sox.nevumi.resources.sources_file_name
+import me.d3sox.nevumi.resources.sources_genre
+import me.d3sox.nevumi.resources.sources_keep_file_tags
+import me.d3sox.nevumi.resources.sources_lossy_flac_hint
+import me.d3sox.nevumi.resources.sources_name_file_artist_title
+import me.d3sox.nevumi.resources.sources_promo_text_hint
+import me.d3sox.nevumi.resources.sources_remove_promo_text
+import me.d3sox.nevumi.resources.sources_reset_album_to_original
+import me.d3sox.nevumi.resources.sources_reset_artist_to_original
+import me.d3sox.nevumi.resources.sources_reset_cover
+import me.d3sox.nevumi.resources.sources_reset_genre_to_original
+import me.d3sox.nevumi.resources.sources_reset_title_to_original
+import me.d3sox.nevumi.resources.sources_selected_image_unavailable
+import me.d3sox.nevumi.resources.sources_song_cover
+import me.d3sox.nevumi.resources.sources_tags_intro_device
+import me.d3sox.nevumi.resources.sources_tags_intro_server
+import me.d3sox.nevumi.resources.sources_write_tags
+import me.d3sox.nevumi.resources.sources_write_tags_failed
+import me.d3sox.nevumi.resources.title
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
-private enum class TagField(val label: String) {
-    TITLE("Title"), ARTIST("Artist"), ALBUM("Album"), GENRE("Genre");
+private enum class TagField(val label: StringResource, val copy: StringResource, val reset: StringResource) {
+    TITLE(Res.string.title, Res.string.sources_copy_title_into_form, Res.string.sources_reset_title_to_original),
+    ARTIST(Res.string.artist, Res.string.sources_copy_artist_into_form, Res.string.sources_reset_artist_to_original),
+    ALBUM(Res.string.album, Res.string.sources_copy_album_into_form, Res.string.sources_reset_album_to_original),
+    GENRE(Res.string.sources_genre, Res.string.sources_copy_genre_into_form, Res.string.sources_reset_genre_to_original);
 
     fun of(tags: ScGateTags) = when (this) { TITLE -> tags.title; ARTIST -> tags.artist; ALBUM -> tags.album; GENRE -> tags.genre }
     fun set(tags: ScGateTags, value: String) = when (this) {
@@ -65,6 +105,9 @@ internal fun SoundCloudTagEditor(job: SoundCloudJob, controller: MusicController
     val serverCover = rememberCover(job, review.cover, fromFile = false, controller)
     val fileCover = rememberCover(job, review.fileCover, fromFile = true, controller)
     val chosenCover by produceState<ImageBitmap?>(null, cover) { value = cover?.let { withContext(Dispatchers.Default) { decodeArtwork(it, 512) } } }
+    val writeFailed = stringResource(Res.string.sources_write_tags_failed)
+    val fileCoverUnavailable = stringResource(Res.string.sources_file_cover_unavailable)
+    val imageUnavailable = stringResource(Res.string.sources_selected_image_unavailable)
     val written = ScGateTags(tags.title.trim(), tags.artist.trim(), tags.album.trim(), tags.genre.trim())
     fun run(fallback: String, operation: suspend () -> Unit) {
         busy = true; error = null
@@ -75,79 +118,80 @@ internal fun SoundCloudTagEditor(job: SoundCloudJob, controller: MusicController
             finally { busy = false }
         }
     }
-    fun finish(keepFileTags: Boolean) = run("sc-gate-dl could not write the tags") {
+    fun finish(keepFileTags: Boolean) = run(writeFailed) {
         controller.finishSoundCloudTags(job.id, ScGateTagChoice(written, keepFileTags, artistTitle, cover.takeUnless { keepFileTags }))
         dismiss()
     }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    SettingsScreen(onDismissRequest = { if (!busy) dismiss() }, title = { Text("Check the tags") }, text = {
+    SettingsScreen(onDismissRequest = { if (!busy) dismiss() }, title = { Text(stringResource(Res.string.sources_check_the_tags)) }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("sc-gate-dl downloaded “${job.track.title}”. It saves the song " +
-                (if (job.destination == ScGateDestination.LIBRARY) "to your music server" else "for this device") + " with these tags.")
+            Text(stringResource(if (job.destination == ScGateDestination.LIBRARY) Res.string.sources_tags_intro_server
+                else Res.string.sources_tags_intro_device, job.track.title))
             if (job.format == ScGateFormat.FLAC && review.lossySource)
-                Text("The downloaded source is lossy. Saving it as FLAC cannot bring back the lost quality.", color = muted)
+                Text(stringResource(Res.string.sources_lossy_flac_hint), color = muted)
             val fileRows = review.fileTags?.let { fileTags -> TagField.entries.map { it to it.of(fileTags).trim() }.filter { (_, value) -> value.isNotEmpty() } }.orEmpty()
             if (fileRows.isNotEmpty() || review.fileCover) Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("The file already has tags", style = MaterialTheme.typography.titleMedium)
-                    Text("Copy a tag or the cover into the form, or keep the file's own tags and finish.", color = muted)
+                    Text(stringResource(Res.string.sources_file_has_tags), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(Res.string.sources_file_has_tags_description), color = muted)
                     fileRows.forEach { (field, value) ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(field.label, style = MaterialTheme.typography.labelMedium, color = muted)
+                                Text(stringResource(field.label), style = MaterialTheme.typography.labelMedium, color = muted)
                                 Text(value)
                             }
-                            AppIconButton(AppIcon.COPY, "Copy ${field.label.lowercase()} into the form", enabled = !busy) { tags = field.set(tags, value) }
+                            AppIconButton(AppIcon.COPY, stringResource(field.copy), enabled = !busy) { tags = field.set(tags, value) }
                         }
                     }
                     if (review.fileCover) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CoverThumbnail(fileCover, 56, "Cover in the file")
-                        Text("Cover", Modifier.weight(1f))
-                        AppIconButton(AppIcon.COPY, "Copy the cover into the form", enabled = !busy) {
-                            run("The file's cover is unavailable") { cover = controller.soundCloudCover(job.id, fromFile = true) }
+                        CoverThumbnail(fileCover, 56, stringResource(Res.string.sources_cover_in_file))
+                        Text(stringResource(Res.string.sources_cover), Modifier.weight(1f))
+                        AppIconButton(AppIcon.COPY, stringResource(Res.string.sources_copy_cover_into_form), enabled = !busy) {
+                            run(fileCoverUnavailable) { cover = controller.soundCloudCover(job.id, fromFile = true) }
                         }
                     }
-                    ActionButton("Keep the file's tags and finish", AppIcon.CHECK, enabled = !busy, style = ActionStyle.OUTLINED) { finish(keepFileTags = true) }
+                    ActionButton(stringResource(Res.string.sources_keep_file_tags), AppIcon.CHECK, enabled = !busy, style = ActionStyle.OUTLINED) { finish(keepFileTags = true) }
                 }
             }
             val cleaned = tags.withoutPromo()
             if (cleaned != tags) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("The tags contain promo text like [FREE DL] or a repeated artist name.", color = muted)
-                ActionButton("Remove promo text", AppIcon.CLEAN_UP, enabled = !busy, style = ActionStyle.OUTLINED) { tags = cleaned }
+                Text(stringResource(Res.string.sources_promo_text_hint), color = muted)
+                ActionButton(stringResource(Res.string.sources_remove_promo_text), AppIcon.CLEAN_UP, enabled = !busy, style = ActionStyle.OUTLINED) { tags = cleaned }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                CoverThumbnail(if (cover != null) chosenCover else serverCover, 96, if (cover != null) "Chosen cover" else "Song cover")
+                CoverThumbnail(if (cover != null) chosenCover else serverCover, 96, if (cover != null) stringResource(Res.string.sources_chosen_cover) else stringResource(Res.string.sources_song_cover))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton("Change cover", AppIcon.ARTWORK_COLORS, enabled = !busy, style = ActionStyle.OUTLINED) {
+                    ActionButton(stringResource(Res.string.sources_change_cover), AppIcon.ARTWORK_COLORS, enabled = !busy, style = ActionStyle.OUTLINED) {
                         scope.launch {
                             try { picker.pick()?.let { cover = it } }
                             catch (cancelled: CancellationException) { throw cancelled }
-                            catch (failure: Exception) { error = failure.message ?: "The selected image is unavailable" }
+                            catch (failure: Exception) { error = failure.message ?: imageUnavailable }
                         }
                     }
-                    if (cover != null) ActionButton("Reset cover", AppIcon.RESET, enabled = !busy, style = ActionStyle.OUTLINED) { cover = null }
+                    if (cover != null) ActionButton(stringResource(Res.string.sources_reset_cover), AppIcon.RESET, enabled = !busy, style = ActionStyle.OUTLINED) { cover = null }
                 }
             }
             TagField.entries.forEach { field ->
                 val value = field.of(tags)
                 val default = field.of(original)
-                OutlinedTextField(value, { tags = field.set(tags, it) }, Modifier.fillMaxWidth(), label = { Text(field.label) }, singleLine = true,
+                val resetDescription = stringResource(field.reset)
+                OutlinedTextField(value, { tags = field.set(tags, it) }, Modifier.fillMaxWidth(), label = { Text(stringResource(field.label)) }, singleLine = true,
                     enabled = !busy, trailingIcon = if (value == default) null else ({
-                        AppIconButton(AppIcon.RESET, "Reset ${field.label.lowercase()} to the original", enabled = !busy) { tags = field.set(tags, default) }
+                        AppIconButton(AppIcon.RESET, resetDescription, enabled = !busy) { tags = field.set(tags, default) }
                     }))
             }
             Row(Modifier.fillMaxWidth().toggleable(artistTitle, enabled = !busy, role = Role.Checkbox) { artistTitle = it },
                 verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(artistTitle, null, enabled = !busy)
-                Text("Name the file “Artist - Title”")
+                Text(stringResource(Res.string.sources_name_file_artist_title))
             }
             taggedFileName(review.fileName, job.format, artistTitle, written).takeIf { it.isNotEmpty() }?.let {
-                Text("File name: $it", style = MaterialTheme.typography.bodyMedium, color = muted)
+                Text(stringResource(Res.string.sources_file_name, it), style = MaterialTheme.typography.bodyMedium, color = muted)
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-    }, confirmButton = { PageAction("Write tags", enabled = !busy) { finish(keepFileTags = false) } })
+    }, confirmButton = { PageAction(stringResource(Res.string.sources_write_tags), enabled = !busy) { finish(keepFileTags = false) } })
 }
 
 @Composable
