@@ -111,25 +111,32 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         var playlistsAdded = 0
         var playlistsMerged = 0
         val existingPlaylists = playlists.all()
-        // Each playlist already here stands in for one backed-up playlist of its name and kind, so same-named playlists stay separate.
+        // Each compatible playlist already here stands in for one backed-up playlist of its name, so same-named playlists stay separate.
+        // A smart playlist is compatible with the same rule. A server playlist is only compatible when it already has every song,
+        // because adding to it would push songs removed since the backup back to the server. Anything else is restored on its own.
         val matched = mutableSetOf<String>()
         for (backup in document.playlists) {
             val name = backup.name.trim().takeIf { it.isNotEmpty() } ?: continue
-            val existing = existingPlaylists.firstOrNull { it.id !in matched && it.name.trim() == name && (it.rule != null) == (backup.rule != null) }
+            val songs = if (backup.rule == null) backup.trackKeys.mapNotNull(::localId) else emptyList()
+            val existing = existingPlaylists.firstOrNull { playlist ->
+                playlist.id !in matched && playlist.name.trim() == name && when {
+                    backup.rule != null -> playlist.rule == backup.rule
+                    playlist.rule != null -> false
+                    playlist.server != null -> playlist.trackIds.containsAll(songs)
+                    else -> true
+                }
+            }
             if (existing != null) {
                 matched += existing.id
-                // Merging into a server playlist would push songs removed since the backup back to the server.
-                if (backup.rule != null || existing.server != null) continue
-                val additions = backup.trackKeys.mapNotNull(::localId).filterNot { it in existing.trackIds }
-                if (additions.isEmpty()) continue
+                val additions = songs.filterNot { it in existing.trackIds }
+                if (backup.rule != null || existing.server != null || additions.isEmpty()) continue
                 try { playlists.append(existing.id, additions) }
                 // Server playlists only take songs from their server.
                 catch (_: IllegalArgumentException) { continue }
                 playlistsMerged++
                 continue
             }
-            val created = if (backup.rule != null) playlists.createSmart(name, backup.rule)
-                else playlists.create(name, backup.trackKeys.mapNotNull(::localId))
+            val created = if (backup.rule != null) playlists.createSmart(name, backup.rule) else playlists.create(name, songs)
             if (backup.description.isNotBlank()) playlists.edit(created.id, name, backup.description)
             if (backup.shuffle) playlists.setShuffle(created.id, true)
             if (backup.sort != PlaylistSort.CUSTOM || backup.descending) playlists.setSort(created.id, backup.sort, backup.descending)

@@ -203,6 +203,12 @@ class MusicBackupTest {
         assertEquals(2, roads.count { it.rule == null })
         assertEquals(1, roads.count { it.rule != null })
         assertTrue(target.history.all().isNotEmpty() && target.history.all().all { it.originDeviceId != null })
+        // A same-named smart playlist with another rule does not stand in for the backed-up one.
+        target.playlists.createSmart("Mix", LibraryQuery(ratingFrom = 4))
+        source.playlists.createSmart("Mix", LibraryQuery(favoritesOnly = true))
+        target.backup.restore(source.backup.export())
+        assertEquals(setOf(LibraryQuery(ratingFrom = 4), LibraryQuery(favoritesOnly = true)),
+            target.playlists.all().filter { it.name == "Mix" }.mapNotNull { it.rule }.toSet())
         // A second restore matches each playlist once instead of adding more.
         target.backup.restore(text)
         assertEquals(3, target.playlists.all().count { it.name == "Road" })
