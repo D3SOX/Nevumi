@@ -156,7 +156,7 @@ class MusicBackupTest {
         assertEquals(RestoreSummary(settings = true, favorites = 1, ratings = 1, playlistsAdded = 3, savedQueues = 1, listens = 1,
             equalizerProfiles = 1, soundCloud = true,
             // The song missing here is referenced by its flags, the Road playlist, the saved queue and a listen.
-            unmatchedTracks = 4,
+            unmatchedTracks = 1,
             signInRequired = listOf(SignInRequired(BackupService.LISTENBRAINZ, "listener"),
                 SignInRequired(BackupService.MUSIC_SERVER, "nico · https://music.test"),
                 SignInRequired(BackupService.SFTP, "nico@music.test:22"))), summary)
@@ -270,7 +270,7 @@ class MusicBackupTest {
         assertEquals(listOf(2, 1, 1, 0, false), listOf(first.playlistsAdded, first.playlistsMerged, first.listens, first.equalizerProfiles, first.soundCloud))
 
         val second = target.backup.restore(backup)
-        assertEquals(RestoreSummary(settings = true, unmatchedTracks = 4, signInRequired = first.signInRequired), second)
+        assertEquals(RestoreSummary(settings = true, unmatchedTracks = 1, signInRequired = first.signInRequired), second)
         assertEquals(merged.trackIds, target.playlists.get(road.id)!!.trackIds)
         assertEquals(1, target.queue.saved().size)
         assertEquals(2, target.history.all().size)

@@ -94,8 +94,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val document = decode(text)
         val matches = TrackMatcher(library.tracks())
         val local = document.tracks.mapNotNull { (key, track) -> matches.find(track)?.let { key to it } }.toMap()
-        var unmatched = 0
-        fun localId(key: String): String? = local[key] ?: null.also { unmatched++ }
+        // A song missing here may be in several playlists, queues and listens; the summary counts it once.
+        val unmatched = mutableSetOf<String>()
+        fun localId(key: String): String? = local[key] ?: null.also { unmatched += key }
 
         val settings = document.settings?.let { restored ->
             // A backup from an older version may lack newer Home sections or sources; keep its order and add the missing ones.
@@ -187,7 +188,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 
         // Listens keep their song's tags, so songs no longer in the backup's library can still be matched.
         val listens = history.import(document.listens.mapNotNull { listen ->
-            (local[listen.trackId] ?: matches.find(listen.metadata.toBackup()) ?: null.also { unmatched++ })
+            (local[listen.trackId] ?: matches.find(listen.metadata.toBackup()) ?: null.also { unmatched += listen.trackId })
                 // An origin keeps restored listens from being scrobbled again; the import time shares them with paired devices.
                 ?.let { listen.copy(trackId = it, originDeviceId = listen.originDeviceId ?: BACKUP_ORIGIN, importedAt = clock()) }
         })
@@ -218,7 +219,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val soundCloud = document.soundCloud?.let { soundCloud?.restore(it) } == true
 
         return RestoreSummary(settings, favorites.size, ratings.size, playlistsAdded, playlistsMerged, savedQueues, listens,
-            equalizerProfiles, scrobblingProfiles, soundCloud, unmatched, signIn)
+            equalizerProfiles, scrobblingProfiles, soundCloud, unmatched.size, signIn)
     }
 
     private fun decode(text: String): BackupDocument {
