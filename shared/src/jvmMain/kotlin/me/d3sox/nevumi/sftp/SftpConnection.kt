@@ -65,6 +65,8 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
                 store.put("sftp:profile:${configuration.id}", "sftp-profiles", configuration)
                 store.put("sftp:current", "sftp-settings", configuration.id)
             }
+            remote?.second?.close()
+            remote = null
         }
     }
     override suspend fun disconnect() = work.withLock {

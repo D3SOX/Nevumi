@@ -120,7 +120,7 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
     @Volatile private var sessionOpen = false
     @Volatile private var shared: Connection? = null
     @Volatile private var root: Pair<SFTPClient, String>? = null
-    // The tags read last, so saving right after the tag editor read them reads nothing again while the file is unchanged.
+    // The tags read last, so preparing an edit right after the tag editor read them reads nothing again while the file is unchanged.
     @Volatile private var recent: Pair<String, RemoteBytes>? = null
     private var closing: ScheduledFuture<*>? = null
 
@@ -195,7 +195,9 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         val (after, local) = TagLayout.of(edited, relativePath)
         val staged = target.substringBeforeLast('/') + "/.nevumi-${UUID.randomUUID()}.part"
         open(client, target, setOf(OpenMode.READ)).use { original ->
-            val bytes = bytes(original, target)
+            // Some taggers keep a file's time when rewriting it, so the tags are read again here instead of taken from the cache;
+            // an editor image from stale cached tags then no longer matches and the edit stops as a conflict.
+            val bytes = RemoteBytes(original).also { recent = target to it }
             val before = try { TagLayout.of(relativePath, bytes.size, bytes::read) } catch (_: UnreadableTags) { throw SftpFailure(SftpFailure.Kind.CONFLICT) }
             if (before.fingerprint(bytes::read) != originalFingerprint) throw SftpFailure(SftpFailure.Kind.CONFLICT)
             check(keepsAudio(before, bytes::read, after, local)) { "Nevumi can't save tags to this file on the server" }
@@ -280,7 +282,8 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         true
     }
 
-    // Takes the tags read last when the file is the same, settled one, instead of reading them again.
+    // Takes the tags read last when the file is the same, settled one, instead of reading them again. Only opening the editor and
+    // preparing an edit use this; replacing the file always compares freshly read tags.
     private fun bytes(remote: RemoteFile, target: String): RemoteBytes {
         val attributes = remote.fetchAttributes()
         val known = recent?.takeIf { (path, bytes) -> path == target && bytes.settled && bytes.size == attributes.size &&

@@ -223,8 +223,11 @@ class SftpFilesTest {
                 Files.setLastModifiedTime(song, hourAgo)
                 files.image("song.flac", image)
                 val edited = files.fingerprint("song.flac")
-                // Another tagger's write moves the file's time, so the tags read before are not trusted.
+                // Another tagger rewrites the file in its padding and keeps its time, so only the tags themselves show the change.
+                val size = Files.size(song)
                 AudioFileIO.read(song.toFile()).apply { tag.setField(FieldKey.TITLE, "Changed elsewhere"); commit() }
+                Files.setLastModifiedTime(song, hourAgo)
+                assertEquals(size, Files.size(song))
                 val changed = Files.readAllBytes(song)
                 AudioFileIO.read(image).apply { tag.setField(FieldKey.YEAR, "2027"); commit() }
                 assertEquals(SftpFailure.Kind.CONFLICT, assertFailsWith<SftpFailure> { files.replaceTags("song.flac", image, edited) }.kind)
