@@ -255,6 +255,18 @@ class MusicBackupTest {
     }
 
     @Test
+    fun aSavedQueueWithRepeatedEntryIdsIsSkipped() = devices { source, target ->
+        source.fill()
+        val night = source.id(nightWalk.title)
+        source.queue.addSaved("Broken", QueueSnapshot(listOf(QueueEntry("x", night), QueueEntry("x", night)), currentEntryId = "x"),
+            SavedQueueKind.SNAPSHOT, 3_000)
+        target.sameSongs()
+        target.backup.restore(source.backup.export())
+        assertTrue(target.queue.saved().none { it.name == "Broken" })
+        assertTrue(target.queue.saved().any { it.name == "Evening" })
+    }
+
+    @Test
     fun unknownVersionsAndOtherFilesAreRejected() = devices { _, target ->
         assertEquals(2, assertFailsWith<BackupFormatException> {
             target.backup.restore("""{"format":"nevumi-backup","version":2,"createdAt":0,"somethingNew":true}""")

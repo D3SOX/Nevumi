@@ -38,7 +38,8 @@ class BackupController internal constructor(private val context: ControllerConte
     val status = mutableStatus.asStateFlow()
 
     fun export(files: BackupFiles, appVersion: String = "") = run(Res.string.backup_error_export) {
-        val text = requireNotNull(backup).export(appVersion)
+        // One consistent snapshot of the app's data; the lock is released before the save dialog waits for the user.
+        val text = context.operations.withLock { requireNotNull(backup).export(appVersion) }
         if (files.save(backupFileName(Clock.System.now().toEpochMilliseconds()), text)) context.confirm(Res.string.backup_notice_exported)
     }
 

@@ -188,7 +188,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val existingQueues = queue.saved()
         for (backup in document.savedQueues) {
             val entries = backup.snapshot.entries.mapNotNull { entry -> localId(entry.trackId)?.let { entry.copy(trackId = it) } }
-            if (entries.isEmpty() || backup.name.isBlank()) continue
+            // An edited or damaged file may repeat entry IDs, which the queue screens use as keys.
+            if (entries.isEmpty() || backup.name.isBlank() || entries.distinctBy { it.id }.size != entries.size) continue
             val ids = entries.map { it.id }.toSet()
             val snapshot = backup.snapshot
             val currentKept = snapshot.currentEntryId in ids
