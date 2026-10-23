@@ -7,6 +7,7 @@ import java.net.Socket
 import java.net.SocketException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import org.jaudiotagger.audio.AudioFileIO
@@ -182,6 +183,49 @@ class SftpFilesTest {
                 assertEquals(listOf("song.flac"), directory.toFile().list()!!.toList())
             } finally { image.delete() }
         } finally { directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun anUnchangedFileIsReadOnceWhileALaterWriteIsStillNoticed() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-sftp-settled")
+        val traffic = AtomicLong()
+        val proxy = proxy(traffic)
+        val image = Files.createTempFile("nevumi-image", ".flac").toFile()
+        try {
+            val original = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac")
+            val song = Files.copy(original, directory.resolve("song.flac"))
+            val expected = Files.copy(original, directory.resolve("expected.flac")).toFile()
+            val hourAgo = FileTime.fromMillis(System.currentTimeMillis() - 3_600_000)
+            Files.setLastModifiedTime(song, hourAgo)
+            val files = SftpFiles(SftpProfile("127.0.0.1", proxy.localPort, System.getProperty("user.name"), directory.toString(),
+                Files.readString(fixture.resolve("fingerprint"))), SftpAuthentication(privateKey = Files.readString(fixture.resolve("client"))))
+            files.session {
+                assertEquals(true, files.exists("song.flac"))
+                var before = traffic.get()
+                files.image("song.flac", image)
+                val read = traffic.get() - before
+                before = traffic.get()
+                // Opening the tag editor again and checking the file before saving only ask for its size and time.
+                files.image("song.flac", image)
+                val fingerprint = files.fingerprint("song.flac")
+                assert(traffic.get() - before < read / 4) { "Moved ${traffic.get() - before} bytes after reading ${read} bytes of tags" }
+                for (copy in listOf(expected, image)) AudioFileIO.read(copy).apply { tag.setField(FieldKey.YEAR, "2026"); commit() }
+                files.replaceTags("song.flac", image, fingerprint)
+                assertEquals(-1L, Files.mismatch(expected.toPath(), song))
+
+                Files.setLastModifiedTime(song, hourAgo)
+                files.image("song.flac", image)
+                val edited = files.fingerprint("song.flac")
+                // Another tagger's write moves the file's time, so the tags read before are not trusted.
+                AudioFileIO.read(song.toFile()).apply { tag.setField(FieldKey.TITLE, "Changed elsewhere"); commit() }
+                val changed = Files.readAllBytes(song)
+                AudioFileIO.read(image).apply { tag.setField(FieldKey.YEAR, "2027"); commit() }
+                assertEquals(SftpFailure.Kind.CONFLICT, assertFailsWith<SftpFailure> { files.replaceTags("song.flac", image, edited) }.kind)
+                assertEquals(true, changed.contentEquals(Files.readAllBytes(song)))
+                files.image("song.flac", image)
+                assertEquals("Changed elsewhere", AudioFileIO.read(image).tag.getFirst(FieldKey.TITLE))
+            }
+        } finally { proxy.close(); image.delete(); directory.toFile().deleteRecursively() }
     }
 
     private val fixture: Path get() = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "sftp-fixture")

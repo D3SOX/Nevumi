@@ -185,6 +185,8 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             }
             val hash = if (files.exists(location)) sourceHash(location) else null
             check(hash == edit.recoveryHash) { "The music file changed since recovery was reviewed. Refresh before restoring it." }
+            // A backup of only the tags is put back onto the audio on the server, which has to be there and intact.
+            check(!edit.partial || hash != null && files.recognizes(hash)) { "The music file is missing or damaged, and its backup holds only the tags" }
             if (edit.operation == FileEditOperation.RENAME && location != edit.sourcePath) {
                 check(!files.exists(edit.sourcePath)) { "A file with the original name already exists" }
                 files.reserveMove(library, edit.trackId, edit.sourcePath)
@@ -197,10 +199,8 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             try {
                 if (hash != null) files.image(location, previous)
                 Files.copy(backup.toPath(), staged, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
-                if (hash == null) {
-                    check(!edit.partial) { "The music file is missing, and its backup holds only the tags" }
-                    files.replace(location, staged.toFile())
-                } else replaceSafely(location, staged.toFile(), previous, hash, edit.partial)
+                if (hash == null) files.replace(location, staged.toFile())
+                else replaceSafely(location, staged.toFile(), previous, hash, edit.partial)
                 if (edit.operation == FileEditOperation.DELETE) {
                     files.completeRestoration(location)
                     files.relocate(library, edit.trackId, edit.sourceId, edit.sourcePath, location)

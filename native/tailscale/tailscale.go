@@ -14,8 +14,8 @@ static void get_bytes(JNIEnv *env, jbyteArray array, jint offset, jint length, v
 static void set_bytes(JNIEnv *env, jbyteArray array, jint offset, jint length, const void *buffer) {
 	(*env)->SetByteArrayRegion(env, array, offset, length, (const jbyte *)buffer);
 }
-static void throw_io(JNIEnv *env, const char *message) {
-	jclass type = (*env)->FindClass(env, "java/io/IOException");
+static void throw_named(JNIEnv *env, const char *name, const char *message) {
+	jclass type = (*env)->FindClass(env, name);
 	if (type != NULL) (*env)->ThrowNew(env, type, message);
 }
 */
@@ -26,6 +26,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -34,8 +35,10 @@ import (
 	"time"
 	"unsafe"
 
+	"tailscale.com/client/local"
 	"tailscale.com/envknob"
 	"tailscale.com/ipn"
+	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 	"tailscale.com/types/logger"
 )
@@ -59,10 +62,18 @@ func goString(env *C.JNIEnv, value C.jstring) string {
 	return C.GoString(chars)
 }
 
+// throw raises an IOException, or a SocketTimeoutException for an expired deadline, which sshj's reader waits through on an
+// idle connection just as it does with a socket's timeout.
 func throw(env *C.JNIEnv, err error) {
+	name := C.CString("java/io/IOException")
+	var timeout net.Error
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		name = C.CString("java/net/SocketTimeoutException")
+	}
+	defer C.free(unsafe.Pointer(name))
 	message := C.CString(err.Error())
 	defer C.free(unsafe.Pointer(message))
-	C.throw_io(env, message)
+	C.throw_named(env, name, message)
 }
 
 func start(directory, hostname, controlURL, authKey string) error {
@@ -173,6 +184,56 @@ func dialPeer(ctx context.Context, node *tsnet.Server, network, address string) 
 	}
 }
 
+// warm starts the node and pings the peer that carries host, so the first connection finds the node running and a direct
+// path to the peer. A disco ping stays inside Tailscale and works for subnet routes, so the server itself sees nothing.
+func warm(host string) error {
+	node, err := current()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := node.Up(ctx); err != nil {
+		return errNotConnected
+	}
+	client, err := node.LocalClient()
+	if err != nil {
+		return err
+	}
+	// Running can still mean the network map cached on disk, which may lack the peer until control sends the current one.
+	for {
+		if address, ok := peerAddress(ctx, client, host); ok {
+			if result, err := client.Ping(ctx, address, tailcfg.PingDisco); err == nil && result.Err == "" {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+// peerAddress returns host if it is an IP address, or the Tailscale address of the peer with that MagicDNS name.
+func peerAddress(ctx context.Context, client *local.Client, host string) (netip.Addr, bool) {
+	if address, err := netip.ParseAddr(host); err == nil {
+		return address, true
+	}
+	state, err := client.Status(ctx)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	name := strings.TrimSuffix(strings.ToLower(host), ".")
+	for _, peer := range state.Peer {
+		dns := strings.TrimSuffix(strings.ToLower(peer.DNSName), ".")
+		if len(peer.TailscaleIPs) > 0 && (dns == name || strings.HasPrefix(dns, name+".")) {
+			return peer.TailscaleIPs[0], true
+		}
+	}
+	return netip.Addr{}, false
+}
+
 func connection(handle C.jlong) (net.Conn, error) {
 	value, ok := connections.Load(int64(handle))
 	if !ok {
@@ -233,6 +294,13 @@ func Java_me_d3sox_nevumi_tunnel_TailscaleNative_status(env *C.JNIEnv, receiver 
 //export Java_me_d3sox_nevumi_tunnel_TailscaleNative_signOut
 func Java_me_d3sox_nevumi_tunnel_TailscaleNative_signOut(env *C.JNIEnv, receiver C.jobject) {
 	if err := signOut(); err != nil {
+		throw(env, err)
+	}
+}
+
+//export Java_me_d3sox_nevumi_tunnel_TailscaleNative_warm
+func Java_me_d3sox_nevumi_tunnel_TailscaleNative_warm(env *C.JNIEnv, receiver C.jobject, host C.jstring) {
+	if err := warm(goString(env, host)); err != nil {
 		throw(env, err)
 	}
 }

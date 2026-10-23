@@ -38,7 +38,7 @@ internal class TagLayout(val size: Long, val tags: List<LongRange>, val audio: L
 
         fun of(name: String, size: Long, read: (Long, Int) -> ByteArray): TagLayout {
             fun bytes(offset: Long, length: Int) = read(offset, length).also {
-                if (it.size < length) throw IOException("The music file ends inside its tags")
+                if (it.size < length) throw UnreadableTags("The music file ends inside its tags")
             }
             fun id3End(): Long {
                 val header = read(0, 10)
@@ -49,7 +49,7 @@ internal class TagLayout(val size: Long, val tags: List<LongRange>, val audio: L
             val layout = when (name.substringAfterLast('.').lowercase()) {
                 "flac" -> {
                     var position = id3End()
-                    if (bytes(position, 4).decodeToString() != "fLaC") throw IOException("This is not a FLAC file")
+                    if (bytes(position, 4).decodeToString() != "fLaC") throw UnreadableTags("This is not a FLAC file")
                     position += 4
                     do {
                         val header = bytes(position, 4)
@@ -64,7 +64,7 @@ internal class TagLayout(val size: Long, val tags: List<LongRange>, val audio: L
                 }
                 "wav" -> {
                     val header = bytes(0, 12)
-                    if (header.decodeToString(0, 4) != "RIFF" || header.decodeToString(8, 12) != "WAVE") throw IOException("This is not a WAV file")
+                    if (header.decodeToString(0, 4) != "RIFF" || header.decodeToString(8, 12) != "WAVE") throw UnreadableTags("This is not a WAV file")
                     var position = 12L
                     var audio: LongRange? = null
                     while (position + 8 <= size) {
@@ -74,12 +74,12 @@ internal class TagLayout(val size: Long, val tags: List<LongRange>, val audio: L
                         if (chunk.decodeToString(0, 4) == "data" && audio == null) audio = data
                         position = data.last + 1 + (length and 1)
                     }
-                    val sound = audio ?: throw IOException("The WAV file has no audio")
+                    val sound = audio ?: throw UnreadableTags("The WAV file has no audio")
                     TagLayout(size, listOf(0 until sound.first, sound.last + 1 until size), sound)
                 }
-                else -> throw IOException("Unsupported music format")
+                else -> throw UnreadableTags("Unsupported music format")
             }
-            if (layout.audio.first > layout.size || layout.tags.any { it.last >= layout.size }) throw IOException("The music file ends inside its tags")
+            if (layout.audio.first > layout.size || layout.tags.any { it.last >= layout.size }) throw UnreadableTags("The music file ends inside its tags")
             return layout
         }
 
@@ -108,5 +108,8 @@ internal class TagLayout(val size: Long, val tags: List<LongRange>, val audio: L
 
 /** Hashes a local copy of the server file [name] the way the server file is compared, by size and tag bytes. */
 internal fun tagFingerprint(file: File, name: String): String = TagLayout.of(file, name).let { (layout, read) -> layout.fingerprint(read) }
+
+/** The file is not a well-formed music file of its type, so it has no tags to read. */
+internal class UnreadableTags(message: String) : IOException(message)
 
 internal val LongRange.length: Long get() = if (isEmpty()) 0 else last - first + 1

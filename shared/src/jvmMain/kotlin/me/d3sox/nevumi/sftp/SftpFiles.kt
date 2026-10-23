@@ -26,6 +26,7 @@ import net.schmizz.sshj.sftp.SFTPException
 import java.io.DataInputStream
 import java.io.FileInputStream
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import me.d3sox.nevumi.tunnel.Tailscale
@@ -57,15 +58,19 @@ private object SftpCrypto {
 // Requests kept in flight per transfer, as in sshj's own get and put; waiting for each reply makes tunnelled transfers crawl.
 private const val PIPELINED_REQUESTS = 16
 private const val BLOCK = 16 * 1024L
-private const val LINGER_SECONDS = 30L
+private const val LINGER_SECONDS = 300L
 
 private val closer = Executors.newSingleThreadScheduledExecutor { task -> Thread(task, "sftp-closer").apply { isDaemon = true } }
 
 // Reads a server file in cached blocks, so parsing tags fetches each part once, with pipelined requests for longer runs.
-private class RemoteBytes(private val file: RemoteFile) {
-    val attributes: FileAttributes = file.fetchAttributes()
+private class RemoteBytes(private val file: RemoteFile, val attributes: FileAttributes = file.fetchAttributes(),
+    private val blocks: MutableMap<Long, ByteArray> = ConcurrentHashMap()) {
     val size = attributes.size
-    private val blocks = HashMap<Long, ByteArray>()
+    // SFTP times count whole seconds, so size and time identify a file's content only once its last second of writes is over.
+    val settled = attributes.has(FileAttributes.Flag.ACMODTIME) && attributes.mtime < System.currentTimeMillis() / 1000 - 2
+
+    /** Reads the same, unchanged file through [file], keeping the bytes read so far. */
+    fun reopened(file: RemoteFile, attributes: FileAttributes) = RemoteBytes(file, attributes, blocks)
 
     fun read(offset: Long, length: Int): ByteArray {
         val end = minOf(offset + length, size)
@@ -114,11 +119,14 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
     }
     @Volatile private var sessionOpen = false
     @Volatile private var shared: Connection? = null
+    @Volatile private var root: Pair<SFTPClient, String>? = null
+    // The tags read last, so saving right after the tag editor read them reads nothing again while the file is unchanged.
+    @Volatile private var recent: Pair<String, RemoteBytes>? = null
     private var closing: ScheduledFuture<*>? = null
 
     /**
      * Runs [block] with one SSH connection for all of its file steps; connecting through a tunnel takes seconds each time.
-     * The connection stays open briefly afterwards, since saving tags usually follows opening the tag editor.
+     * The connection stays open for a few minutes afterwards, since saving tags usually follows opening the tag editor.
      */
     suspend fun <T> session(block: suspend () -> T): T {
         if (sessionOpen) return block()
@@ -158,8 +166,9 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
 
     /** Copies only the tags of a server file into a local file of the same size, leaving the audio as unallocated zeros. */
     fun image(relativePath: String, destination: File) = connected { client ->
-        client.open(path(client, relativePath)).use { remote ->
-            val bytes = RemoteBytes(remote)
+        val target = path(client, relativePath)
+        client.open(target).use { remote ->
+            val bytes = bytes(remote, target)
             TagLayout.of(relativePath, bytes.size, bytes::read).writeImage(destination, bytes::read)
         }
     }
@@ -176,8 +185,8 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
         val (after, local) = TagLayout.of(edited, relativePath)
         val staged = target.substringBeforeLast('/') + "/.nevumi-${UUID.randomUUID()}.part"
         open(client, target, setOf(OpenMode.READ)).use { original ->
-            val bytes = RemoteBytes(original)
-            val before = TagLayout.of(relativePath, bytes.size, bytes::read)
+            val bytes = bytes(original, target)
+            val before = try { TagLayout.of(relativePath, bytes.size, bytes::read) } catch (_: UnreadableTags) { throw SftpFailure(SftpFailure.Kind.CONFLICT) }
             if (before.fingerprint(bytes::read) != originalFingerprint) throw SftpFailure(SftpFailure.Kind.CONFLICT)
             check(keepsAudio(before, bytes::read, after, local)) { "Nevumi can't save tags to this file on the server" }
             var owned = false
@@ -195,10 +204,14 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
                     send(after.audio.last + 1 until after.size)
                 }
                 // Every write and the server's copy were confirmed, so only a change to the original is left to rule out.
-                if (fingerprint(client, target) != originalFingerprint) throw SftpFailure(SftpFailure.Kind.CONFLICT)
+                // Any write after a settled file was checked moves its time, so a stat replaces reading its tags again.
+                val unchanged = if (bytes.settled) client.stat(target).let { it.size == bytes.size && it.mtime == bytes.attributes.mtime }
+                    else fingerprint(client, target) == originalFingerprint
+                if (!unchanged) throw SftpFailure(SftpFailure.Kind.CONFLICT)
                 client.chmod(staged, bytes.attributes.mode.mask)
                 client.rename(staged, target, setOf(RenameFlags.OVERWRITE, RenameFlags.ATOMIC))
                 published = true
+                recent = null
             } finally {
                 if (owned && !published) try { if (client.statExistence(staged) != null) client.rm(staged) } catch (_: IOException) { }
             }
@@ -243,37 +256,48 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
     }
 
     private fun fingerprint(client: SFTPClient, target: String): String = client.open(target).use { remote ->
-        val bytes = RemoteBytes(remote)
-        TagLayout.of(target, bytes.size, bytes::read).fingerprint(bytes::read)
+        val bytes = bytes(remote, target)
+        try { TagLayout.of(target, bytes.size, bytes::read).fingerprint(bytes::read) }
+        // A damaged file has no tags, so its whole content identifies it and it never matches a tag fingerprint.
+        catch (_: UnreadableTags) { "file:" + hash(client, target) }
     }
 
     fun exists(relativePath: String): Boolean = connected { client ->
         validateRelativePath(relativePath)
-        var parent = client.canonicalize(profile.musicDirectory).trimEnd('/')
-        for (component in relativePath.split('/').dropLast(1)) {
-            parent += "/$component"
-            if (client.statExistence(parent) == null) return@connected false
-            require(client.canonicalize(parent) == parent) { "Choose a music folder without symbolic links" }
-        }
-        client.statExistence(path(client, relativePath, mustExist = false)) != null
+        if (client.statExistence("${root(client)}/$relativePath") == null) return@connected false
+        path(client, relativePath, mustExist = false)
+        true
     }
+
+    // Takes the tags read last when the file is the same, settled one, instead of reading them again.
+    private fun bytes(remote: RemoteFile, target: String): RemoteBytes {
+        val attributes = remote.fetchAttributes()
+        val known = recent?.takeIf { (path, bytes) -> path == target && bytes.settled && bytes.size == attributes.size &&
+            bytes.attributes.mtime == attributes.mtime }?.second
+        return (known?.reopened(remote, attributes) ?: RemoteBytes(remote, attributes)).also { recent = target to it }
+    }
+
+    private fun root(client: SFTPClient): String = root?.takeIf { it.first === client }?.second
+        ?: client.canonicalize(profile.musicDirectory).trimEnd('/').also { root = client to it }
 
     fun hash(relativePath: String): String = connected { client -> hash(client, path(client, relativePath)) }
 
     fun rename(relativePath: String, destination: String) = connected { client ->
+        recent = null
         val source = path(client, relativePath)
         val target = path(client, destination, mustExist = false)
         if (client.statExistence(target) != null) throw SftpFailure(SftpFailure.Kind.CONFLICT)
         client.rename(source, target)
     }
 
-    fun delete(relativePath: String) = connected { client -> client.rm(path(client, relativePath)) }
+    fun delete(relativePath: String) = connected { client -> recent = null; client.rm(path(client, relativePath)) }
 
     private fun publish(client: SFTPClient, target: String, source: File, originalFingerprint: String?,
         transferId: String = UUID.randomUUID().toString()) {
         require(source.isFile) { "Choose an existing music file to upload" }
         require(UUID.fromString(transferId).toString() == transferId) { "Invalid upload identifier" }
         val staged = target.substringBeforeLast('/') + "/.nevumi-$transferId.part"
+        recent = null
         var owned = false
         try {
             client.statExistence(staged)?.let {
@@ -337,7 +361,7 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
 
     private fun path(client: SFTPClient, relativePath: String, mustExist: Boolean = true, createParents: Boolean = false): String {
         validateRelativePath(relativePath)
-        val root = client.canonicalize(profile.musicDirectory).trimEnd('/')
+        val root = root(client)
         if (createParents) {
             var parent = root
             for (component in relativePath.split('/').dropLast(1)) {

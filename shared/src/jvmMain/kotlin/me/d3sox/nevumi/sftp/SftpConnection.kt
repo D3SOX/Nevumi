@@ -5,11 +5,13 @@ import me.d3sox.nevumi.storage.MusicStore
 import me.d3sox.nevumi.security.CredentialVault
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeChanges
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 import java.io.InputStream
 import java.nio.file.Files
@@ -177,6 +179,16 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         val server = client() ?: return@withLock
         for (configuration in store.list<SftpConfiguration>("sftp-profiles").filter { it.serverId == server.serverId })
             editor(configuration, credentialsRequired = false).trimHistory(maxAgeMs, maxBytes)
+    }
+    // Starting Tailscale and reaching the server take seconds, which would otherwise delay opening the first tag editor.
+    override suspend fun warmUp() = withContext(Dispatchers.IO) {
+        val connection = configuration()?.connection ?: return@withContext
+        val node = tailscale() ?: return@withContext
+        try { node.warmUp(connection.host) } catch (_: IOException) { }
+    }
+    // The editor keeps the connection and the tags it read, so opening the tag editor next only checks that the file is unchanged.
+    override suspend fun prepareEdit(trackId: String) = work.withLock {
+        try { currentEditor().session { readTags(trackId) }; Unit } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
     }
     override suspend fun recover() = work.withLock {
         val server = client() ?: return@withLock

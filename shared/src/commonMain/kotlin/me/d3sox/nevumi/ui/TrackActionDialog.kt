@@ -52,7 +52,7 @@ internal data class TrackOption(val label: String, val icon: AppIcon, val detail
 internal fun TrackActionDialog(track: Track, artwork: String?, options: List<TrackOption>, dismiss: () -> Unit,
     artworkOrigin: Rect? = null, artworkCornerRadius: Dp = 16.dp,
     onArtworkPlaced: () -> Unit = {},
-    fileOptions: List<TrackOption>? = null) {
+    fileOptions: List<TrackOption>? = null, onFileActions: () -> Unit = {}) {
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val currentDismiss by rememberUpdatedState(dismiss)
@@ -78,6 +78,7 @@ internal fun TrackActionDialog(track: Track, artwork: String?, options: List<Tra
     val pageHeights = remember { IntArray(2) }
     var touching by remember { mutableStateOf(false) }
     val onFiles by remember { derivedStateOf { page >= .5f } }
+    LaunchedEffect(onFiles) { if (onFiles) onFileActions() }
     val showActions by remember { derivedStateOf { page < 1f } }
     val showFiles by remember { derivedStateOf { page > 0f } }
     fun showPage(target: Float, velocity: Float = 0f) {
