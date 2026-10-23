@@ -13,6 +13,7 @@ import kotlin.uuid.Uuid
 import kotlin.math.abs
 import me.d3sox.nevumi.queue.remapQueueTracks
 import me.d3sox.nevumi.playlists.remapPlaylistTracks
+import me.d3sox.nevumi.playlists.playlistedTrackIds
 import me.d3sox.nevumi.downloads.remapDownloadedTrack
 import me.d3sox.nevumi.downloads.DownloadStatus
 import me.d3sox.nevumi.history.remapListeningHistory
@@ -197,7 +198,8 @@ class MusicLibrary(private val store: MusicStore) {
             query.playCountTo != null || query.lastPlayedWithinDays != null || query.notPlayedWithinDays != null
         val tracks = loadTracks()
         return if (query == LibraryQuery()) tracks else filterTracks(tracks, query,
-            if (history) listeningStatistics(store.list<Listen>("listens")) else emptyMap())
+            if (history) listeningStatistics(store.list<Listen>("listens")) else emptyMap(),
+            playlisted = if (query.notInPlaylist) playlistedTrackIds(store.list("playlists")) else emptySet())
     }
     suspend fun importTrack(metadata: TrackMetadata, source: TrackSource, linkTo: String? = null): Track = store.transaction {
         val owner = store.read<SourceOwner>("source-owner:${source.id}")

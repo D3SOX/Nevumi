@@ -61,6 +61,7 @@ class PlaylistsTest {
             val rule = LibraryQuery(notOnServer = true, notInPlaylist = true)
             val smart = playlists.createSmart("Unsorted", rule)
             assertEquals(listOf(unsorted.id), smart.trackIds)
+            assertEquals(listOf(unsorted.id), library.tracks(rule).map { it.id })
             assertEquals(setOf(sorted.id, unsorted.id), playlists.createSmart("Device only", LibraryQuery(notOnServer = true)).trackIds.toSet())
             // Songs that only appear in smart playlists still count as unsorted.
             assertEquals(listOf(unsorted.id), playlists.get(smart.id)!!.trackIds)
