@@ -32,11 +32,10 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
 
     private suspend fun readEdit(id: String): LocalFileEdit? = store.read<LocalFileEdit>("file-edit:$id")?.also {
         check(it.providerId == files.providerId) { "Reconnect to the original file location before using this edit" }
-        check(files.recognizes(it.originalHash)) { "This edit was saved by an older version of Nevumi and can no longer be undone" }
     }
 
     // A tag edit's copies may hold only the tags, so writing one needs the file it replaces; a deletion keeps the whole file.
-    private val LocalFileEdit.partial get() = files.partialCopies && operation != FileEditOperation.DELETE
+    private val LocalFileEdit.partial get() = operation != FileEditOperation.DELETE && files.holdsOnlyTags(originalHash)
 
     override suspend fun linkTracks(keepId: String, otherId: String): Track = edits.withLock { library.linkTracks(keepId, otherId) }
 
@@ -49,8 +48,9 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         val id = UUID.randomUUID().toString()
         val backup = backups.resolve("$id.${files.name(location).substringAfterLast('.')}")
         files.copy(location, backup)
-        val hash = fileHash(backup, location)
-        check(sourceHash(location) == hash) { "The music file changed while its backup was made" }
+        // A deletion keeps the whole file, so its checks compare every byte rather than only the tags.
+        val hash = files.contentHash(backup, location, whole = true)
+        check(sourceHash(location, hash) == hash) { "The music file changed while its backup was made" }
         val edit = LocalFileEdit(id, trackId, location, backup.path, hash, hash, "", now(), writing = true,
             operation = FileEditOperation.DELETE, sourceId = source.id, originalName = files.name(location), originalFolder = files.folder(location), providerId = files.providerId)
         store.put("file-edit:$id", "file-edits", edit)
@@ -136,7 +136,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 return@forEach
             }
             val hash = withContext(Dispatchers.IO) {
-                if (files.exists(edit.sourcePath)) sourceHash(edit.sourcePath) else null
+                if (files.exists(edit.sourcePath)) sourceHash(edit.sourcePath, edit.originalHash) else null
             }
             if (edit.applied && hash == edit.originalHash) {
                 store.put("file-edit:${edit.id}", "file-edits", edit.copy(undone = true, writing = false, needsRecovery = false, recoveryHash = null))
@@ -152,7 +152,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
 
     private suspend fun recoverDeletion(edit: LocalFileEdit) = withContext(Dispatchers.IO) {
         if (edit.applied && edit.destinationPath.isNotBlank() && files.exists(edit.destinationPath)) {
-            val hash = sourceHash(edit.destinationPath)
+            val hash = sourceHash(edit.destinationPath, edit.originalHash)
             if (hash == edit.originalHash) {
                 files.completeRestoration(edit.destinationPath)
                 files.relocate(library, edit.trackId, edit.sourceId, edit.sourcePath, edit.destinationPath)
@@ -168,7 +168,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             store.put("file-edit:${edit.id}", "file-edits", edit.copy(applied = true, writing = false, needsRecovery = false,
                 destinationPath = "", recoveryHash = null))
         } else {
-            val hash = sourceHash(edit.sourcePath)
+            val hash = sourceHash(edit.sourcePath, edit.originalHash)
             if (hash == edit.originalHash) {
                 localSources.scan(files.scanLocation(edit.sourcePath), force = true)
                 store.put("file-edit:${edit.id}", "file-edits", edit.copy(undone = true, writing = false, needsRecovery = false))
@@ -183,16 +183,16 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             val location = edit.recoveryPath.ifBlank {
                 if (edit.operation == FileEditOperation.DELETE && edit.destinationPath.isNotBlank()) edit.destinationPath else edit.sourcePath
             }
-            val hash = if (files.exists(location)) sourceHash(location) else null
+            val hash = if (files.exists(location)) sourceHash(location, edit.originalHash) else null
             check(hash == edit.recoveryHash) { "The music file changed since recovery was reviewed. Refresh before restoring it." }
             // A backup of only the tags is put back onto the audio on the server, which has to be there and intact.
-            check(!edit.partial || hash != null && files.recognizes(hash)) { "The music file is missing or damaged, and its backup holds only the tags" }
+            check(!edit.partial || hash != null && files.holdsOnlyTags(hash)) { "The music file is missing or damaged, and its backup holds only the tags" }
             if (edit.operation == FileEditOperation.RENAME && location != edit.sourcePath) {
                 check(!files.exists(edit.sourcePath)) { "A file with the original name already exists" }
                 files.reserveMove(library, edit.trackId, edit.sourcePath)
             }
             val backup = File(edit.backupPath)
-            check(backup.isFile && fileHash(backup, edit.sourcePath) == edit.originalHash) { "The original backup is unavailable or damaged" }
+            check(backup.isFile && fileHash(backup, edit.sourcePath, edit.originalHash) == edit.originalHash) { "The original backup is unavailable or damaged" }
             val directory = Files.createDirectories(files.stagingDirectory(location).toPath())
             val staged = Files.createTempFile(directory, "restore-", ".part")
             val previous = directory.resolve("before-restore-${UUID.randomUUID()}.part").toFile()
@@ -233,13 +233,13 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             val edit = requireNotNull(readEdit(editId)) { "Edit is missing" }
             check(!edit.undone) { "This edit was already undone" }
             // A remote file just matched its backup, and atomic replacement compares it again, so reading it once more only costs time.
-            val hash = if (fresh && files.atomicWrites) edit.originalHash else sourceHash(edit.sourcePath)
+            val hash = if (fresh && files.atomicWrites) edit.originalHash else sourceHash(edit.sourcePath, edit.originalHash)
             if (hash != edit.editedHash) {
                 check(!edit.applied && hash == edit.originalHash) {
                     "The music file changed outside Nevumi. Applying this edit would overwrite those changes."
                 }
                 val staged = File(edit.stagedPath)
-                check(staged.isFile && fileHash(staged, edit.sourcePath) == edit.editedHash) { "The prepared edit is unavailable or damaged" }
+                check(staged.isFile && fileHash(staged, edit.sourcePath, edit.originalHash) == edit.editedHash) { "The prepared edit is unavailable or damaged" }
                 store.put("file-edit:$editId", "file-edits", edit.copy(writing = true))
                 replaceSafely(edit.sourcePath, staged, File(edit.backupPath), edit.originalHash, edit.partial)
             }
@@ -257,9 +257,9 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             check(edit.applied) { "The edit has not been applied" }
             if (edit.operation == FileEditOperation.DELETE) {
                 check(files.deleted(edit.sourcePath)) { "A music file already exists there. Undo would overwrite it." }
-                check(!files.exists(edit.sourcePath) || sourceHash(edit.sourcePath) == edit.originalHash) { "The trashed music file changed outside Nevumi." }
+                check(!files.exists(edit.sourcePath) || sourceHash(edit.sourcePath, edit.originalHash) == edit.originalHash) { "The trashed music file changed outside Nevumi." }
                 val backup = File(edit.backupPath)
-                check(backup.isFile && fileHash(backup, edit.sourcePath) == edit.originalHash) { "The original backup is unavailable or damaged" }
+                check(backup.isFile && fileHash(backup, edit.sourcePath, edit.originalHash) == edit.originalHash) { "The original backup is unavailable or damaged" }
                 store.put("file-edit:$editId", "file-edits", edit.copy(writing = true))
                 val restored = files.restoreDeleted(edit.sourcePath, backup, edit.originalName, edit.originalFolder) { location ->
                     store.put("file-edit:$editId", "file-edits", edit.copy(writing = true, destinationPath = location))
@@ -274,11 +274,11 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 undoRename(edit)
                 return@withContext
             }
-            check(files.exists(edit.sourcePath) && sourceHash(edit.sourcePath) == edit.editedHash) {
+            check(files.exists(edit.sourcePath) && sourceHash(edit.sourcePath, edit.originalHash) == edit.editedHash) {
                 "The music file changed outside Nevumi. Undo would overwrite those changes."
             }
             val backup = File(edit.backupPath)
-            check(backup.isFile && fileHash(backup, edit.sourcePath) == edit.originalHash) { "The original backup is unavailable or damaged" }
+            check(backup.isFile && fileHash(backup, edit.sourcePath, edit.originalHash) == edit.originalHash) { "The original backup is unavailable or damaged" }
             val stagingDirectory = Files.createDirectories(files.stagingDirectory(edit.sourcePath).toPath())
             val staged = Files.createTempFile(stagingDirectory, "undo-", ".${files.name(edit.sourcePath).substringAfterLast('.')}")
             val previous = stagingDirectory.resolve("before-undo-${UUID.randomUUID()}.part").toFile()
@@ -310,8 +310,8 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         val id = UUID.randomUUID().toString()
         val backup = backups.resolve("$id.$extension")
         files.image(location, backup)
-        val hash = fileHash(backup, location)
-        check(sourceHash(location) == hash) { "The music file changed while its backup was made" }
+        val hash = files.contentHash(backup, location)
+        check(sourceHash(location, hash) == hash) { "The music file changed while its backup was made" }
         val edit = LocalFileEdit(id, trackId, location, backup.path, hash, hash, "", now(), writing = true,
             operation = FileEditOperation.RENAME, sourceId = source.id, destinationPath = destination, originalName = previousName, changedName = name, providerId = files.providerId)
         store.put("file-edit:$id", "file-edits", edit)
@@ -331,7 +331,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
     }
 
     private suspend fun undoRename(edit: LocalFileEdit) {
-        check(files.exists(edit.destinationPath) && files.name(edit.destinationPath) == edit.changedName && sourceHash(edit.destinationPath) == edit.editedHash) {
+        check(files.exists(edit.destinationPath) && files.name(edit.destinationPath) == edit.changedName && sourceHash(edit.destinationPath, edit.originalHash) == edit.editedHash) {
             "The renamed music file changed outside Nevumi. Undo would overwrite those changes."
         }
         check(edit.sourcePath == edit.destinationPath || !files.exists(edit.sourcePath)) { "A file with the original name already exists" }
@@ -343,8 +343,8 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
 
     private suspend fun recoverRename(edit: LocalFileEdit) = withContext(Dispatchers.IO) {
         val atDestination = files.exists(edit.destinationPath) && files.name(edit.destinationPath) == edit.changedName &&
-            sourceHash(edit.destinationPath) == edit.editedHash && (edit.sourcePath == edit.destinationPath || !files.exists(edit.sourcePath))
-        val atOriginal = files.exists(edit.sourcePath) && files.name(edit.sourcePath) == edit.originalName && sourceHash(edit.sourcePath) == edit.originalHash
+            sourceHash(edit.destinationPath, edit.originalHash) == edit.editedHash && (edit.sourcePath == edit.destinationPath || !files.exists(edit.sourcePath))
+        val atOriginal = files.exists(edit.sourcePath) && files.name(edit.sourcePath) == edit.originalName && sourceHash(edit.sourcePath, edit.originalHash) == edit.originalHash
         when {
             atDestination -> finishRename(edit, undone = false)
             atOriginal && edit.applied -> finishRename(edit, undone = true)
@@ -355,7 +355,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             else -> {
                 val location = if (files.exists(edit.destinationPath) && files.name(edit.destinationPath) == edit.changedName)
                     edit.destinationPath else edit.sourcePath
-                val hash = if (files.exists(location)) sourceHash(location) else null
+                val hash = if (files.exists(location)) sourceHash(location, edit.originalHash) else null
                 store.put("file-edit:${edit.id}", "file-edits", edit.copy(needsRecovery = true, recoveryHash = hash, recoveryPath = location))
             }
         }
@@ -456,7 +456,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 if (containerTag is WavTag) containerTag.syncToInfoFromId3Overwrite()
                 audio.commit()
                 AudioFileIO.read(staged.toFile())
-                val result = LocalFileEdit(id, trackId, location, backup.path, fileHash(backup, location), fileHash(staged.toFile(), location), staged.toString(), now(), sourceId = source.id, providerId = files.providerId)
+                val result = LocalFileEdit(id, trackId, location, backup.path, files.contentHash(backup, location), files.contentHash(staged.toFile(), location), staged.toString(), now(), sourceId = source.id, providerId = files.providerId)
                 store.put("file-edit:$id", "file-edits", result)
                 prepared = true
                 result
@@ -466,16 +466,17 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         }
     }
 
-    private fun sourceHash(location: String) = files.contentHash(location)
-    private fun fileHash(file: File, location: String) = files.contentHash(file, location)
+    // Hashes a file the way [like] was made: from the tags alone for copies that hold only the tags, otherwise from every byte.
+    private fun sourceHash(location: String, like: String) = files.contentHash(location, whole = !files.holdsOnlyTags(like))
+    private fun fileHash(file: File, location: String, like: String) = files.contentHash(file, location, whole = !files.holdsOnlyTags(like))
 
     private suspend fun replaceSafely(location: String, staged: File, original: File, originalHash: String, partial: Boolean) {
-        check(original.isFile && fileHash(original, location) == originalHash) { "The original backup is unavailable or damaged" }
+        check(original.isFile && fileHash(original, location, originalHash) == originalHash) { "The original backup is unavailable or damaged" }
         try { if (partial) files.replaceTags(location, staged, originalHash) else files.replace(location, staged, originalHash) } catch (error: IOException) {
             if (files.atomicWrites) throw error
             withContext(NonCancellable) {
                 try {
-                    if (!files.exists(location) || sourceHash(location) != originalHash) {
+                    if (!files.exists(location) || sourceHash(location, originalHash) != originalHash) {
                         val rollback = Files.createTempFile(Files.createDirectories(files.stagingDirectory(location).toPath()), "rollback-", ".part")
                         try {
                             Files.copy(original.toPath(), rollback, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)

@@ -6,6 +6,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.nio.file.Files
+import me.d3sox.nevumi.library.contentHash
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.util.concurrent.atomic.AtomicInteger
@@ -86,7 +87,9 @@ class SftpFilesTest {
             assertEquals(listOf("song.flac"), directory.toFile().list()!!.toList())
             files.replace("song.flac", edited.toFile(), files.fingerprint("song.flac"))
             assertEquals(-1L, Files.mismatch(edited, directory.resolve("song.flac")))
-            assertFailsWith<SftpFailure> { files.replace("missing.flac", edited.toFile(), files.fingerprint("song.flac")) }
+            val expected = files.fingerprint("song.flac")
+            val missing = assertFailsWith<SftpFailure> { files.replace("missing.flac", edited.toFile(), expected) }
+            assertEquals(SftpFailure.Kind.FILE_OPERATION, missing.kind)
             assertEquals(listOf("song.flac"), directory.toFile().list()!!.toList())
         } finally { directory.toFile().deleteRecursively() }
     }
@@ -226,6 +229,23 @@ class SftpFilesTest {
                 assertEquals("Changed elsewhere", AudioFileIO.read(image).tag.getFirst(FieldKey.TITLE))
             }
         } finally { proxy.close(); image.delete(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aFileWithoutKnownTagLocationsIsCopiedAndComparedWhole() {
+        val directory = Files.createTempDirectory("nevumi-sftp-whole")
+        val image = Files.createTempFile("nevumi-image", ".ogg").toFile()
+        try {
+            val bytes = kotlin.random.Random(7).nextBytes(100_000)
+            Files.write(directory.resolve("song.ogg"), bytes)
+            val files = SftpFiles(SftpProfile("127.0.0.1", 14534, System.getProperty("user.name"), directory.toString(),
+                Files.readString(fixture.resolve("fingerprint"))), SftpAuthentication(privateKey = Files.readString(fixture.resolve("client"))))
+            files.image("song.ogg", image)
+            assertEquals(true, bytes.contentEquals(image.readBytes()))
+            val fingerprint = files.fingerprint("song.ogg")
+            assertEquals(bytes.inputStream().use(::contentHash), fingerprint)
+            assertEquals(tagFingerprint(image, "song.ogg"), fingerprint)
+        } finally { image.delete(); directory.toFile().deleteRecursively() }
     }
 
     private val fixture: Path get() = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "sftp-fixture")

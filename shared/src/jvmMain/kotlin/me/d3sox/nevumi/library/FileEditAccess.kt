@@ -21,14 +21,13 @@ interface FileEditAccess {
     fun exists(location: String): Boolean
     fun open(location: String): InputStream
     fun copy(location: String, destination: File)
-    /** Whether [image] copies only a file's tags; [replaceTags] then takes the audio from the file it replaces. */
-    val partialCopies: Boolean get() = false
-    /** Copies what a tag edit needs, which is the whole file unless [partialCopies]. */
+    /** Copies what a tag edit needs, which is the whole file unless [holdsOnlyTags] says otherwise for its hash. */
     fun image(location: String, destination: File) = copy(location, destination)
-    fun contentHash(location: String): String = open(location).use(::contentHash)
-    fun contentHash(file: File, location: String): String = file.inputStream().use(::contentHash)
-    /** Whether [hash] came from this access's [contentHash], since older versions hashed differently. */
-    fun recognizes(hash: String) = true
+    /** Hashes the file as its [image] is compared, or every byte with [whole]. */
+    fun contentHash(location: String, whole: Boolean = false): String = open(location).use(::contentHash)
+    fun contentHash(file: File, location: String, whole: Boolean = false): String = file.inputStream().use(::contentHash)
+    /** Whether a copy with [hash] holds only the tags, so [replaceTags] has to take the audio from the file it replaces. */
+    fun holdsOnlyTags(hash: String) = false
     fun stagingDirectory(location: String): File
     suspend fun replace(location: String, staged: File, originalHash: String? = null)
     /** Replaces the file with a tag edit of an [image]. */

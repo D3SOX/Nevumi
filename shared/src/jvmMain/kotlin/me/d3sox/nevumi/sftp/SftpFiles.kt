@@ -141,7 +141,9 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
                 closing = shared?.let { connection ->
                     // The closer thread keeps the network off Android's main thread, where callers such as the tag editor run.
                     closer.schedule({
-                        synchronized(this) { if (!sessionOpen && shared === connection) { shared = null; connection.close() } }
+                        val idle = synchronized(this) { (!sessionOpen && shared === connection).also { if (it) shared = null } }
+                        // Closing can wait for a dead connection's timeouts, so it happens outside the lock a new session takes.
+                        if (idle) connection.close()
                     }, LINGER_SECONDS, TimeUnit.SECONDS)
                 }
             }
@@ -167,10 +169,12 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
     /** Copies only the tags of a server file into a local file of the same size, leaving the audio as unallocated zeros. */
     fun image(relativePath: String, destination: File) = connected { client ->
         val target = path(client, relativePath)
-        client.open(target).use { remote ->
+        val layout = client.open(target).use { remote ->
             val bytes = bytes(remote, target)
-            TagLayout.of(relativePath, bytes.size, bytes::read).writeImage(destination, bytes::read)
+            try { TagLayout.of(relativePath, bytes.size, bytes::read).also { it.writeImage(destination, bytes::read) } } catch (_: UnreadableTags) { null }
         }
+        // Formats without known tag locations, and damaged files, are copied whole like before tag-only copies.
+        if (layout == null) client.get(target, destination.path)
     }
 
     /** Identifies a server file by its size and tags without reading its audio. */
@@ -203,10 +207,11 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
                     copyAudio(client, original, before.audio, output, after.audio.first, chunk)
                     send(after.audio.last + 1 until after.size)
                 }
-                // Every write and the server's copy were confirmed, so only a change to the original is left to rule out.
-                // Any write after a settled file was checked moves its time, so a stat replaces reading its tags again.
-                val unchanged = if (bytes.settled) client.stat(target).let { it.size == bytes.size && it.mtime == bytes.attributes.mtime }
-                    else fingerprint(client, target) == originalFingerprint
+                // Every write and the server's copy were confirmed, so only a change to the original is left to rule out. A write
+                // to the tags or the audio moves the file's time, unless it fell in the same second as a file modified then, so
+                // a file that was not yet settled also has its tags compared again.
+                val unchanged = client.stat(target).let { it.size == bytes.size && it.mtime == bytes.attributes.mtime } &&
+                    (bytes.settled || fingerprint(client, target) == originalFingerprint)
                 if (!unchanged) throw SftpFailure(SftpFailure.Kind.CONFLICT)
                 client.chmod(staged, bytes.attributes.mode.mask)
                 client.rename(staged, target, setOf(RenameFlags.OVERWRITE, RenameFlags.ATOMIC))
@@ -258,8 +263,8 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
     private fun fingerprint(client: SFTPClient, target: String): String = client.open(target).use { remote ->
         val bytes = bytes(remote, target)
         try { TagLayout.of(target, bytes.size, bytes::read).fingerprint(bytes::read) }
-        // A damaged file has no tags, so its whole content identifies it and it never matches a tag fingerprint.
-        catch (_: UnreadableTags) { "file:" + hash(client, target) }
+        // A file without tags to read is identified by its whole content, which never matches a tag fingerprint.
+        catch (_: UnreadableTags) { hash(client, target) }
     }
 
     fun exists(relativePath: String): Boolean = connected { client ->
@@ -315,7 +320,8 @@ class SftpFiles(private val profile: SftpProfile, private val authentication: Sf
             check(client.stat(staged).size == source.length()) { "The server did not save the whole file" }
             if (originalFingerprint == null) client.rename(staged, target)
             else {
-                if (fingerprint(client, target) != originalFingerprint) throw SftpFailure(SftpFailure.Kind.CONFLICT)
+                val current = if (originalFingerprint.startsWith(TagLayout.FINGERPRINT)) fingerprint(client, target) else hash(client, target)
+                if (current != originalFingerprint) throw SftpFailure(SftpFailure.Kind.CONFLICT)
                 client.chmod(staged, client.stat(target).mode.mask)
                 client.rename(staged, target, setOf(RenameFlags.OVERWRITE, RenameFlags.ATOMIC))
             }

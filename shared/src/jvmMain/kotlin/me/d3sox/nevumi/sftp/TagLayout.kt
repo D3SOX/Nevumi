@@ -106,10 +106,12 @@ internal class TagLayout(val size: Long, val tags: List<LongRange>, val audio: L
     }
 }
 
-/** Hashes a local copy of the server file [name] the way the server file is compared, by size and tag bytes. */
-internal fun tagFingerprint(file: File, name: String): String = TagLayout.of(file, name).let { (layout, read) -> layout.fingerprint(read) }
+/** Hashes a local copy of the server file [name] the way the server file is compared: by size and tag bytes where it has them, otherwise by every byte. */
+internal fun tagFingerprint(file: File, name: String): String =
+    try { TagLayout.of(file, name).let { (layout, read) -> layout.fingerprint(read) } }
+    catch (_: UnreadableTags) { file.inputStream().use { me.d3sox.nevumi.library.contentHash(it) } }
 
-/** The file is not a well-formed music file of its type, so it has no tags to read. */
+/** The file is not a well-formed music file in a format with known tag locations, so it is handled as a whole. */
 internal class UnreadableTags(message: String) : IOException(message)
 
 internal val LongRange.length: Long get() = if (isEmpty()) 0 else last - first + 1

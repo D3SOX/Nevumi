@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.sftp
 
 import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.contentHash
 import me.d3sox.nevumi.navidrome.*
 import me.d3sox.nevumi.storage.openMusicStore
 import io.ktor.client.HttpClient
@@ -39,6 +40,8 @@ class SftpMusicFileEditsTest {
             val authentication = SftpAuthentication(privateKey = Files.readString(fixture.resolve("client")))
             val edits = SftpMusicFileEdits(store, library, client, profile, authentication, directory.resolve("backups").toString())
             val edit = edits.delete(track.id)
+            // A deletion keeps the whole file, so it is checked by every byte rather than only by its tags.
+            assertEquals(Files.newInputStream(original).use(::contentHash), edit.originalHash)
             assertEquals(false, Files.exists(file))
             assertEquals(false, library.findTrack(track.id)!!.sources.single().available)
             assertEquals(false, client.songs().any { it.id == songId })

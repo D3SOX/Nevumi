@@ -93,11 +93,13 @@ private class SftpFileEditAccess(val remote: SftpFiles, profile: SftpProfile, pr
     }
     override fun copy(location: String, destination: File) = remote.download(normalize(location), destination)
     // Tag edits copy only the tags, so opening the editor or saving never moves the audio through the tunnel.
-    override val partialCopies = true
     override fun image(location: String, destination: File) = remote.image(normalize(location), destination)
-    override fun contentHash(location: String) = remote.fingerprint(normalize(location))
-    override fun contentHash(file: File, location: String) = tagFingerprint(file, name(location))
-    override fun recognizes(hash: String) = hash.startsWith(TagLayout.FINGERPRINT)
+    // A whole-file hash is the plain SHA-256 that edits from before tag-only copies stored, so their undo keeps working.
+    override fun contentHash(location: String, whole: Boolean) =
+        if (whole) remote.hash(normalize(location)) else remote.fingerprint(normalize(location))
+    override fun contentHash(file: File, location: String, whole: Boolean) =
+        if (whole) file.inputStream().use(::contentHash) else tagFingerprint(file, name(location))
+    override fun holdsOnlyTags(hash: String) = hash.startsWith(TagLayout.FINGERPRINT)
     override fun stagingDirectory(location: String) = staging
     override suspend fun replace(location: String, staged: File, originalHash: String?) {
         // An expected original must still be there, so a file deleted meanwhile is not recreated.
