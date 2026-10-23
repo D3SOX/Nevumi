@@ -3,22 +3,22 @@ package me.d3sox.nevumi.ui
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.SamplingMode
+import org.jetbrains.skia.Surface
+import kotlin.math.roundToInt
 
+/** Decodes with Skia and scales in one pass; re-encoding a smaller copy through ImageIO cost two more codec passes. */
 internal actual fun decodeArtwork(bytes: ByteArray, maxDimension: Int): ImageBitmap? {
-    val sampled = javax.imageio.ImageIO.createImageInputStream(java.io.ByteArrayInputStream(bytes)).use { input ->
-        val readers = javax.imageio.ImageIO.getImageReaders(input)
-        if (!readers.hasNext()) return null
-        val reader = readers.next()
-        try {
-            reader.input = input
-            val largest = maxOf(reader.getWidth(0), reader.getHeight(0))
-            if (largest <= maxDimension) bytes else {
-                val sample = ((largest + maxDimension - 1) / maxDimension).coerceAtLeast(1)
-                val picture = reader.read(0, reader.defaultReadParam.apply { setSourceSubsampling(sample, sample, 0, 0) })
-                java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(picture, "png", it) }.toByteArray()
-            }
-        } finally { reader.dispose() }
-    }
-    val image = Image.makeFromEncoded(sampled)
-    return if (image.width.toLong() * image.height > 16_000_000) null else image.toComposeImageBitmap()
+    val image = try { Image.makeFromEncoded(bytes) } catch (_: Exception) { return null }
+    if (image.width <= 0 || image.height <= 0 || image.width.toLong() * image.height > 16_000_000) return null
+    val largest = maxOf(image.width, image.height)
+    if (largest <= maxDimension) return image.toComposeImageBitmap()
+    val scale = maxDimension.toFloat() / largest
+    val width = (image.width * scale).roundToInt().coerceAtLeast(1)
+    val height = (image.height * scale).roundToInt().coerceAtLeast(1)
+    val surface = Surface.makeRasterN32Premul(width, height)
+    surface.canvas.drawImageRect(image, Rect.makeWH(image.width.toFloat(), image.height.toFloat()),
+        Rect.makeWH(width.toFloat(), height.toFloat()), SamplingMode.LINEAR, null, true)
+    return surface.makeImageSnapshot().toComposeImageBitmap()
 }

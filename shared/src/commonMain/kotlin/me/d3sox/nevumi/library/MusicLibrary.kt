@@ -130,9 +130,21 @@ fun filterTracks(tracks: List<Track>, query: LibraryQuery, statistics: Map<Strin
 
 class MusicLibrary(private val store: MusicStore) {
     private val decoded = kotlinx.coroutines.sync.Mutex()
+    private var loaded = false
+    private var cachedRevision: Long? = null
     private var cachedRecords = emptyList<me.d3sox.nevumi.storage.StoredRecord>()
     private var cachedTracks = emptyList<Track>()
-    private suspend fun decodeTracks(records: List<me.d3sox.nevumi.storage.StoredRecord>): List<Track> = decoded.withLock { decodeTracksLocked(records) }
+    /** Every track, re-read only after a write to a track record; the revision check costs one indexed row. */
+    private suspend fun loadTracks(): List<Track> = decoded.withLock { loadTracksLocked() }
+    private suspend fun loadTracksLocked(): List<Track> {
+        val revision = store.revision("tracks")
+        if (loaded && revision == cachedRevision) return cachedTracks
+        val tracks = decodeTracksLocked(store.database.records().list("tracks"))
+        cachedRevision = revision
+        // A transaction may roll back after this read, so its result is checked against the store again outside it.
+        loaded = !store.inTransaction()
+        return tracks
+    }
     private fun decodeTracksLocked(records: List<me.d3sox.nevumi.storage.StoredRecord>): List<Track> {
         if (records != cachedRecords) {
             val previous = cachedRecords.associateBy { it.key }
@@ -150,9 +162,9 @@ class MusicLibrary(private val store: MusicStore) {
         return LocalFolderRules(settings?.includeFolders.orEmpty(), settings?.excludeFolders.orEmpty())
     }
 
+    /** The library after each change to a track, at most ten times a second while a scan writes continuously. */
     @OptIn(kotlinx.coroutines.FlowPreview::class)
-    fun observe(): Flow<List<Track>> = store.database.records().observe("tracks").distinctUntilChanged().sample(100)
-        .map { records -> decodeTracks(records) }
+    fun observe(): Flow<List<Track>> = store.database.records().observeRevision("tracks").distinctUntilChanged().sample(100).map { loadTracks() }
 
     internal suspend fun rememberLocalRoot(location: String) {
         store.put("library-root:${location.encodeUtf8().sha256().hex()}", "library-roots", LibraryRoot(location))
@@ -179,7 +191,7 @@ class MusicLibrary(private val store: MusicStore) {
     suspend fun tracks(query: LibraryQuery): List<Track> {
         val history = query.sort in setOf(LibrarySort.PLAY_COUNT, LibrarySort.LAST_PLAYED) || query.playCountFrom != null ||
             query.playCountTo != null || query.lastPlayedWithinDays != null || query.notPlayedWithinDays != null
-        val tracks = decodeTracks(store.database.records().list("tracks"))
+        val tracks = loadTracks()
         return if (query == LibraryQuery()) tracks else filterTracks(tracks, query,
             if (history) listeningStatistics(store.list<Listen>("listens")) else emptyMap())
     }
@@ -206,7 +218,7 @@ class MusicLibrary(private val store: MusicStore) {
     private suspend fun recordingCandidates(recordingId: String): List<Track> {
         val ids = decoded.withLock {
             val index = recordings ?: HashMap<String, MutableSet<String>>().also { index ->
-                for (track in decodeTracksLocked(store.database.records().list("tracks"))) {
+                for (track in loadTracksLocked()) {
                     track.metadata.recordingId.takeIf { it.isNotBlank() }?.let { index.getOrPut(it.lowercase()) { mutableSetOf() }.add(track.id) }
                 }
                 recordings = index

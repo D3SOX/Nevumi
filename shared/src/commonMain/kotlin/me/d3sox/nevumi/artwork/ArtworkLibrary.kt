@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import okio.ByteString.Companion.encodeUtf8
 import okio.ByteString.Companion.toByteString
 import okio.FileSystem
+import okio.Path
 import okio.Path.Companion.toPath
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.sync.Mutex
@@ -19,6 +20,9 @@ class ArtworkLibrary(private val directory: String) {
     private val mutableChanges = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 128,
         onBufferOverflow = BufferOverflow.DROP_OLDEST)
     internal val changes = mutableChanges.asSharedFlow()
+    // The library asks for every song's cover after each refresh; one directory listing answers all of them.
+    private val indexing = Mutex()
+    private var index: HashMap<String, String>? = null
     suspend fun fetch(trackId: String, client: NavidromeClient, coverId: String) = fetch(listOf(trackId), client, coverId)
 
     /** Downloads a cover once and stores it for every track that shares it, such as all songs of an album. */
@@ -36,8 +40,9 @@ class ArtworkLibrary(private val directory: String) {
      * as on Navidrome, so a library refresh downloads new or changed covers and an interrupted refresh resumes where it stopped.
      */
     suspend fun fetchChanged(trackIds: Collection<String>, client: NavidromeClient, coverId: String) {
+        val index = index()
         val missing = withContext(Dispatchers.IO) {
-            trackIds.toSet().filter { id -> existingPath(id) == null || coverIdFile(id).let {
+            trackIds.toSet().filter { id -> index[key(id)] == null || coverIdFile(id).let {
                 FileSystem.SYSTEM.metadataOrNull(it) == null || FileSystem.SYSTEM.read(it) { readUtf8() } != coverId
             } }
         }
@@ -53,19 +58,42 @@ class ArtworkLibrary(private val directory: String) {
         store(trackId, artworkPreview(original))
     } }
 
-    private fun coverIdFile(trackId: String) = directory.toPath() / "${trackId.encodeUtf8().sha256().hex()}.cover"
+    private fun key(trackId: String) = trackId.encodeUtf8().sha256().hex()
+    private fun coverIdFile(trackId: String) = directory.toPath() / "${key(trackId)}.cover"
 
-    private fun store(trackId: String, bytes: ByteArray) {
+    /** Reads the stored paths once; later saves and removals keep the index current. */
+    private suspend fun index(): HashMap<String, String> = indexing.withLock {
+        index ?: withContext(Dispatchers.IO) {
+            val fs = FileSystem.SYSTEM
+            val root = directory.toPath()
+            val names = fs.listOrNull(root)?.map { it.name }.orEmpty()
+            val images = names.filterTo(HashSet()) { it.endsWith(".image") }
+            val paths = HashMap<String, String>()
+            for (name in names) {
+                if (!name.endsWith(".current")) continue
+                val key = name.removeSuffix(".current")
+                val hash = runCatching { fs.read(root / name) { readUtf8() } }.getOrNull() ?: continue
+                if (hash.matches(hashPattern) && "$key-$hash.image" in images) paths[key] = (root / "$key-$hash.image").toString()
+            }
+            paths
+        }.also { index = it }
+    }
+
+    private suspend fun indexed(key: String, path: String?) = indexing.withLock {
+        index?.let { if (path == null) it.remove(key) else it[key] = path }
+    }
+
+    private suspend fun store(trackId: String, bytes: ByteArray) {
         val fs = FileSystem.SYSTEM
         val root = directory.toPath()
         fs.createDirectories(root)
         // Any other image replaces the server cover, so the next refresh downloads it again.
         fs.delete(coverIdFile(trackId), mustExist = false)
-        val key = trackId.encodeUtf8().sha256().hex()
+        val key = key(trackId)
         val hash = bytes.toByteString().sha256().hex()
         val destination = root / "$key-$hash.image"
         val index = root / "$key.current"
-        val previous = existingPath(trackId)?.toPath()
+        val previous = storedPath(trackId)
         val temporary = root / "${Uuid.random()}.part"
         try {
             fs.write(temporary) { write(bytes) }
@@ -73,26 +101,29 @@ class ArtworkLibrary(private val directory: String) {
             fs.write(temporary) { writeUtf8(hash) }
             fs.atomicMove(temporary, index)
             if (previous != null && previous != destination) fs.delete(previous, mustExist = false)
+            indexed(key, destination.toString())
             mutableChanges.tryEmit(trackId to destination.toString())
         } finally { fs.delete(temporary, mustExist = false) }
     }
 
-    suspend fun paths(trackIds: List<String>): Map<String, String> = withContext(Dispatchers.IO) {
-        trackIds.mapNotNull { id -> existingPath(id)?.let { id to it } }.toMap()
+    suspend fun paths(trackIds: List<String>): Map<String, String> {
+        val index = index()
+        return trackIds.mapNotNull { id -> index[key(id)]?.let { id to it } }.toMap()
     }
 
-    suspend fun path(trackId: String): String? = withContext(Dispatchers.IO) { existingPath(trackId) }
+    suspend fun path(trackId: String): String? = index()[key(trackId)]
 
-    private fun existingPath(trackId: String): String? {
-        val key = trackId.encodeUtf8().sha256().hex()
+    /** The stored image according to the files on disk, for writers that must see other writers' changes. */
+    private fun storedPath(trackId: String): Path? {
+        val key = key(trackId)
         val fs = FileSystem.SYSTEM
         val root = directory.toPath()
         val index = root / "$key.current"
         if (fs.metadataOrNull(index)?.size != 64L) return null
         val hash = fs.read(index) { readUtf8() }
-        if (!hash.matches(Regex("[0-9a-f]{64}"))) return null
+        if (!hash.matches(hashPattern)) return null
         val path = root / "$key-$hash.image"
-        return path.toString().takeIf { fs.metadataOrNull(path)?.isRegularFile == true }
+        return path.takeIf { fs.metadataOrNull(path)?.isRegularFile == true }
     }
 
     suspend fun read(trackId: String): ByteArray? = withContext(Dispatchers.IO) {
@@ -100,10 +131,13 @@ class ArtworkLibrary(private val directory: String) {
     }
 
     suspend fun remove(trackId: String) = writes.withLock { withContext(Dispatchers.IO) {
-        val previous = path(trackId)?.toPath()
+        val previous = storedPath(trackId)
         FileSystem.SYSTEM.delete(coverIdFile(trackId), mustExist = false)
-        FileSystem.SYSTEM.delete(directory.toPath() / "${trackId.encodeUtf8().sha256().hex()}.current", mustExist = false)
+        FileSystem.SYSTEM.delete(directory.toPath() / "${key(trackId)}.current", mustExist = false)
         if (previous != null) FileSystem.SYSTEM.delete(previous, mustExist = false)
+        indexed(key(trackId), null)
         mutableChanges.tryEmit(trackId to null)
     } }
+
+    private companion object { val hashPattern = Regex("[0-9a-f]{64}") }
 }

@@ -36,6 +36,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.IO)
     private val wake = Channel<Unit>(Channel.CONFLATED)
+    private val playlists = Playlists(store, library = library)
     private var started = false
 
     fun start() {
@@ -92,7 +93,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
     suspend fun publishPlaylist(id: String) {
         val connection = requireNotNull(client()) { "Connect to your music server before publishing a playlist" }
         store.transaction {
-            val playlist = requireNotNull(Playlists(store).get(id)) { "Playlist is missing" }
+            val playlist = requireNotNull(playlists.get(id)) { "Playlist is missing" }
             require(playlist.server == null && playlist.rule == null) { "Publish a regular app playlist" }
             require(playlist.trackIds.all { trackId -> library.findTrack(trackId)?.sources?.any {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
@@ -167,7 +168,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
             it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
         }.map { it.location to track.id } }.toMap()
         val remotes = if (!changedOnly) connection.playlists() else {
-            val known = Playlists(store).all().mapNotNull { it.server?.takeIf { link -> link.serverId == connection.serverId && link.id != null } }
+            val known = playlists.all().mapNotNull { it.server?.takeIf { link -> link.serverId == connection.serverId && link.id != null } }
                 .associate { it.id to it.changed }
             // Servers that omit change times get every playlist downloaded again.
             connection.playlistVersions().filter { (id, changed) -> changed.isEmpty() || known[id] != changed }.keys.map { connection.playlist(it) }
@@ -180,7 +181,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                         (it.server.id == null && it.pendingSync && remote.owner == connection.username && remote.name == "Nevumi pending ${it.id}"))
                 }?.id ?: "server-playlist:${connection.serverId}:${remote.id}"
                 if (store.read<PlaylistRemoval>("playlist-removal:$id") != null) return@transaction null
-                val previous = Playlists(store).get(id)
+                val previous = playlists.get(id)
                 if (previous?.pendingSync == true) return@transaction null
                 val ids = remote.songIds.map { mapping[it] ?: if (changedOnly) return@transaction null
                     else throw IllegalArgumentException("Refresh the server library before importing its playlists") }
@@ -206,7 +207,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 catch (error: Exception) {
                     // A missing cover must not prevent importing the playlist; forget its change time so the next pull retries it.
                     store.transaction {
-                        val current = Playlists(store).get(id)
+                        val current = playlists.get(id)
                         current?.server?.let { store.put("playlist:$id", "playlists", current.copy(server = it.copy(changed = ""))) }
                     }
                     if (!changedOnly && error is NavidromeRequestException && error.serverUnavailable) throw error
@@ -282,7 +283,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 if (store.read<PlaylistRemoval>(key) == removal) store.database.records().delete(key)
             }
         }
-        for (playlist in Playlists(store).all().filter { it.pendingSync && it.conflict == null && it.server?.serverId == connection.serverId }) attempt {
+        for (playlist in playlists.all().filter { it.pendingSync && it.conflict == null && it.server?.serverId == connection.serverId }) attempt {
             val songIds = serverSongIds(playlist, connection)
             var link = requireNotNull(playlist.server)
             if (link.id == null) {
@@ -291,7 +292,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 val saved = pendingPlaylist(connection, playlist.id) ?: connection.savePlaylist(provisional, songIds, description = playlist.description)
                 link = link.copy(id = saved.id, baselineName = saved.name, baselineSongIds = saved.songIds, baselineDescription = saved.description)
                 val retained = store.transaction {
-                    val current = Playlists(store).get(playlist.id)
+                    val current = playlists.get(playlist.id)
                     if (current == null) {
                         val key = "playlist-removal:${playlist.id}"
                         store.read<PlaylistRemoval>(key)?.let { removal ->
@@ -313,7 +314,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                     track.sources.any { it.kind == SourceKind.SERVER && it.location == songId && it.id.startsWith("server:${connection.serverId}:") }
                 }) { "Refresh the server library before resolving this playlist" }.id }
                 store.transaction {
-                    val current = Playlists(store).get(playlist.id) ?: return@transaction
+                    val current = playlists.get(playlist.id) ?: return@transaction
                     store.put("playlist:${playlist.id}", "playlists", current.copy(
                         conflict = PlaylistConflict(remote.name, remote.songIds, remoteTracks, description = remote.description)))
                 }
@@ -321,7 +322,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
             }
             val saved = if (alreadySaved) remote else connection.savePlaylist(playlist.name, songIds, link.id, description = playlist.description)
             store.transaction {
-                val current = Playlists(store).get(playlist.id) ?: return@transaction
+                val current = playlists.get(playlist.id) ?: return@transaction
                 store.put("playlist:${playlist.id}", "playlists", current.copy(
                     server = link.copy(baselineName = saved.name, baselineSongIds = saved.songIds, baselineDescription = saved.description),
                     pendingSync = current.revision != playlist.revision))

@@ -29,8 +29,15 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
         append(library.localFolderStamp())
         MediaStore.getExternalVolumeNames(context).sorted().forEach { volume ->
             append('|').append(volume).append(':').append(MediaStore.getVersion(context, volume))
-                .append(':').append(MediaStore.getGeneration(context, volume))
         }
+        // A volume's generation also moves for photos and downloads; only the audio rows decide whether to rescan.
+        var count = 0L
+        var generation = 0L
+        context.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Audio.Media.GENERATION_MODIFIED),
+            "${MediaStore.Audio.Media.IS_TRASHED} = 0 AND ${MediaStore.Audio.Media.IS_PENDING} = 0", null, null)?.use { cursor ->
+            while (cursor.moveToNext()) { count++; generation = maxOf(generation, cursor.getLong(0)) }
+        }
+        append("|audio:").append(count).append(':').append(generation)
     }
 
     override suspend fun pendingRefreshLocations(): List<String> = withContext(Dispatchers.IO) {

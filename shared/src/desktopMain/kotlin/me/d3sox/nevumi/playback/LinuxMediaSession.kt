@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import org.freedesktop.dbus.annotations.PropertiesEmitsChangedSignal.EmitChangeSignal
 import org.freedesktop.dbus.DBusPath
 import org.freedesktop.dbus.TypeRef
@@ -80,7 +81,13 @@ class LinuxMediaSession(private val controller: MusicController, address: String
         scope.launch {
             var previous = GetAll("org.mpris.MediaPlayer2.Player").filterKeys { it != "Position" }
             var wasPlaying = controller.state.value.playback.playing
-            combine(controller.state, stopped) { state, _ -> state }.collect { state ->
+            // Playback status arrives many times per second; only the published values decide whether anything is sent.
+            combine(controller.state, stopped) { state, stopped -> state.playback.let { playback ->
+                listOf(playback.trackId, playback.entryId, playback.playing, playback.ended, playback.error, playback.durationMs,
+                    playback.volume, playback.speed, state.queue.unshuffledEntryIds != null, state.queue.repeatMode,
+                    state.queue.currentIndex, state.queue.entries.size, state.artwork[playback.trackId], stopped)
+            } }.distinctUntilChanged().collect {
+                val state = controller.state.value
                 if (state.playback.playing && !wasPlaying) stopped.value = false
                 wasPlaying = state.playback.playing
                 val current = GetAll("org.mpris.MediaPlayer2.Player")

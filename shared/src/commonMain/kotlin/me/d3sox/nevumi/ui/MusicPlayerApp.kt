@@ -62,16 +62,22 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     val waveformReader = audioWaveforms ?: rememberAudioWaveforms()
     val waveforms = remember(waveformReader) { me.d3sox.nevumi.playback.PreparedAudioWaveforms(waveformReader) }
     DisposableEffect(waveforms) { onDispose { waveforms.close() } }
-    val waveformSources = remember(state.tracks, state.preferences.sourcePriority, state.queue.entries, state.queue.currentEntryId) {
+    // Newest files first, so a fresh library prepares recent additions before the rest; sorted once per library change.
+    val waveformCandidates = rememberDerived(null, listOf(state.preferences.sourcePriority), listOf(state.tracks)) {
+        val priority = state.preferences.sourcePriority
+        state.tracks.sortedByDescending { track -> track.sources.maxOfOrNull { it.modifiedAt } ?: 0 }.mapNotNull { track ->
+            track.sources.sortedBy { priority.indexOf(it.kind) }
+                .firstOrNull { it.available && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER }
+                ?.takeIf { track.metadata.durationMs > 0 }?.let { track.id to (it to track.metadata.durationMs) }
+        }
+    }
+    // The queue's upcoming songs move to the front on each song change without sorting the whole library again.
+    val waveformSources = rememberDerived(null, emptyList(), listOf(waveformCandidates, state.queue.entries, state.queue.currentEntryId)) {
         val upcoming = state.queue.entries.drop(state.queue.currentIndex.coerceAtLeast(0)).map { it.trackId }.distinct()
-            .mapIndexed { index, id -> id to index }.toMap()
-        state.tracks.sortedWith(compareBy<me.d3sox.nevumi.library.Track> {
-            upcoming[it.id] ?: Int.MAX_VALUE
-        }.thenByDescending { track -> track.sources.maxOfOrNull { it.modifiedAt } ?: 0 }).mapNotNull { track ->
-        track.sources.sortedBy { state.preferences.sourcePriority.indexOf(it.kind) }
-            .firstOrNull { it.available && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER }
-            ?.takeIf { track.metadata.durationMs > 0 }?.let { it to track.metadata.durationMs }
-    } }
+            .withIndex().associate { it.value to it.index }
+        val (queued, rest) = waveformCandidates.partition { it.first in upcoming }
+        (queued.sortedBy { upcoming.getValue(it.first) } + rest).map { it.second }
+    }
     val prepareWaveforms = state.preferences.precomputeWaveforms && state.libraryReady && !state.loading &&
         state.localScan == null &&
         state.downloads.values.none { it.status == me.d3sox.nevumi.downloads.DownloadStatus.DOWNLOADING }

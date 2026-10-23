@@ -32,7 +32,7 @@ class DownloadService : JobService() {
     override fun onCreate() {
         super.onCreate()
         val notifications = getSystemService(NotificationManager::class.java)
-        val progress = (application as MusicApplication).controller.state.map { transferProgress(it) }.distinctUntilChanged()
+        val progress = (application as MusicApplication).controller.state.transfers().map { transferProgress(it) }.distinctUntilChanged()
         scope.launch {
             combine(progress, visibleJobs, backgroundJobs) { update, visible, background -> update.takeIf { visible == 0 && background > 0 } to visible }
                 .conflate().collect { (update, visible) ->
@@ -59,7 +59,7 @@ class DownloadService : JobService() {
         val task = scope.launch(start = CoroutineStart.LAZY) {
             var retry = false
             val progress = if (visibleTransfer) launch {
-                app.controller.state.map { transferProgress(it) }.distinctUntilChanged().sample(1_000)
+                app.controller.state.transfers().map { transferProgress(it) }.distinctUntilChanged().sample(1_000)
                     .collect { progress -> showTransfer(params, progress) }
             } else null
             try {
@@ -102,6 +102,12 @@ class DownloadService : JobService() {
         scope.cancel()
         if (backgroundNotification) getSystemService(NotificationManager::class.java).cancel(TRANSFER_NOTIFICATION)
         super.onDestroy()
+    }
+
+    // Playback status arrives many times per second; only download and library changes can move the notification.
+    private fun kotlinx.coroutines.flow.Flow<AppState>.transfers() = distinctUntilChanged { previous, next ->
+        previous.downloads === next.downloads && previous.downloadBatch == next.downloadBatch &&
+            previous.playlistDownloads === next.playlistDownloads && previous.tracks === next.tracks
     }
 
     private data class TransferProgress(val title: String = "Nevumi", val text: String = "Downloading music", val percent: Int? = null,

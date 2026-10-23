@@ -15,25 +15,49 @@ internal data class LibrarySearchResults(val songs: List<Track>, val collections
     val count: Int get() = songs.size + collections.values.sumOf { it.size }
 }
 
-internal fun searchLibrary(tracks: List<Track>, playlists: List<Playlist>, text: String): LibrarySearchResults {
-    val query = text.trim()
-    if (query.isEmpty()) return LibrarySearchResults(emptyList(), emptyMap())
-    fun matches(vararg values: String) = values.any { it.contains(query, ignoreCase = true) }
-    fun groups(values: Map<String, List<Track>>) = values.entries.filter { it.key.isNotBlank() && matches(it.key) }
-        .sortedBy { it.key.lowercase() }.map { TrackCollection(it.key, it.key, it.value) }
-    val albums = tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
-        .filter { (key, _) -> key.first.isNotBlank() && matches(key.first, key.second) }
+/**
+ * The library prepared for searching: every song's searchable text in lowercase and the collections grouped and sorted
+ * once, so each keystroke only matches text instead of grouping the whole library again.
+ */
+internal class LibrarySearchIndex(tracks: List<Track>, playlists: List<Playlist>) {
+    private class Entry<T>(val value: T, val text: String)
+    private fun text(vararg values: String) = values.joinToString("\u0000").lowercase()
+    private val songs = tracks.map { track ->
+        val metadata = track.metadata
+        Triple(track, metadata.title.lowercase(), text(metadata.title, metadata.artist, metadata.album, metadata.albumArtist, *metadata.genres.toTypedArray()))
+    }.sortedWith(compareBy<Triple<Track, String, String>> { it.second }.thenBy { it.first.id }).map { Entry(it.first, it.third) }
+    private fun groups(values: Map<String, List<Track>>) = values.entries.filter { it.key.isNotBlank() }
+        .sortedBy { it.key.lowercase() }.map { Entry(TrackCollection(it.key, it.key, it.value), it.key.lowercase()) }
+    private val albums = tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
+        .filter { (key, _) -> key.first.isNotBlank() }
         .entries.sortedBy { it.key.first.lowercase() }.map { (key, songs) ->
-            TrackCollection("${key.first.length}:${key.first}${key.second}", key.first,
-                songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }), key.second)
+            Entry(TrackCollection("${key.first.length}:${key.first}${key.second}", key.first,
+                songs.sortedWith(compareBy<Track> { it.metadata.discNumber }.thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }), key.second),
+                text(key.first, key.second))
         }
-    val catalog = tracks.associateBy { it.id }
-    return LibrarySearchResults(filterTracks(tracks, LibraryQuery(text = query)), mapOf(
-        SearchType.ALBUMS to albums,
-        SearchType.ARTISTS to groups(tracks.groupBy { it.metadata.artist }),
-        SearchType.PLAYLISTS to playlists.filter { matches(it.name, it.description) }.sortedBy { it.name.lowercase() }
-            .map { TrackCollection(it.id, it.name, it.orderedTracks(catalog).map { entry -> entry.value }, it.description) },
-        SearchType.GENRES to groups(tracks.flatMap { track -> track.metadata.genres.map { it to track } }.groupBy({ it.first }, { it.second })),
-        SearchType.FOLDERS to groups(tracks.groupBy { it.metadata.folder }),
-    ))
+    private val artists = groups(tracks.groupBy { it.metadata.artist })
+    private val genres = groups(tracks.flatMap { track -> track.metadata.genres.map { it to track } }.groupBy({ it.first }, { it.second }))
+    private val folders = groups(tracks.groupBy { it.metadata.folder })
+    private val playlists = tracks.associateBy { it.id }.let { catalog ->
+        playlists.sortedBy { it.name.lowercase() }.map { playlist ->
+            Entry(TrackCollection(playlist.id, playlist.name, playlist.orderedTracks(catalog).map { entry -> entry.value }, playlist.description),
+                text(playlist.name, playlist.description))
+        }
+    }
+
+    fun search(text: String): LibrarySearchResults {
+        val query = text.trim().lowercase()
+        if (query.isEmpty()) return LibrarySearchResults(emptyList(), emptyMap())
+        fun <T> List<Entry<T>>.matching() = filter { query in it.text }.map { it.value }
+        return LibrarySearchResults(songs.matching(), mapOf(
+            SearchType.ALBUMS to albums.matching(),
+            SearchType.ARTISTS to artists.matching(),
+            SearchType.PLAYLISTS to playlists.matching(),
+            SearchType.GENRES to genres.matching(),
+            SearchType.FOLDERS to folders.matching(),
+        ))
+    }
 }
+
+internal fun searchLibrary(tracks: List<Track>, playlists: List<Playlist>, text: String): LibrarySearchResults =
+    LibrarySearchIndex(tracks, playlists).search(text)

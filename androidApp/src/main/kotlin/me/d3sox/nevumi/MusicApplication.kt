@@ -72,7 +72,8 @@ class MusicApplication : Application() {
                 if (location.startsWith("content:")) requireNotNull(contentResolver.openInputStream(Uri.parse(location))) { "The local music file is unavailable" }
                 else File(location).inputStream()
             }, changes = serverChanges, artwork = artwork, tailscale = tunnel::serverFiles)
-        val playlists = Playlists(store)
+        val history = ListeningHistory(store, library)
+        val playlists = Playlists(store, library = library, history = history)
         downloadNetwork = AndroidDownloadNetwork(this)
         downloadJobs = AndroidDownloadJobs(this, MusicPreferences(store), playlists) { mutableDownloadNotifications.tryEmit(Unit) }
         offline = OfflineMusic(store, library, connection::client, File(filesDir, "audio").path, playlists, downloadNetwork.state,
@@ -85,7 +86,7 @@ class MusicApplication : Application() {
             connection, localSources, offline, playlists, AndroidAudioAccess(this)::available,
             MusicPreferences(store), artwork, serverChanges,
             AndroidFileEdits(this, store, library, File(filesDir, "file-edits").path, mediaWriteRequests::request, artwork),
-            listeningHistory = ListeningHistory(store, library),
+            listeningHistory = history,
             scrobbling = Scrobbling(store, library, http, credentials, downloadNetwork.state, connection::client),
             equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http), serverFiles = serverFiles,
             pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,

@@ -76,7 +76,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                     val action = if (offset > 0) state.preferences.swipeRight else state.preferences.swipeLeft
                     Column(Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(action.icon(track.favorite, track.rating, state.playlists.any { track.id in it.trackIds }, availableOffline).vector, null, Modifier.size(24.dp))
+                        Icon(action.icon(track.favorite, track.rating, track.id in state.playlistTrackIds, availableOffline).vector, null, Modifier.size(24.dp))
                         Text(action.label(track.favorite, availableOffline), style = MaterialTheme.typography.labelSmall,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
@@ -154,7 +154,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.semantics { contentDescription = "Duration: ${playbackTime(track.metadata.durationMs)}" })
                     if (quickAction) {
-                        val member = state.playlists.any { track.id in it.trackIds }
+                        val member = track.id in state.playlistTrackIds
                         val active = action == TrackAction.FAVORITE && track.favorite || action == TrackAction.RATE && track.rating > 0 ||
                             action == TrackAction.ADD_TO_PLAYLIST && member || action == TrackAction.DOWNLOAD && availableOffline
                         IconButton(onClick = { performAction(action) }, Modifier.size(48.dp).semantics {

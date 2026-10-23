@@ -127,27 +127,42 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
         }
     }
 
-    private fun publicItem(item: MediaItem) = MediaItem.Builder().setMediaId(item.mediaId)
+    private fun artworkFor(item: MediaItem): ByteArray? =
+        artworkData.takeIf { item.mediaMetadata.extras?.getString("trackId") == artworkKey?.first }
+
+    // Public controllers need metadata and an opaque queue identifier, never an authenticated URI or source ID.
+    private fun publicItem(item: MediaItem, artwork: ByteArray?) = MediaItem.Builder().setMediaId(item.mediaId)
         .setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(null).setArtworkUri(null)
-            .setArtworkData(artworkData.takeIf { item.mediaMetadata.extras?.getString("trackId") == artworkKey?.first },
-                MediaMetadata.PICTURE_TYPE_FRONT_COVER).build()).build()
+            .setArtworkData(artwork, MediaMetadata.PICTURE_TYPE_FRONT_COVER).build()).build()
 
     override fun getPlaceholderMediaItemData(mediaItem: MediaItem): MediaItemData =
-        super.getPlaceholderMediaItemData(publicItem(mediaItem))
+        super.getPlaceholderMediaItemData(publicItem(mediaItem, artworkFor(mediaItem)))
+
+    private fun itemData(item: MediaItem, durationUs: Long, artwork: ByteArray?) = MediaItemData.Builder(item.mediaId)
+        .setMediaItem(publicItem(item, artwork)).setIsSeekable(true).setDurationUs(durationUs).build()
 
     private data class Timeline(val items: List<MediaItem>, val artworkKey: Pair<String?, String?>?, val artworkData: ByteArray?,
         val entryId: String?, val durationMs: Long, val index: Int, val data: List<MediaItemData>)
     private var timeline: Timeline? = null
+    private var plainItems: List<MediaItem>? = null
+    private var plainData: List<MediaItemData> = emptyList()
 
     // The state is rebuilt on every position tick; mapping thousands of queue items each time would stall the main thread.
+    // Between queue edits only the current song's duration and artwork change, so the other items keep their data.
     private fun timeline(): Timeline {
         timeline?.takeIf { it.items === items && it.artworkKey == artworkKey && it.artworkData === artworkData &&
             it.entryId == playback.entryId && it.durationMs == playback.durationMs }?.let { return it }
+        if (plainItems !== items) {
+            plainData = items.map { itemData(it, C.TIME_UNSET, null) }
+            plainItems = items
+        }
         val index = items.indexOfFirst { it.mediaId == playback.entryId }.coerceAtLeast(0)
-        val data = items.map { item ->
-            // Public controllers need metadata and an opaque queue identifier, never an authenticated URI or source ID.
-            MediaItemData.Builder(item.mediaId).setMediaItem(publicItem(item)).setIsSeekable(true)
-                .setDurationUs(if (item.mediaId == playback.entryId && playback.durationMs > 0) playback.durationMs * 1_000 else C.TIME_UNSET).build()
+        val data = plainData.toMutableList()
+        items.forEachIndexed { position, item ->
+            val artwork = artworkFor(item)
+            val current = item.mediaId == playback.entryId
+            if (current || artwork != null)
+                data[position] = itemData(item, if (current && playback.durationMs > 0) playback.durationMs * 1_000 else C.TIME_UNSET, artwork)
         }
         return Timeline(items, artworkKey, artworkData, playback.entryId, playback.durationMs, index, data).also { timeline = it }
     }

@@ -49,7 +49,8 @@ fun main(arguments: Array<String>) {
     val connection = NavidromeConnection(store, http, credentials, tunnel::musicServerUrl)
     val artwork = ArtworkLibrary(File(directory, "artwork").path)
     val serverChanges = NavidromeChanges(store, library, artwork, connection::client)
-    val playlists = Playlists(store)
+    val history = ListeningHistory(store, library)
+    val playlists = Playlists(store, library = library, history = history)
     val downloadNetwork = try { LinuxDownloadNetwork() }
         catch (error: Exception) { System.err.println("NetworkManager monitoring unavailable: ${error.message}"); null }
     val offline = OfflineMusic(store, library, connection::client, File(directory, "audio").path, playlists,
@@ -63,7 +64,7 @@ fun main(arguments: Array<String>) {
         connection, localFiles, offline, playlists, preferences = MusicPreferences(store), artwork = artwork,
         serverChanges = serverChanges,
         fileEdits = LocalFileEdits(store, library, File(directory, "file-edits").path, localSources = LocalFiles(library, artwork)),
-        listeningHistory = ListeningHistory(store, library),
+        listeningHistory = history,
         scrobbling = Scrobbling(store, library, http, credentials, offline.network, connection::client),
         equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http),
         serverFiles = me.d3sox.nevumi.sftp.SftpConnection(store, library, connection::client, credentials,

@@ -13,8 +13,13 @@ import androidx.room.immediateTransaction
 import androidx.room.useWriterConnection
 import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.SQLiteDriver
 import androidx.sqlite.execSQL
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -34,6 +39,9 @@ interface RecordDao {
     @Query("SELECT value FROM records WHERE `key` = :key") suspend fun read(key: String): String?
     @Query("SELECT * FROM records WHERE kind = :kind ORDER BY `key`")
     suspend fun list(kind: String): List<StoredRecord>
+    @Query("SELECT `key` FROM records WHERE kind = :kind") suspend fun keys(kind: String): List<String>
+    @Query("SELECT COALESCE((SELECT revision FROM record_revisions WHERE kind = :kind), 0)")
+    suspend fun revision(kind: String): Long
     @Query("SELECT COALESCE((SELECT revision FROM record_revisions WHERE kind = :kind), 0)")
     fun observeRevision(kind: String): Flow<Long>
     @Query("SELECT * FROM record_revisions WHERE kind IN (:kinds) ORDER BY kind")
@@ -77,6 +85,21 @@ expect object MusicDatabaseConstructor : RoomDatabaseConstructor<MusicDatabase> 
     override fun initialize(): MusicDatabase
 }
 
+/**
+ * Write-ahead logging keeps the database consistent after a crash without a disk flush per commit, so the many small
+ * writes of a scan or of playback checkpoints stop waiting for storage. A power loss can only drop the last moments.
+ */
+internal fun SQLiteDriver.withRelaxedDurability(): SQLiteDriver = object : SQLiteDriver {
+    override fun open(fileName: String): SQLiteConnection = this@withRelaxedDurability.open(fileName).also {
+        it.execSQL("PRAGMA synchronous = NORMAL")
+    }
+}
+
+/** Marks the coroutines of a writer transaction, whose reads may see changes that are rolled back later. */
+private class WriterTransaction : AbstractCoroutineContextElement(WriterTransaction) {
+    companion object : CoroutineContext.Key<WriterTransaction>
+}
+
 class MusicStore internal constructor(internal val database: MusicDatabase) {
     internal val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     internal suspend inline fun <reified T> read(key: String): T? =
@@ -87,6 +110,10 @@ class MusicStore internal constructor(internal val database: MusicDatabase) {
     internal suspend inline fun <reified T> list(kind: String): List<T> =
         database.records().list(kind).map { json.decodeFromString<T>(it.value) }
     internal suspend fun <T> transaction(block: suspend () -> T): T =
-        database.useWriterConnection { connection -> connection.immediateTransaction { block() } }
+        database.useWriterConnection { connection -> connection.immediateTransaction { withContext(WriterTransaction()) { block() } } }
+    /** Whether the caller runs inside [transaction]; caches filled there must be verified again after it ends. */
+    internal suspend fun inTransaction(): Boolean = currentCoroutineContext()[WriterTransaction] != null
+    /** Counts the changes to this kind of record, so a cache can tell whether it is still current. */
+    internal suspend fun revision(kind: String): Long = database.records().revision(kind)
     fun close() = database.close()
 }

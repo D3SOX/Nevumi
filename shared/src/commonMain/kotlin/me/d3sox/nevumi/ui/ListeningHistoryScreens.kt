@@ -19,7 +19,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 internal fun ListeningHistoryScreen(state: AppState, controller: MusicController, tracks: List<Track>) {
-    val catalog = rememberDerived("history-catalog", listOf(tracks)) { tracks.associateBy { it.id } }
+    val catalog = rememberDerived("history-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
     val events = remember(state.listens, catalog) { state.listens.filter { it.trackId in catalog } }
     val songs = remember(events, catalog) { events.map { catalog.getValue(it.trackId) } }
     if (events.isEmpty()) Text("Your listening history will appear here.", Modifier.padding(24.dp))
@@ -36,9 +36,9 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
     var grouping by remember { mutableStateOf("Songs") }
     var selected by rememberSaveable(period, grouping) { mutableStateOf<String?>(null) }
     val now = rememberLibraryTime()
-    val report = rememberDerived("statistics-report", listOf(tracks, period), listOf(state.listens, now)) { listeningReport(state.listens, tracks, period, now) }
+    val report = rememberDerived("statistics-report", listOf(period), listOf(tracks, state.listens, now)) { listeningReport(state.listens, tracks, period, now) }
     val ranks = when (grouping) { "Artists" -> report.artists; "Albums" -> report.albums; "Genres" -> report.genres; else -> report.songs }
-    val catalog = rememberDerived("statistics-catalog", listOf(tracks)) { tracks.associateBy { it.id } }
+    val catalog = rememberDerived("statistics-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
     val songStatistics = remember(report) { report.songs.associate { it.trackIds.single() to ListeningStatistics(it.playCount, it.listenedMs, 0) } }
     AnimatedNavigation(selected, null, canGoBack = backEnabled && selected != null,
         onBack = { selected = null }, depth = { if (it == null) 0 else 1 }) { page ->
@@ -80,7 +80,7 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
 @Composable
 internal fun ListeningRecommendationsScreen(state: AppState, controller: MusicController, tracks: List<Track>) {
     val now = rememberLibraryTime()
-    val suggestions = rememberDerived("recommendations", listOf(tracks), listOf(state.listens, now)) { listeningRecommendations(state.listens, tracks, now = now) }
+    val suggestions = rememberDerived("recommendations", emptyList(), listOf(tracks, state.listens, now)) { listeningRecommendations(state.listens, tracks, now = now) }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("From your listening history. Songs played in the last 7 days are left out.",
