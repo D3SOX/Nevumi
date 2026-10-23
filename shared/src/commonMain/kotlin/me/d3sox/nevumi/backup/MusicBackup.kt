@@ -52,7 +52,10 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val tracks = library.tracks().associateBy { it.id }
         // Android names local folders relative to its storage, like "Music/Sky", which looks like a server folder; a folder that
         // holds a song from this device is local however it is written.
-        val localFolders = tracks.values.filter { track -> track.sources.any { it.kind == SourceKind.LOCAL } }.mapNotNullTo(HashSet()) { it.metadata.folder.ifBlank { null } }
+        // A folder that also holds server songs is the server's, and stays valid on another device connected to it.
+        fun folders(kind: SourceKind) = tracks.values.filter { track -> track.sources.any { it.kind == kind } }
+            .mapNotNullTo(HashSet()) { it.metadata.folder.ifBlank { null } }
+        val localFolders = folders(SourceKind.LOCAL) - folders(SourceKind.SERVER)
         fun isDeviceFolder(folder: String) = isDevicePath(folder) || folder in localFolders
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
         val settings = preferences.load().let { it.copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap(),
@@ -151,7 +154,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 if (backup.sort != existing.sort || backup.descending != existing.descending) {
                     playlists.setSort(existing.id, backup.sort, backup.descending); changed = true
                 }
-                val additions = songs.filterNot { it in existing.trackIds }
+                // Playlists may hold a song more than once, so only the occurrences the playlist lacks are added.
+                val present = existing.trackIds.groupingBy { it }.eachCount().toMutableMap()
+                val additions = songs.filter { id -> (present[id] ?: 0).let { count -> if (count > 0) { present[id] = count - 1; false } else true } }
                 if (backup.rule == null && additions.isNotEmpty()) {
                     playlists.append(existing.id, additions); changed = true
                 }

@@ -228,6 +228,11 @@ class MusicBackupTest {
         target.backup.restore(source.backup.export())
         assertEquals(setOf(LibraryQuery(ratingFrom = 4), LibraryQuery(favoritesOnly = true)),
             target.playlists.all().filter { it.name == "Mix" }.mapNotNull { it.rule }.toSet())
+        // A song the backup lists twice is added until the matched playlist has it twice too.
+        target.playlists.create("Twice", listOf(target.id(nightWalk.title)))
+        source.playlists.create("Twice", List(2) { source.id(nightWalk.title) })
+        target.backup.restore(source.backup.export())
+        assertEquals(List(2) { nightWalk.title }, target.titles(target.playlists.all().single { it.name == "Twice" }.trackIds))
         // A second restore matches each playlist once instead of adding more.
         target.backup.restore(text)
         assertEquals(3, target.playlists.all().count { it.name == "Road" })
