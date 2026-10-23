@@ -131,7 +131,7 @@ jobs:
           packages: ffmpeg mpv libsecret-tools openssh-server cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils
       - name: Build test artifacts before starting the emulator
         run: >-
-          ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx2g --max-workers=2
+          ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx4g --max-workers=2
           -Pkotlin.compiler.execution.strategy=in-process
           :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :shared:desktopTestClasses
       - name: Enable emulator hardware acceleration

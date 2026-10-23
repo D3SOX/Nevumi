@@ -152,8 +152,11 @@ class PlaybackTransferTest {
             phone.transferPlayback(devices[0].state.value.peers.single().deviceId).join()
             withTimeout(3_000) { desktop.engine.status.first { it.playing } }
             assertFalse(phone.engine.status.value.playWhenReady)
-            assertTrue(kotlin.math.abs(desktop.engine.status.value.positionMs - phone.engine.status.value.positionMs) < 250,
-                "Preparing a slow receiver must not rewind playback: source=${phone.engine.status.value.positionMs}, target=${desktop.engine.status.value.positionMs}")
+            // The receiver keeps playing after the handover, so on a loaded machine it can be well ahead; only a rewind is wrong.
+            val source = phone.engine.status.value.positionMs
+            val target = desktop.engine.status.value.positionMs
+            assertTrue(target >= source - 250 && target - source < 5_000,
+                "Preparing a slow receiver must not rewind playback: source=$source, target=$target")
         } finally {
             connected.complete(Unit)
             players.forEach { it.closeAndJoin() }; stores.forEach { it.close() }; directory.toFile().deleteRecursively()
