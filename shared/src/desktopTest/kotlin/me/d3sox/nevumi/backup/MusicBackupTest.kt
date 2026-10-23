@@ -34,6 +34,7 @@ import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.settings.CollectionLayout
+import me.d3sox.nevumi.queue.QueueOrigin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -102,7 +103,7 @@ class MusicBackupTest {
             Listen("listen-2", missingId, "play-2", 20_000, missing, 50_000, 50_000, 100_000)))
         preferences.update { it.copy(themeMode = ThemeMode.DARK, speed = 1.25, includeFolders = listOf("/home/someone/Music"),
             libraryFilter = LibraryQuery(folder = "/home/someone/Music/Sky"),
-            collectionLayouts = mapOf(LibraryTab.FOLDERS to CollectionLayout(order = listOf("/home/someone/Music/Sky", "Rock/Live")))) }
+            collectionLayouts = mapOf(LibraryTab.FOLDERS to CollectionLayout(order = listOf("/home/someone/Music/Sky", "\\\\nas\\music\\Sky", "Rock/Live")))) }
         equalizer.save("Warm", AudioEffects(enabled = true, preampDb = -2.0))
         store.put("scrobbling-profile:lb", "scrobbling-profiles", ScrobblingProfile("lb", ScrobblingService.LISTENBRAINZ, "listener",
             "https://api.listenbrainz.org", 5))
@@ -175,8 +176,10 @@ class MusicBackupTest {
     @Test
     fun theBackupContainsNoSecretsOrDevicePaths() = devices { source, _ ->
         source.fill()
+        source.queue.addSaved("Sky folder", QueueSnapshot(listOf(QueueEntry("f1", source.id(northern.title))), currentEntryId = "f1",
+            contextName = "/home/someone/Music/Sky", origin = QueueOrigin(LibraryTab.FOLDERS, "/home/someone/Music/Sky")), SavedQueueKind.SNAPSHOT, 2_000)
         val text = source.backup.export()
-        for (secret in source.vault.secrets.values + "viewer-password-secret" + "/home/someone/Music")
+        for (secret in source.vault.secrets.values + "viewer-password-secret" + "/home/someone/Music" + "nas\\\\music")
             assertFalse(secret in text, "The backup contains $secret")
         assertFalse("password" in text.lowercase())
         assertTrue("listener" in text && "https://music.test" in text && "music.test" in text)

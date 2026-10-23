@@ -12,6 +12,7 @@ import me.d3sox.nevumi.history.listeningStatistics
 import me.d3sox.nevumi.library.filterTracks
 import me.d3sox.nevumi.history.Scrobbling
 import me.d3sox.nevumi.history.ScrobblingService
+import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
@@ -65,7 +66,10 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
         }
         val savedQueues = queue.saved().filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
-            BackupSavedQueue(saved.name, saved.snapshot.copy(selectedSavedQueueId = null, origin = null), saved.kind, saved.capturedAt)
+            // A queue played from a local folder is named after its path, which device sync also replaces.
+            val folder = saved.snapshot.origin?.tab == LibraryTab.FOLDERS || isDevicePath(saved.snapshot.contextName)
+            BackupSavedQueue(saved.name, saved.snapshot.copy(selectedSavedQueueId = null, origin = null,
+                contextName = if (folder) "Library" else saved.snapshot.contextName), saved.kind, saved.capturedAt)
         }
         val listens = listened.map { it.copy(importedAt = null, metadata = it.metadata.copy(folder = "")) }
         val referenced = (tracks.values.filter { it.favorite || it.rating != 0 }.map { it.id } + playlists.flatMap { it.trackKeys } +
@@ -217,8 +221,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 /** The origin of listens restored from a backup, which were already scrobbled where they were played. */
 private const val BACKUP_ORIGIN = "backup"
 
-/** Local folders are absolute paths or content URIs; server folders are relative to the music library. */
-private fun isDevicePath(folder: String) = folder.startsWith("/") || "://" in folder || Regex("^[A-Za-z]:").containsMatchIn(folder)
+/** Local folders are absolute paths, Windows drive or network share paths, or content URIs; server folders are relative to the music library. */
+private fun isDevicePath(folder: String) = folder.startsWith("/") || folder.startsWith("\\\\") || "://" in folder ||
+    Regex("^[A-Za-z]:").containsMatchIn(folder)
 
 private fun Track.toBackup() = metadata.toBackup().copy(serverSources = sources.filter { it.kind == SourceKind.SERVER }.map { it.id },
     favorite = favorite, rating = rating)
