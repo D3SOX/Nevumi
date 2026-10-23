@@ -50,7 +50,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
     suspend fun export(appVersion: String = ""): String {
         val tracks = library.tracks().associateBy { it.id }
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
-        val settings = preferences.load().copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap())
+        val settings = preferences.load().let { it.copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap(),
+            libraryFilter = it.libraryFilter.copy(folder = it.libraryFilter.folder?.takeUnless(::isDevicePath))) }
         val listened = history.all()
         val playlists = playlists.all().map { playlist ->
             val rule = playlist.rule
@@ -140,16 +141,19 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         for (backup in document.savedQueues) {
             val entries = backup.snapshot.entries.mapNotNull { entry -> localId(entry.trackId)?.let { entry.copy(trackId = it) } }
             if (entries.isEmpty() || backup.name.isBlank()) continue
-            if (existingQueues.any { saved -> saved.name == backup.name.trim() && saved.snapshot.entries.map { it.trackId } == entries.map { it.trackId } }) continue
             val ids = entries.map { it.id }.toSet()
             val snapshot = backup.snapshot
             val currentKept = snapshot.currentEntryId in ids
-            queue.addSaved(backup.name, snapshot.copy(entries = entries,
+            val restored = snapshot.copy(entries = entries,
                 currentEntryId = if (currentKept) snapshot.currentEntryId else entries.first().id,
                 positionMs = if (currentKept) snapshot.positionMs else 0,
                 lastInsertedEntryId = snapshot.lastInsertedEntryId?.takeIf { it in ids },
-                unshuffledEntryIds = snapshot.unshuffledEntryIds?.filter { it in ids }, origin = null, selectedSavedQueueId = null),
-                if (backup.kind == SavedQueueKind.RECOVERY) SavedQueueKind.SNAPSHOT else backup.kind, backup.capturedAt)
+                unshuffledEntryIds = snapshot.unshuffledEntryIds?.filter { it in ids }, origin = null, selectedSavedQueueId = null)
+            val kind = if (backup.kind == SavedQueueKind.RECOVERY) SavedQueueKind.SNAPSHOT else backup.kind
+            // Only an identical saved queue counts as restored; its position, sections and order matter as much as its songs.
+            if (existingQueues.any { saved -> saved.name == backup.name.trim() && saved.kind == kind &&
+                    saved.snapshot.copy(origin = null, selectedSavedQueueId = null) == restored }) continue
+            queue.addSaved(backup.name, restored, kind, backup.capturedAt)
             savedQueues++
         }
 

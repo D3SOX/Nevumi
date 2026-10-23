@@ -98,7 +98,8 @@ class MusicBackupTest {
             currentEntryId = "e3", positionMs = 5_000, contextName = "Road"), SavedQueueKind.SNAPSHOT, 1_000)
         history.import(listOf(Listen("listen-1", northernId, "play-1", 10_000, northern, 150_000, 150_000, 200_000, ended = true),
             Listen("listen-2", missingId, "play-2", 20_000, missing, 50_000, 50_000, 100_000)))
-        preferences.update { it.copy(themeMode = ThemeMode.DARK, speed = 1.25, includeFolders = listOf("/home/someone/Music")) }
+        preferences.update { it.copy(themeMode = ThemeMode.DARK, speed = 1.25, includeFolders = listOf("/home/someone/Music"),
+            libraryFilter = LibraryQuery(folder = "/home/someone/Music/Sky")) }
         equalizer.save("Warm", AudioEffects(enabled = true, preampDb = -2.0))
         store.put("scrobbling-profile:lb", "scrobbling-profiles", ScrobblingProfile("lb", ScrobblingService.LISTENBRAINZ, "listener",
             "https://api.listenbrainz.org", 5))
@@ -125,7 +126,7 @@ class MusicBackupTest {
         target.sameSongs()
         val summary = target.backup.restore(source.backup.export("1.2.3"))
 
-        assertEquals(source.preferences.load().copy(includeFolders = emptyList()), target.preferences.load())
+        assertEquals(source.preferences.load().copy(includeFolders = emptyList(), libraryFilter = LibraryQuery()), target.preferences.load())
         val playlists = target.playlists.all().associateBy { it.name }
         assertEquals(setOf("Road", "Music ▸ Night", "Loved"), playlists.keys)
         assertEquals(listOf("Northern Light", "Long Way Home", "Night Walk"), target.titles(playlists.getValue("Road").trackIds))
