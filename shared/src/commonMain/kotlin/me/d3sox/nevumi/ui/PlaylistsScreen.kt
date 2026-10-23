@@ -47,7 +47,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
     LaunchedEffect(destination) {
         if (destination?.tab == me.d3sox.nevumi.library.LibraryTab.PLAYLISTS && destination.revision != handledDestination) {
             val id = destination.collectionId
-            if (id?.startsWith(FOLDER_PREFIX) == true) { folder = id.removePrefix(FOLDER_PREFIX); selected = null }
+            if (id?.startsWith(PLAYLIST_FOLDER_PREFIX) == true) { folder = id.removePrefix(PLAYLIST_FOLDER_PREFIX); selected = null }
             else { selected = id; folder = null }
             handledDestination = destination.revision
         }
@@ -87,22 +87,22 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         folderPath(folderSegments(path).take((page?.let(::folderSegments)?.size ?: 0) + 1)) to playlist
     }.groupBy({ it.first }, { it.second }).map { (name, contents) ->
         val trackIds = contents.flatMap(Playlist::trackIds).distinct()
-        CollectionItem(FOLDER_PREFIX + name, folderSegments(name).last(), countLabel(contents.size, "playlist"), null, AppIcon.FOLDER,
+        CollectionItem(PLAYLIST_FOLDER_PREFIX + name, folderSegments(name).last(), countLabel(contents.size, "playlist"), null, AppIcon.FOLDER,
             songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0, trackIds = trackIds)
     }
     fun closePlaylist() { folder = openFolder; selected = null }
-    fun open(id: String) { if (id.startsWith(FOLDER_PREFIX)) folder = id.removePrefix(FOLDER_PREFIX) else selected = id }
+    fun open(id: String) { if (id.startsWith(PLAYLIST_FOLDER_PREFIX)) folder = id.removePrefix(PLAYLIST_FOLDER_PREFIX) else selected = id }
     if (rearranging && backEnabled && selected == null) PlatformBackHandler(finishRearranging)
-    val current = selected ?: openFolder?.let { FOLDER_PREFIX + it }
-    val parent = (if (selected != null) openFolder else openFolder?.let(::parentFolder))?.let { FOLDER_PREFIX + it }
+    val current = selected ?: openFolder?.let { PLAYLIST_FOLDER_PREFIX + it }
+    val parent = (if (selected != null) openFolder else openFolder?.let(::parentFolder))?.let { PLAYLIST_FOLDER_PREFIX + it }
     AnimatedNavigation(current, parent, canGoBack = backEnabled && current != null,
         onBack = { if (selected != null) closePlaylist() else folder = openFolder?.let(::parentFolder) }, depth = { page -> when {
             page == null -> 0
-            page.startsWith(FOLDER_PREFIX) -> folderSegments(page.removePrefix(FOLDER_PREFIX)).size
+            page.startsWith(PLAYLIST_FOLDER_PREFIX) -> folderSegments(page.removePrefix(PLAYLIST_FOLDER_PREFIX)).size
             else -> 1 + (state.playlists.firstOrNull { it.id == page }?.folder?.let(::folderSegments)?.size ?: 0)
         } }) { page ->
     val playlist = state.playlists.firstOrNull { it.id == page }
-    val pageFolder = page?.takeIf { playlist == null && it.startsWith(FOLDER_PREFIX) }?.removePrefix(FOLDER_PREFIX)
+    val pageFolder = page?.takeIf { playlist == null && it.startsWith(PLAYLIST_FOLDER_PREFIX) }?.removePrefix(PLAYLIST_FOLDER_PREFIX)
     Column(Modifier.fillMaxSize()) {
         if (fileBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         fileMessage?.let { Text(it, Modifier.padding(horizontal = 24.dp)) }
@@ -215,7 +215,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
     if (renaming && playlist != null) EditPlaylistDialog(playlist, state, controller) { renaming = false }
 }
 
-private const val FOLDER_PREFIX = "playlist-folder:"
+internal const val PLAYLIST_FOLDER_PREFIX = "playlist-folder:"
 private const val SECTION_PREFIX = "playlist-section:"
 
 /** A playlist picker row: a section or folder header (keyed by its name or path) or a playlist (keyed by its id). */
@@ -259,7 +259,7 @@ private fun pickerRows(playlists: List<Playlist>, sort: PlaylistPickerSort, layo
         return (own.map { node(it, it.title) } +
             nested.groupBy { segments(it)[folder.size] }.map { (name, inside) ->
                 val children = nodes(folder + name, inside)
-                PickerNode(item(FOLDER_PREFIX + folderPath(folder + name), name, inside.flatMap(Playlist::trackIds).distinct()),
+                PickerNode(item(PLAYLIST_FOLDER_PREFIX + folderPath(folder + name), name, inside.flatMap(Playlist::trackIds).distinct()),
                     children.maxOf { it.updatedAt }, children.maxOf { it.createdAt }, children.maxOf { it.playedAt }, null, children)
             }).sortedWith(comparator)
     }
