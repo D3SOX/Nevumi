@@ -5,6 +5,8 @@ import me.d3sox.nevumi.storage.openMusicStore
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
 import java.nio.file.Files
 import kotlin.test.*
 import me.d3sox.nevumi.playlists.Playlists
@@ -310,6 +312,48 @@ class NavidromeChangesTest {
             assertEquals(playlist.trackIds, playlists.get(playlist.id)!!.trackIds)
             changes.synchronize()
             Unit
+        } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun anEditToAPlaylistTheServerMadeReadOnlyIsReplacedByTheServerVersion() = runBlocking {
+        val directory = Files.createTempDirectory("read-only-playlist-edit")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        var synced = false
+        val edits = mutableListOf<String>()
+        val http = HttpClient(MockEngine { request ->
+            val songs = if (synced) """[{"id":"first"},{"id":"second"}]""" else """[{"id":"first"}]"""
+            val body = when {
+                request.url.encodedPath.endsWith("/getPlaylists.view") ->
+                    """{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"m3u"}]}}}"""
+                request.url.encodedPath.endsWith("/getPlaylist.view") ->
+                    """{"subsonic-response":{"status":"ok","playlist":{"id":"m3u","name":"From a file","owner":"fixture","readonly":$synced,"entry":$songs}}}"""
+                else -> { edits += request.url.encodedPath; """{"subsonic-response":{"status":"failed","error":{"code":50,"message":"User is not authorized for the given operation"}}}""" }
+            }
+            respond(body)
+        })
+        try {
+            val library = MusicLibrary(store)
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "test"))
+            val changes = NavidromeChanges(store, library) { client }
+            val first = changes.importSong(client, ServerSong("first", TrackMetadata("First")))
+            val second = changes.importSong(client, ServerSong("second", TrackMetadata("Second")))
+            changes.importPlaylists(client)
+            val playlists = Playlists(store)
+            val playlist = playlists.all().single()
+            playlists.replaceTracks(playlist.id, emptyList())
+            // Navidrome now syncs the playlist from an M3U file, which also changed its songs.
+            synced = true
+            val discarded = async(start = CoroutineStart.UNDISPATCHED) { changes.discardedEdits.first() }
+            changes.synchronize()
+            assertEquals("From a file", withTimeout(1_000) { discarded.await() })
+            val restored = playlists.get(playlist.id)!!
+            assertEquals(listOf(first.id, second.id), restored.trackIds)
+            assertFalse(restored.pendingSync)
+            assertEquals(true, restored.server?.readOnly)
+            assertEquals(emptyList(), edits, "A read-only playlist must not receive the edit")
+            changes.importPlaylists(client)
+            assertEquals(true, playlists.get(playlist.id)?.server?.readOnly, "The owner cannot edit a playlist the server keeps read-only")
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 

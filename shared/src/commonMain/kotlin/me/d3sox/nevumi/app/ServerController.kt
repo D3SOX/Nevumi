@@ -2,6 +2,7 @@ package me.d3sox.nevumi.app
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -11,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.notice_playlist_edit_discarded
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.library.MusicLibrary
@@ -45,6 +48,12 @@ class ServerController internal constructor(private val context: ControllerConte
     private val serverRefreshJob = MutableStateFlow<Job?>(null)
 
     init {
+        // Subscribe before the first sync so its notices are not lost.
+        serverChanges?.let { changes -> context.scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            changes.discardedEdits.collect { name ->
+                context.confirm(Res.string.notice_playlist_edit_discarded, ActionDestination.PLAYLISTS, arguments = listOf(name))
+            }
+        } }
         serverChanges?.start()
         // Warming up can wait up to 30 seconds inside Tailscale, which cancelling cannot interrupt, so closing does not wait for it.
         serverFiles?.let { files -> CoroutineScope(Dispatchers.Default).launch { files.warmUp() } }
