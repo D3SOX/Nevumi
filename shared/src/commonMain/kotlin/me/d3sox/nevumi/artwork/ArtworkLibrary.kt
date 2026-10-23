@@ -40,9 +40,9 @@ class ArtworkLibrary(private val directory: String) {
      * as on Navidrome, so a library refresh downloads new or changed covers and an interrupted refresh resumes where it stopped.
      */
     suspend fun fetchChanged(trackIds: Collection<String>, client: NavidromeClient, coverId: String) {
-        val index = index()
+        val indexed = withIndex { index -> trackIds.filterTo(HashSet()) { index[key(it)] != null } }
         val missing = withContext(Dispatchers.IO) {
-            trackIds.toSet().filter { id -> index[key(id)] == null || coverIdFile(id).let {
+            trackIds.toSet().filter { id -> id !in indexed || coverIdFile(id).let {
                 FileSystem.SYSTEM.metadataOrNull(it) == null || FileSystem.SYSTEM.read(it) { readUtf8() } != coverId
             } }
         }
@@ -61,9 +61,12 @@ class ArtworkLibrary(private val directory: String) {
     private fun key(trackId: String) = trackId.encodeUtf8().sha256().hex()
     private fun coverIdFile(trackId: String) = directory.toPath() / "${key(trackId)}.cover"
 
-    /** Reads the stored paths once; later saves and removals keep the index current. */
-    private suspend fun index(): HashMap<String, String> = indexing.withLock {
-        index ?: withContext(Dispatchers.IO) {
+    /**
+     * Runs [lookup] on the stored paths, which are read once; later saves and removals keep the index current.
+     * Concurrent fetches save while others look up, so every access to the map holds [indexing].
+     */
+    private suspend fun <T> withIndex(lookup: (Map<String, String>) -> T): T = indexing.withLock {
+        lookup(index ?: withContext(Dispatchers.IO) {
             val fs = FileSystem.SYSTEM
             val root = directory.toPath()
             val names = fs.listOrNull(root)?.map { it.name }.orEmpty()
@@ -76,7 +79,7 @@ class ArtworkLibrary(private val directory: String) {
                 if (hash.matches(hashPattern) && "$key-$hash.image" in images) paths[key] = (root / "$key-$hash.image").toString()
             }
             paths
-        }.also { index = it }
+        }.also { index = it })
     }
 
     private suspend fun indexed(key: String, path: String?) = indexing.withLock {
@@ -106,12 +109,10 @@ class ArtworkLibrary(private val directory: String) {
         } finally { fs.delete(temporary, mustExist = false) }
     }
 
-    suspend fun paths(trackIds: List<String>): Map<String, String> {
-        val index = index()
-        return trackIds.mapNotNull { id -> index[key(id)]?.let { id to it } }.toMap()
-    }
+    suspend fun paths(trackIds: List<String>): Map<String, String> =
+        withIndex { index -> trackIds.mapNotNull { id -> index[key(id)]?.let { id to it } }.toMap() }
 
-    suspend fun path(trackId: String): String? = index()[key(trackId)]
+    suspend fun path(trackId: String): String? = withIndex { it[key(trackId)] }
 
     /** The stored image according to the files on disk, for writers that must see other writers' changes. */
     private fun storedPath(trackId: String): Path? {

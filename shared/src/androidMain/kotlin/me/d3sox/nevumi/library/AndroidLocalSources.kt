@@ -27,17 +27,18 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
 
     private suspend fun deviceStamp(): String = buildString {
         append(library.localFolderStamp())
+        // A volume's generation also moves for photos and downloads; only its audio rows decide whether to rescan.
+        // Generations count per volume, so each volume keeps its own.
         MediaStore.getExternalVolumeNames(context).sorted().forEach { volume ->
+            var count = 0L
+            var generation = 0L
+            context.contentResolver.query(MediaStore.Audio.Media.getContentUri(volume), arrayOf(MediaStore.Audio.Media.GENERATION_MODIFIED),
+                "${MediaStore.Audio.Media.IS_TRASHED} = 0 AND ${MediaStore.Audio.Media.IS_PENDING} = 0", null, null)?.use { cursor ->
+                while (cursor.moveToNext()) { count++; generation = maxOf(generation, cursor.getLong(0)) }
+            }
             append('|').append(volume).append(':').append(MediaStore.getVersion(context, volume))
+                .append(":audio:").append(count).append(':').append(generation)
         }
-        // A volume's generation also moves for photos and downloads; only the audio rows decide whether to rescan.
-        var count = 0L
-        var generation = 0L
-        context.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Audio.Media.GENERATION_MODIFIED),
-            "${MediaStore.Audio.Media.IS_TRASHED} = 0 AND ${MediaStore.Audio.Media.IS_PENDING} = 0", null, null)?.use { cursor ->
-            while (cursor.moveToNext()) { count++; generation = maxOf(generation, cursor.getLong(0)) }
-        }
-        append("|audio:").append(count).append(':').append(generation)
     }
 
     override suspend fun pendingRefreshLocations(): List<String> = withContext(Dispatchers.IO) {
