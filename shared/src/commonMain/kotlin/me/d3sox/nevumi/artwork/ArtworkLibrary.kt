@@ -20,9 +20,6 @@ class ArtworkLibrary(private val directory: String) {
     private val mutableChanges = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 128,
         onBufferOverflow = BufferOverflow.DROP_OLDEST)
     internal val changes = mutableChanges.asSharedFlow()
-    // The library asks for every song's cover after each refresh; one directory listing answers all of them.
-    private val indexing = Mutex()
-    private var index: HashMap<String, String>? = null
     suspend fun fetch(trackId: String, client: NavidromeClient, coverId: String) = fetch(listOf(trackId), client, coverId)
 
     /** Downloads a cover once and stores it for every track that shares it, such as all songs of an album. */
@@ -63,10 +60,11 @@ class ArtworkLibrary(private val directory: String) {
 
     /**
      * Runs [lookup] on the stored paths, which are read once; later saves and removals keep the index current.
-     * Concurrent fetches save while others look up, so every access to the map holds [indexing].
+     * Concurrent fetches save while others look up, so every access to the map holds the index's lock.
      */
-    private suspend fun <T> withIndex(lookup: (Map<String, String>) -> T): T = indexing.withLock {
-        lookup(index ?: withContext(Dispatchers.IO) {
+    private suspend fun <T> withIndex(lookup: (Map<String, String>) -> T): T {
+        val index = storedPaths()
+        return index.lock.withLock { lookup(index.paths ?: withContext(Dispatchers.IO) {
             val fs = FileSystem.SYSTEM
             val root = directory.toPath()
             val names = fs.listOrNull(root)?.map { it.name }.orEmpty()
@@ -79,11 +77,16 @@ class ArtworkLibrary(private val directory: String) {
                 if (hash.matches(hashPattern) && "$key-$hash.image" in images) paths[key] = (root / "$key-$hash.image").toString()
             }
             paths
-        }.also { index = it })
+        }.also { index.paths = it }) }
     }
 
-    private suspend fun indexed(key: String, path: String?) = indexing.withLock {
-        index?.let { if (path == null) it.remove(key) else it[key] = path }
+    private suspend fun indexed(key: String, path: String?) = storedPaths().let { index -> index.lock.withLock {
+        index.paths?.let { if (path == null) it.remove(key) else it[key] = path }
+    } }
+
+    /** The index of this directory, shared by every library that stores covers there so each sees the others' saves. */
+    private suspend fun storedPaths(): StoredPaths = registry.withLock {
+        indexes.getOrPut(directory.toPath().normalized().toString()) { StoredPaths() }
     }
 
     private suspend fun store(trackId: String, bytes: ByteArray) {
@@ -140,5 +143,15 @@ class ArtworkLibrary(private val directory: String) {
         mutableChanges.tryEmit(trackId to null)
     } }
 
-    private companion object { val hashPattern = Regex("[0-9a-f]{64}") }
+    // The library asks for every song's cover after each refresh; one directory listing answers all of them.
+    private class StoredPaths {
+        val lock = Mutex()
+        var paths: HashMap<String, String>? = null
+    }
+
+    private companion object {
+        val hashPattern = Regex("[0-9a-f]{64}")
+        val registry = Mutex()
+        val indexes = HashMap<String, StoredPaths>()
+    }
 }

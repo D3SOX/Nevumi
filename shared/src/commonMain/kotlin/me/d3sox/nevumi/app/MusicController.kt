@@ -166,12 +166,6 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     // Starts one interval in the past so the first checkpoint is not delayed; Long.MIN_VALUE would overflow the subtraction.
     private var positionCheckpointAt = -POSITION_CHECKPOINT_MS
     /** The entry IDs the decoder currently holds, and whether that is the whole queue. */
-    private var engineEntryIds = emptyList<String>()
-    private var engineHoldsWholeQueue = true
-    /** Whether the last window walked to the end of the queue, so sliding it cannot add more songs. */
-    private var engineReachedEnd = true
-    /** The repeat mode last given to the decoder, which follows the window rather than the queue. */
-    private var engineRepeatMode: RepeatMode? = null
     private data class IncomingPlayback(val peerId: String, val id: String, val previous: PlaybackTransfer,
         val preparedQueue: QueueSnapshot, val revision: Long)
     private var incomingPlayback: IncomingPlayback? = null
@@ -225,7 +219,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         mutableState.update { it.copy(queue = restored) }
         if (queueLoaded) {
             if (current != live.currentEntryId && restored.currentIndex >= 0) loadSnapshot(restored, engine.status.value.playWhenReady)
-            else pushEngineQueue(restored)
+            else engine.updateQueue(playableQueue(restored))
         }
     }
     val fileEditingAvailable: Boolean get() = fileEdits != null || serverFiles != null
@@ -349,7 +343,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                     if (queueLoaded) {
                         if (snapshot.currentIndex >= 0 && snapshot.currentEntryId != engine.status.value.entryId)
                             loadSnapshot(snapshot, engine.status.value.playWhenReady)
-                        else pushEngineQueue(snapshot)
+                        else engine.updateQueue(playableQueue(snapshot))
                     }
                     mutableState.update { it.copy(savedQueues = saved, queue = snapshot) }
                 }
@@ -415,7 +409,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 operations.withLock {
                     // Byte progress only affects the UI; the player needs to hear about finished or evicted files.
                     val files = progress.filterValues { it.status == DownloadStatus.COMPLETE }.mapValues { it.value.path }
-                    if (queueLoaded && files != completed) pushEngineQueue(queue.snapshot())
+                    if (queueLoaded && files != completed) engine.updateQueue(playableQueue(queue.snapshot()))
                     completed = files
                     mutableState.update { it.copy(downloads = progress) }
                 }
@@ -502,20 +496,16 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                         positionCheckpointAt = now
                     }
                     snapshot = queue.snapshot()
-                    if (queueLoaded && engineNeedsMoreEntries(snapshot)) pushEngineQueue(snapshot)
                 }
                 var recovered = false
                 val failedEntry = playback.entryId
                 val failedSource = playback.sourceId
                 if (playback.error != null && failedEntry != null && failedSource != null && snapshot.currentEntryId == failedEntry &&
                     failedSources.getOrPut(failedEntry) { mutableSetOf() }.add(failedSource)) {
-                    val window = engineWindow(snapshot)
-                    val playable = window.tracks
+                    val playable = playableQueue(snapshot)
                     val index = playable.indexOfFirst { it.entryId == failedEntry }
                     if (index >= 0) {
-                        matchEngineRepeat(snapshot, window)
                         engine.loadQueue(playable, index, snapshot.positionMs, playback.playWhenReady)
-                        rememberEngineQueue(window)
                         queueLoaded = true
                         recovered = true
                     }
@@ -594,7 +584,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
      */
     private suspend fun reloadStreams() = operations.withLock {
         try {
-            if (queueLoaded) pushEngineQueue(queue.snapshot())
+            if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot()))
             refresh()
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { mutableState.update { it.copy(error = failure.message ?: "Playback could not switch connections") } }
@@ -693,7 +683,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             val linked = mergeTracks(keepId, otherId)
             serverChanges?.setFavorite(linked.id, linked.favorite)
             serverChanges?.setRating(linked.id, linked.rating)
-            if (queueLoaded) pushEngineQueue(queue.snapshot())
+            if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot()))
             refresh()
         }
         if (offline != null) offline.withLibraryChanges { link() } else link()
@@ -721,7 +711,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                     catch (_: IllegalStateException) { return }
                 if (linked.favorite != server.favorite) serverChanges?.setFavorite(linked.id, linked.favorite)
                 if (linked.rating != server.rating) serverChanges?.setRating(linked.id, linked.rating)
-                if (queued) pushEngineQueue(queue.snapshot())
+                if (queued) engine.updateQueue(playableQueue(queue.snapshot()))
             }
             if (offline != null) offline.withLibraryChanges { link() } else link()
         }
@@ -808,7 +798,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         if (settings.crossfadeDurationMs != previous.crossfadeDurationMs) engine.setCrossfadeDuration(settings.crossfadeDurationMs)
         if (settings.gaplessPlayback != previous.gaplessPlayback) engine.setGaplessPlayback(settings.gaplessPlayback)
         if (queueLoaded && settings.sourcePriority != previous.sourcePriority)
-            pushEngineQueue(queue.snapshot())
+            engine.updateQueue(playableQueue(queue.snapshot()))
         if (settings.undoRetentionDays != previous.undoRetentionDays || settings.undoBackupBytes != previous.undoBackupBytes) {
             trimFileHistory()
             refresh()
@@ -1187,7 +1177,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         }.map { it.id } }.toSet(), false)
         connection.disconnect()
         operations.withLock {
-            if (queueLoaded) pushEngineQueue(queue.snapshot())
+            if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot()))
             refresh()
         }
     }
@@ -1422,25 +1412,18 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         queue.startEmpty()
         val snapshot = queue.snapshot()
         mutableState.update { it.copy(queue = snapshot) }
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
     }
     fun setQueueShuffled(enabled: Boolean) = action {
         queue.shuffle(enabled)
         val snapshot = queue.snapshot()
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
         mutableState.update { it.copy(queue = snapshot) }
     }
     fun setQueueRepeat(mode: RepeatMode, playCount: Int? = null) = action {
         queue.setRepeat(mode, playCount)
-        val snapshot = queue.snapshot()
-        if (!queueLoaded) engine.setRepeat(snapshot.repeatMode, playCount)
-        else {
-            // Repeat all decides whether a long queue's window continues at the start, so the decoder gets the matching entries.
-            val window = engineWindow(snapshot)
-            matchEngineRepeat(snapshot, window, playCount, always = true)
-            if (windowed(snapshot)) { engine.updateQueue(window.tracks); rememberEngineQueue(window) }
-        }
-        mutableState.update { it.copy(queue = snapshot) }
+        engine.setRepeat(mode, playCount)
+        mutableState.update { it.copy(queue = queue.snapshot()) }
     }
     fun shuffleQueueAlbums() = action {
         val albums = state.value.tracks.groupBy { track ->
@@ -1450,7 +1433,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             .thenBy { it.metadata.trackNumber }.thenBy { it.metadata.title }).map { it.id } }
         queue.shuffleAlbums(albums)
         val snapshot = queue.snapshot()
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
         mutableState.update { it.copy(queue = snapshot) }
     }
     private suspend fun requestPlaybackConfirmation(title: String, confirmed: Boolean, play: () -> kotlinx.coroutines.Job): Boolean {
@@ -1489,7 +1472,6 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             queueLoaded = true
         } else {
             engine.updateQueue(emptyList())
-            engineEntryIds = emptyList(); engineHoldsWholeQueue = true; engineReachedEnd = true
         }
     }
     fun removeSavedQueue(id: String) = action {
@@ -1543,13 +1525,13 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         confirm("Removed from queue", undo = { restoreQueue(before) }, redo = { restoreQueue(after) })
         if (before.currentEntryId == entryId && after.currentIndex >= 0)
             loadSnapshot(after, play = playing)
-        else if (queueLoaded) pushEngineQueue(after)
+        else if (queueLoaded) engine.updateQueue(playableQueue(after))
     }
     fun moveQueueEntry(entryId: String, destination: Int, section: me.d3sox.nevumi.queue.QueueSection? = null) = action {
         queue.reorder(entryId, destination, section)
         val snapshot = queue.snapshot()
         mutableState.update { it.copy(queue = snapshot) }
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
     }
     fun clearQueue(selection: me.d3sox.nevumi.queue.QueueClear = me.d3sox.nevumi.queue.QueueClear.ALL) = action {
         persistPlaybackPosition()
@@ -1558,7 +1540,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         val snapshot = queue.snapshot()
         mutableState.update { it.copy(queue = snapshot) }
         confirm("Queue cleared", undo = { restoreQueue(before) }, redo = { restoreQueue(snapshot) })
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
     }
     fun moveQueueEntryToSection(entryId: String, section: me.d3sox.nevumi.queue.QueueSection) = action {
         val before = queue.snapshot()
@@ -1568,7 +1550,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         queue.reorder(entryId, destination.coerceAtMost(before.entries.lastIndex), section)
         val snapshot = queue.snapshot()
         mutableState.update { it.copy(queue = snapshot) }
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
         confirm(if (section == me.d3sox.nevumi.queue.QueueSection.MANUAL) "Moved to Up next" else "Moved to context",
             undo = { restoreQueue(before) }, redo = { restoreQueue(snapshot) })
     }
@@ -1583,7 +1565,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         val snapshot = queue.snapshot()
         mutableState.update { it.copy(queue = snapshot) }
         confirmQueueAction(operation, before, snapshot)
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
     }
     fun enqueue(trackIds: List<String>, operation: QueueAction) = action {
         trackIds.forEach { requireNotNull(library.findTrack(it)) { "Track is missing" } }
@@ -1592,7 +1574,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         val snapshot = queue.snapshot()
         mutableState.update { it.copy(queue = snapshot) }
         confirmQueueAction(operation, before, snapshot)
-        if (queueLoaded) pushEngineQueue(snapshot)
+        if (queueLoaded) engine.updateQueue(playableQueue(snapshot))
     }
 
     private fun confirmQueueAction(operation: QueueAction, before: QueueSnapshot, after: QueueSnapshot) = confirm(when (operation) {
@@ -1603,15 +1585,13 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
 
     private suspend fun loadSnapshot(snapshot: QueueSnapshot, play: Boolean = true) {
         val intention = transportIntent.value
-        val window = engineWindow(snapshot)
-        val playable = window.tracks
+        val playable = playableQueue(snapshot)
         val index = playable.indexOfFirst { it.entryId == snapshot.currentEntryId }
         require(index >= 0) { "This track has no available audio source" }
         transport.withLock {
             val requested = transportIntent.value.let { if (it.revision != intention.revision) it.play else play }
-            matchEngineRepeat(snapshot, window, always = true)
+            engine.setRepeat(snapshot.repeatMode, snapshot.repeatPlays)
             engine.loadQueue(playable, index, snapshot.positionMs, requested)
-            rememberEngineQueue(window)
             queueLoaded = true
             val status = engine.status.value
             mutableState.update { it.copy(queue = snapshot, playback = status.copy(trackId = playable[index].id,
@@ -1632,68 +1612,6 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             if (transportIntent.value.play) engine.play()
             mutableState.update { it.copy(playback = engine.status.value) }
         }
-    }
-
-    private class EngineWindow(val tracks: List<PlayableTrack>, val whole: Boolean, val reachedEnd: Boolean)
-
-    private fun windowed(snapshot: QueueSnapshot) = snapshot.entries.size > ENGINE_PREVIOUS + ENGINE_UPCOMING + 1
-
-    /**
-     * The songs the decoder holds for [snapshot]: a few before the current one and up to [ENGINE_UPCOMING] playable ones
-     * after it. A queue of thousands of songs would otherwise be resolved and handed to the decoder again on every edit
-     * and shown in full to the media session. Unplayable entries are skipped without counting, so a long run of them
-     * cannot hide the songs behind it. With repeat all, the window continues at the start of the queue.
-     */
-    private suspend fun engineWindow(snapshot: QueueSnapshot): EngineWindow {
-        if (!windowed(snapshot)) return EngineWindow(playableQueue(snapshot), whole = true, reachedEnd = true)
-        val entries = snapshot.entries
-        val lookup = SourceLookup(library.tracks().associateBy { it.id })
-        val current = snapshot.currentIndex
-        val wraps = snapshot.repeatMode == RepeatMode.ALL
-        val previous = if (current < 0) IntRange.EMPTY else (current - ENGINE_PREVIOUS until current).filter { wraps || it >= 0 }
-        val tracks = previous.mapNotNullTo(mutableListOf()) { playable(entries[it.mod(entries.size)], snapshot, false, lookup) }
-        val first = current.coerceAtLeast(0)
-        val last = if (wraps) first + entries.size - 1 - previous.count() else entries.lastIndex
-        var following = 0
-        var index = first
-        while (index <= last && following <= ENGINE_UPCOMING) {
-            playable(entries[index.mod(entries.size)], snapshot, false, lookup)?.let { tracks += it; following++ }
-            index++
-        }
-        // With repeat all, a walk around the whole queue found every playable song. The decoder then holds them in queue
-        // order and repeats them itself, because a rotated window that cannot slide would stop after one pass.
-        if (wraps && index > last) return EngineWindow(entries.mapNotNull { playable(it, snapshot, false, lookup) },
-            whole = true, reachedEnd = true)
-        return EngineWindow(tracks, whole = false, reachedEnd = index > last)
-    }
-
-    /** The decoder repeats natively only when it holds every playable song; otherwise the window wraps around for it. */
-    private fun matchEngineRepeat(snapshot: QueueSnapshot, window: EngineWindow, playCount: Int? = snapshot.repeatPlays,
-        always: Boolean = false) {
-        val mode = if (snapshot.repeatMode == RepeatMode.ALL && !window.whole) RepeatMode.OFF else snapshot.repeatMode
-        if (always || mode != engineRepeatMode) engine.setRepeat(mode, playCount)
-        engineRepeatMode = mode
-    }
-
-    private fun rememberEngineQueue(window: EngineWindow) {
-        engineEntryIds = window.tracks.map { it.entryId }
-        engineHoldsWholeQueue = window.whole
-        engineReachedEnd = window.reachedEnd
-    }
-
-    /** Whether the decoder is close to the end of its window while more playable songs follow beyond it. */
-    private fun engineNeedsMoreEntries(snapshot: QueueSnapshot): Boolean {
-        if (engineHoldsWholeQueue && !windowed(snapshot)) return false
-        val index = engineEntryIds.indexOf(snapshot.currentEntryId)
-        if (index < 0) return true
-        return engineEntryIds.size - index - 1 < ENGINE_SLIDE_MARGIN && !engineReachedEnd
-    }
-
-    private suspend fun pushEngineQueue(snapshot: QueueSnapshot) {
-        val window = engineWindow(snapshot)
-        matchEngineRepeat(snapshot, window)
-        engine.updateQueue(window.tracks)
-        rememberEngineQueue(window)
     }
 
     /** Resolves sources against one library catalogue and one server connection lookup for a whole pass. */
@@ -1750,11 +1668,6 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
 
     private companion object {
         const val POSITION_CHECKPOINT_MS = 30_000L
-        /** Songs before and after the current one that the decoder holds for a long queue. */
-        const val ENGINE_PREVIOUS = 10
-        const val ENGINE_UPCOMING = 100
-        /** The decoder receives the next part of the queue once fewer upcoming songs than this remain in its window. */
-        const val ENGINE_SLIDE_MARGIN = 20
     }
 
     suspend fun closeAndJoin() = withContext(NonCancellable) {
