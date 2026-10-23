@@ -102,7 +102,7 @@ fun filterTracks(tracks: List<Track>, query: LibraryQuery, statistics: Map<Strin
         (query.notPlayedWithinDays == null || statistics[track.id]?.lastPlayedAt?.let { it < now - query.notPlayedWithinDays * 86_400_000L } != false) &&
         (!query.availableOnly || track.sources.any { it.available }) &&
         (query.sourceKind == null || track.sources.any { it.kind == query.sourceKind }) &&
-        (!query.notOnServer || track.sources.none { it.kind == SourceKind.SERVER }) &&
+        (!query.notOnServer || track.sources.none { it.kind == SourceKind.SERVER && it.available }) &&
         (!query.notInPlaylist || track.id !in playlisted)
 }.let { matching ->
     // Derive each sort key once per song instead of on every comparison; large libraries make that the main cost.

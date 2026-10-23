@@ -56,13 +56,16 @@ class PlaylistsTest {
             val sorted = library.importTrack(TrackMetadata("Evening"), TrackSource("local:sorted", SourceKind.LOCAL, "/music/sorted.flac"))
             val onServer = library.importTrack(TrackMetadata("Night Walk"), TrackSource("local:shared", SourceKind.LOCAL, "/music/shared.flac"))
             library.importTrack(onServer.metadata, TrackSource("server:fixture:shared", SourceKind.SERVER, "shared"), linkTo = onServer.id)
+            // A refresh keeps the server copy of a song deleted from the server, but marks it unavailable.
+            val deleted = library.importTrack(TrackMetadata("Old Demo"), TrackSource("local:deleted", SourceKind.LOCAL, "/music/deleted.flac"))
+            library.importTrack(deleted.metadata, TrackSource("server:fixture:deleted", SourceKind.SERVER, "deleted", available = false), linkTo = deleted.id)
             val playlists = Playlists(store)
-            val regular = playlists.create("Evening", listOf(sorted.id))
+            val regular = playlists.create("Evening", listOf(sorted.id, deleted.id))
             val rule = LibraryQuery(notOnServer = true, notInPlaylist = true)
             val smart = playlists.createSmart("Unsorted", rule)
             assertEquals(listOf(unsorted.id), smart.trackIds)
             assertEquals(listOf(unsorted.id), library.tracks(rule).map { it.id })
-            assertEquals(setOf(sorted.id, unsorted.id), playlists.createSmart("Device only", LibraryQuery(notOnServer = true)).trackIds.toSet())
+            assertEquals(setOf(sorted.id, unsorted.id, deleted.id), playlists.createSmart("Device only", LibraryQuery(notOnServer = true)).trackIds.toSet())
             // Songs that only appear in smart playlists still count as unsorted.
             assertEquals(listOf(unsorted.id), playlists.get(smart.id)!!.trackIds)
             val update = async(start = CoroutineStart.UNDISPATCHED) {
