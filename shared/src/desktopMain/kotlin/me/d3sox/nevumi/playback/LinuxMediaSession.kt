@@ -85,7 +85,9 @@ class LinuxMediaSession(private val controller: MusicController, address: String
             combine(controller.state, stopped) { state, stopped -> state.playback.let { playback ->
                 listOf(playback.trackId, playback.entryId, playback.playing, playback.ended, playback.error, playback.durationMs,
                     playback.volume, playback.speed, state.queue.unshuffledEntryIds != null, state.queue.repeatMode,
-                    state.queue.currentIndex, state.queue.entries.size, state.artwork[playback.trackId], stopped)
+                    state.queue.currentIndex, state.queue.entries.size, state.artwork[playback.trackId], stopped,
+                    // Tag edits change only the track, and Metadata is built from it.
+                    state.tracks.find { it.id == playback.trackId })
             } }.distinctUntilChanged().collect {
                 val state = controller.state.value
                 if (state.playback.playing && !wasPlaying) stopped.value = false

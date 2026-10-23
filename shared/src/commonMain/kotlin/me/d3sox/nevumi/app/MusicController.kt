@@ -163,10 +163,13 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private var queueLoaded = false
     private var cachedEntryId: String? = null
     private val clock = kotlin.time.TimeSource.Monotonic.markNow()
-    private var positionCheckpointAt = Long.MIN_VALUE
+    // Starts one interval in the past so the first checkpoint is not delayed; Long.MIN_VALUE would overflow the subtraction.
+    private var positionCheckpointAt = -POSITION_CHECKPOINT_MS
     /** The entry IDs the decoder currently holds, and whether that is the whole queue. */
     private var engineEntryIds = emptyList<String>()
     private var engineHoldsWholeQueue = true
+    /** Whether the last window walked to the end of the queue, so sliding it cannot add more songs. */
+    private var engineReachedEnd = true
     private data class IncomingPlayback(val peerId: String, val id: String, val previous: PlaybackTransfer,
         val preparedQueue: QueueSnapshot, val revision: Long)
     private var incomingPlayback: IncomingPlayback? = null
@@ -504,11 +507,12 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 val failedSource = playback.sourceId
                 if (playback.error != null && failedEntry != null && failedSource != null && snapshot.currentEntryId == failedEntry &&
                     failedSources.getOrPut(failedEntry) { mutableSetOf() }.add(failedSource)) {
-                    val playable = playableQueue(snapshot, engineWindow(snapshot))
+                    val window = engineWindow(snapshot)
+                    val playable = window.tracks
                     val index = playable.indexOfFirst { it.entryId == failedEntry }
                     if (index >= 0) {
                         engine.loadQueue(playable, index, snapshot.positionMs, playback.playWhenReady)
-                        rememberEngineQueue(playable, snapshot)
+                        rememberEngineQueue(window)
                         queueLoaded = true
                         recovered = true
                     }
@@ -1478,7 +1482,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             queueLoaded = true
         } else {
             engine.updateQueue(emptyList())
-            engineEntryIds = emptyList(); engineHoldsWholeQueue = true
+            engineEntryIds = emptyList(); engineHoldsWholeQueue = true; engineReachedEnd = true
         }
     }
     fun removeSavedQueue(id: String) = action {
@@ -1592,14 +1596,15 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
 
     private suspend fun loadSnapshot(snapshot: QueueSnapshot, play: Boolean = true) {
         val intention = transportIntent.value
-        val playable = playableQueue(snapshot, engineWindow(snapshot))
+        val window = engineWindow(snapshot)
+        val playable = window.tracks
         val index = playable.indexOfFirst { it.entryId == snapshot.currentEntryId }
         require(index >= 0) { "This track has no available audio source" }
         transport.withLock {
             val requested = transportIntent.value.let { if (it.revision != intention.revision) it.play else play }
             engine.setRepeat(engineRepeat(snapshot), snapshot.repeatPlays)
             engine.loadQueue(playable, index, snapshot.positionMs, requested)
-            rememberEngineQueue(playable, snapshot)
+            rememberEngineQueue(window)
             queueLoaded = true
             val status = engine.status.value
             mutableState.update { it.copy(queue = snapshot, playback = status.copy(trackId = playable[index].id,
@@ -1622,43 +1627,57 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         }
     }
 
+    private class EngineWindow(val tracks: List<PlayableTrack>, val whole: Boolean, val reachedEnd: Boolean)
+
+    private fun windowed(snapshot: QueueSnapshot) = snapshot.entries.size > ENGINE_PREVIOUS + ENGINE_UPCOMING + 1
+
     /**
-     * The entries the decoder holds for [snapshot]: the songs around the current one. A queue of thousands of songs
-     * would otherwise be resolved and handed to the decoder again on every edit and shown in full to the media session.
-     * With repeat all, the window continues at the start of the queue; a queue that fits is held whole.
+     * The songs the decoder holds for [snapshot]: a few before the current one and up to [ENGINE_UPCOMING] playable ones
+     * after it. A queue of thousands of songs would otherwise be resolved and handed to the decoder again on every edit
+     * and shown in full to the media session. Unplayable entries are skipped without counting, so a long run of them
+     * cannot hide the songs behind it. With repeat all, the window continues at the start of the queue.
      */
-    private fun engineWindow(snapshot: QueueSnapshot): List<me.d3sox.nevumi.queue.QueueEntry> {
+    private suspend fun engineWindow(snapshot: QueueSnapshot): EngineWindow {
+        if (!windowed(snapshot)) return EngineWindow(playableQueue(snapshot), whole = true, reachedEnd = true)
         val entries = snapshot.entries
-        if (entries.size <= ENGINE_PREVIOUS + ENGINE_UPCOMING + 1) return entries
+        val lookup = SourceLookup(library.tracks().associateBy { it.id })
         val current = snapshot.currentIndex
-        if (current < 0) return entries.take(ENGINE_UPCOMING + 1)
-        return if (snapshot.repeatMode == RepeatMode.ALL) (current - ENGINE_PREVIOUS..current + ENGINE_UPCOMING).map { entries[it.mod(entries.size)] }
-            else entries.subList((current - ENGINE_PREVIOUS).coerceAtLeast(0), (current + ENGINE_UPCOMING + 1).coerceAtMost(entries.size))
+        val wraps = snapshot.repeatMode == RepeatMode.ALL
+        val previous = if (current < 0) IntRange.EMPTY else (current - ENGINE_PREVIOUS until current).filter { wraps || it >= 0 }
+        val tracks = previous.mapNotNullTo(mutableListOf()) { playable(entries[it.mod(entries.size)], snapshot, false, lookup) }
+        val first = current.coerceAtLeast(0)
+        val last = if (wraps) first + entries.size - 1 - previous.count() else entries.lastIndex
+        var following = 0
+        var index = first
+        while (index <= last && following <= ENGINE_UPCOMING) {
+            playable(entries[index.mod(entries.size)], snapshot, false, lookup)?.let { tracks += it; following++ }
+            index++
+        }
+        return EngineWindow(tracks, whole = false, reachedEnd = index > last)
     }
 
     /** The decoder repeats natively only when it holds the whole queue; otherwise the window wraps around for it. */
     private fun engineRepeat(snapshot: QueueSnapshot): RepeatMode =
-        if (snapshot.repeatMode == RepeatMode.ALL && engineWindow(snapshot).size < snapshot.entries.size) RepeatMode.OFF else snapshot.repeatMode
+        if (snapshot.repeatMode == RepeatMode.ALL && windowed(snapshot)) RepeatMode.OFF else snapshot.repeatMode
 
-    private fun rememberEngineQueue(playable: List<PlayableTrack>, snapshot: QueueSnapshot) {
-        engineEntryIds = playable.map { it.entryId }
-        engineHoldsWholeQueue = engineWindow(snapshot).size == snapshot.entries.size
+    private fun rememberEngineQueue(window: EngineWindow) {
+        engineEntryIds = window.tracks.map { it.entryId }
+        engineHoldsWholeQueue = window.whole
+        engineReachedEnd = window.reachedEnd
     }
 
-    /** Whether the decoder is close to the end of its window while the queue continues beyond it. */
+    /** Whether the decoder is close to the end of its window while more playable songs follow beyond it. */
     private fun engineNeedsMoreEntries(snapshot: QueueSnapshot): Boolean {
-        if (engineHoldsWholeQueue && engineWindow(snapshot).size == snapshot.entries.size) return false
+        if (engineHoldsWholeQueue && !windowed(snapshot)) return false
         val index = engineEntryIds.indexOf(snapshot.currentEntryId)
         if (index < 0) return true
-        val remaining = engineEntryIds.size - index - 1
-        val upcoming = if (snapshot.repeatMode == RepeatMode.ALL) Int.MAX_VALUE else snapshot.entries.lastIndex - snapshot.currentIndex
-        return remaining < minOf(ENGINE_SLIDE_MARGIN, upcoming)
+        return engineEntryIds.size - index - 1 < ENGINE_SLIDE_MARGIN && !engineReachedEnd
     }
 
     private suspend fun pushEngineQueue(snapshot: QueueSnapshot) {
-        val playable = playableQueue(snapshot, engineWindow(snapshot))
-        engine.updateQueue(playable)
-        rememberEngineQueue(playable, snapshot)
+        val window = engineWindow(snapshot)
+        engine.updateQueue(window.tracks)
+        rememberEngineQueue(window)
     }
 
     /** Resolves sources against one library catalogue and one server connection lookup for a whole pass. */

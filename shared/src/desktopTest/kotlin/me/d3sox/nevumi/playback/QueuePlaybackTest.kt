@@ -437,6 +437,35 @@ class QueuePlaybackTest {
     }
 
     @Test
+    fun aLongRunOfUnplayableSongsDoesNotHideTheSongsAfterItFromTheDecoder() = runBlocking {
+        val directory = Files.createTempDirectory("long-unplayable-run")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val path = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac").toString()
+        val current = library.importTrack(TrackMetadata("Playing"), TrackSource("local:playing", SourceKind.LOCAL, path))
+        // More unplayable songs than the decoder's window holds, followed by one that plays.
+        val missing = (1..150).map { library.importTrack(TrackMetadata("Missing $it"), TrackSource("local:missing:$it", SourceKind.LOCAL,
+            directory.resolve("missing-$it.flac").toString())) }
+        library.setSourceAvailability(missing.flatMap { track -> track.sources.map { it.id } }.toSet(), false)
+        val after = library.importTrack(TrackMetadata("After the gap"), TrackSource("local:after", SourceKind.LOCAL, path))
+        val decoder = MpvPlaybackEngine("null")
+        val handed = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+        val engine = object : PlaybackEngine by decoder {
+            override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
+                handed += tracks.map { it.id }; decoder.loadQueue(tracks, startIndex, positionMs, play)
+            }
+            override fun updateQueue(tracks: List<PlayableTrack>) { handed += tracks.map { it.id }; decoder.updateQueue(tracks) }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), engine)
+        try {
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.playTrack(current.id, listOf(current.id) + missing.map { it.id } + after.id).join()
+            withTimeout(3_000) { controller.state.first { it.playback.trackId == current.id } }
+            assertEquals(listOf(current.id, after.id), handed.last())
+        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun skippingPassesOverSongsWithoutAnAvailableSource() = runBlocking {
         val directory = Files.createTempDirectory("skip-unavailable")
         val store = openMusicStore(directory.resolve("library.db").toString())
