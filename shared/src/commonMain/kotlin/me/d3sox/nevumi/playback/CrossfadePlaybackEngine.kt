@@ -45,10 +45,11 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var fadeDurationMs = 0.0
     private val clock = TimeSource.Monotonic.markNow()
     private var lastTickMs = 0L
-    private var commandedAtMs = Long.MIN_VALUE
+    // Starts before the recent-command window; Long.MIN_VALUE would overflow the subtraction and keep the fast cadence.
+    private var commandedAtMs = -COMMAND_CADENCE_MS
     /** Fades and loads need the fast cadence; a paused or idle player only has to notice commands, which wake it at once. */
     private fun tickDelayMs(): Long = if (requestedPlaying.value || outgoing != null || pendingLoad != null || active.status.value.playing ||
-        clock.elapsedNow().inWholeMilliseconds - commandedAtMs < 500) 25 else 250
+        clock.elapsedNow().inWholeMilliseconds - commandedAtMs < COMMAND_CADENCE_MS) 25 else 250
     private val worker = scope.launch {
         try {
             while (isActive) {
@@ -328,3 +329,6 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         }
     }
 }
+
+/** How long after a command the worker keeps the fast cadence. */
+private const val COMMAND_CADENCE_MS = 500L

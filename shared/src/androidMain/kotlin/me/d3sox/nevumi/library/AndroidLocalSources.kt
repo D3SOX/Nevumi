@@ -30,14 +30,18 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
         // A volume's generation also moves for photos and downloads; only its audio rows decide whether to rescan.
         // Generations count per volume, so each volume keeps its own.
         MediaStore.getExternalVolumeNames(context).sorted().forEach { volume ->
-            var count = 0L
-            var generation = 0L
-            context.contentResolver.query(MediaStore.Audio.Media.getContentUri(volume), arrayOf(MediaStore.Audio.Media.GENERATION_MODIFIED),
-                "${MediaStore.Audio.Media.IS_TRASHED} = 0 AND ${MediaStore.Audio.Media.IS_PENDING} = 0", null, null)?.use { cursor ->
-                while (cursor.moveToNext()) { count++; generation = maxOf(generation, cursor.getLong(0)) }
-            }
-            append('|').append(volume).append(':').append(MediaStore.getVersion(context, volume))
-                .append(":audio:").append(count).append(':').append(generation)
+            // A volume that cannot be queried, for example while it is being unmounted, gets a fixed stamp instead of failing
+            // the check; it differs from the volume's real stamp, so a scan follows once the volume answers again.
+            val audio = try {
+                var count = 0L
+                var generation = 0L
+                context.contentResolver.query(MediaStore.Audio.Media.getContentUri(volume), arrayOf(MediaStore.Audio.Media.GENERATION_MODIFIED),
+                    "${MediaStore.Audio.Media.IS_TRASHED} = 0 AND ${MediaStore.Audio.Media.IS_PENDING} = 0", null, null)?.use { cursor ->
+                    while (cursor.moveToNext()) { count++; generation = maxOf(generation, cursor.getLong(0)) }
+                }
+                "$count:$generation"
+            } catch (_: Exception) { "unavailable" }
+            append('|').append(volume).append(':').append(MediaStore.getVersion(context, volume)).append(":audio:").append(audio)
         }
     }
 

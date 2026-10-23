@@ -86,7 +86,7 @@ expect object MusicDatabaseConstructor : RoomDatabaseConstructor<MusicDatabase> 
 }
 
 /**
- * Write-ahead logging keeps the database consistent after a crash without a disk flush per commit, so the many small
+ * Write-ahead logging, which both stores set explicitly, keeps the database consistent after a crash without a disk flush per commit, so the many small
  * writes of a scan or of playback checkpoints stop waiting for storage. A power loss can only drop the last moments.
  */
 internal fun SQLiteDriver.withRelaxedDurability(): SQLiteDriver = object : SQLiteDriver {
