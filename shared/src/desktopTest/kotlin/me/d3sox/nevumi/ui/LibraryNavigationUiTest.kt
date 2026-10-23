@@ -145,8 +145,8 @@ class LibraryNavigationUiTest {
         onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Home to bottom navigation"))
         onNodeWithContentDescription("Add Home to bottom navigation").assertIsEnabled().performClick()
         val overflowTab = tabs[4]
-        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add ${overflowTab.label} to bottom navigation"))
-        onNodeWithContentDescription("Add ${overflowTab.label} to bottom navigation").assertIsNotEnabled()
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add ${runBlocking { getString(overflowTab.label) }} to bottom navigation"))
+        onNodeWithContentDescription("Add ${runBlocking { getString(overflowTab.label) }} to bottom navigation").assertIsNotEnabled()
         onNodeWithText("Save tabs").performClick()
         assertEquals(tabs.take(4).toSet(), saved)
     }
@@ -246,7 +246,7 @@ class LibraryNavigationUiTest {
             Box(Modifier.width(360.dp)) { LibraryTabsEditor(tabs, null, onSave = { enabled, _ -> saved = enabled }, dismiss = {}) }
         } }
         listOf(tabs[0] to -1f, tabs[3] to 1f).forEach { (tab, direction) ->
-            val handle = onNodeWithContentDescription("Reorder tab: ${tab.label}", useUnmergedTree = true)
+            val handle = onNodeWithContentDescription("Reorder tab: ${runBlocking { getString(tab.label) }}", useUnmergedTree = true)
             val start = handle.fetchSemanticsNode().boundsInRoot.top
             handle.performTouchInput { down(center) }
             repeat(6) {
