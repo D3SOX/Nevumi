@@ -110,7 +110,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private val networkAccess: suspend (String) -> Unit = {},
     private val soundCloud: SoundCloudDownloads? = null,
     discovery: me.d3sox.nevumi.navidrome.ServerDiscovery? = null,
-    backup: me.d3sox.nevumi.backup.MusicBackup? = null) : AutoCloseable {
+    backup: me.d3sox.nevumi.backup.MusicBackup? = null,
+    lyrics: me.d3sox.nevumi.lyrics.LyricsLibrary? = null) : AutoCloseable {
     private val context = ControllerContext()
     private val loader = AppStateLoader(context, library, queue, preferences, navidrome, playlists, fileEdits, serverFiles, listeningHistory, artwork)
     val playbackController = PlaybackController(context, library, queue, engine, navidrome, sourceAccessible, preferences, offline,
@@ -127,6 +128,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val soundCloudController = SoundCloudController(context, serverController, libraryController, queueController, soundCloud)
     val discoveryController = DiscoveryController(context, queueController, discovery)
     val backupController = BackupController(context, loader, playbackController, backup)
+    val lyricsController = LyricsController(context, lyrics)
     private val shutdown = Mutex()
     private var shutdownFinished = false
     val state = context.state

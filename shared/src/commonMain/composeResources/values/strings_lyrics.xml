@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lyrics in Now Playing and their setting. -->
+<resources>
+    <string name="lyrics_title">Lyrics</string>
+    <string name="lyrics_loading">Loading lyrics</string>
+    <string name="lyrics_none">No lyrics for this song</string>
+    <string name="lyrics_none_online_hint">Turn on Find lyrics online in Playback settings to search LRCLIB.</string>
+    <string name="lyrics_seek_line">Play from this line</string>
+    <string name="lyrics_source_embedded">Lyrics from the song’s tags</string>
+    <string name="lyrics_source_sidecar">Lyrics from a file next to the song</string>
+    <string name="lyrics_source_server">Lyrics from your music server</string>
+    <string name="lyrics_source_lrclib">Lyrics from LRCLIB</string>
+    <string name="lyrics_setting_online">Find lyrics online</string>
+    <string name="lyrics_setting_online_description">Sends the artist, title, album and length of songs without lyrics to LRCLIB.</string>
+</resources>

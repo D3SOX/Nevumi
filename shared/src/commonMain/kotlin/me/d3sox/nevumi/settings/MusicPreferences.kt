@@ -78,6 +78,8 @@ data class MusicSettings(
     val queueRecoveryIntervalMinutes: Int = 5,
     val precomputeWaveforms: Boolean = true,
     val showAudioInfo: Boolean = true,
+    /** Off by default because searching LRCLIB sends the song's artist, title, album and length to a third party. */
+    val fetchLyricsOnline: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,

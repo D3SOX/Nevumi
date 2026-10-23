@@ -1,6 +1,9 @@
 package me.d3sox.nevumi.navidrome
 
 import me.d3sox.nevumi.library.TrackMetadata
+import me.d3sox.nevumi.lyrics.Lyrics
+import me.d3sox.nevumi.lyrics.classicLyrics
+import me.d3sox.nevumi.lyrics.structuredLyrics
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -239,6 +242,16 @@ class NavidromeClient(
         }
         envelope
     } }
+
+    /** Lyrics from OpenSubsonic `getLyricsBySongId`, or the classic `getLyrics` by artist and title on servers without it. */
+    suspend fun lyrics(songId: String, artist: String, title: String): Lyrics? {
+        val structured = try { request("getLyricsBySongId", listOf("id" to songId)) }
+            catch (_: NavidromeException) { null }
+            catch (unsupported: NavidromeRequestException) { if (unsupported.httpStatus in 400..499) null else throw unsupported }
+        structured?.let(::structuredLyrics)?.let { return it }
+        if (artist.isBlank() || title.isBlank()) return null
+        return classicLyrics(request("getLyrics", listOf("artist" to artist, "title" to title)))
+    }
 
     suspend fun setFavorite(songId: String, favorite: Boolean) {
         request(if (favorite) "star" else "unstar", listOf("id" to songId))

@@ -97,7 +97,9 @@ class MusicApplication : Application() {
                 networkAccess = localNetworkRequests::request),
             tunnel = tunnel, networkAccess = localNetworkRequests::request, soundCloud = soundCloud,
             discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client),
-            backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles))
+            backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles),
+            lyrics = me.d3sox.nevumi.lyrics.LyricsSources(store, me.d3sox.nevumi.lyrics.FileLyrics { contentResolver.openInputStream(Uri.parse(it)) },
+                connection::client, me.d3sox.nevumi.lyrics.LrcLibClient(http, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty())))
         widgetUpdates = NowPlayingWidgetUpdates(this, controller).apply { resume() }
     }
 

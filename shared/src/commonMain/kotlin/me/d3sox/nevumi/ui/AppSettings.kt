@@ -347,6 +347,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsToggle(stringResource(Res.string.settings_show_audio_info), AppIcon.INFO, stringResource(Res.string.settings_show_audio_info_description), settings.showAudioInfo) {
                 enabled -> controller.updatePreferences { it.copy(showAudioInfo = enabled) }
             }
+            LyricsSettings(settings, controller)
             SettingsLink(stringResource(Res.string.audio_effects), AppIcon.EQUALIZER, stringResource(Res.string.settings_audio_effects_description), audioEffects)
             SettingsSlider(stringResource(Res.string.crossfade), AppIcon.CROSSFADE, settings.crossfadeDurationMs / 1_000f, 0f..12f, 11,
                 { value -> when (val seconds = value.roundToInt()) { 0 -> stringResource(Res.string.off); else -> pluralStringResource(Res.plurals.settings_seconds, seconds, seconds) } }) {

@@ -418,11 +418,11 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             val controlsMaxHeight = maxHeight * .65f
                             if (maxWidth > maxHeight) Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-                                PlayerCover(state, current, Modifier.weight(1f).fillMaxHeight(), motion)
+                                PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxHeight(), motion)
                                 PlayerControls(state, controller, current, requested, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
                             } else Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                                PlayerCover(state, current, Modifier.weight(1f).fillMaxWidth(), motion)
+                                PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxWidth(), motion)
                                 PlayerControls(state, controller, current, requested,
                                     Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
                             }
@@ -701,8 +701,9 @@ internal fun MiniTrackInformation(state: AppState, track: Track, modifier: Modif
 }
 
 @Composable
-private fun PlayerCover(state: AppState, track: Track, modifier: Modifier, motion: PlayerMotion) {
+private fun PlayerCover(state: AppState, controller: MusicController, track: Track, modifier: Modifier, motion: PlayerMotion) {
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        if (PlayerLyrics.shown(controller)) LyricsCover(state, controller, motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTWORK)) else
         Surface(Modifier.size(minOf(maxWidth, maxHeight, 420.dp)).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTWORK)), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
             MusicArtwork(state.artwork[track.id], track.metadata.title, stringResource(Res.string.player_album_artwork, track.metadata.title), maxDimension = 1024)
         }
@@ -782,6 +783,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
                             style = MaterialTheme.typography.labelMedium)
                     }
                 }
+                LyricsButton(controller)
                 Text(playbackTime(durationMs), style = MaterialTheme.typography.labelMedium)
             }
         }

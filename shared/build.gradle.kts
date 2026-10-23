@@ -22,6 +22,8 @@ val generateAppVersion = tasks.register("generateAppVersion") {
 
                 @Composable
                 internal actual fun appVersion(): String = "${appVersion.get()}"
+
+                const val NEVUMI_VERSION = "${appVersion.get()}"
             """.trimIndent() + "\n")
         }
     }
