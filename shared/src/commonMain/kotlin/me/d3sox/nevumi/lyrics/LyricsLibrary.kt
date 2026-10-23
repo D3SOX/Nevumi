@@ -76,8 +76,9 @@ class LyricsSources(private val store: MusicStore?, private val files: LyricsFil
         fun cacheKey(metadata: TrackMetadata): String? = LibrarySync.identity(metadata)
             ?: if (metadata.artist.isBlank() || metadata.title.isBlank()) null
             // The length tells live, remastered and extended versions with the same tags apart, as it does for LRCLIB.
-            else "text:" + listOf(metadata.artist, metadata.title, metadata.album).joinToString("|") { it.trim().lowercase() } +
-                "|" + (metadata.durationMs + 500) / 1_000
+            // A JSON array keeps a separator inside a tag from making two songs share a key.
+            else "text:" + Json.encodeToString(listOf(metadata.artist, metadata.title, metadata.album).map { it.trim().lowercase() } +
+                ((metadata.durationMs + 500) / 1_000).toString())
     }
 }
 

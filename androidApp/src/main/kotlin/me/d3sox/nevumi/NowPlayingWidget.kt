@@ -102,14 +102,24 @@ private fun Content(playing: NowPlaying, artwork: Bitmap?) {
         // Three buttons do not fit the smallest size, so it only plays and pauses.
         // A one-row widget can be as short as 40 dp, so artwork and buttons shrink to the height left inside the padding.
         val fit = minOf(48.dp, size.height - 8.dp)
+        val title = @Composable {
+            Text(playing.title ?: context.getString(R.string.nothing_playing), maxLines = 1,
+                style = TextStyle(GlanceTheme.colors.onSurface, 15.sp, FontWeight.Medium))
+            if (playing.artist.isNotEmpty()) Text(playing.artist, maxLines = 1, style = TextStyle(GlanceTheme.colors.onSurfaceVariant, 13.sp))
+        }
         if (size.width < wide.width) Controls(playing.playing, fit, skips = false)
-        else Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Artwork(artwork, GlanceModifier.size(if (size.height >= tall.height) 80.dp else fit).cornerRadius(8.dp))
-            Column(GlanceModifier.defaultWeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(playing.title ?: context.getString(R.string.nothing_playing), maxLines = 1,
-                    style = TextStyle(GlanceTheme.colors.onSurface, 15.sp, FontWeight.Medium))
-                if (playing.artist.isNotEmpty()) Text(playing.artist, maxLines = 1, style = TextStyle(GlanceTheme.colors.onSurfaceVariant, 13.sp))
+        else if (size.height >= tall.height) Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            // The buttons sit under the title, and the artwork takes the width the buttons and padding leave, up to 80 dp.
+            val button = 40.dp
+            Artwork(artwork, GlanceModifier.size(minOf(80.dp, size.height - 8.dp, size.width - 48.dp - button * 3)).cornerRadius(8.dp))
+            Column(GlanceModifier.defaultWeight().padding(start = 12.dp)) {
+                title()
+                Controls(playing.playing, button)
             }
+        }
+        else Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(artwork, GlanceModifier.size(fit).cornerRadius(8.dp))
+            Column(GlanceModifier.defaultWeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) { title() }
             Controls(playing.playing, fit)
         }
     }
