@@ -15,6 +15,13 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_camera
+import me.d3sox.nevumi.resources.sources_desktop_camera_open_failed
+import me.d3sox.nevumi.resources.sources_no_webcam
+import me.d3sox.nevumi.resources.sources_opening_camera
+import me.d3sox.nevumi.resources.sources_pairing_camera_preview
+import org.jetbrains.compose.resources.stringResource
 
 internal data class DesktopCamera(val path: String, val name: String)
 
@@ -77,12 +84,13 @@ internal fun DesktopPairingCameraPreview(cameras: List<DesktopCamera>, modifier:
     val scanned by rememberUpdatedState(onScanned)
     val failed by rememberUpdatedState(onError)
     val scope = rememberCoroutineScope()
+    val openFailed = stringResource(Res.string.sources_desktop_camera_open_failed)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (cameras.isEmpty()) Text("No webcam found. Connect a camera or use a manual invitation code.")
+        if (cameras.isEmpty()) Text(stringResource(Res.string.sources_no_webcam))
         else {
-            SettingChoice("Camera", selected, cameras.map { it.path as String? to it.name }, card = false) { selected = it }
-            frame?.let { Image(it, "Pairing camera preview", Modifier.fillMaxWidth().height(220.dp)) }
-                ?: Box(Modifier.fillMaxWidth().height(220.dp)) { Text("Opening camera…") }
+            SettingChoice(stringResource(Res.string.sources_camera), selected, cameras.map { it.path as String? to it.name }, card = false) { selected = it }
+            frame?.let { Image(it, stringResource(Res.string.sources_pairing_camera_preview), Modifier.fillMaxWidth().height(220.dp)) }
+                ?: Box(Modifier.fillMaxWidth().height(220.dp)) { Text(stringResource(Res.string.sources_opening_camera)) }
         }
     }
     DisposableEffect(selected) {
@@ -108,7 +116,7 @@ internal fun DesktopPairingCameraPreview(cameras: List<DesktopCamera>, modifier:
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
                 if (!disposed.get()) {
-                    failed("Could not open this camera. Check camera access, choose another camera or use a manual invitation code.")
+                    failed(openFailed)
                 }
             } finally { capture.getAndSet(null)?.close() }
         } }

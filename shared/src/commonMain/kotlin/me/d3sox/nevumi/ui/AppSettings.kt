@@ -24,19 +24,188 @@ import kotlinx.coroutines.launch
 import kotlin.math.log2
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_gate_browser
+import me.d3sox.nevumi.resources.ssh_authentication
+import me.d3sox.nevumi.resources.statistics_grouping
+import me.d3sox.nevumi.resources.music_sources
+import me.d3sox.nevumi.resources.music_library
+import me.d3sox.nevumi.resources.about_nevumi
+import me.d3sox.nevumi.resources.add_to_queue
+import me.d3sox.nevumi.resources.audio_effects
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.clear
+import me.d3sox.nevumi.resources.colors
+import me.d3sox.nevumi.resources.connect_last_fm
+import me.d3sox.nevumi.resources.connect_listenbrainz
+import me.d3sox.nevumi.resources.crossfade
+import me.d3sox.nevumi.resources.customize_home
+import me.d3sox.nevumi.resources.download_network
+import me.d3sox.nevumi.resources.downloads
+import me.d3sox.nevumi.resources.keep_undo_backups
+import me.d3sox.nevumi.resources.library_tabs
+import me.d3sox.nevumi.resources.music_server
+import me.d3sox.nevumi.resources.off
+import me.d3sox.nevumi.resources.on
+import me.d3sox.nevumi.resources.on_launch
+import me.d3sox.nevumi.resources.paired_devices
+import me.d3sox.nevumi.resources.play_after
+import me.d3sox.nevumi.resources.play_next
+import me.d3sox.nevumi.resources.playback
+import me.d3sox.nevumi.resources.playback_cache
+import me.d3sox.nevumi.resources.quick_action
+import me.d3sox.nevumi.resources.record_listening_history
+import me.d3sox.nevumi.resources.saved_queues
+import me.d3sox.nevumi.resources.server
+import me.d3sox.nevumi.resources.server_files_sftp
+import me.d3sox.nevumi.resources.settings
+import me.d3sox.nevumi.resources.settings_about_nevumi_description
+import me.d3sox.nevumi.resources.settings_add_excluded_folder
+import me.d3sox.nevumi.resources.settings_add_folder
+import me.d3sox.nevumi.resources.settings_add_included_folder
+import me.d3sox.nevumi.resources.settings_amoled_black
+import me.d3sox.nevumi.resources.settings_amoled_black_description
+import me.d3sox.nevumi.resources.settings_any_network
+import me.d3sox.nevumi.resources.settings_appearance
+import me.d3sox.nevumi.resources.settings_appearance_description
+import me.d3sox.nevumi.resources.settings_audio_effects_description
+import me.d3sox.nevumi.resources.settings_clear_all_favorites
+import me.d3sox.nevumi.resources.settings_clear_all_favorites_message
+import me.d3sox.nevumi.resources.settings_clear_all_ratings
+import me.d3sox.nevumi.resources.settings_clear_all_ratings_message
+import me.d3sox.nevumi.resources.settings_clear_favorites
+import me.d3sox.nevumi.resources.settings_clear_history
+import me.d3sox.nevumi.resources.settings_clear_listening_history
+import me.d3sox.nevumi.resources.settings_clear_listening_history_message
+import me.d3sox.nevumi.resources.settings_clear_listening_history_question
+import me.d3sox.nevumi.resources.settings_clear_ratings
+import me.d3sox.nevumi.resources.settings_colors_artwork
+import me.d3sox.nevumi.resources.settings_colors_custom
+import me.d3sox.nevumi.resources.settings_colors_system
+import me.d3sox.nevumi.resources.settings_confirm_queue_jumps
+import me.d3sox.nevumi.resources.settings_confirm_queue_jumps_description
+import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption
+import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption_description
+import me.d3sox.nevumi.resources.settings_could_not_select_folder
+import me.d3sox.nevumi.resources.settings_customize_home_description
+import me.d3sox.nevumi.resources.settings_days
+import me.d3sox.nevumi.resources.settings_dismiss_folder_error
+import me.d3sox.nevumi.resources.settings_downloads_cache
+import me.d3sox.nevumi.resources.settings_downloads_cache_description
+import me.d3sox.nevumi.resources.settings_exclude_folders
+import me.d3sox.nevumi.resources.settings_exclude_folders_empty
+import me.d3sox.nevumi.resources.settings_files_recovery
+import me.d3sox.nevumi.resources.settings_files_recovery_description
+import me.d3sox.nevumi.resources.settings_folder_rules_note
+import me.d3sox.nevumi.resources.settings_gapless_playback
+import me.d3sox.nevumi.resources.settings_gapless_playback_description
+import me.d3sox.nevumi.resources.settings_include_folders
+import me.d3sox.nevumi.resources.settings_include_folders_empty
+import me.d3sox.nevumi.resources.settings_last_opened_page
+import me.d3sox.nevumi.resources.settings_library_gestures
+import me.d3sox.nevumi.resources.settings_library_gestures_description
+import me.d3sox.nevumi.resources.settings_library_tabs_description
+import me.d3sox.nevumi.resources.settings_listening_scrobbling
+import me.d3sox.nevumi.resources.settings_listening_scrobbling_description
+import me.d3sox.nevumi.resources.settings_local_music
+import me.d3sox.nevumi.resources.settings_local_music_description
+import me.d3sox.nevumi.resources.settings_local_music_summary
+import me.d3sox.nevumi.resources.settings_manage_downloads
+import me.d3sox.nevumi.resources.settings_manage_downloads_description
+import me.d3sox.nevumi.resources.settings_music_server_description
+import me.d3sox.nevumi.resources.settings_original_pitch
+import me.d3sox.nevumi.resources.settings_paired_devices_description
+import me.d3sox.nevumi.resources.settings_playback_description
+import me.d3sox.nevumi.resources.settings_playback_pitch
+import me.d3sox.nevumi.resources.settings_playback_speed
+import me.d3sox.nevumi.resources.settings_previous_track_limit
+import me.d3sox.nevumi.resources.settings_remember_scroll_positions
+import me.d3sox.nevumi.resources.settings_remember_scroll_positions_description
+import me.d3sox.nevumi.resources.settings_remove_excluded_folder
+import me.d3sox.nevumi.resources.settings_remove_included_folder
+import me.d3sox.nevumi.resources.settings_review_interrupted_edit
+import me.d3sox.nevumi.resources.settings_review_interrupted_edit_description
+import me.d3sox.nevumi.resources.settings_saved_queues_description
+import me.d3sox.nevumi.resources.settings_scan_complete
+import me.d3sox.nevumi.resources.settings_scan_music
+import me.d3sox.nevumi.resources.settings_scanning_music
+import me.d3sox.nevumi.resources.settings_search_settings
+import me.d3sox.nevumi.resources.settings_seconds
+import me.d3sox.nevumi.resources.settings_semitones_down
+import me.d3sox.nevumi.resources.settings_semitones_up
+import me.d3sox.nevumi.resources.settings_server_files_description
+import me.d3sox.nevumi.resources.settings_show_audio_info
+import me.d3sox.nevumi.resources.settings_show_audio_info_description
+import me.d3sox.nevumi.resources.settings_show_options_buttons_description
+import me.d3sox.nevumi.resources.settings_show_previous_tracks
+import me.d3sox.nevumi.resources.settings_show_previous_tracks_description
+import me.d3sox.nevumi.resources.settings_soundcloud
+import me.d3sox.nevumi.resources.settings_soundcloud_description
+import me.d3sox.nevumi.resources.settings_source_local
+import me.d3sox.nevumi.resources.settings_theme_dark
+import me.d3sox.nevumi.resources.settings_theme_follow_system
+import me.d3sox.nevumi.resources.settings_theme_light
+import me.d3sox.nevumi.resources.settings_title_scroll_speed
+import me.d3sox.nevumi.resources.settings_tunnel_description
+import me.d3sox.nevumi.resources.settings_undo_backups_note
+import me.d3sox.nevumi.resources.settings_unmetered_only
+import me.d3sox.nevumi.resources.settings_waveforms
+import me.d3sox.nevumi.resources.settings_waveforms_description
+import me.d3sox.nevumi.resources.show_options_buttons
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.source_priority
+import me.d3sox.nevumi.resources.swipe_left
+import me.d3sox.nevumi.resources.swipe_right
+import me.d3sox.nevumi.resources.theme
+import me.d3sox.nevumi.resources.tunnel
+import me.d3sox.nevumi.resources.undo_backup_storage
+import me.d3sox.nevumi.history.ScrobblingService
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.pluralStringResource
 
-internal fun QueueAction.label(): String = when (this) {
-    QueueAction.PLAY_NEXT -> "Play next"
-    QueueAction.PLAY_AFTER -> "Play after"
-    QueueAction.APPEND -> "Add to queue"
-}
+@Composable
+internal fun QueueAction.label(): String = stringResource(when (this) {
+    QueueAction.PLAY_NEXT -> Res.string.play_next
+    QueueAction.PLAY_AFTER -> Res.string.play_after
+    QueueAction.APPEND -> Res.string.add_to_queue
+})
+
+/** Settings navigation uses these page ids; this resolves the localized title shown for a page. */
+@Composable
+internal fun settingsPageTitle(page: String): String = stringResource(when (page) {
+    "Appearance" -> Res.string.settings_appearance
+    "Library & gestures" -> Res.string.settings_library_gestures
+    "Local music" -> Res.string.settings_local_music
+    "Playback" -> Res.string.playback
+    "Waveforms" -> Res.string.settings_waveforms
+    "Downloads & cache" -> Res.string.settings_downloads_cache
+    "Listening & scrobbling" -> Res.string.settings_listening_scrobbling
+    "Files & recovery" -> Res.string.settings_files_recovery
+    "Music server" -> Res.string.music_server
+    "Manage downloads" -> Res.string.settings_manage_downloads
+    "Audio effects" -> Res.string.audio_effects
+    "Server files (SFTP)" -> Res.string.server_files_sftp
+    "Tunnel" -> Res.string.tunnel
+    "SoundCloud" -> Res.string.settings_soundcloud
+    "Paired devices" -> Res.string.paired_devices
+    "Saved queues" -> Res.string.saved_queues
+    "About Nevumi" -> Res.string.about_nevumi
+    "Customize Home" -> Res.string.customize_home
+    "Library tabs" -> Res.string.library_tabs
+    "Connect Last.fm" -> Res.string.connect_last_fm
+    "Connect ListenBrainz" -> Res.string.connect_listenbrainz
+    "Search settings" -> Res.string.settings_search_settings
+    else -> return page
+})
 
 @Composable
 internal fun AppSettings(state: AppState, controller: MusicController, server: () -> Unit, downloads: () -> Unit,
     savedQueues: () -> Unit, audioEffects: () -> Unit, serverFiles: () -> Unit, tunnel: () -> Unit, pairedDevices: () -> Unit,
     fileRecovery: () -> Unit, soundCloud: () -> Unit = {}, categoryState: MutableState<String?>, onAddMusic: (() -> Unit)? = null, folderPicker: FolderPicker, dismiss: () -> Unit) {
     val settings = state.preferences
-    val trackActions = remember { TrackAction.entries.filter { it != TrackAction.PLAY }.map { it to it.label() } }
+    val trackActions = TrackAction.entries.filter { it != TrackAction.PLAY }.map { it to it.displayLabel() }
     var category by categoryState
     val scope = rememberCoroutineScope()
     var pickingFolder by remember { mutableStateOf(false) }
@@ -53,7 +222,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                         if (include) current.excludeFolders else current.excludeFolders + folder).join()
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { folderError = error.message ?: "Could not select this folder" }
+            catch (error: Exception) { folderError = error.message ?: getString(Res.string.settings_could_not_select_folder) }
             finally { pickingFolder = false }
         }
     }
@@ -109,26 +278,26 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
     else if (shownCategory == "Connect Last.fm") { ConnectLastFm(controller, back) }
     else {
     val category = shownCategory
-    SettingsScreen(onDismissRequest = back, title = { Text(category ?: "Settings") },
-        actions = { AppIconButton(AppIcon.SEARCH, "Search settings") { search = ""; searching = true } }, text = {
+    SettingsScreen(onDismissRequest = back, title = { Text(category?.let { settingsPageTitle(it) } ?: stringResource(Res.string.settings)) },
+        actions = { AppIconButton(AppIcon.SEARCH, stringResource(Res.string.settings_search_settings)) { search = ""; searching = true } }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (category == "Appearance") {
             SettingsGroup {
-            SettingChoice("Theme", settings.themeMode, listOf(ThemeMode.SYSTEM to "Follow system", ThemeMode.LIGHT to "Light",
-                ThemeMode.DARK to "Dark")) { mode ->
+            SettingChoice(Res.string.theme, settings.themeMode, listOf(ThemeMode.SYSTEM to stringResource(Res.string.settings_theme_follow_system), ThemeMode.LIGHT to stringResource(Res.string.settings_theme_light),
+                ThemeMode.DARK to stringResource(Res.string.settings_theme_dark))) { mode ->
                 controller.updatePreferences { it.copy(themeMode = mode) }
             }
-            SettingsToggle("AMOLED black", AppIcon.DARK_THEME, "Use a black background in dark mode", settings.amoledBlack) {
+            SettingsToggle(stringResource(Res.string.settings_amoled_black), AppIcon.DARK_THEME, stringResource(Res.string.settings_amoled_black_description), settings.amoledBlack) {
                 enabled -> controller.updatePreferences { it.copy(amoledBlack = enabled) }
             }
-            SettingChoice("Colors", settings.colors, listOf(ColorMode.SYSTEM to "System colors", ColorMode.ARTWORK to "Artwork colors",
-                ColorMode.CUSTOM to "Custom")) { colors ->
+            SettingChoice(Res.string.colors, settings.colors, listOf(ColorMode.SYSTEM to stringResource(Res.string.settings_colors_system), ColorMode.ARTWORK to stringResource(Res.string.settings_colors_artwork),
+                ColorMode.CUSTOM to stringResource(Res.string.settings_colors_custom))) { colors ->
                 controller.updatePreferences { it.copy(colors = colors) }
             }
             if (settings.colors == ColorMode.CUSTOM) CustomColorPicker(settings.customColor) { color ->
                 controller.updatePreferences { it.copy(customColor = color) }
             }
-            SettingsSlider("Title scroll speed", AppIcon.TEXT_SCROLL, settings.marqueeSpeed.toFloat(), 0.5f..3f, 9,
+            SettingsSlider(stringResource(Res.string.settings_title_scroll_speed), AppIcon.TEXT_SCROLL, settings.marqueeSpeed.toFloat(), 0.5f..3f, 9,
                 { value -> "${(value * 100).roundToInt() / 100.0}×" }) { value ->
                 controller.updatePreferences { it.copy(marqueeSpeed = (value * 4).roundToInt() / 4.0) }
             }
@@ -136,69 +305,69 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
 }
             if (category == "Library & gestures") {
             SettingsGroup {
-            SettingChoice("On launch", settings.startupTab,
-                listOf(null to "Last opened page") + settings.libraryTabs.map { it to it.label }) { tab ->
+            SettingChoice(Res.string.on_launch, settings.startupTab,
+                listOf(null to stringResource(Res.string.settings_last_opened_page)) + settings.libraryTabs.map { it to stringResource(it.label) }) { tab ->
                 controller.updatePreferences { it.copy(startupTab = tab) }
             }
-            SettingChoice("Swipe right", settings.swipeRight, trackActions) { action ->
+            SettingChoice(Res.string.swipe_right, settings.swipeRight, trackActions) { action ->
                 controller.updatePreferences { it.copy(swipeRight = action) }
             }
-            SettingChoice("Swipe left", settings.swipeLeft, trackActions) { action ->
+            SettingChoice(Res.string.swipe_left, settings.swipeLeft, trackActions) { action ->
                 controller.updatePreferences { it.copy(swipeLeft = action) }
             }
-            SettingChoice("Quick action", settings.quickAction, trackActions) { action ->
+            SettingChoice(Res.string.quick_action, settings.quickAction, trackActions) { action ->
                 controller.updatePreferences { it.copy(quickAction = action) }
             }
-            SettingsToggle("Show options buttons", AppIcon.MORE, "Show ⋮ on songs and collections. Long press opens the same menu.", settings.showMoreButtons) {
+            SettingsToggle(stringResource(Res.string.show_options_buttons), AppIcon.MORE, stringResource(Res.string.settings_show_options_buttons_description), settings.showMoreButtons) {
                 enabled -> controller.updatePreferences { it.copy(showMoreButtons = enabled) }
             }
-            SettingsToggle("Remember scroll positions", AppIcon.LIBRARY, "Reopen library lists and grids where you left off.", settings.rememberScrollPositions) {
+            SettingsToggle(stringResource(Res.string.settings_remember_scroll_positions), AppIcon.LIBRARY, stringResource(Res.string.settings_remember_scroll_positions_description), settings.rememberScrollPositions) {
                 enabled -> controller.updatePreferences { it.copy(rememberScrollPositions = enabled) }
             }
-                SettingsLink("Customize Home", AppIcon.HOME, "Reorder sections on your Home page") { customizeHome = true }
-                SettingsLink("Library tabs", AppIcon.TABS, "Choose and reorder library pages") { libraryTabs = true }
+                SettingsLink(stringResource(Res.string.customize_home), AppIcon.HOME, stringResource(Res.string.settings_customize_home_description)) { customizeHome = true }
+                SettingsLink(stringResource(Res.string.library_tabs), AppIcon.TABS, stringResource(Res.string.settings_library_tabs_description)) { libraryTabs = true }
                         }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton("Clear favorites", AppIcon.FAVORITE, enabled = favoriteIds.isNotEmpty(),
+                ActionButton(stringResource(Res.string.settings_clear_favorites), AppIcon.FAVORITE, enabled = favoriteIds.isNotEmpty(),
                     style = ActionStyle.DESTRUCTIVE) { clearingFavorites = true }
-                ActionButton("Clear ratings", AppIcon.RATING, enabled = ratingCount > 0,
+                ActionButton(stringResource(Res.string.settings_clear_ratings), AppIcon.RATING, enabled = ratingCount > 0,
                     style = ActionStyle.DESTRUCTIVE) { clearingRatings = true }
             }
 }
             if (category == "Playback") {
             SettingsGroup {
-            SettingsSlider("Playback speed", AppIcon.SPEED, settings.speed.toFloat(), 0.5f..2f, 29,
+            SettingsSlider(stringResource(Res.string.settings_playback_speed), AppIcon.SPEED, settings.speed.toFloat(), 0.5f..2f, 29,
                 { value -> "${(value * 100).roundToInt() / 100.0}×" }) { controller.setSpeed(it.toDouble()) }
-            SettingsSlider("Playback pitch", AppIcon.PITCH, (12 * log2(settings.pitch)).toFloat(), -12f..12f, 23,
+            SettingsSlider(stringResource(Res.string.settings_playback_pitch), AppIcon.PITCH, (12 * log2(settings.pitch)).toFloat(), -12f..12f, 23,
                 { value -> when (val semitones = value.roundToInt()) {
-                    0 -> "Original pitch"
-                    1 -> "+1 semitone"
-                    -1 -> "−1 semitone"
-                    else -> if (semitones > 0) "+$semitones semitones" else "$semitones semitones"
+                    0 -> stringResource(Res.string.settings_original_pitch)
+                    else -> if (semitones > 0) pluralStringResource(Res.plurals.settings_semitones_up, semitones, semitones)
+                        else pluralStringResource(Res.plurals.settings_semitones_down, -semitones, -semitones)
                 } }) { controller.setPitch(2.0.pow(it.roundToInt() / 12.0)) }
-            SettingsLink("Waveforms", AppIcon.WAVEFORM, "Prepare and cache waveforms for your music") { categoryState.value = "Waveforms" }
-            SettingsToggle("Show audio info", AppIcon.INFO, "Format, bitrate and sample rate in Now Playing", settings.showAudioInfo) {
+            SettingsLink(stringResource(Res.string.settings_waveforms), AppIcon.WAVEFORM, stringResource(Res.string.settings_waveforms_description)) { categoryState.value = "Waveforms" }
+            SettingsToggle(stringResource(Res.string.settings_show_audio_info), AppIcon.INFO, stringResource(Res.string.settings_show_audio_info_description), settings.showAudioInfo) {
                 enabled -> controller.updatePreferences { it.copy(showAudioInfo = enabled) }
             }
-            SettingsLink("Audio effects", AppIcon.EQUALIZER, "Equalizer, headphone profiles and mono audio", audioEffects)
-            SettingsSlider("Crossfade", AppIcon.CROSSFADE, settings.crossfadeDurationMs / 1_000f, 0f..12f, 11,
-                { value -> when (val seconds = value.roundToInt()) { 0 -> "Off"; 1 -> "1 second"; else -> "$seconds seconds" } }) {
+            LyricsSettings(settings, controller)
+            SettingsLink(stringResource(Res.string.audio_effects), AppIcon.EQUALIZER, stringResource(Res.string.settings_audio_effects_description), audioEffects)
+            SettingsSlider(stringResource(Res.string.crossfade), AppIcon.CROSSFADE, settings.crossfadeDurationMs / 1_000f, 0f..12f, 11,
+                { value -> when (val seconds = value.roundToInt()) { 0 -> stringResource(Res.string.off); else -> pluralStringResource(Res.plurals.settings_seconds, seconds, seconds) } }) {
                 controller.updatePreferences { preferences -> preferences.copy(crossfadeDurationMs = it.roundToInt() * 1_000L) }
             }
-            SettingsToggle("Gapless playback", AppIcon.MUSIC, "Play adjacent tracks without a break when crossfade is off.", settings.gaplessPlayback) {
+            SettingsToggle(stringResource(Res.string.settings_gapless_playback), AppIcon.MUSIC, stringResource(Res.string.settings_gapless_playback_description), settings.gaplessPlayback) {
                 enabled -> controller.updatePreferences { it.copy(gaplessPlayback = enabled) }
             }
-            SettingsToggle("Show previous tracks in queue", AppIcon.HISTORY, "Display songs before the current track", settings.showPreviousQueueTracks) {
+            SettingsToggle(stringResource(Res.string.settings_show_previous_tracks), AppIcon.HISTORY, stringResource(Res.string.settings_show_previous_tracks_description), settings.showPreviousQueueTracks) {
                 enabled -> controller.updatePreferences { it.copy(showPreviousQueueTracks = enabled) }
             }
-            SettingsToggle("Confirm queue jumps", AppIcon.CONFIRM, "Ask before playing a song other than the next one", settings.confirmQueueJumps) {
+            SettingsToggle(stringResource(Res.string.settings_confirm_queue_jumps), AppIcon.CONFIRM, stringResource(Res.string.settings_confirm_queue_jumps_description), settings.confirmQueueJumps) {
                 enabled -> controller.updatePreferences { it.copy(confirmQueueJumps = enabled) }
             }
-            SettingsToggle("Confirm interrupting Up next", AppIcon.CONFIRM, "Ask before starting other music while Up next is active", settings.confirmNextUpInterruption) {
+            SettingsToggle(stringResource(Res.string.settings_confirm_up_next_interruption), AppIcon.CONFIRM, stringResource(Res.string.settings_confirm_up_next_interruption_description), settings.confirmNextUpInterruption) {
                 enabled -> controller.updatePreferences { it.copy(confirmNextUpInterruption = enabled) }
             }
             if (settings.showPreviousQueueTracks) {
-                SettingsSlider("Previous track limit", AppIcon.REPEAT_COUNT, settings.previousQueueTrackLimit.toFloat(), 1f..100f, 98,
+                SettingsSlider(stringResource(Res.string.settings_previous_track_limit), AppIcon.REPEAT_COUNT, settings.previousQueueTrackLimit.toFloat(), 1f..100f, 98,
                     format = { it.roundToInt().toString() }) { value ->
                     controller.updatePreferences { it.copy(previousQueueTrackLimit = value.roundToInt()) }
                 }
@@ -208,135 +377,154 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             if (category == "Waveforms") { WaveformSettings(state, controller) }
             if (category == "Downloads & cache") {
             SettingsGroup {
+            val sourceNames = mapOf(SourceKind.LOCAL to stringResource(Res.string.settings_source_local), SourceKind.DOWNLOAD to stringResource(Res.string.downloads),
+                SourceKind.SERVER to stringResource(Res.string.server))
             val sourceOrders = SourceKind.entries.flatMap { first ->
                 SourceKind.entries.filter { it != first }.map { second ->
                     listOf(first, second, SourceKind.entries.first { it != first && it != second })
                 }
             }
-            SettingChoice("Source priority", settings.sourcePriority, sourceOrders.map { order -> order to order.joinToString(" → ") { source ->
-                when (source) { SourceKind.LOCAL -> "Local"; SourceKind.DOWNLOAD -> "Downloads"; SourceKind.SERVER -> "Server" }
+            SettingChoice(Res.string.source_priority, settings.sourcePriority, sourceOrders.map { order -> order to order.joinToString(" → ") { source ->
+                sourceNames.getValue(source)
             } }) { order -> controller.updatePreferences { it.copy(sourcePriority = order) } }
-            SettingChoice("Playback cache", settings.cacheBytes, listOf(0L to "Off", 268_435_456L to "256 MiB",
+            SettingChoice(Res.string.playback_cache, settings.cacheBytes, listOf(0L to stringResource(Res.string.off), 268_435_456L to "256 MiB",
                 1_073_741_824L to "1 GiB", 2_147_483_648L to "2 GiB", 5_368_709_120L to "5 GiB")) { bytes ->
                 controller.updatePreferences { it.copy(cacheBytes = bytes) }
             }
-            SettingChoice("Download network", settings.downloadOnMetered,
-                listOf(false to "Unmetered only", true to "Any network")) { allowed ->
+            SettingChoice(Res.string.download_network, settings.downloadOnMetered,
+                listOf(false to stringResource(Res.string.settings_unmetered_only), true to stringResource(Res.string.settings_any_network))) { allowed ->
                 controller.updatePreferences { it.copy(downloadOnMetered = allowed) }
             }
-                SettingsLink("Manage downloads", AppIcon.DOWNLOAD, "Downloads, progress and offline music", downloads)
+                SettingsLink(stringResource(Res.string.settings_manage_downloads), AppIcon.DOWNLOAD, stringResource(Res.string.settings_manage_downloads_description), downloads)
                         }
 }
             if (category == "Listening & scrobbling") {
             SettingsGroup {
-            SettingChoice("Record listening history", settings.recordListeningHistory,
-                listOf(true to "On", false to "Off")) { enabled ->
+            SettingChoice(Res.string.record_listening_history, settings.recordListeningHistory,
+                listOf(true to stringResource(Res.string.on), false to stringResource(Res.string.off))) { enabled ->
                 controller.updatePreferences { it.copy(recordListeningHistory = enabled) }
             }
                         }
-            ActionButton("Clear listening history", AppIcon.REMOVE, style = ActionStyle.DESTRUCTIVE) { clearHistory = true }
+            ActionButton(stringResource(Res.string.settings_clear_listening_history), AppIcon.REMOVE, style = ActionStyle.DESTRUCTIVE) { clearHistory = true }
                 if (controller.scrobblingAvailable) ScrobblingSettingsContent(state, controller) {
-                    categoryState.value = "Connect ${it.label()}"
+                    categoryState.value = when (it) {
+                        ScrobblingService.LISTENBRAINZ -> "Connect ListenBrainz"
+                        ScrobblingService.LASTFM -> "Connect Last.fm"
+                        ScrobblingService.NAVIDROME -> "Connect Music server"
+                    }
                 }
 }
             if (category == "Files & recovery") {
             SettingsGroup {
                 if (state.fileEdits.any { it.needsRecovery || (!it.applied && !it.undone && !it.writing) })
-                    SettingsLink("Review interrupted edit", AppIcon.UNDO, "Restore or finish a pending music file edit", fileRecovery)
+                    SettingsLink(stringResource(Res.string.settings_review_interrupted_edit), AppIcon.UNDO, stringResource(Res.string.settings_review_interrupted_edit_description), fileRecovery)
             if (controller.fileEditingAvailable) {
-                SettingChoice("Keep undo backups", settings.undoRetentionDays, listOf(7 to "7 days", 30 to "30 days", 90 to "90 days")) { days ->
+                SettingChoice(Res.string.keep_undo_backups, settings.undoRetentionDays, listOf(7, 30, 90).map { it to pluralStringResource(Res.plurals.settings_days, it, it) }) { days ->
                     controller.updatePreferences { it.copy(undoRetentionDays = days) }
                 }
-                SettingChoice("Undo backup storage", settings.undoBackupBytes, listOf(268_435_456L to "256 MiB",
+                SettingChoice(Res.string.undo_backup_storage, settings.undoBackupBytes, listOf(268_435_456L to "256 MiB",
                     1_073_741_824L to "1 GiB", 5_368_709_120L to "5 GiB")) { bytes ->
                     controller.updatePreferences { it.copy(undoBackupBytes = bytes) }
                 }
             }
-                if (controller.serverFilesAvailable) SettingsLink("Server files (SFTP)", AppIcon.SERVER_FILES, "Optional file editing and uploads", serverFiles)
+                if (controller.serverFilesAvailable) SettingsLink(stringResource(Res.string.server_files_sftp), AppIcon.SERVER_FILES, stringResource(Res.string.settings_server_files_description), serverFiles)
                         }
             if (controller.fileEditingAvailable)
-                Text("Older backups expire. The newest edit and unfinished recovery can exceed the storage target.",
+                Text(stringResource(Res.string.settings_undo_backups_note),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
             if (category == "Local music") {
-                Text("Scan the music already stored on your device. Files stay in their current folders.",
+                Text(stringResource(Res.string.settings_local_music_description),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(enabled = !state.loading && state.localScan == null,
                     onClick = { if (onAddMusic != null) onAddMusic() else controller.rescanLocalMusic() }) {
-                    Icon(AppIcon.SEARCH.vector, null); Spacer(Modifier.width(8.dp)); Text("Scan music")
+                    Icon(AppIcon.SEARCH.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.settings_scan_music))
                 }
                 state.localScan?.let { scan ->
                     LinearProgressIndicator(progress = { if (scan.total == 0) 0f else scan.processed.toFloat() / scan.total }, Modifier.fillMaxWidth())
-                    Text("Scanning music · ${scan.processed} / ${scan.total}", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(Res.string.settings_scanning_music, scan.processed, scan.total), style = MaterialTheme.typography.bodySmall)
                 } ?: state.lastLocalScanCount?.let { count ->
-                    Text("Scan complete · ${countLabel(count, "song")}", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(Res.string.settings_scan_complete, countLabel(count, Res.plurals.songs)), style = MaterialTheme.typography.bodySmall)
                 }
-                Text("Selected folders include their subfolders. Exclusions take priority.",
+                Text(stringResource(Res.string.settings_folder_rules_note),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                FolderRuleList("Include folders", settings.includeFolders, "included", pickingFolder,
-                    "All scanned folders are included", { pickFolder(true) }) { folder ->
+                FolderRuleList(stringResource(Res.string.settings_include_folders), settings.includeFolders, stringResource(Res.string.settings_add_included_folder),
+                    Res.string.settings_remove_included_folder, pickingFolder, stringResource(Res.string.settings_include_folders_empty), { pickFolder(true) }) { folder ->
                     controller.updateLocalFolders(settings.includeFolders - folder, settings.excludeFolders)
                 }
                 HorizontalDivider()
-                FolderRuleList("Exclude folders", settings.excludeFolders, "excluded", pickingFolder,
-                    "No folders excluded", { pickFolder(false) }) { folder ->
+                FolderRuleList(stringResource(Res.string.settings_exclude_folders), settings.excludeFolders, stringResource(Res.string.settings_add_excluded_folder),
+                    Res.string.settings_remove_excluded_folder, pickingFolder, stringResource(Res.string.settings_exclude_folders_empty), { pickFolder(false) }) { folder ->
                     controller.updateLocalFolders(settings.includeFolders, settings.excludeFolders - folder)
                 }
                 if (pickingFolder) LinearProgressIndicator(Modifier.fillMaxWidth())
                 folderError?.let { error ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(error, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
-                        AppIconButton(AppIcon.CLOSE, "Dismiss folder error") { folderError = null }
+                        AppIconButton(AppIcon.CLOSE, stringResource(Res.string.settings_dismiss_folder_error)) { folderError = null }
                     }
                 }
             }
             if (category == null) {
                 SettingsGroup {
-                SettingsLink("Appearance", AppIcon.THEME, "Theme, system colors and artwork colors") { categoryState.value = "Appearance" }
-                SettingsLink("Local music", AppIcon.FOLDER, "Scan music, include folders and exclusions") { categoryState.value = "Local music" }
-                SettingsLink("Library & gestures", AppIcon.GESTURES, "Tabs and swipe actions") { categoryState.value = "Library & gestures" }
-                SettingsLink("Playback", AppIcon.PLAY, "Speed, pitch, crossfade and audio effects") { categoryState.value = "Playback" }
+                SettingsLink(stringResource(Res.string.settings_appearance), AppIcon.THEME, stringResource(Res.string.settings_appearance_description)) { categoryState.value = "Appearance" }
+                SettingsLink(stringResource(Res.string.settings_local_music), AppIcon.FOLDER, stringResource(Res.string.settings_local_music_summary)) { categoryState.value = "Local music" }
+                SettingsLink(stringResource(Res.string.settings_library_gestures), AppIcon.GESTURES, stringResource(Res.string.settings_library_gestures_description)) { categoryState.value = "Library & gestures" }
+                SettingsLink(stringResource(Res.string.playback), AppIcon.PLAY, stringResource(Res.string.settings_playback_description)) { categoryState.value = "Playback" }
                 }
                 SettingsGroup {
-                SettingsLink("Downloads & cache", AppIcon.DOWNLOAD, "Offline music, network and source priority") { categoryState.value = "Downloads & cache" }
-                SettingsLink("Music server", AppIcon.SERVER, "Navidrome and Subsonic", server)
-                if (controller.tunnel != null) SettingsLink("Tunnel", AppIcon.TAILSCALE, "Reach your servers through Tailscale", tunnel)
-                if (controller.soundCloudAvailable) SettingsLink("SoundCloud", AppIcon.CLOUD, "Search and download songs through sc-gate-dl", soundCloud)
-                SettingsLink("Listening & scrobbling", AppIcon.HISTORY, "History, statistics and connected services") { categoryState.value = "Listening & scrobbling" }
+                SettingsLink(stringResource(Res.string.settings_downloads_cache), AppIcon.DOWNLOAD, stringResource(Res.string.settings_downloads_cache_description)) { categoryState.value = "Downloads & cache" }
+                SettingsLink(stringResource(Res.string.music_server), AppIcon.SERVER, stringResource(Res.string.settings_music_server_description), server)
+                if (controller.tunnel != null) SettingsLink(stringResource(Res.string.tunnel), AppIcon.TAILSCALE, stringResource(Res.string.settings_tunnel_description), tunnel)
+                if (controller.soundCloudAvailable) SettingsLink(stringResource(Res.string.settings_soundcloud), AppIcon.CLOUD, stringResource(Res.string.settings_soundcloud_description), soundCloud)
+                SettingsLink(stringResource(Res.string.settings_listening_scrobbling), AppIcon.HISTORY, stringResource(Res.string.settings_listening_scrobbling_description)) { categoryState.value = "Listening & scrobbling" }
                 }
                 SettingsGroup {
-                if (controller.pairedDevices != null) SettingsLink("Paired devices", AppIcon.DEVICES, "Sync with your phone or computer", pairedDevices)
-                if (controller.fileEditingAvailable || controller.serverFilesAvailable) SettingsLink("Files & recovery", AppIcon.UNDO, "Undo backups and server file editing") { categoryState.value = "Files & recovery" }
-                SettingsLink("Saved queues", AppIcon.QUEUE, "Manage saved playback queues", savedQueues)
-                SettingsLink("About Nevumi", AppIcon.INFO, "Source code and license") { about = true }
+                if (controller.pairedDevices != null) SettingsLink(stringResource(Res.string.paired_devices), AppIcon.DEVICES, stringResource(Res.string.settings_paired_devices_description), pairedDevices)
+                if (controller.fileEditingAvailable || controller.serverFilesAvailable) SettingsLink(stringResource(Res.string.settings_files_recovery), AppIcon.UNDO, stringResource(Res.string.settings_files_recovery_description)) { categoryState.value = "Files & recovery" }
+                SettingsLink(stringResource(Res.string.saved_queues), AppIcon.QUEUE, stringResource(Res.string.settings_saved_queues_description), savedQueues)
+                SettingsLink(stringResource(Res.string.about_nevumi), AppIcon.INFO, stringResource(Res.string.settings_about_nevumi_description)) { about = true }
                 }
+                BackupSettings(controller)
             }
         }
     })
     }
     }
     if (clearingRatings) AlertDialog(onDismissRequest = { clearingRatings = false },
-        title = { Text("Clear all ratings?") },
-        text = { Text("Remove ratings from ${countLabel(ratingCount, "song")}, including songs hidden by filters. Your music files will stay in your library.") },
+        title = { Text(stringResource(Res.string.settings_clear_all_ratings)) },
+        text = { Text(stringResource(Res.string.settings_clear_all_ratings_message, countLabel(ratingCount, Res.plurals.songs))) },
         confirmButton = { TextButton(onClick = { controller.clearRatings(); clearingRatings = false },
-            enabled = ratingCount > 0) { Text("Clear") } },
-        dismissButton = { TextButton(onClick = { clearingRatings = false }) { Text("Cancel") } })
+            enabled = ratingCount > 0) { Text(stringResource(Res.string.clear)) } },
+        dismissButton = { TextButton(onClick = { clearingRatings = false }) { Text(stringResource(Res.string.cancel)) } })
     if (clearingFavorites) AlertDialog(onDismissRequest = { clearingFavorites = false },
-        title = { Text("Clear all favorites?") },
-        text = { Text("Remove all ${countLabel(favoriteIds.size, "song")} from favorites, including songs hidden by filters. Your music files will stay in your library.") },
+        title = { Text(stringResource(Res.string.settings_clear_all_favorites)) },
+        text = { Text(stringResource(Res.string.settings_clear_all_favorites_message, countLabel(favoriteIds.size, Res.plurals.songs))) },
         confirmButton = {
             TextButton(onClick = { controller.setFavorite(favoriteIds, false); clearingFavorites = false },
-                enabled = favoriteIds.isNotEmpty()) { Text("Clear") }
+                enabled = favoriteIds.isNotEmpty()) { Text(stringResource(Res.string.clear)) }
         },
-        dismissButton = { TextButton(onClick = { clearingFavorites = false }) { Text("Cancel") } })
-    if (clearHistory) AlertDialog(onDismissRequest = { clearHistory = false }, title = { Text("Clear listening history?") },
-        text = { Text("This removes this device’s listening history and statistics.") },
-        confirmButton = { TextButton(onClick = { controller.clearListeningHistory(); clearHistory = false }) { Text("Clear history") } },
-        dismissButton = { TextButton(onClick = { clearHistory = false }) { Text("Cancel") } })
+        dismissButton = { TextButton(onClick = { clearingFavorites = false }) { Text(stringResource(Res.string.cancel)) } })
+    if (clearHistory) AlertDialog(onDismissRequest = { clearHistory = false }, title = { Text(stringResource(Res.string.settings_clear_listening_history_question)) },
+        text = { Text(stringResource(Res.string.settings_clear_listening_history_message)) },
+        confirmButton = { TextButton(onClick = { controller.clearListeningHistory(); clearHistory = false }) { Text(stringResource(Res.string.settings_clear_history)) } },
+        dismissButton = { TextButton(onClick = { clearHistory = false }) { Text(stringResource(Res.string.cancel)) } })
+}
+
+@Composable
+internal fun <T> SettingChoice(label: StringResource, selected: T, choices: List<Pair<T, String>>, card: Boolean = true, change: (T) -> Unit) {
+    SettingChoice(stringResource(label), label, settingsIcon(label), selected, choices, card, change)
 }
 
 @Composable
 internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T, String>>, card: Boolean = true, change: (T) -> Unit) {
+    val key = settingKey(label)
+    SettingChoice(label, key, key?.let(::settingsIcon) ?: AppIcon.SETTINGS, selected, choices, card, change)
+}
+
+@Composable
+private fun <T> SettingChoice(label: String, key: StringResource?, icon: AppIcon, selected: T, choices: List<Pair<T, String>>,
+    card: Boolean, change: (T) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     fun choiceIcon(value: T): AppIcon? = when (value) {
         is QueueAction -> value.icon()
@@ -360,16 +548,16 @@ internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T,
         }
         is SourceKind -> when (value) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD }
         is List<*> -> when (value.firstOrNull()) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD; else -> null }
-        is Boolean -> if (label == "Download network") { if (value) AppIcon.NETWORK else AppIcon.WIFI }
+        is Boolean -> if (key == Res.string.download_network) { if (value) AppIcon.NETWORK else AppIcon.WIFI }
             else if (value) AppIcon.CHECK else AppIcon.CLOSE
-        is Double -> if (label == "Playback speed") AppIcon.SPEED else if (label == "Playback pitch") AppIcon.PITCH else null
-        is Long -> when (label) { "Playback cache", "Undo backup storage" -> AppIcon.STORAGE; "Music library" -> AppIcon.FOLDER; else -> null }
-        is Int -> if (label == "Keep undo backups") AppIcon.YEAR else null
+        is Long -> when (key) { Res.string.playback_cache, Res.string.undo_backup_storage -> AppIcon.STORAGE; Res.string.music_library -> AppIcon.FOLDER; else -> null }
+        is Int -> if (key == Res.string.keep_undo_backups) AppIcon.YEAR else null
         is me.d3sox.nevumi.history.ListeningPeriod -> if (value.days == null) AppIcon.HISTORY else AppIcon.YEAR
-        null -> when (label) { "On launch" -> AppIcon.HISTORY; "Music sources" -> AppIcon.LIBRARY; "Gate browser" -> AppIcon.SERVER; else -> null }
-        is String -> if (label == "Statistics grouping") when (value) {
+        null -> when (key) { Res.string.on_launch -> AppIcon.HISTORY; Res.string.music_sources -> AppIcon.LIBRARY
+            Res.string.sources_gate_browser -> AppIcon.SERVER; else -> null }
+        is String -> if (key == Res.string.statistics_grouping) when (value) {
             "Songs" -> AppIcon.MUSIC; "Artists" -> AppIcon.ARTIST; "Albums" -> AppIcon.ALBUM; "Genres" -> AppIcon.GENRE; else -> null
-        } else if (label == "SSH authentication") { if (value == "SSH private key") AppIcon.KEY else AppIcon.LOCK } else null
+        } else if (key == Res.string.ssh_authentication) { if (value == "SSH private key") AppIcon.KEY else AppIcon.LOCK } else null
         else -> null
     }
     val distinctIcons = choices.map { choiceIcon(it.first) }.distinct().size > 1
@@ -390,7 +578,7 @@ internal fun <T> SettingChoice(label: String, selected: T, choices: List<Pair<T,
     }
     }
     Box(Modifier.fillMaxWidth()) {
-        if (card && LocalSettingsCards.current) SettingsCard(settingsIcon(label), onClick = { expanded = true }) {
+        if (card && LocalSettingsCards.current) SettingsCard(icon, onClick = { expanded = true }) {
             Box(Modifier.weight(1f)) { row() }
         } else row()
         // Keep the popup outside the clickable card so choosing an option cannot reopen it.
@@ -417,7 +605,7 @@ internal fun SettingsLink(title: String, icon: AppIcon, description: String, cli
 }
 
 @Composable
-private fun FolderRuleList(title: String, folders: List<String>, kind: String, busy: Boolean,
+private fun FolderRuleList(title: String, folders: List<String>, addDescription: String, removeDescription: StringResource, busy: Boolean,
     emptyMessage: String, add: () -> Unit, remove: (String) -> Unit) {
     Text(title, style = MaterialTheme.typography.titleMedium)
     if (folders.isEmpty()) Text(emptyMessage, style = MaterialTheme.typography.bodyMedium,
@@ -425,18 +613,18 @@ private fun FolderRuleList(title: String, folders: List<String>, kind: String, b
     folders.forEach { folder ->
         ListItem(headlineContent = { Text(folder.trimEnd('/').substringAfterLast('/')) },
             supportingContent = { Text(folder) }, leadingContent = { Icon(AppIcon.FOLDER.vector, null) },
-            trailingContent = { AppIconButton(AppIcon.REMOVE, "Remove $kind folder: $folder", enabled = !busy) { remove(folder) } })
+            trailingContent = { AppIconButton(AppIcon.REMOVE, stringResource(removeDescription, folder), enabled = !busy) { remove(folder) } })
     }
-    TextButton(onClick = add, enabled = !busy, modifier = Modifier.semantics { contentDescription = "Add $kind folder" }) {
+    TextButton(onClick = add, enabled = !busy, modifier = Modifier.semantics { contentDescription = addDescription }) {
         Icon(AppIcon.PLUS.vector, null)
         Spacer(Modifier.width(8.dp))
-        Text("Add folder")
+        Text(stringResource(Res.string.settings_add_folder))
     }
 }
 
 @Composable
 internal fun SettingsSlider(label: String, icon: AppIcon, selected: Float, range: ClosedFloatingPointRange<Float>,
-    steps: Int = 0, format: (Float) -> String, change: (Float) -> Unit) {
+    steps: Int = 0, format: @Composable (Float) -> String, change: (Float) -> Unit) {
     var value by remember(selected) { mutableFloatStateOf(selected) }
     SettingsCard(icon) {
         Column(Modifier.weight(1f)) {

@@ -14,6 +14,14 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.Track
 import kotlin.math.abs
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.manage_playlists
+import me.d3sox.nevumi.resources.player_favorite
+import me.d3sox.nevumi.resources.player_in_a_playlist
+import me.d3sox.nevumi.resources.player_not_in_a_playlist
+import me.d3sox.nevumi.resources.player_remove_favorite
+import me.d3sox.nevumi.resources.unknown_artist
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun PlayingTrackDetails(state: AppState, controller: MusicController, current: Track,
@@ -42,19 +50,20 @@ internal fun PlayingTrackDetails(state: AppState, controller: MusicController, c
                     PlayerMarquee(track.metadata.title, MaterialTheme.typography.headlineSmall,
                         if (direction == 0) motion.anchor(PlayerPanel.PLAYING, PlayerElement.TITLE, visible) else Modifier,
                         marqueeState = if (direction == 0) motion.marquee(PlayerElement.TITLE, track.metadata.title) else null, active = visible)
-                    PlayerMarquee(track.metadata.artist.ifBlank { "Unknown artist" }, MaterialTheme.typography.titleMedium,
+                    PlayerMarquee(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, MaterialTheme.typography.titleMedium,
                         if (direction == 0) motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTIST, visible) else Modifier,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        marqueeState = if (direction == 0) motion.marquee(PlayerElement.ARTIST, track.metadata.artist.ifBlank { "Unknown artist" }) else null, active = visible)
+                        marqueeState = if (direction == 0) motion.marquee(PlayerElement.ARTIST, track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }) else null, active = visible)
                 }
                 IconToggleButton(track.favorite, { controller.setFavorite(track.id, it) }) {
                     Icon((if (track.favorite) AppIcon.FAVORITE_FILLED else AppIcon.FAVORITE).vector,
-                        if (track.favorite) "Remove favorite" else "Favorite",
+                        stringResource(if (track.favorite) Res.string.player_remove_favorite else Res.string.player_favorite),
                         tint = if (track.favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 val member = state.playlists.any { track.id in it.trackIds }
-                AppIconButton(if (member) AppIcon.PLAYLIST_CHECK else AppIcon.PLAYLIST_PLUS, "Manage playlists",
-                    Modifier.semantics { selected = member; stateDescription = if (member) "In a playlist" else "Not in a playlist" }) {
+                val membership = stringResource(if (member) Res.string.player_in_a_playlist else Res.string.player_not_in_a_playlist)
+                AppIconButton(if (member) AppIcon.PLAYLIST_CHECK else AppIcon.PLAYLIST_PLUS, stringResource(Res.string.manage_playlists),
+                    Modifier.semantics { selected = member; stateDescription = membership }) {
                     managingPlaylist = track.id
                 }
             }

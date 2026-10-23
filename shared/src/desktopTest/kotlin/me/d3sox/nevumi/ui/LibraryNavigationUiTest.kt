@@ -18,6 +18,8 @@ import me.d3sox.nevumi.settings.MusicSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.compose.resources.getString
 
 @OptIn(ExperimentalTestApi::class)
 class LibraryNavigationUiTest {
@@ -92,7 +94,7 @@ class LibraryNavigationUiTest {
         } }
         onNodeWithText("More").assertDoesNotExist()
         onAllNodes(navigationItem).assertCountEquals(configured.size)
-        val positions = configured.map { onNodeWithContentDescription(it.label).fetchSemanticsNode().boundsInRoot.left }
+        val positions = configured.map { onNodeWithContentDescription(runBlocking { getString(it.label) }).fetchSemanticsNode().boundsInRoot.left }
         assertEquals(positions.sorted(), positions)
         onNodeWithContentDescription("History").assertIsSelected()
     }
@@ -128,7 +130,7 @@ class LibraryNavigationUiTest {
         onNodeWithText("More").assertIsSelected()
         runOnIdle { width = 720.dp }
         onAllNodes(navigationItem).assertCountEquals(8)
-        onNodeWithContentDescription(tabs[6].label).assertIsSelected()
+        onNodeWithContentDescription(runBlocking { getString(tabs[6].label) }).assertIsSelected()
     }
 
     @Test fun customizationMovesTabsBetweenSectionsAndEnforcesCapacity() = runComposeUiTest {
@@ -143,8 +145,8 @@ class LibraryNavigationUiTest {
         onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add Home to bottom navigation"))
         onNodeWithContentDescription("Add Home to bottom navigation").assertIsEnabled().performClick()
         val overflowTab = tabs[4]
-        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add ${overflowTab.label} to bottom navigation"))
-        onNodeWithContentDescription("Add ${overflowTab.label} to bottom navigation").assertIsNotEnabled()
+        onNodeWithTag("library-tabs-editor").performScrollToNode(hasContentDescription("Add ${runBlocking { getString(overflowTab.label) }} to bottom navigation"))
+        onNodeWithContentDescription("Add ${runBlocking { getString(overflowTab.label) }} to bottom navigation").assertIsNotEnabled()
         onNodeWithText("Save tabs").performClick()
         assertEquals(tabs.take(4).toSet(), saved)
     }
@@ -244,7 +246,7 @@ class LibraryNavigationUiTest {
             Box(Modifier.width(360.dp)) { LibraryTabsEditor(tabs, null, onSave = { enabled, _ -> saved = enabled }, dismiss = {}) }
         } }
         listOf(tabs[0] to -1f, tabs[3] to 1f).forEach { (tab, direction) ->
-            val handle = onNodeWithContentDescription("Reorder tab: ${tab.label}", useUnmergedTree = true)
+            val handle = onNodeWithContentDescription("Reorder tab: ${runBlocking { getString(tab.label) }}", useUnmergedTree = true)
             val start = handle.fetchSemanticsNode().boundsInRoot.top
             handle.performTouchInput { down(center) }
             repeat(6) {

@@ -33,10 +33,70 @@ import me.d3sox.nevumi.settings.CollectionSort
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.album
+import me.d3sox.nevumi.resources.album_artist
+import me.d3sox.nevumi.resources.album_artists
+import me.d3sox.nevumi.resources.albums
+import me.d3sox.nevumi.resources.artist
+import me.d3sox.nevumi.resources.artists
+import me.d3sox.nevumi.resources.folders
+import me.d3sox.nevumi.resources.genres
+import me.d3sox.nevumi.resources.library_album_artist_options
+import me.d3sox.nevumi.resources.library_album_options
+import me.d3sox.nevumi.resources.library_artist_options
+import me.d3sox.nevumi.resources.library_automatic
+import me.d3sox.nevumi.resources.library_collection_view
+import me.d3sox.nevumi.resources.library_column_count
+import me.d3sox.nevumi.resources.library_columns
+import me.d3sox.nevumi.resources.library_finish_rearranging
+import me.d3sox.nevumi.resources.library_folder
+import me.d3sox.nevumi.resources.library_folder_options
+import me.d3sox.nevumi.resources.library_genre
+import me.d3sox.nevumi.resources.library_genre_options
+import me.d3sox.nevumi.resources.library_grid
+import me.d3sox.nevumi.resources.library_list
+import me.d3sox.nevumi.resources.library_no_songs
+import me.d3sox.nevumi.resources.library_playlist
+import me.d3sox.nevumi.resources.library_playlist_options_for
+import me.d3sox.nevumi.resources.library_reorder
+import me.d3sox.nevumi.resources.library_scroll_album_artists
+import me.d3sox.nevumi.resources.library_scroll_albums
+import me.d3sox.nevumi.resources.library_scroll_artists
+import me.d3sox.nevumi.resources.library_scroll_folders
+import me.d3sox.nevumi.resources.library_scroll_genres
+import me.d3sox.nevumi.resources.library_scroll_playlists
+import me.d3sox.nevumi.resources.library_unknown_year
+import me.d3sox.nevumi.resources.move_down
+import me.d3sox.nevumi.resources.move_up
+import me.d3sox.nevumi.resources.playlists
+import me.d3sox.nevumi.resources.songs
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.PluralStringResource
 
+/**
+ * A collection row or card. [describe] replaces [subtitle] when set, so lists built outside a composition
+ * can show counted text such as "3 songs" that is resolved when the row is shown.
+ */
 internal data class CollectionItem(val id: String, val title: String, val subtitle: String,
     val artwork: String?, val icon: AppIcon, val songCount: Int = 0, val artist: String = "", val year: Int = 0, val recentAt: Long = 0,
-    val trackIds: List<String> = emptyList())
+    val trackIds: List<String> = emptyList(), val describe: (@Composable () -> String)? = null)
+
+/** How a collection tab names one of its collections and counts them, without deriving singulars from the tab label. */
+internal class CollectionNouns(val kind: StringResource, val count: PluralStringResource, val options: StringResource, val scroll: StringResource)
+
+/** Only collection tabs reach the collection browser and hero; the playlists wording covers any other tab. */
+internal fun LibraryTab.collectionNouns() = when (this) {
+    LibraryTab.ALBUMS -> CollectionNouns(Res.string.album, Res.plurals.albums, Res.string.library_album_options, Res.string.library_scroll_albums)
+    LibraryTab.ARTISTS -> CollectionNouns(Res.string.artist, Res.plurals.artists, Res.string.library_artist_options, Res.string.library_scroll_artists)
+    LibraryTab.ALBUM_ARTISTS -> CollectionNouns(Res.string.album_artist, Res.plurals.album_artists,
+        Res.string.library_album_artist_options, Res.string.library_scroll_album_artists)
+    LibraryTab.GENRES -> CollectionNouns(Res.string.library_genre, Res.plurals.genres, Res.string.library_genre_options, Res.string.library_scroll_genres)
+    LibraryTab.FOLDERS -> CollectionNouns(Res.string.library_folder, Res.plurals.folders, Res.string.library_folder_options, Res.string.library_scroll_folders)
+    else -> CollectionNouns(Res.string.library_playlist, Res.plurals.playlists, Res.string.library_playlist_options_for, Res.string.library_scroll_playlists)
+}
 
 internal fun CollectionLayout.comparator(): Comparator<CollectionItem> {
     val positions = order.withIndex().associate { it.value to it.index }
@@ -54,6 +114,7 @@ internal fun CollectionLayout.comparator(): Comparator<CollectionItem> {
 @Composable
 internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, state: AppState, controller: MusicController,
     modifier: Modifier = Modifier, total: Int = entries.size, rearranging: Boolean = false, finishRearranging: () -> Unit = {}, open: (String) -> Unit) {
+    val nouns = tab.collectionNouns()
     val listScroll = rememberLibraryListState(controller, "collections:${tab.name}:list")
     val gridScroll = rememberLibraryGridState(controller, "collections:${tab.name}:grid")
     val layout = state.preferences.collectionLayout(tab)
@@ -95,10 +156,13 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
             saveOrder(rows)
             return true
         }
+        val reorderDescription = stringResource(Res.string.library_reorder, entry.title)
+        val moveUp = stringResource(Res.string.move_up)
+        val moveDown = stringResource(Res.string.move_down)
         Box(Modifier.size(48.dp).testTag("collection-reorder:${entry.id}")
             .semantics {
-                contentDescription = "Reorder ${entry.title}"
-                customActions = listOf(CustomAccessibilityAction("Move up") { moveBy(-1) }, CustomAccessibilityAction("Move down") { moveBy(1) })
+                contentDescription = reorderDescription
+                customActions = listOf(CustomAccessibilityAction(moveUp) { moveBy(-1) }, CustomAccessibilityAction(moveDown) { moveBy(1) })
             }
             .draggableHandle(onDragStopped = { dragged?.let(::saveOrder) }),
             contentAlignment = Alignment.Center) { Icon(AppIcon.DRAG.vector, null) }
@@ -108,14 +172,14 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
         if (navigationActive && rearranging && it.key == Key.Escape && it.type == KeyEventType.KeyUp) { finishRearranging(); true } else false
     }) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(countLabel(total, tab.label.lowercase().removeSuffix("s"), tab.label.lowercase()), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
+            Text(countLabel(total, nouns.count), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (rearranging) AppIconButton(AppIcon.CHECK, "Finish rearranging", onClick = finishRearranging)
+            if (rearranging) AppIconButton(AppIcon.CHECK, stringResource(Res.string.library_finish_rearranging), onClick = finishRearranging)
             else Box {
-                AppIconButton(if (layout.view == CollectionView.GRID) AppIcon.GRID else AppIcon.LIST, "Collection view") { menu = true }
+                AppIconButton(if (layout.view == CollectionView.GRID) AppIcon.GRID else AppIcon.LIST, stringResource(Res.string.library_collection_view)) { menu = true }
                 DropdownMenu(menu, { menu = false }) {
                     CollectionView.entries.forEach { view ->
-                        AppMenuItem(text = { Text(if (view == CollectionView.LIST) "List" else "Grid") },
+                        AppMenuItem(text = { Text(stringResource(if (view == CollectionView.LIST) Res.string.library_list else Res.string.library_grid)) },
                             leadingIcon = { Icon((if (view == CollectionView.LIST) AppIcon.LIST else AppIcon.GRID).vector, null) },
                             trailingIcon = { if (layout.view == view) Icon(AppIcon.CHECK.vector, null) },
                             modifier = Modifier.semantics { selected = layout.view == view },
@@ -123,13 +187,13 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                     }
                     if (layout.view == CollectionView.GRID) {
                         HorizontalDivider()
-                        Text("Columns", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
-                        AppMenuItem(text = { Text("Automatic") },
+                        Text(stringResource(Res.string.library_columns), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
+                        AppMenuItem(text = { Text(stringResource(Res.string.library_automatic)) },
                             trailingIcon = { if (layout.columns == null) Icon(AppIcon.CHECK.vector, null) },
                             modifier = Modifier.semantics { selected = layout.columns == null },
                             onClick = { update { it.copy(columns = null) }; menu = false })
                         (2..6).forEach { columns ->
-                            AppMenuItem(text = { Text("$columns columns") },
+                            AppMenuItem(text = { Text(pluralStringResource(Res.plurals.library_column_count, columns, columns)) },
                                 trailingIcon = { if (layout.columns == columns) Icon(AppIcon.CHECK.vector, null) },
                                 modifier = Modifier.semantics { selected = layout.columns == columns },
                                 onClick = { update { it.copy(columns = columns) }; menu = false })
@@ -153,8 +217,8 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                 ListItem(modifier = Modifier.combinedClickable(onClick = { open(entry.id) }, onLongClick = menu),
                     headlineContent = { Text(entry.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     leadingContent = { CollectionArtwork(entry.artwork, entry.title, entry.icon, Modifier.size(48.dp)) },
-                    supportingContent = { Text(entry.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${tab.label.removeSuffix("s")} options: ${entry.title}", onClick = menu) })
+                    supportingContent = { Text(entry.describe?.invoke() ?: entry.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(nouns.options, entry.title), onClick = menu) })
                 }
             }
         } else LazyVerticalGrid(gridCells, Modifier.fillMaxSize(), state = gridScroll,
@@ -167,26 +231,32 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                         CollectionArtwork(entry.artwork, entry.title, entry.icon, Modifier.fillMaxWidth().aspectRatio(1f))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(entry.title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${tab.label.removeSuffix("s")} options: ${entry.title}", onClick = menu)
+                            if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(nouns.options, entry.title), onClick = menu)
                         }
-                        Text(entry.subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                        Text(entry.describe?.invoke() ?: entry.subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 2,
                             overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 }
             }
         }
+        val unknownYear = stringResource(Res.string.library_unknown_year)
+        val noSongs = stringResource(Res.string.library_no_songs)
+        // Scrollbar labels are read outside composition, so resolve each distinct song count up front.
+        val songCounts = if (layout.sort != CollectionSort.SONG_COUNT) emptyMap() else
+            remember(sortedEntries) { sortedEntries.map { it.songCount }.distinct() }.associateWith { key(it) { countLabel(it, Res.plurals.songs) } }
         fun indicator(index: Int): String = sortedEntries[index].let { entry -> when (layout.sort) {
             CollectionSort.NAME -> alphabetIndicator(entry.title)
             CollectionSort.ARTIST -> alphabetIndicator(entry.artist)
-            CollectionSort.YEAR -> if (entry.year == 0) "Unknown year" else "${entry.year}"
-            CollectionSort.SONG_COUNT -> countLabel(entry.songCount, "song")
-            CollectionSort.RECENT -> if (entry.recentAt == 0L) "No songs" else formatScrollDate(entry.recentAt)
+            CollectionSort.YEAR -> if (entry.year == 0) unknownYear else "${entry.year}"
+            CollectionSort.SONG_COUNT -> songCounts[entry.songCount].orEmpty()
+            CollectionSort.RECENT -> if (entry.recentAt == 0L) noSongs else formatScrollDate(entry.recentAt)
             CollectionSort.CUSTOM -> "${index + 1}"
         } }
-        if (rearranging) LibraryScrollbar(rearrangeScroll, entries.size, "Scroll ${tab.label.lowercase()}", label = ::indicator)
-        else if (layout.view == CollectionView.LIST) LibraryScrollbar(listScroll, entries.size, "Scroll ${tab.label.lowercase()}", label = ::indicator)
-        else LibraryScrollbar(gridScroll, entries.size, "Scroll ${tab.label.lowercase()}", label = ::indicator)
+        val scrollDescription = stringResource(nouns.scroll)
+        if (rearranging) LibraryScrollbar(rearrangeScroll, entries.size, scrollDescription, label = ::indicator)
+        else if (layout.view == CollectionView.LIST) LibraryScrollbar(listScroll, entries.size, scrollDescription, label = ::indicator)
+        else LibraryScrollbar(gridScroll, entries.size, scrollDescription, label = ::indicator)
         }
     }
 }

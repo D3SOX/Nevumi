@@ -18,6 +18,10 @@ import me.d3sox.nevumi.playlists.Playlist
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.library_reorder_position
+import me.d3sox.nevumi.resources.library_scroll_playlist
+import org.jetbrains.compose.resources.stringResource
 
 private data class PlaylistDragRow(val key: Int, val trackId: String)
 
@@ -44,15 +48,18 @@ internal fun PlaylistRearrangeList(playlist: Playlist, state: AppState, controll
         val target = rows.indexOfFirst { it.key == destination.key }
         if (source >= 0 && target >= 0) rows = rows.toMutableList().apply { add(target, removeAt(source)) }
     }
+    val reorderTemplate = stringResource(Res.string.library_reorder_position)
     Box(modifier.fillMaxSize()) {
+    CompositionLocalProvider(LocalTrackRowStrings provides trackRowStrings()) {
     LazyColumn(Modifier.fillMaxSize(), state = scroll) {
         item("playlist-header") { header() }
         itemsIndexed(rows, key = { _, row -> row.key }) { index, row ->
             val track = catalog[row.trackId] ?: return@itemsIndexed
+            val reorderDescription = reorderTemplate.withArgs(track.metadata.title, index + 1)
             ReorderableItem(reorderable, row.key) { _ ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.padding(start = 8.dp).size(48.dp).testTag("playlist-reorder:${row.key}")
-                        .semantics { contentDescription = "Reorder ${track.metadata.title}, position ${index + 1}" }
+                        .semantics { contentDescription = reorderDescription }
                         .draggableHandle(enabled = !committing, onDragStarted = { from = index; dragging = true },
                             onDragStopped = {
                                 val destination = rows.indexOfFirst { it.key == row.key }
@@ -70,8 +77,9 @@ internal fun PlaylistRearrangeList(playlist: Playlist, state: AppState, controll
             }
         }
     }
+    }
     val scrollRows = rows
-    LibraryScrollbar(scroll, scrollRows.size, "Scroll playlist", headerItems = 1) { index ->
+    LibraryScrollbar(scroll, scrollRows.size, stringResource(Res.string.library_scroll_playlist), headerItems = 1) { index ->
         scrollRows.getOrNull(index)?.trackId?.let { catalog[it]?.metadata?.title }.orEmpty()
     }
     }

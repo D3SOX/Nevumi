@@ -3,7 +3,10 @@ package me.d3sox.nevumi.history
 import me.d3sox.nevumi.library.Track
 import kotlin.time.Clock
 
-data class ListeningRecommendation(val track: Track, val reason: String)
+/** Recommended because the listener plays the artist or genre [name]; the UI phrases the reason. */
+data class ListeningRecommendation(val track: Track, val reason: Reason, val name: String) {
+    enum class Reason { ARTIST, GENRE }
+}
 
 fun listeningRecommendations(listens: List<Listen>, tracks: List<Track>, limit: Int = 20,
     now: Long = Clock.System.now().toEpochMilliseconds()): List<ListeningRecommendation> {
@@ -27,9 +30,9 @@ fun listeningRecommendations(listens: List<Listen>, tracks: List<Track>, limit: 
         val matchingGenres = track.metadata.genres.map(String::trim).distinctBy { it.lowercase() }.mapNotNull { genres[it.lowercase()] }
         val affinity = (artist?.plays ?: 0) * 3 + matchingGenres.sumOf { it.plays }
         if (affinity == 0) return@mapNotNull null
-        val reason = artist?.let { "More from ${it.name}" }
-            ?: "Because you listen to ${matchingGenres.maxBy { it.plays }.name}"
-        Candidate(ListeningRecommendation(track, reason), affinity, previous?.playCount ?: 0)
+        val recommendation = artist?.let { ListeningRecommendation(track, ListeningRecommendation.Reason.ARTIST, it.name) }
+            ?: ListeningRecommendation(track, ListeningRecommendation.Reason.GENRE, matchingGenres.maxBy { it.plays }.name)
+        Candidate(recommendation, affinity, previous?.playCount ?: 0)
     }.sortedWith(compareByDescending<Candidate> { it.plays == 0 }.thenByDescending { it.affinity }.thenBy { it.plays }
         .thenBy { it.recommendation.track.metadata.title.lowercase() }.thenBy { it.recommendation.track.id })
         .take(limit).map { it.recommendation }.toList()

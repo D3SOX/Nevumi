@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notice_undone">Undone</string>
+    <string name="notice_redone">Redone</string>
+    <string name="notice_already_available_offline">Already available offline</string>
+    <string name="notice_download_queued">Download queued</string>
+    <string name="notice_added_to_favorites">Added to favorites</string>
+    <string name="notice_removed_from_favorites">Removed from favorites</string>
+    <string name="notice_rating_cleared">Rating cleared</string>
+    <string name="notice_rated_one_star">Rated 1 star</string>
+    <string name="notice_rated_stars">Rated %1$s stars</string>
+    <string name="notice_playlist_created">Playlist created</string>
+    <string name="notice_added_to_playlist">Added to playlist</string>
+    <string name="notice_playlists_updated">Playlists updated</string>
+    <string name="notice_playlist_updated">Playlist updated</string>
+    <string name="notice_removed_from_queue">Removed from queue</string>
+    <string name="notice_queue_cleared">Queue cleared</string>
+    <string name="notice_moved_to_up_next">Moved to Up next</string>
+    <string name="notice_moved_to_context">Moved to context</string>
+    <string name="notice_added_to_play_next">Added to play next</string>
+    <string name="notice_added_to_play_after">Added to play after</string>
+    <string name="notice_added_to_queue">Added to queue</string>
+    <string name="notice_paired_device">paired device</string>
+    <string name="notice_playback_moved">Playback moved to %1$s</string>
+    <string name="notice_playback_moved_skipped_song">Playback moved to %1$s; skipped %2$s unavailable song</string>
+    <string name="notice_playback_moved_skipped_songs">Playback moved to %1$s; skipped %2$s unavailable songs</string>
+    <string name="notice_ratings_cleared">Ratings cleared</string>
+    <string name="notice_soundcloud_needs_choice">“%1$s” needs your choice to continue</string>
+    <string name="notice_soundcloud_check_tags">Check the tags of “%1$s” to finish</string>
+    <string name="notice_soundcloud_failed">“%1$s” could not be downloaded</string>
+    <string name="notice_soundcloud_added">Added “%1$s”</string>
+    <string name="notice_soundcloud_saved_outside">Saved “%1$s” outside your library folders</string>
+    <string name="notice_soundcloud_downloading">Downloading “%1$s”</string>
+</resources>

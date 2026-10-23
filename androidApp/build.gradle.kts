@@ -94,6 +94,7 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.activity.compose)
     implementation(libs.startup.runtime)
+    implementation(libs.glance.appwidget)
     implementation(libs.compose.runtime)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)

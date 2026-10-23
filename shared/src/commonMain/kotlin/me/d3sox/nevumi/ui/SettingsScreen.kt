@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.back
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal expect fun PlatformBackHandler(onBack: () -> Unit)
@@ -28,7 +31,7 @@ internal fun SettingsScreen(onDismissRequest: () -> Unit, title: @Composable () 
     }) {
         Column(Modifier.fillMaxSize().imePadding()) {
             Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppIconButton(AppIcon.BACK, "Back", onClick = onDismissRequest)
+                AppIconButton(AppIcon.BACK, stringResource(Res.string.back), onClick = onDismissRequest)
                 Box(Modifier.weight(1f)) { ProvideTextStyle(MaterialTheme.typography.titleLarge) { title() } }
                 actions?.invoke()
             }

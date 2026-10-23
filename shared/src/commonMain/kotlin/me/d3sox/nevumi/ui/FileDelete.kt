@@ -10,6 +10,16 @@ import me.d3sox.nevumi.app.FileEditTarget
 import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.delete
+import me.d3sox.nevumi.resources.library_delete_local_file
+import me.d3sox.nevumi.resources.library_delete_local_file_description
+import me.d3sox.nevumi.resources.library_delete_server_file
+import me.d3sox.nevumi.resources.library_delete_server_file_description
+import me.d3sox.nevumi.resources.library_music_file_unavailable
+import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.getString
 
 @Composable
 internal fun FileDelete(track: Track, controller: MusicController, target: FileEditTarget = FileEditTarget.LOCAL, dismiss: () -> Unit) {
@@ -21,13 +31,13 @@ internal fun FileDelete(track: Track, controller: MusicController, target: FileE
     LaunchedEffect(track.id) {
         try { name = controller.musicFileName(track.id, target) }
         catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: Exception) { loadError = error.message ?: "The music file is unavailable" }
+        catch (error: Exception) { loadError = error.message ?: getString(Res.string.library_music_file_unavailable) }
     }
-    AlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(if (target == FileEditTarget.SERVER) "Delete server file?" else "Delete local file?") }, text = {
+    AlertDialog(onDismissRequest = { if (!saving) dismiss() }, title = { Text(stringResource(if (target == FileEditTarget.SERVER) Res.string.library_delete_server_file else Res.string.library_delete_local_file)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             name?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
-            Text(if (target == FileEditTarget.SERVER) "This removes the music file from your server. Nevumi keeps the original so you can undo this deletion."
-                else "This removes the local music file. Nevumi keeps the original so you can undo this deletion.")
+            Text(stringResource(if (target == FileEditTarget.SERVER) Res.string.library_delete_server_file_description
+                else Res.string.library_delete_local_file_description))
             if (saving || (name == null && loadError == null)) LinearProgressIndicator(Modifier.fillMaxWidth())
             (loadError ?: state.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
@@ -39,6 +49,6 @@ internal fun FileDelete(track: Track, controller: MusicController, target: FileE
                 saving = false
                 if (controller.state.value.error == null) dismiss()
             }
-        }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-    }, dismissButton = { TextButton(enabled = !saving, onClick = dismiss) { Text("Cancel") } })
+        }) { Text(stringResource(Res.string.delete), color = MaterialTheme.colorScheme.error) }
+    }, dismissButton = { TextButton(enabled = !saving, onClick = dismiss) { Text(stringResource(Res.string.cancel)) } })
 }

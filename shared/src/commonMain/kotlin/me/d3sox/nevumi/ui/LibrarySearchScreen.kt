@@ -27,6 +27,36 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.queue.QueueOrigin
+import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.settings
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.sources_album_options
+import me.d3sox.nevumi.resources.sources_artist_options
+import me.d3sox.nevumi.resources.sources_clear_search
+import me.d3sox.nevumi.resources.sources_close_search
+import me.d3sox.nevumi.resources.sources_enter_search_term
+import me.d3sox.nevumi.resources.sources_folder_options
+import me.d3sox.nevumi.resources.sources_genre_options
+import me.d3sox.nevumi.resources.sources_no_results_for
+import me.d3sox.nevumi.resources.sources_open_album
+import me.d3sox.nevumi.resources.sources_open_artist
+import me.d3sox.nevumi.resources.sources_open_folder
+import me.d3sox.nevumi.resources.sources_open_genre
+import me.d3sox.nevumi.resources.sources_open_playlist
+import me.d3sox.nevumi.resources.sources_playlist_options
+import me.d3sox.nevumi.resources.sources_search_soundcloud_prompt
+import me.d3sox.nevumi.resources.sources_search_your_library
+import me.d3sox.nevumi.resources.sources_see_all
+
+/** Accessibility text of a search result collection and of its options button, by [SearchType]. */
+private fun SearchType.collectionDescriptions() = when (this) {
+    SearchType.ALBUMS -> Res.string.sources_open_album to Res.string.sources_album_options
+    SearchType.ARTISTS -> Res.string.sources_open_artist to Res.string.sources_artist_options
+    SearchType.PLAYLISTS -> Res.string.sources_open_playlist to Res.string.sources_playlist_options
+    SearchType.GENRES -> Res.string.sources_open_genre to Res.string.sources_genre_options
+    else -> Res.string.sources_open_folder to Res.string.sources_folder_options
+}
 
 @Composable
 internal fun LibrarySearchScreen(state: AppState, controller: MusicController, bottomSpace: Dp, dismiss: (() -> Unit)?, onSettings: (() -> Unit)? = null) {
@@ -58,19 +88,20 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     CompositionLocalProvider(LocalSongSelection provides selection, LocalLibraryOrigin provides QueueOrigin(LibraryTab.SONGS),
         LocalLibraryScrollKey provides "global-search:${type.name}") {
         Column(Modifier.fillMaxSize().imePadding().testTag("library-search-page")) {
+            val searchLabel = stringResource(Res.string.sources_search_your_library)
             if (selection.active) SongSelectionHeader(selection, controller)
             else Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = if (opened == null && dismiss == null) 16.dp else 0.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (opened != null || dismiss != null) AppIconButton(AppIcon.BACK, "Close search") { stopTyping(); if (opened != null) openedId = null else dismiss?.invoke() }
-                TextField(search, { if (it.text != query) openedId = null; search = it }, placeholder = { Text("Search your library") }, singleLine = true,
+                if (opened != null || dismiss != null) AppIconButton(AppIcon.BACK, stringResource(Res.string.sources_close_search)) { stopTyping(); if (opened != null) openedId = null else dismiss?.invoke() }
+                TextField(search, { if (it.text != query) openedId = null; search = it }, placeholder = { Text(searchLabel) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { stopTyping() }),
-                    trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, "Clear search") { search = TextFieldValue(); openedId = null } },
-                    modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = "Search your library" })
-                if (onSettings != null) AppIconButton(AppIcon.SETTINGS, "Settings") { stopTyping(); onSettings() }
+                    trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, stringResource(Res.string.sources_clear_search)) { search = TextFieldValue(); openedId = null } },
+                    modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = searchLabel })
+                if (onSettings != null) AppIconButton(AppIcon.SETTINGS, stringResource(Res.string.settings)) { stopTyping(); onSettings() }
                 LaunchedEffect(Unit) { focus.requestFocus() }
             }
             if (opened == null) LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(SearchType.entries.filter { it != SearchType.SOUNDCLOUD || state.soundCloud != null }, key = { it }) { category ->
-                    FilterChip(type == category, { type = category; selection.clear(); stopTyping() }, label = { Text(category.label) },
+                    FilterChip(type == category, { type = category; selection.clear(); stopTyping() }, label = { Text(stringResource(category.label)) },
                         modifier = Modifier.testTag("search-type:${category.name}"))
                 }
             }
@@ -80,22 +111,23 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     SongList(opened.tracks, controller, playlistId = opened.id.takeIf { openedType == SearchType.PLAYLISTS }, contextName = opened.title,
                         header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) { openedId = null } })
                 } else if (query.isBlank()) {
-                    if (type == SearchType.SOUNDCLOUD) SearchPrompt(AppIcon.CLOUD, "Search SoundCloud for songs to download", Modifier.align(Alignment.Center))
-                    else SearchPrompt(AppIcon.MUSIC, "Enter a search term", Modifier.align(Alignment.Center))
+                    if (type == SearchType.SOUNDCLOUD) SearchPrompt(AppIcon.CLOUD, stringResource(Res.string.sources_search_soundcloud_prompt), Modifier.align(Alignment.Center))
+                    else SearchPrompt(AppIcon.MUSIC, stringResource(Res.string.sources_enter_search_term), Modifier.align(Alignment.Center))
                 } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller)
                 else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search")
                 else {
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD } else listOf(type)
                     val count = if (type == SearchType.ALL) results.count else results.collections[type].orEmpty().size
+                    CompositionLocalProvider(LocalTrackRowStrings provides trackRowStrings()) {
                     LazyColumn(Modifier.fillMaxSize().testTag("search-results")) {
-                        if (count == 0) item { Text("No results for “${query.trim()}”", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if (count == 0) item { Text(stringResource(Res.string.sources_no_results_for, query.trim()), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         categories.forEach { category ->
                             val collections = results.collections[category].orEmpty()
                             val total = if (category == SearchType.SONGS) results.songs.size else collections.size
                             if (total > 0) item(key = "heading:${category.name}") {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("${category.label} · $total", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                                    if (type == SearchType.ALL) TextButton(onClick = { type = category; stopTyping() }) { Text("See all") }
+                                    Text("${stringResource(category.label)} · $total", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                                    if (type == SearchType.ALL) TextButton(onClick = { type = category; stopTyping() }) { Text(stringResource(Res.string.sources_see_all)) }
                                 }
                             }
                             if (category == SearchType.SONGS) itemsIndexed(results.songs.take(20), key = { _, song -> "song:${song.id}" }) { index, song ->
@@ -103,23 +135,26 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                                     onSelect = { selection.toggle(song.id, songIds) }, contextName = "Search")
                             } else items(if (type == SearchType.ALL) collections.take(10) else collections, key = { "${category.name}:${it.id}" }) { collection ->
                                 val tab = requireNotNull(category.tab)
+                                val (openText, optionsText) = category.collectionDescriptions()
+                                val openDescription = stringResource(openText, collection.title)
                                 val entry = CollectionItem(collection.id, collection.title, collection.subtitle,
                                     collection.tracks.firstNotNullOfOrNull { state.artwork[it.id] }, tab.icon(), collection.tracks.size,
                                     trackIds = collection.tracks.map { it.id })
                                 val open = { openedType = category; openedId = collection.id; stopTyping() }
                                 CollectionActionHost(entry, tab, state, controller, open) { menu ->
                                 ListItem(modifier = Modifier.combinedClickable(onClick = open, onLongClick = menu)
-                                    .semantics { contentDescription = "Open ${category.label.lowercase().removeSuffix("s")}: ${collection.title}" },
+                                    .semantics { contentDescription = openDescription },
                                     headlineContent = { Text(collection.title) },
-                                    supportingContent = { Text(listOf(collection.subtitle, countLabel(collection.tracks.size, "song")).filter { it.isNotBlank() }.joinToString(" · ")) },
+                                    supportingContent = { Text(listOf(collection.subtitle, countLabel(collection.tracks.size, Res.plurals.songs)).filter { it.isNotBlank() }.joinToString(" · ")) },
                                     leadingContent = { CollectionArtwork(entry.artwork, collection.title, tab.icon(), Modifier.size(48.dp)) },
-                                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, "${category.label.removeSuffix("s")} options: ${collection.title}", onClick = menu) })
+                                    trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(optionsText, collection.title), onClick = menu) })
                                 }
                             }
                         }
                         if (type == SearchType.ALL && state.soundCloud != null) item(key = "search-soundcloud") {
                             SearchSoundCloudRow(query) { type = SearchType.SOUNDCLOUD; stopTyping() }
                         }
+                    }
                     }
                 }
             }

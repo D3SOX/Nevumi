@@ -19,6 +19,26 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
+import org.jetbrains.compose.resources.stringResource
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.disabled
+import me.d3sox.nevumi.resources.library_tabs
+import me.d3sox.nevumi.resources.more
+import me.d3sox.nevumi.resources.move_down
+import me.d3sox.nevumi.resources.move_up
+import me.d3sox.nevumi.resources.sources_add_tab_to_bottom_navigation
+import me.d3sox.nevumi.resources.sources_bottom_navigation
+import me.d3sox.nevumi.resources.sources_disabled_tabs_hint
+import me.d3sox.nevumi.resources.sources_library_tabs_help
+import me.d3sox.nevumi.resources.sources_more_tabs_hint
+import me.d3sox.nevumi.resources.sources_move_tab_to_more
+import me.d3sox.nevumi.resources.sources_remove_tab_from_bottom_navigation
+import me.d3sox.nevumi.resources.sources_reorder_tab
+import me.d3sox.nevumi.resources.sources_reset
+import me.d3sox.nevumi.resources.sources_save_tabs
+import me.d3sox.nevumi.resources.sources_show_tab
+import me.d3sox.nevumi.resources.sources_tabs_shown
 
 @Composable
 internal fun LibraryTabsDialog(initial: List<LibraryTab>, controller: MusicController,
@@ -65,26 +85,35 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
         }
     }
     Box(Modifier.fillMaxSize().onSizeChanged { width = it.width }) {
-        SettingsScreen(onDismissRequest = dismiss, title = { Text("Library tabs") }, text = {
+        SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.library_tabs)) }, text = {
             LazyColumn(Modifier.testTag("library-tabs-editor"), state = scroll, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 item("help") {
-                    Text("Use + and − to choose bottom navigation tabs. Drag to reorder within each section. Uncheck a tab to hide it entirely.",
+                    Text(stringResource(Res.string.sources_library_tabs_help),
                         Modifier.padding(bottom = 16.dp), style = MaterialTheme.typography.bodyMedium)
                 }
                 listOf("Bottom navigation" to primary, "More" to overflow, "Disabled" to disabled).forEach { (title, section) ->
                     item(title) {
-                        Text(title, Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(when (title) {
+                            "Bottom navigation" -> Res.string.sources_bottom_navigation
+                            "More" -> Res.string.more
+                            else -> Res.string.disabled
+                        }), Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.titleSmall)
                         if (title == "Bottom navigation") Text(
-                            "${primary.size} tabs shown. Available space depends on screen width and text size.",
+                            stringResource(Res.string.sources_tabs_shown, primary.size),
                             Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (title == "More" || title == "Disabled") Text(
-                            if (title == "More") "Open these tabs from More in the bottom navigation."
-                            else "Hidden from navigation. Check a tab to enable it.",
+                            if (title == "More") stringResource(Res.string.sources_more_tabs_hint)
+                            else stringResource(Res.string.sources_disabled_tabs_hint),
                             Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     items(section, key = { it.name }) { tab ->
+                        val tabLabel = stringResource(tab.label)
+                        val showDescription = stringResource(Res.string.sources_show_tab, tabLabel)
+                        val reorderDescription = stringResource(Res.string.sources_reorder_tab, tabLabel)
+                        val moveUp = stringResource(Res.string.move_up)
+                        val moveDown = stringResource(Res.string.move_down)
                         val boundary = remember(tab, scroll) { DragBoundary({ slot(tab) ?: 0f },
                             { edge(tab, last = false) ?: Float.NEGATIVE_INFINITY }, { edge(tab, last = true) ?: Float.POSITIVE_INFINITY }) }
                         // Other sections can't be move targets, even when auto-scroll picks the nearest row.
@@ -98,8 +127,8 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                     Checkbox(tab in tabs, enabled = tabs.size > 1 || tab !in tabs, onCheckedChange = { visible ->
                                         bottomTabs = bottomTabs?.minus(tab)
                                         tabs = if (visible) tabs + tab else tabs - tab
-                                    }, modifier = Modifier.semantics { contentDescription = "Show ${tab.label}" })
-                                    Text(tab.label, Modifier.weight(1f))
+                                    }, modifier = Modifier.semantics { contentDescription = showDescription })
+                                    Text(tabLabel, Modifier.weight(1f))
                                     val candidateTabs = if (tab in tabs) tabs else tabs + tab
                                     val configuredBottom = bottomTabs ?: primary.toSet()
                                     val isConfigured = tab in configuredBottom
@@ -111,17 +140,17 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                                     }, enabled = isConfigured || canAdd) {
                                         Icon(if (isConfigured) AppIcon.MINUS.vector else AppIcon.PLUS.vector,
                                             when {
-                                                tab in primary -> "Move ${tab.label} to More"
-                                                isConfigured -> "Remove ${tab.label} from bottom navigation"
-                                                else -> "Add ${tab.label} to bottom navigation"
+                                                tab in primary -> stringResource(Res.string.sources_move_tab_to_more, tabLabel)
+                                                isConfigured -> stringResource(Res.string.sources_remove_tab_from_bottom_navigation, tabLabel)
+                                                else -> stringResource(Res.string.sources_add_tab_to_bottom_navigation, tabLabel)
                                             })
                                     }
                                     if (tab in tabs) {
                                         Box(Modifier.size(48.dp).draggableHandle(dragGestureDetector = boundary,
                                             onDragStarted = { draggingTab = tab }, onDragStopped = { draggingTab = null }).semantics {
-                                            contentDescription = "Reorder tab: ${tab.label}"
-                                            customActions = listOf(CustomAccessibilityAction("Move up") { move(tab, -1) },
-                                                CustomAccessibilityAction("Move down") { move(tab, 1) })
+                                            contentDescription = reorderDescription
+                                            customActions = listOf(CustomAccessibilityAction(moveUp) { move(tab, -1) },
+                                                CustomAccessibilityAction(moveDown) { move(tab, 1) })
                                         }, contentAlignment = Alignment.Center) { Icon(AppIcon.DRAG.vector, null) }
                                     }
                                 }
@@ -130,10 +159,10 @@ internal fun LibraryTabsEditor(initial: List<LibraryTab>, initialBottomNavigatio
                     }
                 }
             }
-        }, actions = { ActionButton("Reset", AppIcon.RESET, style = ActionStyle.OUTLINED) {
+        }, actions = { ActionButton(stringResource(Res.string.sources_reset), AppIcon.RESET, style = ActionStyle.OUTLINED) {
             tabs = me.d3sox.nevumi.settings.MusicSettings().libraryTabs
             bottomTabs = null
-        } }, confirmButton = { PageAction("Save tabs", onClick = { onSave(tabs, bottomTabs) }) },
-            dismissButton = { PageAction("Cancel", AppIcon.CLOSE, secondary = true, onClick = dismiss) })
+        } }, confirmButton = { PageAction(stringResource(Res.string.sources_save_tabs), onClick = { onSave(tabs, bottomTabs) }) },
+            dismissButton = { PageAction(stringResource(Res.string.cancel), AppIcon.CLOSE, secondary = true, onClick = dismiss) })
     }
 }

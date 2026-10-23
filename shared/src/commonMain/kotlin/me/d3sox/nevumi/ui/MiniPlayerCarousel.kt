@@ -24,6 +24,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.next
+import me.d3sox.nevumi.resources.next_track
+import me.d3sox.nevumi.resources.pause
+import me.d3sox.nevumi.resources.play
+import me.d3sox.nevumi.resources.previous
+import me.d3sox.nevumi.resources.previous_track
+import org.jetbrains.compose.resources.stringResource
 
 private data class PreviewTrack(val entryId: String, val track: Track)
 private data class Preview(val current: Track, val previous: PreviewTrack?, val next: PreviewTrack?)
@@ -83,14 +91,14 @@ internal fun MiniPlayerCarousel(state: AppState, controller: MusicController, cu
                 motion = motion, visible = visible)
             if (offset != 0f && neighbor != null) MiniTrackInformation(state, neighbor.track,
                 Modifier.fillMaxSize().offset { IntOffset((offset + if (offset < 0) widthPx else -widthPx).roundToInt(), 0) },
-                if (offset < 0) "Next" else "Previous")
+                stringResource(if (offset < 0) Res.string.next else Res.string.previous))
         }
         AppVolume(controller, Modifier.width(200.dp).padding(end = 12.dp))
-        AppIconButton(AppIcon.PREVIOUS, "Previous track", motion.anchor(PlayerPanel.MINI, PlayerElement.PREVIOUS, visible)) { controller.skip(-1) }
+        AppIconButton(AppIcon.PREVIOUS, stringResource(Res.string.previous_track), motion.anchor(PlayerPanel.MINI, PlayerElement.PREVIOUS, visible)) { controller.skip(-1) }
         FilledIconButton(onClick = { controller.togglePlayback() }, modifier = Modifier.size(48.dp).then(motion.anchor(PlayerPanel.MINI, PlayerElement.PLAY, visible)), shape = CircleShape,
             colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-            Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, if (requested) "Pause" else "Play")
+            Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, stringResource(if (requested) Res.string.pause else Res.string.play))
         }
-        AppIconButton(AppIcon.NEXT, "Next track", motion.anchor(PlayerPanel.MINI, PlayerElement.NEXT, visible)) { controller.skip(1) }
+        AppIconButton(AppIcon.NEXT, stringResource(Res.string.next_track), motion.anchor(PlayerPanel.MINI, PlayerElement.NEXT, visible)) { controller.skip(1) }
     }
 }

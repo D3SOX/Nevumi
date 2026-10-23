@@ -8,6 +8,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlin.math.round
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.library_decrease
+import me.d3sox.nevumi.resources.library_increase
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun PreciseSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, steps: Int,
@@ -18,9 +22,9 @@ internal fun PreciseSlider(label: String, value: Float, range: ClosedFloatingPoi
         finish()
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        AppIconButton(AppIcon.MINUS, "Decrease $label", enabled = enabled && value > range.start) { adjust(-1) }
+        AppIconButton(AppIcon.MINUS, stringResource(Res.string.library_decrease, label), enabled = enabled && value > range.start) { adjust(-1) }
         Slider(value, change, Modifier.weight(1f).semantics { contentDescription = label }, enabled = enabled,
             valueRange = range, steps = steps, colors = appSliderColors(), onValueChangeFinished = finish)
-        AppIconButton(AppIcon.PLUS, "Increase $label", enabled = enabled && value < range.endInclusive) { adjust(1) }
+        AppIconButton(AppIcon.PLUS, stringResource(Res.string.library_increase, label), enabled = enabled && value < range.endInclusive) { adjust(1) }
     }
 }

@@ -1,0 +1,46 @@
+<resources>
+    <plurals name="songs">
+        <item quantity="one">%1$d song</item>
+        <item quantity="other">%1$d songs</item>
+    </plurals>
+    <plurals name="server_songs">
+        <item quantity="one">%1$d server song</item>
+        <item quantity="other">%1$d server songs</item>
+    </plurals>
+    <plurals name="matching_songs">
+        <item quantity="one">%1$d matching song</item>
+        <item quantity="other">%1$d matching songs</item>
+    </plurals>
+    <plurals name="matches">
+        <item quantity="one">%1$d match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
+    <plurals name="plays">
+        <item quantity="one">%1$d play</item>
+        <item quantity="other">%1$d plays</item>
+    </plurals>
+    <plurals name="playlists">
+        <item quantity="one">%1$d playlist</item>
+        <item quantity="other">%1$d playlists</item>
+    </plurals>
+    <plurals name="albums">
+        <item quantity="one">%1$d album</item>
+        <item quantity="other">%1$d albums</item>
+    </plurals>
+    <plurals name="artists">
+        <item quantity="one">%1$d artist</item>
+        <item quantity="other">%1$d artists</item>
+    </plurals>
+    <plurals name="album_artists">
+        <item quantity="one">%1$d album artist</item>
+        <item quantity="other">%1$d album artists</item>
+    </plurals>
+    <plurals name="genres">
+        <item quantity="one">%1$d genre</item>
+        <item quantity="other">%1$d genres</item>
+    </plurals>
+    <plurals name="folders">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+</resources>

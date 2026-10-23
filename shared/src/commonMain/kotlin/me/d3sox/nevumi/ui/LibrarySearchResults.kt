@@ -2,13 +2,16 @@ package me.d3sox.nevumi.ui
 
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playlists.Playlist
+import me.d3sox.nevumi.resources.*
+import org.jetbrains.compose.resources.StringResource
 
-internal enum class SearchType(val label: String, val tab: LibraryTab?) {
-    ALL("All", null), SONGS("Songs", LibraryTab.SONGS), ALBUMS("Albums", LibraryTab.ALBUMS),
-    ARTISTS("Artists", LibraryTab.ARTISTS), PLAYLISTS("Playlists", LibraryTab.PLAYLISTS),
-    GENRES("Genres", LibraryTab.GENRES), FOLDERS("Folders", LibraryTab.FOLDERS),
+internal enum class SearchType(val label: StringResource, val tab: LibraryTab?) {
+    ALL(Res.string.search_type_all, null), SONGS(Res.string.search_type_songs, LibraryTab.SONGS),
+    ALBUMS(Res.string.search_type_albums, LibraryTab.ALBUMS), ARTISTS(Res.string.search_type_artists, LibraryTab.ARTISTS),
+    PLAYLISTS(Res.string.search_type_playlists, LibraryTab.PLAYLISTS), GENRES(Res.string.search_type_genres, LibraryTab.GENRES),
+    FOLDERS(Res.string.search_type_folders, LibraryTab.FOLDERS),
     /** Searches SoundCloud through sc-gate-dl instead of the library. */
-    SOUNDCLOUD("SoundCloud", null)
+    SOUNDCLOUD(Res.string.search_type_soundcloud, null)
 }
 
 internal data class LibrarySearchResults(val songs: List<Track>, val collections: Map<SearchType, List<TrackCollection>>) {

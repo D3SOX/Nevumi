@@ -12,6 +12,9 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_song_actions
+import org.jetbrains.compose.resources.stringResource
 
 private class MenuLayer(val render: @Composable () -> Unit, val dismiss: () -> Unit)
 private val LocalMenuLayer = staticCompositionLocalOf<MutableState<MenuLayer?>> { error("A track menu needs the app host") }
@@ -26,7 +29,8 @@ internal actual fun TrackMenuHost(content: @Composable () -> Unit) {
             val focus = remember { FocusRequester() }
             BackHandler(onBack = menu.dismiss)
             LaunchedEffect(menu) { focus.requestFocus() }
-            Box(Modifier.fillMaxSize().semantics { paneTitle = "Song actions"; isTraversalGroup = true }.focusRequester(focus)
+            val songActions = stringResource(Res.string.sources_song_actions)
+            Box(Modifier.fillMaxSize().semantics { paneTitle = songActions; isTraversalGroup = true }.focusRequester(focus)
                 .onPreviewKeyEvent { event ->
                     if (event.key == Key.Escape && event.type == KeyEventType.KeyUp) { menu.dismiss(); true } else false
                 }.focusable()) { menu.render() }

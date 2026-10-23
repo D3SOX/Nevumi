@@ -20,6 +20,12 @@ import me.d3sox.nevumi.playback.RepeatMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.player_album_artwork
+import me.d3sox.nevumi.resources.player_next_artwork
+import me.d3sox.nevumi.resources.player_previous_artwork
+import me.d3sox.nevumi.resources.player_queue_artwork
+import org.jetbrains.compose.resources.stringResource
 
 internal data class ArtworkNeighbor(val entryId: String, val track: Track)
 internal data class ArtworkPreview(val current: Track, val previous: ArtworkNeighbor?, val next: ArtworkNeighbor?)
@@ -81,10 +87,10 @@ internal fun PlayingArtwork(state: AppState, current: Track, swipe: PlayingArtwo
                 alpha = (1f - abs(translationX) / size.width.coerceAtLeast(1f)).coerceIn(0f, 1f)
             }, shape = RoundedCornerShape((12 + 16 * expansion * (1 - queueProgress)).dp), color = MaterialTheme.colorScheme.secondaryContainer) {
                 MusicArtwork(state.artwork[track.id], track.metadata.title, when {
-                    direction < 0 -> "Previous artwork: ${track.metadata.title}"
-                    direction > 0 -> "Next artwork: ${track.metadata.title}"
-                    queueProgress >= .999f -> "Queue artwork: ${state.queue.currentEntryId}"
-                    else -> "Album artwork: ${track.metadata.title}"
+                    direction < 0 -> stringResource(Res.string.player_previous_artwork, track.metadata.title)
+                    direction > 0 -> stringResource(Res.string.player_next_artwork, track.metadata.title)
+                    queueProgress >= .999f -> stringResource(Res.string.player_queue_artwork, state.queue.currentEntryId.toString())
+                    else -> stringResource(Res.string.player_album_artwork, track.metadata.title)
                 }, maxDimension = 1024)
             }
         }

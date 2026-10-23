@@ -28,6 +28,13 @@ import kotlin.math.roundToInt
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.next_track
+import me.d3sox.nevumi.resources.pause
+import me.d3sox.nevumi.resources.play
+import me.d3sox.nevumi.resources.previous_track
+import me.d3sox.nevumi.resources.unknown_artist
+import org.jetbrains.compose.resources.stringResource
 
 internal enum class PlayerElement { ARTWORK, TITLE, ARTIST, PREVIOUS, PLAY, NEXT }
 
@@ -112,9 +119,9 @@ internal fun PlayerMotionElements(motion: PlayerMotion, state: AppState, control
                 val queue = if (title) theme.titleSmall else theme.bodySmall
                 val style = if (queueProgress > 0) lerp(full, queue, queueProgress) else lerp(small, full, expansion)
                 Box(modifier.then(drag), contentAlignment = Alignment.CenterStart) {
-                    PlayerMarquee(if (title) track.metadata.title else track.metadata.artist.ifBlank { "Unknown artist" },
+                    PlayerMarquee(if (title) track.metadata.title else track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) },
                         style = style, centerProgress = 0f,
-                        marqueeState = motion.marquee(element, if (title) track.metadata.title else track.metadata.artist.ifBlank { "Unknown artist" }),
+                        marqueeState = motion.marquee(element, if (title) track.metadata.title else track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }),
                         color = if (title) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -123,11 +130,11 @@ internal fun PlayerMotionElements(motion: PlayerMotion, state: AppState, control
                 alpha = visible * visible
             }.then(drag), contentAlignment = Alignment.Center) {
                 when (element) {
-                    PlayerElement.PREVIOUS -> AppIconButton(AppIcon.PREVIOUS, "Previous track", Modifier.fillMaxSize()) { controller.skip(-1) }
-                    PlayerElement.NEXT -> AppIconButton(AppIcon.NEXT, "Next track", Modifier.fillMaxSize()) { controller.skip(1) }
+                    PlayerElement.PREVIOUS -> AppIconButton(AppIcon.PREVIOUS, stringResource(Res.string.previous_track), Modifier.fillMaxSize()) { controller.skip(-1) }
+                    PlayerElement.NEXT -> AppIconButton(AppIcon.NEXT, stringResource(Res.string.next_track), Modifier.fillMaxSize()) { controller.skip(1) }
                     else -> FilledIconButton(onClick = { controller.togglePlayback() }, modifier = Modifier.fillMaxSize(), shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-                        Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, if (requested) "Pause" else "Play",
+                        Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, stringResource(if (requested) Res.string.pause else Res.string.play),
                             Modifier.size((24 + 12 * expansion * (1 - queueProgress)).dp))
                     }
                 }

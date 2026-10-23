@@ -8,6 +8,8 @@ import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.LibraryTab
 import kotlinx.serialization.Serializable
 import me.d3sox.nevumi.playback.AudioEffects
+import me.d3sox.nevumi.resources.*
+import org.jetbrains.compose.resources.StringResource
 
 @Serializable
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -33,14 +35,18 @@ enum class PlaylistPickerSort { UPDATED, ADDED, NAME, PLAYED, LIBRARY }
 data class LibraryPosition(val index: Int = 0, val offset: Int = 0)
 
 @Serializable
-enum class HomeSectionId(val label: String) {
-    MIXES("Mixes"), RECENT("Recent listens"), TOP("Top listens"), RECENT_ALBUMS("Recent albums"),
-    RECENT_ARTISTS("Recent artists"), TOP_ALBUMS("Top albums"), TOP_ARTISTS("Top artists"),
-    REDISCOVER("Rediscover"), PLAYLISTS("Your playlists"), SAVED_QUEUES("Saved queues"), ADDED("Recently added")
+enum class HomeSectionId(val label: StringResource) {
+    MIXES(Res.string.home_section_mixes), RECENT(Res.string.home_section_recent), TOP(Res.string.home_section_top),
+    RECENT_ALBUMS(Res.string.home_section_recent_albums), RECENT_ARTISTS(Res.string.home_section_recent_artists),
+    TOP_ALBUMS(Res.string.home_section_top_albums), TOP_ARTISTS(Res.string.home_section_top_artists),
+    REDISCOVER(Res.string.home_section_rediscover), PLAYLISTS(Res.string.home_section_playlists),
+    SAVED_QUEUES(Res.string.home_section_saved_queues), ADDED(Res.string.home_section_added)
 }
 
 @Serializable
-enum class QueueRecoveryMode(val label: String) { BEFORE_REPLACE("Before replacing or clearing"), ON_CHANGE("After queue edits"), TIMER("On a timer") }
+enum class QueueRecoveryMode(val label: StringResource) {
+    BEFORE_REPLACE(Res.string.queue_recovery_before_replace), ON_CHANGE(Res.string.queue_recovery_on_change), TIMER(Res.string.queue_recovery_timer)
+}
 
 @Serializable
 data class MusicSettings(
@@ -72,6 +78,8 @@ data class MusicSettings(
     val queueRecoveryIntervalMinutes: Int = 5,
     val precomputeWaveforms: Boolean = true,
     val showAudioInfo: Boolean = true,
+    /** Off by default because searching LRCLIB sends the song's artist, title, album and length to a third party. */
+    val fetchLyricsOnline: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,

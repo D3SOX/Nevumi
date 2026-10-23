@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Nevumi</string>
+    <string name="now_playing_widget_label">Now playing</string>
+    <string name="now_playing_widget_description">Shows the current song with playback controls.</string>
+    <string name="now_playing_widget_preview_title">Song title</string>
+    <string name="now_playing_widget_preview_artist">Artist</string>
+    <string name="nothing_playing">Nothing playing</string>
+    <string name="playback_previous">Previous</string>
+    <string name="playback_play">Play</string>
+    <string name="playback_pause">Pause</string>
+    <string name="playback_next">Next</string>
+</resources>

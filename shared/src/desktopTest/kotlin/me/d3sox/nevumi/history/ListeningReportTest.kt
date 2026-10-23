@@ -33,8 +33,8 @@ class ListeningReportTest {
             }
             val tracks = library.tracks()
             assertEquals(listOf(artist.id, genre.id, rock.id), history.recommendations(tracks).map { it.track.id })
-            assertEquals("More from Favorite artist", history.recommendations(tracks).first().reason)
-            assertEquals("Because you listen to Ambient", history.recommendations(tracks)[1].reason)
+            assertEquals(ListeningRecommendation.Reason.ARTIST to "Favorite artist", history.recommendations(tracks).first().let { it.reason to it.name })
+            assertEquals(ListeningRecommendation.Reason.GENRE to "Ambient", history.recommendations(tracks)[1].let { it.reason to it.name })
             assertEquals(listOf(artist.id, genre.id), history.recommendations(tracks, limit = 2).map { it.track.id })
             assertEquals(listOf(genre.id), history.recommendations(listOf(genre)).map { it.track.id })
             wall += 8 * 86_400_000L

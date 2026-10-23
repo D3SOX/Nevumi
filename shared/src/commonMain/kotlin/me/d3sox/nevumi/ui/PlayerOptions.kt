@@ -8,6 +8,15 @@ import androidx.compose.ui.semantics.*
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.playback.RepeatMode
 import me.d3sox.nevumi.queue.QueueSnapshot
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.off
+import me.d3sox.nevumi.resources.player_plays_remaining
+import me.d3sox.nevumi.resources.player_repeat
+import me.d3sox.nevumi.resources.player_repeat_count
+import me.d3sox.nevumi.resources.player_repeat_song
+import me.d3sox.nevumi.resources.queue
+import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.pluralStringResource
 
 @Composable
 internal fun PlayerRepeatControl(queue: QueueSnapshot, controller: MusicController, onRepeatCount: () -> Unit, modifier: Modifier = Modifier) {
@@ -19,20 +28,20 @@ internal fun PlayerRepeatControl(queue: QueueSnapshot, controller: MusicControll
         }, colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
             contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)) {
-            Icon((if (queue.repeatMode == RepeatMode.ONE) AppIcon.REPEAT_ONE else AppIcon.REPEAT).vector, "Repeat")
+            Icon((if (queue.repeatMode == RepeatMode.ONE) AppIcon.REPEAT_ONE else AppIcon.REPEAT).vector, stringResource(Res.string.player_repeat))
         }
         DropdownMenu(menu, { menu = false }) {
-            listOf(RepeatMode.OFF to "Off", RepeatMode.ONE to "Song", RepeatMode.ALL to "Queue").forEach { (mode, name) ->
+            listOf(RepeatMode.OFF to stringResource(Res.string.off), RepeatMode.ONE to stringResource(Res.string.player_repeat_song), RepeatMode.ALL to stringResource(Res.string.queue)).forEach { (mode, name) ->
                 AppMenuItem(text = { Text(name) }, leadingIcon = { Icon(when (mode) {
                     RepeatMode.OFF -> AppIcon.CLOSE; RepeatMode.ONE -> AppIcon.REPEAT_ONE; RepeatMode.ALL -> AppIcon.REPEAT
                 }.vector, null) }, trailingIcon = { if (mode == queue.repeatMode) Icon(AppIcon.CHECK.vector, null) },
                     onClick = { controller.setQueueRepeat(mode); menu = false })
             }
             HorizontalDivider()
-            AppMenuItem(text = { Text("Repeat count") }, leadingIcon = { Icon(AppIcon.REPEAT_COUNT.vector, null) },
+            AppMenuItem(text = { Text(stringResource(Res.string.player_repeat_count)) }, leadingIcon = { Icon(AppIcon.REPEAT_COUNT.vector, null) },
                 onClick = { menu = false; onRepeatCount() })
             queue.repeatPlays?.let { remaining ->
-                AppMenuItem(text = { Text(if (remaining == 1) "1 play remaining" else "$remaining plays remaining") }, enabled = false, onClick = {})
+                AppMenuItem(text = { Text(pluralStringResource(Res.plurals.player_plays_remaining, remaining, remaining)) }, enabled = false, onClick = {})
             }
         }
     }

@@ -24,7 +24,7 @@ class HomeFeedTest {
         val unavailable = track("Unavailable", available = false)
         val listens = listOf(listen(first, 1_000), listen(first, day), listen(second, 500, qualified = false),
             listen(old, 90 * day), listen(unavailable, 0), listen(first, -day), listen(track("Removed"), 0))
-        val feed = homeFeed(listOf(first, second, old, unavailable), listens, now, 42)
+        val feed = homeFeed(listOf(first, second, old, unavailable), listens, now, 42, "Unknown album", "Unknown artist")
         assertEquals(listOf(second, first, old), feed.recent)
         assertEquals(listOf(first), feed.top, "Partial, future and old listens do not count as top listens")
         assertEquals(listOf(old), feed.rediscover)
@@ -38,15 +38,15 @@ class HomeFeedTest {
 
     @Test fun filtersAndStableRefreshSeedsAreAppliedToEverySectionAndMix() {
         val tracks = (0 until 60).map { track("Track $it", "Artist $it", "Album $it") }
-        val first = homeFeed(tracks, emptyList(), now, 42)
-        val second = homeFeed(tracks, emptyList(), now, 42)
+        val first = homeFeed(tracks, emptyList(), now, 42, "Unknown album", "Unknown artist")
+        val second = homeFeed(tracks, emptyList(), now, 42, "Unknown album", "Unknown artist")
         assertEquals(first, second)
-        assertNotEquals(first.mixes.first().tracks, homeFeed(tracks, emptyList(), now, 99).mixes.first().tracks)
+        assertNotEquals(first.mixes.first().tracks, homeFeed(tracks, emptyList(), now, 99, "Unknown album", "Unknown artist").mixes.first().tracks)
         assertTrue(first.mixes.all { it.tracks.size <= 50 })
-        val filtered = homeFeed(tracks.take(2), tracks.map { listen(it, day) }, now, 42)
+        val filtered = homeFeed(tracks.take(2), tracks.map { listen(it, day) }, now, 42, "Unknown album", "Unknown artist")
         assertEquals(tracks.take(2).toSet(), filtered.recent.toSet())
         assertTrue(filtered.mixes.flatMap { it.tracks }.all { it in tracks.take(2) })
-        val empty = homeFeed(emptyList(), tracks.map { listen(it, day) }, now, 42)
+        val empty = homeFeed(emptyList(), tracks.map { listen(it, day) }, now, 42, "Unknown album", "Unknown artist")
         assertTrue(empty.mixes.isEmpty() && empty.recent.isEmpty() && empty.top.isEmpty())
     }
 

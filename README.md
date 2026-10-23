@@ -39,15 +39,19 @@ I started it because I couldn't find a music player with all the features I want
 - **Playlists.** Create regular, smart and M3U playlists and sort them into nested folders. Nevumi syncs them with your music server, including covers on Navidrome 0.61 or newer.
 - **Queue.** Up next is a separate queue. Save queues with their history and position, switch between them, or export them as playlists.
 - **Offline.** Download music from your server. Nevumi shows local and server copies of the same song as one song.
+- **Discovery.** Artist pages show the biography, similar artists and top songs from your music server. Play similar songs from any server song or artist.
 - **SoundCloud.** Search and download songs through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server, to your music server or your device. Nevumi never contacts SoundCloud.
 - **Playback.** Nevumi has gapless playback, crossfade, speed and pitch, repeat counts, an equalizer with AutoEQ headphone profiles, mono audio and a sleep timer.
+- **Lyrics.** Nevumi shows synced and plain lyrics from embedded tags, `.lrc` files next to the song and your music server. You can turn on LRCLIB lookups in Settings. Tap a line to jump to it.
 - **Waveforms.** Nevumi draws waveforms from the actual audio and caches them.
 - **Tag editing.** Edit local tags and artwork, or your Navidrome files over SFTP. Look up metadata on MusicBrainz.
 - **Tailscale.** The built-in client reaches your servers on a tailnet without the Tailscale app or a VPN. Headscale works too.
 - **Scrobbling.** Nevumi keeps a listening history and scrobbles to your music server, Last.fm or ListenBrainz.
 - **Device sync.** Pair devices with a QR code to sync playlists, favorites, ratings, history and saved queues.
+- **Backup.** Export settings, playlists, saved queues, history, favorites, ratings and connection profiles to one JSON file. Restore it on another device. The backup never includes passwords or keys.
 - **Themes.** Pick light, dark, system or artwork-based colors, or a custom palette.
 - **Desktop.** Linux has MPRIS media controls, right-click menus and a volume slider in the mini player.
+- **Widget.** Android has a home screen widget and a quick settings tile for the current song.
 - **Visualizer.** Nevumi runs MilkDrop presets through projectM. Over 10,000 presets ship with the app. You can search them, mark favorites and switch presets automatically.
 
 ## Screenshots

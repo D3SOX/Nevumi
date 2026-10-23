@@ -31,6 +31,28 @@ import me.d3sox.nevumi.soundcloud.ScGateDestination
 import me.d3sox.nevumi.soundcloud.SoundCloudDestination
 import me.d3sox.nevumi.soundcloud.SoundCloudSource
 import me.d3sox.nevumi.soundcloud.SoundCloudTrack
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_check_tags_after_download
+import me.d3sox.nevumi.resources.sources_check_tags_before_saving
+import me.d3sox.nevumi.resources.sources_close_download_options
+import me.d3sox.nevumi.resources.sources_download_gate
+import me.d3sox.nevumi.resources.sources_download_options_for
+import me.d3sox.nevumi.resources.sources_free_download
+import me.d3sox.nevumi.resources.sources_in_library
+import me.d3sox.nevumi.resources.sources_no_soundcloud_results
+import me.d3sox.nevumi.resources.sources_open_on_soundcloud
+import me.d3sox.nevumi.resources.sources_save_to_device_description
+import me.d3sox.nevumi.resources.sources_save_to_music_server
+import me.d3sox.nevumi.resources.sources_save_to_server_description
+import me.d3sox.nevumi.resources.sources_save_to_server_keep_offline
+import me.d3sox.nevumi.resources.sources_save_to_server_keep_offline_description
+import me.d3sox.nevumi.resources.sources_save_to_this_device
+import me.d3sox.nevumi.resources.sources_search_soundcloud_description
+import me.d3sox.nevumi.resources.sources_search_soundcloud_for
+import me.d3sox.nevumi.resources.sources_show_more
+import me.d3sox.nevumi.resources.sources_soundcloud_search_failed
+import me.d3sox.nevumi.resources.sources_soundcloud_song_description
+import org.jetbrains.compose.resources.stringResource
 
 private fun songKey(artist: String, title: String) = "${artist.trim().lowercase()}\u0000${title.trim().lowercase()}"
 
@@ -43,6 +65,7 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
     var error by remember(query) { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf<SoundCloudTrack?>(null) }
     val scope = rememberCoroutineScope()
+    val searchFailed = stringResource(Res.string.sources_soundcloud_search_failed)
     suspend fun load(offset: Int) {
         loading = true; error = null
         try {
@@ -51,7 +74,7 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
             results += page.results.filter { result -> results.none { it.id == result.id } }
             nextOffset = page.nextOffset
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { error = failure.message ?: "SoundCloud search failed" }
+        catch (failure: Exception) { error = failure.message ?: searchFailed }
         finally { loading = false }
     }
     LaunchedEffect(query) {
@@ -74,14 +97,15 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
         items(results, key = { "soundcloud:${it.id}" }) { track ->
             val job = jobs[track.url]?.firstOrNull()
             val inLibrary = songKey(track.artist, track.title) in owned
+            val songDescription = stringResource(Res.string.sources_soundcloud_song_description, track.title, track.artist)
             ListItem(modifier = Modifier.combinedClickable(onClick = { pick(track) }, onLongClick = { picked = track })
-                .semantics { contentDescription = "SoundCloud song: ${track.title} by ${track.artist}" },
+                .semantics { contentDescription = songDescription },
                 headlineContent = { Text(track.title, maxLines = 2) },
                 supportingContent = {
                     Column {
                         Text(listOfNotNull(track.artist, track.durationMs.takeIf { it > 0 }?.let(::playbackTime), when (track.source) {
-                            SoundCloudSource.DOWNLOAD -> "Free download"
-                            SoundCloudSource.GATE -> "Download gate"
+                            SoundCloudSource.DOWNLOAD -> stringResource(Res.string.sources_free_download)
+                            SoundCloudSource.GATE -> stringResource(Res.string.sources_download_gate)
                             SoundCloudSource.NONE -> null
                         }).joinToString(" · "), maxLines = 1)
                         if (job != null && !job.finished) Text(job.message, color = MaterialTheme.colorScheme.primary, maxLines = 1)
@@ -90,8 +114,8 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
                 leadingContent = { SoundCloudCover(track, controller) },
                 trailingContent = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (inLibrary) Text("In library", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        AppIconButton(AppIcon.DOWNLOAD, "Download options: ${track.title}") { picked = track }
+                        if (inLibrary) Text(stringResource(Res.string.sources_in_library), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AppIconButton(AppIcon.DOWNLOAD, stringResource(Res.string.sources_download_options_for, track.title)) { picked = track }
                     }
                 })
         }
@@ -100,9 +124,9 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
             item { Text(message, Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error) }
         }
         if (!loading && error == null && results.isEmpty() && nextOffset == null)
-            item { Text("No SoundCloud results for “${query.trim()}”", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text(stringResource(Res.string.sources_no_soundcloud_results, query.trim()), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         nextOffset?.let { offset ->
-            if (!loading) item { TextButton(onClick = { scope.launch { load(offset) } }, Modifier.padding(horizontal = 8.dp)) { Text("Show more") } }
+            if (!loading) item { TextButton(onClick = { scope.launch { load(offset) } }, Modifier.padding(horizontal = 8.dp)) { Text(stringResource(Res.string.sources_show_more)) } }
         }
     }
     picked?.let { track -> SoundCloudDownloadSheet(track, state, controller) { picked = null } }
@@ -140,8 +164,8 @@ private fun SoundCloudCover(track: SoundCloudTrack, controller: MusicController)
 @Composable
 internal fun SearchSoundCloudRow(query: String, open: () -> Unit) {
     ListItem(modifier = Modifier.clickable(onClick = open).testTag("search-soundcloud"),
-        headlineContent = { Text("Search SoundCloud for “${query.trim()}”") },
-        supportingContent = { Text("Find songs to download through sc-gate-dl") },
+        headlineContent = { Text(stringResource(Res.string.sources_search_soundcloud_for, query.trim())) },
+        supportingContent = { Text(stringResource(Res.string.sources_search_soundcloud_description)) },
         leadingContent = { Icon(AppIcon.CLOUD.vector, null) })
 }
 
@@ -161,21 +185,21 @@ internal fun SoundCloudDownloadSheet(track: SoundCloudTrack, state: AppState, co
                 Text(track.title, style = MaterialTheme.typography.titleLarge, maxLines = 2)
                 Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            AppIconButton(AppIcon.CLOSE, "Close download options", onClick = dismiss)
+            AppIconButton(AppIcon.CLOSE, stringResource(Res.string.sources_close_download_options), onClick = dismiss)
         }
-        ListItem(headlineContent = { Text("Check tags before saving") }, supportingContent = { Text("Edit the tags once the file is downloaded") },
+        ListItem(headlineContent = { Text(stringResource(Res.string.sources_check_tags_before_saving)) }, supportingContent = { Text(stringResource(Res.string.sources_check_tags_after_download)) },
             leadingContent = { Icon(AppIcon.TAGS.vector, null) }, trailingContent = { Switch(reviewTags, null) },
             modifier = Modifier.toggleable(reviewTags, role = Role.Switch) { reviewTags = it })
         if (server) {
-            ListItem(headlineContent = { Text("Save to music server") }, supportingContent = { Text("Add it to your library on ${state.server.baseUrl.substringAfter("://")}") },
+            ListItem(headlineContent = { Text(stringResource(Res.string.sources_save_to_music_server)) }, supportingContent = { Text(stringResource(Res.string.sources_save_to_server_description, state.server.baseUrl.substringAfter("://"))) },
                 leadingContent = { Icon(AppIcon.SERVER.vector, null) }, modifier = Modifier.clickable { download(ScGateDestination.LIBRARY) })
-            ListItem(headlineContent = { Text("Save to music server and keep offline") }, supportingContent = { Text("Also download it to this device") },
+            ListItem(headlineContent = { Text(stringResource(Res.string.sources_save_to_server_keep_offline)) }, supportingContent = { Text(stringResource(Res.string.sources_save_to_server_keep_offline_description)) },
                 leadingContent = { Icon(AppIcon.AVAILABLE_OFFLINE.vector, null) }, modifier = Modifier.clickable { download(ScGateDestination.LIBRARY, keepOffline = true) })
         }
-        if (controller.soundCloudDeviceDownloads) ListItem(headlineContent = { Text("Save to this device") },
-            supportingContent = { Text("Add the file to your local music") },
+        if (controller.soundCloudDeviceDownloads) ListItem(headlineContent = { Text(stringResource(Res.string.sources_save_to_this_device)) },
+            supportingContent = { Text(stringResource(Res.string.sources_save_to_device_description)) },
             leadingContent = { Icon(AppIcon.DEVICE.vector, null) }, modifier = Modifier.clickable { download(ScGateDestination.CLIENT) })
-        ListItem(headlineContent = { Text("Open on SoundCloud") }, leadingContent = { Icon(AppIcon.OPEN_EXTERNAL.vector, null) },
+        ListItem(headlineContent = { Text(stringResource(Res.string.sources_open_on_soundcloud)) }, leadingContent = { Icon(AppIcon.OPEN_EXTERNAL.vector, null) },
             modifier = Modifier.clickable { dismiss(); browser.openUri(track.url) })
         Spacer(Modifier.height(16.dp))
     }

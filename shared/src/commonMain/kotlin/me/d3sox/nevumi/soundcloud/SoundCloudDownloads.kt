@@ -263,6 +263,16 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             browser = browser?.takeIf { it in profile.browserModes }, reviewTags = reviewTags).also { mutableProfile.value = it })
     }
 
+    /** Sets up [profile], such as from a backup, unless a server is already set up; returns whether it was set up. */
+    suspend fun restore(profile: SoundCloudProfile): Boolean = profiles.withLock {
+        if (store.read<SoundCloudProfile>("soundcloud:profile") != null) return@withLock false
+        val restored = profile.copy(baseUrl = normalizeServerAddress(profile.baseUrl))
+        store.put("soundcloud:profile", "soundcloud-settings", restored)
+        capabilitiesChecked = false
+        mutableProfile.value = restored
+        true
+    }
+
     suspend fun disconnect() = profiles.withLock {
         store.database.records().delete("soundcloud:profile")
         mutableProfile.value = null

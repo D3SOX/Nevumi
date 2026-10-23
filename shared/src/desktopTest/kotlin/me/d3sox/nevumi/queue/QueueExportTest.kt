@@ -8,6 +8,7 @@ import me.d3sox.nevumi.storage.openMusicStore
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.*
+import org.jetbrains.compose.resources.getString
 
 class QueueExportTest {
     @Test fun playlistAndM3uExportsPreserveOccurrenceOrderAndScopeWithoutChangingTheQueue() = runBlocking {
@@ -28,10 +29,10 @@ class QueueExportTest {
                 QueueExportScope.REMAINING to listOf(b.id, a.id, a.id, b.id), QueueExportScope.UP_NEXT to listOf(a.id, a.id))
             for ((selection, ids) in expected) {
                 assertEquals(ids, selection.trackIds(snapshot))
-                val playlist = controller.createQueuePlaylist(selection.label, snapshot, selection)
+                val playlist = controller.createQueuePlaylist(getString(selection.label), snapshot, selection)
                 assertEquals(ids, playlist.trackIds)
                 val text = controller.exportQueueM3u(snapshot, selection)
-                val imported = M3uPlaylists(library, playlists).import("Imported ${selection.label}", text)
+                val imported = M3uPlaylists(library, playlists).import("Imported ${getString(selection.label)}", text)
                 assertEquals(ids, imported.playlist.trackIds)
                 assertEquals(emptyList(), imported.unresolved)
                 assertFalse("http" in text)

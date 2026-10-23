@@ -12,6 +12,32 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import me.d3sox.nevumi.navidrome.ServerRefreshProgress
 import me.d3sox.nevumi.navidrome.ServerRefreshStage
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.playlists
+import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.sources_cancel_refresh
+import me.d3sox.nevumi.resources.sources_covers
+import me.d3sox.nevumi.resources.sources_dismiss
+import me.d3sox.nevumi.resources.sources_files
+import me.d3sox.nevumi.resources.sources_library_refresh_progress
+import me.d3sox.nevumi.resources.sources_refresh_cancelled_description
+import me.d3sox.nevumi.resources.sources_refresh_checked
+import me.d3sox.nevumi.resources.sources_refresh_received
+import me.d3sox.nevumi.resources.sources_refresh_saved
+import me.d3sox.nevumi.resources.sources_refresh_slow
+import me.d3sox.nevumi.resources.sources_refresh_stage_artwork
+import me.d3sox.nevumi.resources.sources_refresh_stage_cancelled
+import me.d3sox.nevumi.resources.sources_refresh_stage_complete
+import me.d3sox.nevumi.resources.sources_refresh_stage_connecting
+import me.d3sox.nevumi.resources.sources_refresh_stage_failed
+import me.d3sox.nevumi.resources.sources_refresh_stage_files
+import me.d3sox.nevumi.resources.sources_refresh_stage_importing
+import me.d3sox.nevumi.resources.sources_refresh_stage_matching
+import me.d3sox.nevumi.resources.sources_refresh_stage_playlists
+import me.d3sox.nevumi.resources.sources_refresh_stage_songs
+import me.d3sox.nevumi.resources.sources_refresh_stage_waiting
+import me.d3sox.nevumi.resources.sources_refresh_updated
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun ServerRefreshStatus(progress: ServerRefreshProgress, cancel: () -> Unit, dismiss: () -> Unit,
@@ -21,26 +47,26 @@ internal fun ServerRefreshStatus(progress: ServerRefreshProgress, cancel: () -> 
         if (progress.running) { delay(10_000); slow = true }
     }
     val title = when (progress.stage) {
-        ServerRefreshStage.CONNECTING -> "Connecting to the music server"
-        ServerRefreshStage.WAITING -> "Waiting for another server task"
-        ServerRefreshStage.SONGS -> "Loading songs"
-        ServerRefreshStage.FILES -> "Loading file details"
-        ServerRefreshStage.IMPORTING -> "Saving songs"
-        ServerRefreshStage.PLAYLISTS -> "Syncing playlists"
-        ServerRefreshStage.ARTWORK -> "Updating artwork"
-        ServerRefreshStage.MATCHING -> "Matching local and server songs"
-        ServerRefreshStage.COMPLETE -> "Library refreshed"
-        ServerRefreshStage.CANCELLED -> "Refresh cancelled"
-        ServerRefreshStage.FAILED -> "Refresh stopped"
+        ServerRefreshStage.CONNECTING -> stringResource(Res.string.sources_refresh_stage_connecting)
+        ServerRefreshStage.WAITING -> stringResource(Res.string.sources_refresh_stage_waiting)
+        ServerRefreshStage.SONGS -> stringResource(Res.string.sources_refresh_stage_songs)
+        ServerRefreshStage.FILES -> stringResource(Res.string.sources_refresh_stage_files)
+        ServerRefreshStage.IMPORTING -> stringResource(Res.string.sources_refresh_stage_importing)
+        ServerRefreshStage.PLAYLISTS -> stringResource(Res.string.sources_refresh_stage_playlists)
+        ServerRefreshStage.ARTWORK -> stringResource(Res.string.sources_refresh_stage_artwork)
+        ServerRefreshStage.MATCHING -> stringResource(Res.string.sources_refresh_stage_matching)
+        ServerRefreshStage.COMPLETE -> stringResource(Res.string.sources_refresh_stage_complete)
+        ServerRefreshStage.CANCELLED -> stringResource(Res.string.sources_refresh_stage_cancelled)
+        ServerRefreshStage.FAILED -> stringResource(Res.string.sources_refresh_stage_failed)
     }
     val count = when (progress.stage) {
-        ServerRefreshStage.SONGS -> "${countLabel(progress.processed, "song")} received"
-        ServerRefreshStage.FILES -> "${countLabel(progress.processed, "file")} received"
-        ServerRefreshStage.IMPORTING -> "${progress.processed} of ${countLabel(progress.total ?: 0, "song")} saved"
-        ServerRefreshStage.PLAYLISTS -> progress.total?.let { "${progress.processed} of ${countLabel(it, "playlist")} checked" }
-        ServerRefreshStage.ARTWORK -> progress.total?.let { "${progress.processed} of ${countLabel(it, "cover")} checked" }
-        ServerRefreshStage.COMPLETE -> "${countLabel(progress.processed, "song")} updated"
-        ServerRefreshStage.CANCELLED -> "Songs already saved are kept. You can refresh again later."
+        ServerRefreshStage.SONGS -> stringResource(Res.string.sources_refresh_received, countLabel(progress.processed, Res.plurals.songs))
+        ServerRefreshStage.FILES -> stringResource(Res.string.sources_refresh_received, countLabel(progress.processed, Res.plurals.sources_files))
+        ServerRefreshStage.IMPORTING -> stringResource(Res.string.sources_refresh_saved, progress.processed, countLabel(progress.total ?: 0, Res.plurals.songs))
+        ServerRefreshStage.PLAYLISTS -> progress.total?.let { stringResource(Res.string.sources_refresh_checked, progress.processed, countLabel(it, Res.plurals.playlists)) }
+        ServerRefreshStage.ARTWORK -> progress.total?.let { stringResource(Res.string.sources_refresh_checked, progress.processed, countLabel(it, Res.plurals.sources_covers)) }
+        ServerRefreshStage.COMPLETE -> stringResource(Res.string.sources_refresh_updated, countLabel(progress.processed, Res.plurals.songs))
+        ServerRefreshStage.CANCELLED -> stringResource(Res.string.sources_refresh_cancelled_description)
         else -> null
     }
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
@@ -52,15 +78,16 @@ internal fun ServerRefreshStatus(progress: ServerRefreshProgress, cancel: () -> 
             count?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             progress.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             if (progress.running) {
-                val bar = Modifier.fillMaxWidth().semantics { contentDescription = "Library refresh progress" }
+                val barDescription = stringResource(Res.string.sources_library_refresh_progress)
+                val bar = Modifier.fillMaxWidth().semantics { contentDescription = barDescription }
                 val total = progress.total
                 if (total != null && total > 0) LinearProgressIndicator(
                     progress = { (progress.processed.toFloat() / total).coerceIn(0f, 1f) }, modifier = bar)
                 else LinearProgressIndicator(bar)
-                if (slow) Text("This step is taking longer than usual. You can cancel and try again.",
+                if (slow) Text(stringResource(Res.string.sources_refresh_slow),
                     style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = cancel) { Text("Cancel refresh") }
-            } else TextButton(onClick = dismiss) { Text("Dismiss") }
+                TextButton(onClick = cancel) { Text(stringResource(Res.string.sources_cancel_refresh)) }
+            } else TextButton(onClick = dismiss) { Text(stringResource(Res.string.sources_dismiss)) }
         }
     }
 }

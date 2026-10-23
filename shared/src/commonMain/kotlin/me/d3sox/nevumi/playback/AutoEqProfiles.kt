@@ -72,6 +72,13 @@ class AutoEqProfiles(private val store: MusicStore, private val http: HttpClient
         return EqualizerProfile(id, name.trim(), effects, "Imported file").also { store.put(id, "equalizer-profile", it) }
     }
 
+    /** Adds a saved profile, such as from a backup, unless one with its ID exists; returns whether it was added. */
+    suspend fun restore(profile: EqualizerProfile): Boolean = store.transaction {
+        require(profile.id.startsWith("autoeq:") || profile.id.startsWith("equalizer-")) { "Invalid equalizer profile" }
+        profile.effects.validate()
+        if (store.read<EqualizerProfile>(profile.id) != null) false else { store.put(profile.id, "equalizer-profile", profile); true }
+    }
+
     suspend fun remove(id: String) { store.transaction {
         if (store.read<EqualizerProfile>(id) != null) store.database.records().delete(id)
     } }

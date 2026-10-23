@@ -113,7 +113,7 @@ class MilkDropPresetsUiTest {
                 onNodeWithText("Original MilkDrop").performClick()
                 onNodeWithText("552 presets").assertIsDisplayed()
                 onNodeWithText("Search presets").performTextInput("POSTCARD FROM FRACTOPIA")
-                onNodeWithText("1 presets").assertIsDisplayed()
+                onNodeWithText("1 preset").assertIsDisplayed()
                 onNodeWithText("Flexi + Rovastar - postcard from Fractopia").performClick()
                 assertEquals(presets.indexOfFirst { it.name == "Flexi + Rovastar - postcard from Fractopia" }, selected.intValue)
                 onNodeWithContentDescription("Choose MilkDrop preset").performClick()

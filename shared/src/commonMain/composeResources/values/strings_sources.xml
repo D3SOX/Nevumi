@@ -1,0 +1,482 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Connections, SoundCloud, listening history, downloads, library navigation and platform file pickers. -->
+<resources>
+    <!-- ScrobblingSettings -->
+    <string name="sources_scrobbling_intro">Scrobbling sends recorded plays to your connected accounts. Existing history is not backfilled.</string>
+    <string name="sources_scrobble_after">Scrobble after</string>
+    <string name="sources_scrobble_or_after">Or after</string>
+    <string name="sources_scrobble_threshold_hint">Send a listen when either threshold is reached. Choose Off to use only the percentage. Applies to all connected services. Last.fm requires tracks longer than 30 seconds.</string>
+    <string name="sources_scrobble_server_forward_hint">If your music server forwards plays to Last.fm or ListenBrainz, keep the matching direct connection off here.</string>
+    <string name="sources_connected_as">Connected as %1$s</string>
+    <string name="sources_send_listens_to">Send listens to %1$s</string>
+    <string name="sources_disconnect_service">Disconnect %1$s</string>
+    <string name="sources_lastfm_authorize_hint">Authorize Nevumi in your browser, then return here to complete sign-in.</string>
+    <string name="sources_open_lastfm_authorization">Open Last.fm authorization</string>
+    <string name="sources_open_authorization_failed">Could not open the authorization page in your browser.</string>
+    <string name="sources_complete_sign_in">Complete sign-in</string>
+    <string name="sources_complete_lastfm_sign_in_failed">Could not complete Last.fm sign-in</string>
+    <string name="sources_cancel_sign_in">Cancel sign-in</string>
+    <string name="sources_no_pending_listens">No pending listens</string>
+    <string name="sources_pending_listens">Pending listens</string>
+    <string name="sources_scrobble_state_uncertain">Unconfirmed submission</string>
+    <string name="sources_scrobble_state_authorization">Sign-in required</string>
+    <string name="sources_scrobble_state_rejected">Service rejected this listen</string>
+    <string name="sources_scrobble_state_in_flight">Sending listen</string>
+    <string name="sources_scrobble_state_waiting">Waiting to send</string>
+    <string name="sources_discard_listen">Discard listen</string>
+    <string name="sources_disconnect_service_question">Disconnect %1$s?</string>
+    <string name="sources_disconnect_scrobbling_description">This removes the saved credentials and discards pending deliveries for %1$s.</string>
+    <string name="sources_disconnect">Disconnect</string>
+    <string name="sources_retry_unconfirmed_listen_question">Retry unconfirmed listen?</string>
+    <string name="sources_retry_unconfirmed_listen_description">The service may already have recorded this listen. Retrying can submit it a second time.</string>
+    <string name="sources_retry_listen">Retry listen</string>
+    <string name="sources_lastfm_credentials_intro">Enter the API credentials for your Last.fm application, then authorize Nevumi in your browser.</string>
+    <string name="sources_lastfm_callback_hint">Leave the Callback URL field blank when creating your Last.fm API application.</string>
+    <string name="sources_get_api_credentials">Get API credentials</string>
+    <string name="sources_application_api_key">Application API key</string>
+    <string name="sources_application_shared_secret">Application shared secret</string>
+    <string name="sources_start_sign_in">Start sign-in</string>
+    <string name="sources_start_lastfm_sign_in_failed">Could not start Last.fm sign-in</string>
+    <string name="sources_listenbrainz_token_intro">Use the user token from your ListenBrainz account settings.</string>
+    <string name="sources_user_token">User token</string>
+    <string name="sources_service_address">Service address</string>
+    <string name="sources_connect">Connect</string>
+    <string name="sources_connect_listenbrainz_failed">Could not connect to ListenBrainz</string>
+
+    <!-- SftpSettings -->
+    <string name="sources_server_libraries_read_failed">The server libraries could not be read</string>
+    <string name="sources_sftp_connect_navidrome_first">Connect to Navidrome in Music server first.</string>
+    <string name="sources_sftp_connected">SFTP connected</string>
+    <string name="sources_disconnect_sftp">Disconnect SFTP</string>
+    <string name="sources_sftp_disconnect_failed">SFTP could not be disconnected</string>
+    <string name="sources_unfinished_uploads">Unfinished uploads</string>
+    <string name="sources_upload_reconnect_hint">Reconnect to this upload’s original SFTP directory to retry it.</string>
+    <string name="sources_retry_upload">Retry upload</string>
+    <string name="sources_discard_upload">Discard upload</string>
+    <string name="sources_sftp_intro">Edit and upload the actual music files. Use the SSH account’s absolute path to your Navidrome music directory.</string>
+    <string name="sources_sftp_tunnel_hint">To reach a server on your tailnet, turn on Server files in Tunnel settings.</string>
+    <string name="sources_sftp_host">SFTP host</string>
+    <string name="sources_sftp_port">SFTP port</string>
+    <string name="sources_ssh_username">SSH username</string>
+    <string name="sources_server_music_directory">Server music directory</string>
+    <string name="sources_host_key_fingerprint">Host-key fingerprint</string>
+    <string name="sources_host_key_fingerprint_hint">Verify the SHA256 fingerprint with your server administrator before connecting.</string>
+    <string name="sources_ssh_private_key">SSH private key</string>
+    <string name="sources_password">Password</string>
+    <string name="sources_key_passphrase_optional">Key passphrase (optional)</string>
+    <string name="sources_ssh_password">SSH password</string>
+    <string name="sources_connect_sftp">Connect SFTP</string>
+    <string name="sources_sftp_connect_failed">SFTP could not be connected</string>
+    <string name="sources_discard_unfinished_upload_question">Discard unfinished upload?</string>
+    <string name="sources_discard_unfinished_upload_description">Nevumi will remove its staged copy and stop retrying. Any file already uploaded to the server is kept.</string>
+
+    <!-- PairingSettings -->
+    <string name="sources_device_sync_failed">Device sync failed</string>
+    <string name="sources_pairing_intro">Share favorites, ratings, listening history, app playlists and saved queues over an encrypted connection. Music files, credentials and playback position stay on each device.</string>
+    <string name="sources_pairing_sync_hint">Open Nevumi on both devices, then choose Sync now.</string>
+    <string name="sources_ready_to_sync">Ready to sync</string>
+    <string name="sources_library_synced">Library synced</string>
+    <string name="sources_sync_now">Sync now</string>
+    <string name="sources_sync_with_device">Sync with %1$s</string>
+    <string name="sources_remove_device_named">Remove %1$s</string>
+    <string name="sources_songs_to_match">Songs to match</string>
+    <string name="sources_all_shared_songs_matched">All shared songs matched</string>
+    <string name="sources_songs_need_your_copy">%1$s need your copy</string>
+    <string name="sources_choose_folder_for_playlist">Choose folder: %1$s</string>
+    <string name="sources_choose_folder_for_playlist_description">Choose folder for %1$s</string>
+    <string name="sources_pair_another_device">Pair another device</string>
+    <string name="sources_scan_qr_code">Scan QR code</string>
+    <string name="sources_enter_code">Enter code</string>
+    <string name="sources_device_network_address">This device’s network address</string>
+    <string name="sources_create_invitation">Create invitation</string>
+    <string name="sources_invitation_hint">Scan this QR code or copy the invitation to your other device. It expires in five minutes.</string>
+    <string name="sources_your_invitation">Your invitation</string>
+    <string name="sources_cancel_invitation">Cancel invitation</string>
+    <string name="sources_enter_pairing_code">Enter pairing code</string>
+    <string name="sources_paste_pairing_invitation">Paste the pairing invitation from your other device.</string>
+    <string name="sources_pairing_invitation">Pairing invitation</string>
+    <string name="sources_pair_device">Pair device</string>
+    <string name="sources_remove_device_question">Remove %1$s?</string>
+    <string name="sources_remove_device_description">This device will no longer accept sync from %1$s. Your library changes remain on both devices.</string>
+    <string name="sources_remove_device">Remove device</string>
+    <string name="sources_folder_for_playlist">Folder for %1$s</string>
+    <string name="sources_choose_smart_playlist_folder">Choose the folder this smart playlist should use on this device.</string>
+
+    <!-- TunnelSettings -->
+    <string name="sources_tailscale_unavailable">Tailscale is unavailable</string>
+    <string name="sources_tunnel_intro">Nevumi can join your tailnet itself, so it reaches servers there without the Tailscale app or a VPN.</string>
+    <string name="sources_reset_tailscale">Reset Tailscale</string>
+    <string name="sources_tailscale_reset_failed">Tailscale could not be reset</string>
+    <string name="sources_control_server_optional">Control server (optional)</string>
+    <string name="sources_control_server_hint">Leave empty for Tailscale, or enter your Headscale URL.</string>
+    <string name="sources_auth_key_optional">Auth key (optional)</string>
+    <string name="sources_auth_key_hint">Without a key, sign in through your browser.</string>
+    <string name="sources_sign_in_to_tailscale">Sign in to Tailscale</string>
+    <string name="sources_tailscale_start_failed">Tailscale could not start</string>
+    <string name="sources_tunnel_connected_as">Connected to your tailnet as %1$s</string>
+    <string name="sources_tunnel_sign_in_hint">Sign in to add Nevumi to your tailnet.</string>
+    <string name="sources_tunnel_waiting_for_approval">Waiting for your tailnet admin to approve this device.</string>
+    <string name="sources_tunnel_connecting">Connecting to Tailscale…</string>
+    <string name="sources_open_sign_in_page">Open sign-in page</string>
+    <string name="sources_sign_out_of_tailscale">Sign out of Tailscale</string>
+    <string name="sources_tailscale_sign_out_failed">Tailscale could not sign out</string>
+    <string name="sources_connect_through_tailscale">Connect through Tailscale</string>
+    <string name="sources_tunnel_settings_save_failed">The tunnel settings could not be saved</string>
+    <string name="sources_tunnel_music_server_description">Navidrome requests, streaming and downloads</string>
+    <string name="sources_tunnel_server_files_description">File editing and uploads</string>
+    <string name="sources_soundcloud_downloads">SoundCloud downloads</string>
+    <string name="sources_tunnel_soundcloud_description">sc-gate-dl searches and downloads</string>
+    <string name="sources_tunnel_sign_in_required">Sign in to Tailscale to use these connections.</string>
+
+    <!-- ServerSettings -->
+    <string name="sources_connected">Connected</string>
+    <string name="sources_user_on_server">%1$s on %2$s</string>
+    <string name="sources_server_intro">Connect to Navidrome or a Subsonic-compatible server.</string>
+    <string name="sources_server_address">Server address</string>
+    <string name="sources_username">Username</string>
+    <string name="sources_refresh_library">Refresh library</string>
+    <string name="sources_change_server">Change server</string>
+    <string name="sources_disconnect_music_server_question">Disconnect music server?</string>
+    <string name="sources_disconnect_music_server_description">Songs from this server stay in your library but can\'t be streamed until you reconnect. Downloaded songs keep playing.</string>
+    <string name="sources_disconnect_music_server_sftp">Server file editing (SFTP) is disconnected too.</string>
+
+    <!-- ServerRefreshStatus -->
+    <string name="sources_refresh_stage_connecting">Connecting to the music server</string>
+    <string name="sources_refresh_stage_waiting">Waiting for another server task</string>
+    <string name="sources_refresh_stage_songs">Loading songs</string>
+    <string name="sources_refresh_stage_files">Loading file details</string>
+    <string name="sources_refresh_stage_importing">Saving songs</string>
+    <string name="sources_refresh_stage_playlists">Syncing playlists</string>
+    <string name="sources_refresh_stage_artwork">Updating artwork</string>
+    <string name="sources_refresh_stage_matching">Matching local and server songs</string>
+    <string name="sources_refresh_stage_complete">Library refreshed</string>
+    <string name="sources_refresh_stage_cancelled">Refresh cancelled</string>
+    <string name="sources_refresh_stage_failed">Refresh stopped</string>
+    <string name="sources_refresh_received">%1$s received</string>
+    <string name="sources_refresh_saved">%1$d of %2$s saved</string>
+    <string name="sources_refresh_checked">%1$d of %2$s checked</string>
+    <string name="sources_refresh_updated">%1$s updated</string>
+    <string name="sources_refresh_cancelled_description">Songs already saved are kept. You can refresh again later.</string>
+    <string name="sources_library_refresh_progress">Library refresh progress</string>
+    <string name="sources_refresh_slow">This step is taking longer than usual. You can cancel and try again.</string>
+    <string name="sources_cancel_refresh">Cancel refresh</string>
+    <string name="sources_dismiss">Dismiss</string>
+
+    <!-- SoundCloudSettings -->
+    <string name="sources_gate_browser_headless">Headless</string>
+    <string name="sources_gate_browser_xvfb">Hidden window (Xvfb)</string>
+    <string name="sources_gate_browser_headed">Visible window</string>
+    <string name="sources_sc_gate_unavailable">sc-gate-dl is unavailable</string>
+    <string name="sources_sc_gate_disconnect_failed">Could not disconnect sc-gate-dl</string>
+    <string name="sources_sc_gate_ready_library">sc-gate-dl is ready and can save to your music server</string>
+    <string name="sources_sc_gate_ready">sc-gate-dl is ready</string>
+    <string name="sources_soundcloud_intro">Search SoundCloud and download songs through your sc-gate-dl server. It runs the searches, so this device does not contact SoundCloud.</string>
+    <string name="sources_soundcloud_library_destination">Can save songs to your music server\'s library</string>
+    <string name="sources_soundcloud_device_destination">Saves songs to this device. Set SC_GATE_DL_LIBRARY_DIR on the server to add them to your music server.</string>
+    <string name="sources_test_connection">Test connection</string>
+    <string name="sources_sc_gate_address">sc-gate-dl address</string>
+    <string name="sources_sc_gate_address_hint">The API address, such as http://homelan:3000</string>
+    <string name="sources_download_format">Download format</string>
+    <string name="sources_when_you_pick_a_song">When you pick a song</string>
+    <string name="sources_ask_every_time">Ask every time</string>
+    <string name="sources_save_to_music_server">Save to music server</string>
+    <string name="sources_save_to_this_device">Save to this device</string>
+    <string name="sources_gate_browser">Gate browser</string>
+    <string name="sources_gate_browser_default">sc-gate-dl\'s default</string>
+    <string name="sources_check_tags_before_saving">Check tags before saving</string>
+    <string name="sources_check_tags_before_saving_description">Downloads wait for you to edit their tags, like in sc-gate-dl\'s web interface</string>
+    <string name="sources_flac_hint">FLAC keeps lossless sources lossless. A lossy source does not gain quality in a FLAC file.</string>
+    <string name="sources_browser_view_hint">Watch sc-gate-dl\'s browser from a download and take over when a gate needs you.</string>
+    <string name="sources_browser_view_setup_hint">Set BROWSER_VIEW_URL on sc-gate-dl to watch its browser from Nevumi.</string>
+
+    <!-- SoundCloudSearch -->
+    <string name="sources_soundcloud_search_failed">SoundCloud search failed</string>
+    <string name="sources_soundcloud_song_description">SoundCloud song: %1$s by %2$s</string>
+    <string name="sources_free_download">Free download</string>
+    <string name="sources_download_gate">Download gate</string>
+    <string name="sources_in_library">In library</string>
+    <string name="sources_download_options_for">Download options: %1$s</string>
+    <string name="sources_no_soundcloud_results">No SoundCloud results for “%1$s”</string>
+    <string name="sources_show_more">Show more</string>
+    <string name="sources_search_soundcloud_for">Search SoundCloud for “%1$s”</string>
+    <string name="sources_search_soundcloud_description">Find songs to download through sc-gate-dl</string>
+    <string name="sources_close_download_options">Close download options</string>
+    <string name="sources_check_tags_after_download">Edit the tags once the file is downloaded</string>
+    <string name="sources_save_to_server_description">Add it to your library on %1$s</string>
+    <string name="sources_save_to_server_keep_offline">Save to music server and keep offline</string>
+    <string name="sources_save_to_server_keep_offline_description">Also download it to this device</string>
+    <string name="sources_save_to_device_description">Add the file to your local music</string>
+    <string name="sources_open_on_soundcloud">Open on SoundCloud</string>
+
+    <!-- SoundCloudJobs -->
+    <string name="sources_soundcloud_download_description">SoundCloud download: %1$s</string>
+    <string name="sources_to_music_server">To music server</string>
+    <string name="sources_to_this_device">To this device</string>
+    <string name="sources_job_needs_link">sc-gate-dl found no download link. Paste a gate or download link, or save the SoundCloud stream, which has lower quality than a download.</string>
+    <string name="sources_job_needs_tags">Downloaded. sc-gate-dl saves it once you check its tags.</string>
+    <string name="sources_job_failed">The download failed</string>
+    <string name="sources_job_attention_viewer">The gate needs a manual step, such as a captcha. Finish it in sc-gate-dl\'s browser or cancel.</string>
+    <string name="sources_job_attention">The gate needs a manual step, such as a captcha, in sc-gate-dl\'s browser. Finish it in the sc-gate-dl web interface or cancel.</string>
+    <string name="sources_job_excluded_folder">Your local folder rules leave out %1$s.</string>
+    <string name="sources_paste_link">Paste link</string>
+    <string name="sources_save_soundcloud_stream">Save SoundCloud stream</string>
+    <string name="sources_choose_song">Choose song</string>
+    <string name="sources_check_tags">Check tags</string>
+    <string name="sources_view_browser">View browser</string>
+    <string name="sources_browser_open_failed">sc-gate-dl\'s browser could not be opened</string>
+    <string name="sources_add_folder_to_library">Add folder to library</string>
+    <string name="sources_cancel_download">Cancel download</string>
+    <string name="sources_remove_from_list">Remove from list</string>
+    <string name="sources_paste_download_link">Paste download link</string>
+    <string name="sources_gate_or_download_link">Gate or download link</string>
+    <string name="sources_gate_link_hint">Hypeddit, Bandcamp and other links sc-gate-dl supports</string>
+    <string name="sources_continue">Continue</string>
+    <string name="sources_choose_the_song">Choose the song</string>
+    <string name="sources_choose_bandcamp_song">sc-gate-dl could not tell which song on the Bandcamp album this is.</string>
+    <string name="sources_action_for_item">%1$s: %2$s</string>
+
+    <!-- SoundCloudTags -->
+    <string name="sources_genre">Genre</string>
+    <string name="sources_copy_title_into_form">Copy title into the form</string>
+    <string name="sources_copy_artist_into_form">Copy artist into the form</string>
+    <string name="sources_copy_album_into_form">Copy album into the form</string>
+    <string name="sources_copy_genre_into_form">Copy genre into the form</string>
+    <string name="sources_reset_title_to_original">Reset title to the original</string>
+    <string name="sources_reset_artist_to_original">Reset artist to the original</string>
+    <string name="sources_reset_album_to_original">Reset album to the original</string>
+    <string name="sources_reset_genre_to_original">Reset genre to the original</string>
+    <string name="sources_write_tags_failed">sc-gate-dl could not write the tags</string>
+    <string name="sources_file_cover_unavailable">The file\'s cover is unavailable</string>
+    <string name="sources_selected_image_unavailable">The selected image is unavailable</string>
+    <string name="sources_check_the_tags">Check the tags</string>
+    <string name="sources_tags_intro_server">sc-gate-dl downloaded “%1$s”. It saves the song to your music server with these tags.</string>
+    <string name="sources_tags_intro_device">sc-gate-dl downloaded “%1$s”. It saves the song for this device with these tags.</string>
+    <string name="sources_lossy_flac_hint">The downloaded source is lossy. Saving it as FLAC cannot bring back the lost quality.</string>
+    <string name="sources_file_has_tags">The file already has tags</string>
+    <string name="sources_file_has_tags_description">Copy a tag or the cover into the form, or keep the file\'s own tags and finish.</string>
+    <string name="sources_cover_in_file">Cover in the file</string>
+    <string name="sources_cover">Cover</string>
+    <string name="sources_copy_cover_into_form">Copy the cover into the form</string>
+    <string name="sources_keep_file_tags">Keep the file\'s tags and finish</string>
+    <string name="sources_promo_text_hint">The tags contain promo text like [FREE DL] or a repeated artist name.</string>
+    <string name="sources_remove_promo_text">Remove promo text</string>
+    <string name="sources_chosen_cover">Chosen cover</string>
+    <string name="sources_song_cover">Song cover</string>
+    <string name="sources_change_cover">Change cover</string>
+    <string name="sources_reset_cover">Reset cover</string>
+    <string name="sources_name_file_artist_title">Name the file “Artist - Title”</string>
+    <string name="sources_file_name">File name: %1$s</string>
+    <string name="sources_write_tags">Write tags</string>
+
+    <!-- PairingQr -->
+    <string name="sources_pairing_qr_code">Pairing QR code</string>
+    <string name="sources_scan_pairing_qr_code">Scan pairing QR code</string>
+    <string name="sources_scan_pairing_hint">Point the camera at the pairing invitation shown on your other device.</string>
+    <string name="sources_use_manual_code">Use manual code</string>
+
+    <!-- ListeningHistoryScreens -->
+    <string name="sources_history_empty">Your listening history will appear here.</string>
+    <string name="sources_history_entry_played">%1$s · %2$s listened · Played</string>
+    <string name="sources_history_entry_partial">%1$s · %2$s listened · Partial listen</string>
+    <string name="sources_statistics_period">Statistics period</string>
+    <string name="sources_period_all_time">All time</string>
+    <string name="sources_period_last_7_days">Last 7 days</string>
+    <string name="sources_period_last_30_days">Last 30 days</string>
+    <string name="sources_period_last_365_days">Last 365 days</string>
+    <string name="sources_listening_time">Listening time: %1$s</string>
+    <string name="sources_statistics_empty">Play some music to build your statistics.</string>
+    <string name="sources_statistics_genres_hint">Songs with multiple genres contribute to each genre.</string>
+    <string name="sources_recommendations_intro">From your listening history. Songs played in the last 7 days are left out.</string>
+    <string name="sources_recommendation_artist">More from %1$s</string>
+    <string name="sources_recommendation_genre">Because you listen to %1$s</string>
+    <string name="sources_recommendations_empty">Play some music to discover more from your library.</string>
+    <string name="sources_listening_statistics">%1$s · %2$s listened</string>
+
+    <!-- DownloadsScreen -->
+    <string name="sources_downloads_paused">Downloads paused</string>
+    <string name="sources_waiting_for_network">Waiting for a network</string>
+    <string name="sources_waiting_for_unmetered_network">Waiting for an unmetered network</string>
+    <string name="sources_count_downloaded">%1$s downloaded</string>
+    <string name="sources_progress_downloaded">%1$d of %2$s downloaded</string>
+    <string name="sources_download_progress">Download progress</string>
+    <string name="sources_resume_downloads">Resume downloads</string>
+    <string name="sources_pause_downloads">Pause downloads</string>
+    <string name="sources_retry_failed_downloads">Retry failed downloads</string>
+    <string name="sources_playlist_download_progress">Playlist download progress: %1$s</string>
+    <string name="sources_unavailable_song">Unavailable song</string>
+    <string name="sources_download_status_complete">Downloaded</string>
+    <string name="sources_download_status_downloading">Downloading</string>
+    <string name="sources_download_status_pending">Queued</string>
+    <string name="sources_download_status_paused">Paused</string>
+    <string name="sources_download_status_insufficient_space">Not enough storage — free space and retry</string>
+    <string name="sources_download_status_failed">Failed — retry to continue</string>
+    <string name="sources_download_bytes">%1$d / %2$d bytes</string>
+    <string name="sources_remove_download">Remove download</string>
+    <string name="sources_downloads_empty">Download songs or enable automatic downloads on a playlist.</string>
+
+    <!-- ServerUploadDialog -->
+    <string name="sources_local_file_read_failed">The local music file could not be read</string>
+    <string name="sources_upload_to_server">Upload to server</string>
+    <string name="sources_upload_intro">Upload the original local file. Missing folders will be created. Existing files are kept.</string>
+    <string name="sources_server_filename">Server filename</string>
+    <string name="sources_server_filename_hint">Relative to your server music directory; keep the file extension.</string>
+    <string name="sources_upload">Upload</string>
+
+    <!-- FileRecovery -->
+    <string name="sources_file_recovery">File recovery</string>
+    <string name="sources_file_recovery_intro">A file edit stopped before finishing. Nevumi kept the original and the prepared edit.</string>
+    <string name="sources_file_recovery_restore_hint">Restoring replaces the interrupted file with its original backup.</string>
+    <string name="sources_music_file">Music file</string>
+    <string name="sources_restore_original_file">Restore original file</string>
+    <string name="sources_file_unchanged">The music file is unchanged. Apply the prepared changes or discard them.</string>
+    <string name="sources_apply_prepared_edit">Apply prepared edit</string>
+    <string name="sources_discard_prepared_edit">Discard prepared edit</string>
+
+    <!-- AudioOutputPicker -->
+    <string name="sources_audio_output">Audio output</string>
+    <string name="sources_close_audio_output">Close audio output</string>
+    <string name="sources_this_device">This device</string>
+    <string name="sources_this_device_description">Choose speakers, headphones, or Bluetooth</string>
+    <string name="sources_move_playback_here">Move playback here</string>
+    <string name="sources_pair_a_device">Pair a device</string>
+    <string name="sources_pair_a_device_description">Connect another Nevumi phone or computer</string>
+    <string name="sources_system_output_failed">Could not open the system audio output selector</string>
+
+    <!-- MilkDropVisualizer -->
+    <string name="sources_milkdrop_visualizer">MilkDrop visualizer</string>
+    <string name="sources_choose_milkdrop_preset">Choose MilkDrop preset</string>
+    <string name="sources_choose_a_preset">Choose a preset</string>
+    <string name="sources_unfavorite_current_preset">Unfavorite current preset: %1$s</string>
+    <string name="sources_favorite_current_preset">Favorite current preset: %1$s</string>
+    <string name="sources_random">Random</string>
+    <string name="sources_previous_preset">Previous preset</string>
+    <string name="sources_random_preset">Random preset</string>
+    <string name="sources_next_preset">Next preset</string>
+    <string name="sources_change_preset_every_20_seconds">Change preset every 20 seconds</string>
+    <string name="sources_change_presets_automatically">Change presets automatically</string>
+    <string name="sources_only_play_favorite_presets">Only play favorite presets</string>
+    <string name="sources_favorite_preset_to_start">Favorite a preset to start the visualizer.</string>
+    <string name="sources_milkdrop_presets">MilkDrop presets</string>
+    <string name="sources_search_presets">Search presets</string>
+    <string name="sources_category">Category</string>
+    <string name="sources_all_categories">All categories</string>
+    <string name="sources_no_presets_match">No presets match your search.</string>
+    <string name="sources_selected_preset">Selected preset</string>
+    <string name="sources_unfavorite_preset">Unfavorite preset: %1$s</string>
+    <string name="sources_favorite_preset">Favorite preset: %1$s</string>
+    <string name="sources_scroll_milkdrop_presets">Scroll MilkDrop presets</string>
+    <string name="sources_preset_credits">Preset credits</string>
+
+    <!-- LibraryFilters -->
+    <string name="sources_filter_library">Filter library</string>
+    <string name="sources_apply_filters">Apply filters</string>
+    <string name="sources_clear_filters">Clear filters</string>
+    <string name="sources_enter_whole_number">Enter a whole number</string>
+    <string name="sources_enter_whole_seconds">Enter a whole number of seconds</string>
+    <string name="sources_enter_valid_duration">Enter a valid duration</string>
+    <string name="sources_search_text">Search text</string>
+    <string name="sources_favorites_only">Favorites only</string>
+    <string name="sources_all_sources">All sources</string>
+    <string name="sources_device">Device</string>
+    <string name="sources_song_order">Song order</string>
+    <string name="sources_rating">Rating</string>
+    <string name="sources_last_played">Last played</string>
+    <string name="sources_reverse">Reverse</string>
+    <string name="sources_folder">Folder</string>
+    <string name="sources_year_from">Year from</string>
+    <string name="sources_year_to">Year to</string>
+    <string name="sources_minimum_seconds">Minimum seconds</string>
+    <string name="sources_maximum_seconds">Maximum seconds</string>
+    <string name="sources_minimum_rating">Minimum rating</string>
+    <string name="sources_maximum_rating">Maximum rating</string>
+    <string name="sources_rating_range_hint">Ratings range from 1 to 5. Use 0 for unrated songs.</string>
+    <string name="sources_minimum_plays">Minimum plays</string>
+    <string name="sources_maximum_plays">Maximum plays</string>
+    <string name="sources_played_within_days">Played within days</string>
+    <string name="sources_not_played_within_days">Not played within days</string>
+    <string name="sources_available_sources_only">Available sources only</string>
+    <string name="sources_song_limit">Song limit</string>
+
+    <!-- LibrarySearchScreen -->
+    <string name="sources_close_search">Close search</string>
+    <string name="sources_search_your_library">Search your library</string>
+    <string name="sources_clear_search">Clear search</string>
+    <string name="sources_search_soundcloud_prompt">Search SoundCloud for songs to download</string>
+    <string name="sources_enter_search_term">Enter a search term</string>
+    <string name="sources_no_results_for">No results for “%1$s”</string>
+    <string name="sources_see_all">See all</string>
+    <string name="sources_open_album">Open album: %1$s</string>
+    <string name="sources_open_artist">Open artist: %1$s</string>
+    <string name="sources_open_playlist">Open playlist: %1$s</string>
+    <string name="sources_open_genre">Open genre: %1$s</string>
+    <string name="sources_open_folder">Open folder: %1$s</string>
+    <string name="sources_album_options">Album options: %1$s</string>
+    <string name="sources_artist_options">Artist options: %1$s</string>
+    <string name="sources_playlist_options">Playlist options: %1$s</string>
+    <string name="sources_genre_options">Genre options: %1$s</string>
+    <string name="sources_folder_options">Folder options: %1$s</string>
+
+    <!-- LibraryTabs -->
+    <string name="sources_library_tabs_help">Use + and − to choose bottom navigation tabs. Drag to reorder within each section. Uncheck a tab to hide it entirely.</string>
+    <string name="sources_bottom_navigation">Bottom navigation</string>
+    <string name="sources_tabs_shown">%1$d tabs shown. Available space depends on screen width and text size.</string>
+    <string name="sources_more_tabs_hint">Open these tabs from More in the bottom navigation.</string>
+    <string name="sources_disabled_tabs_hint">Hidden from navigation. Check a tab to enable it.</string>
+    <string name="sources_show_tab">Show %1$s</string>
+    <string name="sources_move_tab_to_more">Move %1$s to More</string>
+    <string name="sources_remove_tab_from_bottom_navigation">Remove %1$s from bottom navigation</string>
+    <string name="sources_add_tab_to_bottom_navigation">Add %1$s to bottom navigation</string>
+    <string name="sources_reorder_tab">Reorder tab: %1$s</string>
+    <string name="sources_reset">Reset</string>
+    <string name="sources_save_tabs">Save tabs</string>
+
+    <!-- LibraryNavigation -->
+    <string name="sources_recent">Recent</string>
+
+    <!-- platform files -->
+    <string name="sources_choose_artwork">Choose artwork</string>
+    <string name="sources_images">Images</string>
+    <string name="sources_choose_music_folder">Choose music folder</string>
+    <string name="sources_import_equalizer_profile">Import equalizer profile</string>
+    <string name="sources_equalizer_apo_text">Equalizer APO text</string>
+    <string name="sources_m3u_playlists">M3U playlists</string>
+    <string name="sources_import_playlist">Import playlist</string>
+    <string name="sources_export_playlist">Export playlist</string>
+    <string name="sources_app_volume">App volume</string>
+    <string name="sources_no_webcam">No webcam found. Connect a camera or use a manual invitation code.</string>
+    <string name="sources_camera">Camera</string>
+    <string name="sources_pairing_camera_preview">Pairing camera preview</string>
+    <string name="sources_opening_camera">Opening camera…</string>
+    <string name="sources_desktop_camera_open_failed">Could not open this camera. Check camera access, choose another camera or use a manual invitation code.</string>
+    <string name="sources_milkdrop_load_failed">Could not load MilkDrop. Reinstall Nevumi\'s visualizer libraries.</string>
+    <string name="sources_milkdrop_open_failed">Could not open MilkDrop</string>
+    <string name="sources_preset_load_failed">%1$s could not be loaded. Choose another preset.</string>
+    <string name="sources_milkdrop_render_failed">Could not render MilkDrop</string>
+    <string name="sources_milkdrop_window_hint">The visualizer opens in a separate window. N and P switch presets, F toggles fullscreen, and Esc closes it.</string>
+    <string name="sources_preparing_milkdrop">Preparing the MilkDrop library…</string>
+    <string name="sources_close_visualizer">Close visualizer</string>
+    <string name="sources_allow_camera_hint">Allow camera access to scan, or use a manual invitation code.</string>
+    <string name="sources_allow_camera">Allow camera</string>
+    <string name="sources_android_camera_open_failed">Could not open the camera. Check camera access or use a manual invitation code.</string>
+    <string name="sources_presets_open_failed">Could not open the presets</string>
+    <string name="sources_lock_preset">Lock preset</string>
+    <string name="sources_unlock_preset">Unlock preset</string>
+    <string name="sources_milkdrop_visualization">MilkDrop visualization</string>
+    <string name="sources_song_actions">Song actions</string>
+
+    <!-- Counts -->
+    <plurals name="sources_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="sources_covers">
+        <item quantity="one">%1$d cover</item>
+        <item quantity="other">%1$d covers</item>
+    </plurals>
+    <plurals name="sources_presets">
+        <item quantity="one">%1$d preset</item>
+        <item quantity="other">%1$d presets</item>
+    </plurals>
+    <string name="sources_not_on_server">Not on server</string>
+    <string name="sources_not_in_any_playlist">Not in any playlist</string>
+</resources>

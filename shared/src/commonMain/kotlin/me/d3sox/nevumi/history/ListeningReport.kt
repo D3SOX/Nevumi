@@ -7,6 +7,7 @@ enum class ListeningPeriod(val days: Int?) {
     ALL_TIME(null), LAST_7_DAYS(7), LAST_30_DAYS(30), LAST_365_DAYS(365)
 }
 
+/** [name] is blank for artist, album and genre groups of songs without that tag. */
 data class ListeningRank(val name: String, val detail: String = "", val trackIds: List<String>,
     val playCount: Int, val listenedMs: Long)
 
@@ -45,9 +46,9 @@ fun listeningReport(listens: List<Listen>, tracks: List<Track>, period: Listenin
         ListeningRank(total.track.metadata.title, total.track.metadata.artist, listOf(id), total.plays, total.milliseconds)
     }.sortedByRank { it.trackIds.single() }
     return ListeningReport(events.count { it.qualified }, events.sumOf { it.listenedMs }, songs,
-        ranks { listOf(it.metadata.artist.ifBlank { "Unknown artist" } to "") },
-        ranks { listOf(it.metadata.album.ifBlank { "Unknown album" } to it.metadata.albumArtist.ifBlank { it.metadata.artist }) },
-        ranks { it.metadata.genres.ifEmpty { listOf("Unknown genre") }.map { genre -> genre to "" } })
+        ranks { listOf(it.metadata.artist.ifBlank { "" } to "") },
+        ranks { listOf(it.metadata.album.ifBlank { "" } to it.metadata.albumArtist.ifBlank { it.metadata.artist }) },
+        ranks { it.metadata.genres.ifEmpty { listOf("") }.map { genre -> genre to "" } })
 }
 
 /** Lowercases each name once instead of on every comparison. */

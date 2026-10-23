@@ -23,6 +23,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_allow_camera
+import me.d3sox.nevumi.resources.sources_allow_camera_hint
+import me.d3sox.nevumi.resources.sources_android_camera_open_failed
+import me.d3sox.nevumi.resources.sources_pairing_camera_preview
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal actual fun PairingCameraPreview(modifier: Modifier, onScanned: (String) -> Unit, onError: (String) -> Unit) {
@@ -35,11 +41,13 @@ internal actual fun PairingCameraPreview(modifier: Modifier, onScanned: (String)
     LaunchedEffect(Unit) { if (!permitted) permission.launch(Manifest.permission.CAMERA) }
     if (!permitted) {
         Column(modifier) {
-            Text("Allow camera access to scan, or use a manual invitation code.")
-            ActionButton("Allow camera", AppIcon.CAMERA) { permission.launch(Manifest.permission.CAMERA) }
+            Text(stringResource(Res.string.sources_allow_camera_hint))
+            ActionButton(stringResource(Res.string.sources_allow_camera), AppIcon.CAMERA) { permission.launch(Manifest.permission.CAMERA) }
         }
         return
     }
+    val previewDescription = stringResource(Res.string.sources_pairing_camera_preview)
+    val openFailed = stringResource(Res.string.sources_android_camera_open_failed)
     val view = remember(context) {
         PreviewView(context).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
@@ -48,7 +56,7 @@ internal actual fun PairingCameraPreview(modifier: Modifier, onScanned: (String)
             clipToOutline = true
         }
     }
-    AndroidView(factory = { view }, modifier = modifier.height(280.dp).semantics { contentDescription = "Pairing camera preview" })
+    AndroidView(factory = { view }, modifier = modifier.height(280.dp).semantics { contentDescription = previewDescription })
     DisposableEffect(context, lifecycle, view) {
         val executor = Executors.newSingleThreadExecutor()
         val main = ContextCompat.getMainExecutor(context)
@@ -75,7 +83,7 @@ internal actual fun PairingCameraPreview(modifier: Modifier, onScanned: (String)
                 val selector = if (requireNotNull(provider).hasCamera(CameraSelector.DEFAULT_BACK_CAMERA))
                     CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
                 requireNotNull(provider).bindToLifecycle(lifecycle, selector, preview, analysis)
-            } catch (_: Exception) { failed("Could not open the camera. Check camera access or use a manual invitation code.") }
+            } catch (_: Exception) { failed(openFailed) }
         }, main)
         onDispose {
             disposed.set(true)
