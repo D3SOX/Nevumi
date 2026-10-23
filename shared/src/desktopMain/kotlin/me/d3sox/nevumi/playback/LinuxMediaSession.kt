@@ -1,6 +1,8 @@
 package me.d3sox.nevumi.playback
 
+import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -81,13 +83,23 @@ class LinuxMediaSession(private val controller: MusicController, address: String
         scope.launch {
             var previous = GetAll("org.mpris.MediaPlayer2.Player").filterKeys { it != "Position" }
             var wasPlaying = controller.state.value.playback.playing
+            // The library can hold many thousands of songs, so the current one is looked up again only when either changes.
+            var lookedUp: Pair<List<Track>, String?>? = null
+            var currentTrack: Track? = null
+            fun currentTrack(state: AppState): Track? {
+                val key = state.tracks to state.playback.trackId
+                if (lookedUp?.let { it.first === key.first && it.second == key.second } != true) {
+                    lookedUp = key; currentTrack = state.tracks.find { it.id == state.playback.trackId }
+                }
+                return currentTrack
+            }
             // Playback status arrives many times per second; only the published values decide whether anything is sent.
             combine(controller.state, stopped) { state, stopped -> state.playback.let { playback ->
                 listOf(playback.trackId, playback.entryId, playback.playing, playback.ended, playback.error, playback.durationMs,
                     playback.volume, playback.speed, state.queue.unshuffledEntryIds != null, state.queue.repeatMode,
                     state.queue.currentIndex, state.queue.entries.size, state.artwork[playback.trackId], stopped,
                     // Tag edits change only the track, and Metadata is built from it.
-                    state.tracks.find { it.id == playback.trackId })
+                    currentTrack(state))
             } }.distinctUntilChanged().collect {
                 val state = controller.state.value
                 if (state.playback.playing && !wasPlaying) stopped.value = false

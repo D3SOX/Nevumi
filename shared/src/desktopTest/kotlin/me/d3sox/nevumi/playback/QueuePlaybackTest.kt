@@ -466,6 +466,39 @@ class QueuePlaybackTest {
     }
 
     @Test
+    fun repeatAllKeepsCyclingALongQueueWhoseFewPlayableSongsFitTheDecoder() = runBlocking {
+        val directory = Files.createTempDirectory("repeat-sparse-long-queue")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val path = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac").toString()
+        val playable = (1..3).map { library.importTrack(TrackMetadata("Song $it"), TrackSource("local:song:$it", SourceKind.LOCAL, path)) }
+        val missing = (1..150).map { library.importTrack(TrackMetadata("Missing $it"), TrackSource("local:missing:$it", SourceKind.LOCAL,
+            directory.resolve("missing-$it.flac").toString())) }
+        library.setSourceAvailability(missing.flatMap { track -> track.sources.map { it.id } }.toSet(), false)
+        val decoder = MpvPlaybackEngine("null")
+        val handed = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+        val repeats = java.util.concurrent.CopyOnWriteArrayList<RepeatMode>()
+        val engine = object : PlaybackEngine by decoder {
+            override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
+                handed += tracks.map { it.id }; decoder.loadQueue(tracks, startIndex, positionMs, play)
+            }
+            override fun updateQueue(tracks: List<PlayableTrack>) { handed += tracks.map { it.id }; decoder.updateQueue(tracks) }
+            override fun setRepeat(mode: RepeatMode, playCount: Int?) { repeats += mode; decoder.setRepeat(mode, playCount) }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), engine)
+        try {
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            // The middle song plays first, so a window starting at it would leave the first song only behind the decoder.
+            val ids = listOf(playable[0].id) + missing.map { it.id } + playable[1].id + playable[2].id
+            controller.playTrack(playable[1].id, ids).join()
+            withTimeout(3_000) { controller.state.first { it.playback.trackId == playable[1].id } }
+            controller.setQueueRepeat(RepeatMode.ALL).join()
+            assertEquals(playable.map { it.id }, handed.last(), "Every playable song stays in queue order")
+            assertEquals(RepeatMode.ALL, repeats.last(), "The decoder repeats the whole cycle itself")
+        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun skippingPassesOverSongsWithoutAnAvailableSource() = runBlocking {
         val directory = Files.createTempDirectory("skip-unavailable")
         val store = openMusicStore(directory.resolve("library.db").toString())
