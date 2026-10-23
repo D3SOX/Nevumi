@@ -8,6 +8,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
 import me.d3sox.nevumi.history.ListeningHistory
+import me.d3sox.nevumi.history.listeningStatistics
+import me.d3sox.nevumi.library.filterTracks
 import me.d3sox.nevumi.history.Scrobbling
 import me.d3sox.nevumi.history.ScrobblingService
 import me.d3sox.nevumi.library.MusicLibrary
@@ -49,14 +51,20 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val tracks = library.tracks().associateBy { it.id }
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
         val settings = preferences.load().copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap())
+        val listened = history.all()
         val playlists = playlists.all().map { playlist ->
-            BackupPlaylist(playlist.name, if (playlist.rule == null) playlist.trackIds else emptyList(), playlist.rule,
+            val rule = playlist.rule
+            // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
+            if (rule?.folder?.let(::isDevicePath) == true) BackupPlaylist(playlist.name,
+                filterTracks(tracks.values.toList(), rule, listeningStatistics(listened)).map { it.id }, null,
+                playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
+            else BackupPlaylist(playlist.name, if (rule == null) playlist.trackIds else emptyList(), rule,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
         }
         val savedQueues = queue.saved().filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
             BackupSavedQueue(saved.name, saved.snapshot.copy(selectedSavedQueueId = null, origin = null), saved.kind, saved.capturedAt)
         }
-        val listens = history.all().map { it.copy(importedAt = null, metadata = it.metadata.copy(folder = "")) }
+        val listens = listened.map { it.copy(importedAt = null, metadata = it.metadata.copy(folder = "")) }
         val referenced = (tracks.values.filter { it.favorite || it.rating != 0 }.map { it.id } + playlists.flatMap { it.trackKeys } +
             savedQueues.flatMap { saved -> saved.snapshot.entries.map { it.trackId } } + listens.map { it.trackId }).toSet()
         val document = BackupDocument(createdAt = clock(), appVersion = appVersion, settings = settings,
@@ -190,6 +198,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         catch (_: IllegalArgumentException) { throw BackupFormatException() }
     }
 }
+
+/** Local folders are absolute paths or content URIs; server folders are relative to the music library. */
+private fun isDevicePath(folder: String) = folder.startsWith("/") || "://" in folder || Regex("^[A-Za-z]:").containsMatchIn(folder)
 
 private fun Track.toBackup() = metadata.toBackup().copy(serverSources = sources.filter { it.kind == SourceKind.SERVER }.map { it.id },
     favorite = favorite, rating = rating)

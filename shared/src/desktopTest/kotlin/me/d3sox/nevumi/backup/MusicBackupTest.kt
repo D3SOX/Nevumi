@@ -178,6 +178,19 @@ class MusicBackupTest {
     }
 
     @Test
+    fun aSmartPlaylistOnALocalFolderIsKeptAsItsSongsWithoutThePath() = devices { source, target ->
+        source.library.importTrack(nightWalk.copy(folder = "/home/someone/Music/Night"), TrackSource("local:3", SourceKind.LOCAL, "/music/03.wav"))
+        source.playlists.createSmart("Night folder", LibraryQuery(folder = "/home/someone/Music/Night"))
+        val text = source.backup.export()
+        assertFalse("/home/someone" in text)
+        target.sameSongs()
+        target.backup.restore(text)
+        val restored = target.playlists.all().single { it.name == "Night folder" }
+        assertNull(restored.rule)
+        assertEquals(listOf(nightWalk.title), target.titles(restored.trackIds))
+    }
+
+    @Test
     fun unknownVersionsAndOtherFilesAreRejected() = devices { _, target ->
         assertEquals(2, assertFailsWith<BackupFormatException> {
             target.backup.restore("""{"format":"nevumi-backup","version":2,"createdAt":0,"somethingNew":true}""")

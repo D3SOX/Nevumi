@@ -33,7 +33,8 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun ArtistDiscovery(artist: String, tab: LibraryTab, state: AppState, controller: MusicController) {
     if (tab != LibraryTab.ARTISTS && tab != LibraryTab.ALBUM_ARTISTS || artist.isBlank() || state.server == null) return
-    val discovery by produceState<me.d3sox.nevumi.app.ArtistDiscovery?>(null, artist, state.server, state.libraryReady) {
+    // The library is a key so a refresh or scan maps the server's songs and artists to the library again; details stay cached.
+    val discovery by produceState<me.d3sox.nevumi.app.ArtistDiscovery?>(null, artist, state.server, state.libraryReady, state.tracks) {
         value = controller.discoveryController.artistInfo(artist)
     }
     val navigate = LocalLibraryNavigate.current
