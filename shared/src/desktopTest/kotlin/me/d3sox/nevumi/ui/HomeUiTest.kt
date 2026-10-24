@@ -173,7 +173,7 @@ class HomeUiTest {
             runComposeUiTest {
                 setContent { MusicPlayerApp(restored) }
                 waitUntil(timeoutMillis = 5_000) { restored.state.value.libraryReady }
-                onNodeWithContentDescription("Home").assertIsSelected()
+                onNode(hasContentDescription("Home") and hasAnyAncestor(hasTestTag("library-navigation"))).assertIsSelected()
                 onNodeWithTag("home-page").assertIsDisplayed()
                 assertNull(restored.state.value.preferences.startupTab)
             }
