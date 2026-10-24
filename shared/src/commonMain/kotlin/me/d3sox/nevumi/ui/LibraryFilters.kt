@@ -9,7 +9,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.*
@@ -73,19 +76,42 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun LibraryFiltersDialog(state: AppState, controller: MusicController, dismiss: () -> Unit) {
     var query by remember { mutableStateOf<LibraryQuery?>(state.preferences.libraryFilter) }
-    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.sources_filter_library)) }, text = {
+    val windowSize = LocalWindowInfo.current.containerSize
+    val compactLandscape = windowSize.width > windowSize.height && with(LocalDensity.current) { windowSize.height.toDp() } < 480.dp
+    KeyboardAlertDialog(onDismissRequest = dismiss,
+        modifier = if (compactLandscape) Modifier.padding(horizontal = 24.dp).widthIn(max = 560.dp).fillMaxWidth() else Modifier,
+        properties = if (compactLandscape) DialogProperties(usePlatformDefaultWidth = false) else null,
+        title = { Text(stringResource(Res.string.sources_filter_library)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             LibraryQueryFields(state.preferences.libraryFilter, includeSearchAndOrder = false) { query = it }
             query?.let { Text(countLabel(filterTracks(state.tracks, it, listeningStatistics(state.listens),
                 playlisted = playlistedTrackIds(state.playlists)).size, Res.plurals.matching_songs)) }
         }
-    }, confirmButton = { TextButton(enabled = query != null, onClick = {
-        val valid = requireNotNull(query)
-        controller.updatePreferences { it.copy(libraryFilter = valid) }; dismiss()
-    }) { Text(stringResource(Res.string.sources_apply_filters)) } }, dismissButton = {
-        Row {
-            TextButton(onClick = { controller.updatePreferences { it.copy(libraryFilter = LibraryQuery()) }; dismiss() }) { Text(stringResource(Res.string.sources_clear_filters)) }
-            TextButton(onClick = dismiss) { Text(stringResource(Res.string.cancel)) }
+    }, confirmButton = {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    onClick = { controller.updatePreferences { it.copy(libraryFilter = LibraryQuery()) }; dismiss() }) {
+                    Icon(AppIcon.FILTER_OFF.vector, null, Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                    Text(stringResource(Res.string.sources_clear_filters))
+                }
+                OutlinedButton(onClick = dismiss, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                    Icon(AppIcon.CLOSE.vector, null, Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                    Text(stringResource(Res.string.cancel))
+                }
+            }
+            Button(enabled = query != null, onClick = {
+                val valid = requireNotNull(query)
+                controller.updatePreferences { it.copy(libraryFilter = valid) }; dismiss()
+            }) {
+                Icon(AppIcon.CHECK.vector, null, Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                Text(stringResource(Res.string.sources_apply_filters))
+            }
         }
     })
 }

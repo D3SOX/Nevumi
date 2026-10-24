@@ -24,9 +24,10 @@ internal fun KeyboardAlertDialog(
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null,
+    properties: DialogProperties? = null,
 ) {
     // A landscape phone leaves too little room above the keyboard for the whole dialog, so let the system pan it there.
     val roomy = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() } >= 480.dp
     AlertDialog(onDismissRequest, confirmButton, if (roomy) modifier.windowInsetsPadding(WindowInsets.safeDrawing) else modifier,
-        dismissButton, icon, title, text, properties = if (roomy) KeyboardDialogProperties else DialogProperties())
+        dismissButton, icon, title, text, properties = properties ?: if (roomy) KeyboardDialogProperties else DialogProperties())
 }

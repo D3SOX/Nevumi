@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FilterList
+import androidx.compose.material.icons.rounded.FilterAltOff
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
@@ -139,6 +140,7 @@ internal enum class AppIcon(val vector: ImageVector) {
     MENU(Icons.Rounded.Menu),
     SORT(Icons.Rounded.Sort),
     FILTER(Icons.Rounded.FilterList),
+    FILTER_OFF(Icons.Rounded.FilterAltOff),
     CLOSE(Icons.Rounded.Close),
     BACK(Icons.Rounded.ArrowBack),
     UP(Icons.Rounded.ExpandLess),
