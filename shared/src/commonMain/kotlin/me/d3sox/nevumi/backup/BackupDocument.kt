@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ScrobblingProfile
 import me.d3sox.nevumi.library.LibraryQuery
+import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.playback.EqualizerProfile
 import me.d3sox.nevumi.playlists.PlaylistSort
@@ -15,6 +16,8 @@ import me.d3sox.nevumi.soundcloud.SoundCloudProfile
 
 internal const val BACKUP_FORMAT = "nevumi-backup"
 internal const val BACKUP_VERSION = 1
+
+enum class BackupSection { SETTINGS, PLAYLISTS, SAVED_QUEUES, FAVORITES, RATINGS, LISTENING_HISTORY, SERVICE_PROFILES, EQUALIZER_PROFILES }
 
 /**
  * Everything a backup file holds. Songs are listed once in [tracks] under a key that only has meaning inside the file;
@@ -28,6 +31,8 @@ data class BackupDocument(
     val createdAt: Long,
     val appVersion: String = "",
     val settings: MusicSettings? = null,
+    /** Null preserves the destination's order; empty clears it. Older full backups store their order in settings. */
+    val playlistOrder: List<String>? = settings?.collectionLayout(LibraryTab.PLAYLISTS)?.order,
     val tracks: Map<String, BackupTrack> = emptyMap(),
     val playlists: List<BackupPlaylist> = emptyList(),
     val savedQueues: List<BackupSavedQueue> = emptyList(),

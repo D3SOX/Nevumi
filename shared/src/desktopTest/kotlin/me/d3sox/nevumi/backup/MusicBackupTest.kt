@@ -2,6 +2,9 @@ package me.d3sox.nevumi.backup
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ListeningHistory
@@ -36,6 +39,7 @@ import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.settings.CollectionLayout
 import me.d3sox.nevumi.queue.QueueOrigin
 import me.d3sox.nevumi.settings.CollectionSort
+import me.d3sox.nevumi.settings.CollectionView
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -73,7 +77,7 @@ class MusicBackupTest {
         val preferences = MusicPreferences(store)
         suspend fun id(title: String) = library.tracks().single { it.metadata.title == title }.id
         suspend fun titles(ids: List<String>) = ids.map { id -> library.findTrack(id)!!.metadata.title }
-        override fun close() { soundCloud.close(); scrobbling.close(); http.close(); store.close() }
+        override fun close() = runBlocking { soundCloud.closeAndJoin(); scrobbling.closeAndJoin(); http.close(); store.close() }
     }
 
     private fun devices(block: suspend (Device, Device) -> Unit) = runBlocking {
@@ -123,6 +127,108 @@ class MusicBackupTest {
         library.importTrack(nightWalk, TrackSource("local:a", SourceKind.LOCAL, "/other/c.wav"))
         library.importTrack(longWay.copy(title = longWayTitle), serverSource)
         library.importTrack(northern.copy(title = northernTitle), TrackSource("local:b", SourceKind.LOCAL, "/other/a.flac"))
+    }
+
+    @Test
+    fun exportingOneSectionExcludesEveryOtherSection() {
+        for (section in BackupSection.entries) devices { source, _ ->
+            source.fill()
+            val document = Json.decodeFromString<BackupDocument>(source.backup.export(sections = setOf(section)))
+            val included = buildSet {
+                if (document.settings != null) add(BackupSection.SETTINGS)
+                if (document.playlists.isNotEmpty()) add(BackupSection.PLAYLISTS)
+                if (document.savedQueues.isNotEmpty()) add(BackupSection.SAVED_QUEUES)
+                if (document.tracks.values.any { it.favorite }) add(BackupSection.FAVORITES)
+                if (document.tracks.values.any { it.rating != 0 }) add(BackupSection.RATINGS)
+                if (document.listens.isNotEmpty()) add(BackupSection.LISTENING_HISTORY)
+                if (document.scrobblingProfiles.isNotEmpty() || document.server != null || document.sftpProfiles.isNotEmpty() || document.soundCloud != null)
+                    add(BackupSection.SERVICE_PROFILES)
+                if (document.equalizerProfiles.isNotEmpty()) add(BackupSection.EQUALIZER_PROFILES)
+            }
+            assertEquals(setOf(section), included, "Exporting $section included other data")
+            if (section in setOf(BackupSection.SETTINGS, BackupSection.SERVICE_PROFILES, BackupSection.EQUALIZER_PROFILES))
+                assertTrue(document.tracks.isEmpty())
+        }
+    }
+
+    @Test
+    fun restoringOnlyPlaylistsLeavesSettingsFavoritesRatingsAndHistoryAlone() = devices { source, target ->
+        source.fill()
+        target.sameSongs()
+        val settings = target.preferences.load()
+        val summary = target.backup.restore(source.backup.export(sections = setOf(BackupSection.PLAYLISTS)))
+        assertEquals(3, summary.playlistsAdded)
+        assertFalse(summary.settings)
+        assertEquals(settings, target.preferences.load())
+        assertTrue(target.library.tracks().none { it.favorite || it.rating != 0 })
+        assertTrue(target.history.all().isEmpty())
+        assertTrue(target.queue.saved().isEmpty())
+        assertTrue(target.equalizer.saved().isEmpty())
+        assertTrue(summary.signInRequired.isEmpty())
+        assertEquals(listOf("Northern Light", "Long Way Home", "Night Walk"),
+            target.titles(target.playlists.all().single { it.name == "Road" }.trackIds))
+    }
+
+    @Test
+    fun restoringSettingsWithoutPlaylistsPreservesTheTargetsPlaylistOrder() = devices { source, target ->
+        val sourcePlaylist = source.playlists.create("Source", emptyList())
+        val sourceLayout = CollectionLayout(view = CollectionView.LIST, sort = CollectionSort.CUSTOM, order = listOf(sourcePlaylist.id))
+        source.preferences.update { it.copy(themeMode = ThemeMode.DARK, collectionLayouts = mapOf(LibraryTab.PLAYLISTS to sourceLayout)) }
+        val first = target.playlists.create("First", emptyList())
+        val second = target.playlists.create("Second", emptyList())
+        val order = listOf(second.id, first.id)
+        target.preferences.update { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to CollectionLayout(order = order))) }
+
+        val text = source.backup.export(sections = setOf(BackupSection.SETTINGS))
+        assertFalse(sourcePlaylist.id in text)
+        target.backup.restore(text)
+
+        val restored = target.preferences.load()
+        assertEquals(ThemeMode.DARK, restored.themeMode)
+        assertEquals(sourceLayout.copy(order = order), restored.collectionLayout(LibraryTab.PLAYLISTS))
+        assertEquals(setOf(first.id, second.id), target.playlists.all().map { it.id }.toSet())
+    }
+
+    @Test
+    fun fullBackupsCanClearTheTargetsPlaylistOrder() {
+        for (explicitEmptyOrder in listOf(false, true)) devices { source, target ->
+            if (explicitEmptyOrder) source.preferences.update { it.copy(collectionLayouts = mapOf(
+                LibraryTab.PLAYLISTS to CollectionLayout(sort = CollectionSort.CUSTOM, order = emptyList()))) }
+            val playlist = target.playlists.create("Target", emptyList())
+            target.preferences.update { it.copy(collectionLayouts = mapOf(
+                LibraryTab.PLAYLISTS to CollectionLayout(sort = CollectionSort.CUSTOM, order = listOf(playlist.id)))) }
+
+            target.backup.restore(source.backup.export())
+
+            assertTrue(target.preferences.load().collectionLayout(LibraryTab.PLAYLISTS).order.isEmpty())
+        }
+    }
+
+    @Test
+    fun playlistOnlyBackupsRestoreCustomOrderWithoutChangingOtherSettings() = devices { source, target ->
+        val sourceFirst = source.playlists.create("First", emptyList())
+        val sourceSecond = source.playlists.create("Second", emptyList())
+        source.preferences.update { it.copy(themeMode = ThemeMode.DARK, collectionLayouts = mapOf(
+            LibraryTab.PLAYLISTS to CollectionLayout(sort = CollectionSort.CUSTOM, order = listOf(sourceSecond.id, sourceFirst.id)))) }
+        val existing = target.playlists.create("Existing", emptyList())
+        val layout = CollectionLayout(view = CollectionView.LIST, sort = CollectionSort.CUSTOM, order = listOf(existing.id))
+        val before = target.preferences.update { it.copy(themeMode = ThemeMode.LIGHT, speed = 1.25,
+            collectionLayouts = mapOf(LibraryTab.PLAYLISTS to layout)) }
+
+        val text = source.backup.export(sections = setOf(BackupSection.PLAYLISTS))
+        assertNull(Json.decodeFromString<BackupDocument>(text).settings)
+        assertFalse(sourceFirst.id in text || sourceSecond.id in text)
+        val summary = target.backup.restore(text)
+
+        assertFalse(summary.settings)
+        val ids = target.playlists.all().associate { it.name to it.id }
+        val order = listOf(ids.getValue("Second"), ids.getValue("First"))
+        assertEquals(before.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to layout.copy(order = order))), target.preferences.load())
+    }
+
+    @Test
+    fun exportingNothingIsRejected() = devices { source, _ ->
+        assertFailsWith<IllegalArgumentException> { source.backup.export(sections = emptySet()) }
     }
 
     @Test
@@ -240,18 +346,21 @@ class MusicBackupTest {
     }
 
     @Test
-    fun aCustomPlaylistOrderFollowsThePlaylistsToTheirNewIds() = devices { source, target ->
-        source.fill()
-        val names = listOf("Loved", "Music ▸ Night", "Road")
-        val ids = source.playlists.all().associate { it.name to it.id }
-        source.preferences.update { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to
-            CollectionLayout(sort = CollectionSort.CUSTOM, order = names.map { name -> ids.getValue(name) }))) }
-        val text = source.backup.export()
-        assertFalse(ids.values.any { it in text })
-        target.sameSongs()
-        target.backup.restore(text)
-        val restored = target.playlists.all().associate { it.id to it.name }
-        assertEquals(names, target.preferences.load().collectionLayouts.getValue(LibraryTab.PLAYLISTS).order.map { restored.getValue(it) })
+    fun aCustomPlaylistOrderFollowsThePlaylistsToTheirNewIds() {
+        for (olderBackup in listOf(false, true)) devices { source, target ->
+            source.fill()
+            val names = listOf("Loved", "Music ▸ Night", "Road")
+            val ids = source.playlists.all().associate { it.name to it.id }
+            source.preferences.update { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to
+                CollectionLayout(sort = CollectionSort.CUSTOM, order = names.map { name -> ids.getValue(name) }))) }
+            val exported = source.backup.export()
+            val text = if (olderBackup) JsonObject(Json.parseToJsonElement(exported).jsonObject - "playlistOrder").toString() else exported
+            assertFalse(ids.values.any { it in text })
+            target.sameSongs()
+            target.backup.restore(text)
+            val restored = target.playlists.all().associate { it.id to it.name }
+            assertEquals(names, target.preferences.load().collectionLayouts.getValue(LibraryTab.PLAYLISTS).order.map { restored.getValue(it) })
+        }
     }
 
     @Test

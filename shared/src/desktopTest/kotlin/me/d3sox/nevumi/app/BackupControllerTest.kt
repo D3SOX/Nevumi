@@ -20,8 +20,42 @@ import kotlin.test.*
 class BackupControllerTest {
     private class MemoryFiles(var text: String? = null) : BackupFiles {
         var savedName: String? = null
+        var saveResult = true
         override suspend fun open() = text
-        override suspend fun save(name: String, text: String): Boolean { savedName = name; this.text = text; return true }
+        override suspend fun save(name: String, text: String): Boolean { savedName = name; this.text = text; return saveResult }
+    }
+
+    @Test fun lastBackupSurvivesRestartAndDoesNotChangeAfterCancelledOrFailedSaves() = runBlocking {
+        val directory = Files.createTempDirectory("backup-last-export")
+        val path = directory.resolve("library.db").toString()
+        val store = openMusicStore(path)
+        val library = MusicLibrary(store)
+        var now = 1_000L
+        val backup = MusicBackup(store, library, clock = { now })
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), backup = backup)
+        try {
+            withTimeout(3_000) { player.state.first { it.libraryReady } }
+            assertNull(player.backupController.lastExportedAt.first())
+            val files = MemoryFiles()
+            player.backupController.export(files).join()
+            assertEquals(1_000L, player.backupController.lastExportedAt.first())
+            now = 2_000L
+            files.saveResult = false
+            player.backupController.export(files).join()
+            assertEquals(1_000L, player.backupController.lastExportedAt.first())
+            val failing = object : BackupFiles {
+                override suspend fun open(): String? = null
+                override suspend fun save(name: String, text: String): Boolean = throw java.io.IOException("Disk full")
+            }
+            player.backupController.export(failing).join()
+            assertEquals(1_000L, player.backupController.lastExportedAt.first())
+            assertTrue(player.state.value.error.orEmpty().contains("Disk full"))
+        } finally { player.closeAndJoin(); store.close() }
+        try {
+            val reopened = openMusicStore(path)
+            try { assertEquals(1_000L, MusicBackup(reopened).lastExportedAt.first()) }
+            finally { reopened.close() }
+        } finally { directory.toFile().deleteRecursively() }
     }
 
     @Test fun exportingAndRestoringThroughThePickerUpdatesTheAppStateAndShowsASummary() = runBlocking {

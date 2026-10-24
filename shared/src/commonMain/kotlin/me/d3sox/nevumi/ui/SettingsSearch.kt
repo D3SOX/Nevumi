@@ -15,6 +15,10 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.about_nevumi
 import me.d3sox.nevumi.resources.audio_effects
+import me.d3sox.nevumi.resources.backup_export
+import me.d3sox.nevumi.resources.backup_export_description
+import me.d3sox.nevumi.resources.backup_restore
+import me.d3sox.nevumi.resources.backup_restore_description
 import me.d3sox.nevumi.resources.colors
 import me.d3sox.nevumi.resources.connect_last_fm
 import me.d3sox.nevumi.resources.connect_listenbrainz
@@ -196,6 +200,10 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             if (controller.pairedDevices != null) add(SettingEntry(Res.string.paired_devices, "Paired devices", AppIcon.DEVICES,
                 Res.string.settings_keywords_paired_devices))
             add(SettingEntry(Res.string.saved_queues, "Saved queues", AppIcon.QUEUE, Res.string.settings_keywords_saved_queues))
+            if (controller.backupController.backupAvailable) {
+                add(SettingEntry(Res.string.backup_export, "Backup & restore", AppIcon.SAVE, Res.string.backup_export_description))
+                add(SettingEntry(Res.string.backup_restore, "Backup & restore", AppIcon.BACKUP_FILES, Res.string.backup_restore_description))
+            }
             add(SettingEntry(Res.string.about_nevumi, "About Nevumi", AppIcon.INFO, Res.string.settings_keywords_about_nevumi))
         }
     }

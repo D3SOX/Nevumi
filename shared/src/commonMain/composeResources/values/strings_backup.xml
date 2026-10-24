@@ -1,6 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Backing up and restoring settings, playlists, history and profiles. -->
 <resources>
+    <string name="settings_backup_restore">Backup &amp; restore</string>
+    <string name="settings_backup_restore_description">Export your data or restore a backup file</string>
+    <string name="backup_last_export">Last backup</string>
+    <string name="backup_never_exported">No backup exported on this device yet</string>
+    <string name="backup_choose_export">Choose what to export</string>
+    <string name="backup_export_empty">Choose at least one item to export</string>
+    <string name="backup_section_settings">Settings</string>
+    <string name="backup_section_playlists">Playlists</string>
+    <string name="backup_section_saved_queues">Saved queues</string>
+    <string name="backup_section_favorites">Favorites</string>
+    <string name="backup_section_ratings">Ratings</string>
+    <string name="backup_section_listening_history">Listening history</string>
+    <string name="backup_section_service_profiles">Service profiles</string>
+    <string name="backup_section_equalizer_profiles">Equalizer profiles</string>
     <string name="backup_export">Export backup</string>
     <string name="backup_export_description">Save settings, playlists, history and profiles to a file</string>
     <string name="backup_restore">Restore backup</string>
