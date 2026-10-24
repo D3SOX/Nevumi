@@ -142,7 +142,7 @@ The packages and repository database are signed. The public key is also availabl
 You can install a downloaded Arch package directly:
 
 ```sh
-sudo pacman -U ./nevumi-0.12.0-1-x86_64.pkg.tar.zst
+sudo pacman -U ./nevumi-0.13.0-1-x86_64.pkg.tar.zst
 ```
 
 ### AppImage
@@ -150,8 +150,8 @@ sudo pacman -U ./nevumi-0.12.0-1-x86_64.pkg.tar.zst
 For an AppImage:
 
 ```sh
-chmod +x ./nevumi-0.12.0-x86_64.AppImage
-./nevumi-0.12.0-x86_64.AppImage
+chmod +x ./nevumi-0.13.0-x86_64.AppImage
+./nevumi-0.13.0-x86_64.AppImage
 ```
 
 If FUSE is unavailable, run it with `APPIMAGE_EXTRACT_AND_RUN=1`. AppImages bundle the JVM, mpv, FFmpeg and the visualizer. The host supplies its C and C++ runtimes and graphics drivers. CI builds them on Ubuntu 24.04.
