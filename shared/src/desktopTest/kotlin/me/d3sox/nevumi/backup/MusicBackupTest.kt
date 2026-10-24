@@ -3,6 +3,8 @@ package me.d3sox.nevumi.backup
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ListeningHistory
@@ -203,6 +205,28 @@ class MusicBackupTest {
     }
 
     @Test
+    fun playlistOnlyBackupsRestoreCustomOrderWithoutChangingOtherSettings() = devices { source, target ->
+        val sourceFirst = source.playlists.create("First", emptyList())
+        val sourceSecond = source.playlists.create("Second", emptyList())
+        source.preferences.update { it.copy(themeMode = ThemeMode.DARK, collectionLayouts = mapOf(
+            LibraryTab.PLAYLISTS to CollectionLayout(sort = CollectionSort.CUSTOM, order = listOf(sourceSecond.id, sourceFirst.id)))) }
+        val existing = target.playlists.create("Existing", emptyList())
+        val layout = CollectionLayout(view = CollectionView.LIST, sort = CollectionSort.CUSTOM, order = listOf(existing.id))
+        val before = target.preferences.update { it.copy(themeMode = ThemeMode.LIGHT, speed = 1.25,
+            collectionLayouts = mapOf(LibraryTab.PLAYLISTS to layout)) }
+
+        val text = source.backup.export(sections = setOf(BackupSection.PLAYLISTS))
+        assertNull(Json.decodeFromString<BackupDocument>(text).settings)
+        assertFalse(sourceFirst.id in text || sourceSecond.id in text)
+        val summary = target.backup.restore(text)
+
+        assertFalse(summary.settings)
+        val ids = target.playlists.all().associate { it.name to it.id }
+        val order = listOf(ids.getValue("Second"), ids.getValue("First"))
+        assertEquals(before.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to layout.copy(order = order))), target.preferences.load())
+    }
+
+    @Test
     fun exportingNothingIsRejected() = devices { source, _ ->
         assertFailsWith<IllegalArgumentException> { source.backup.export(sections = emptySet()) }
     }
@@ -322,18 +346,21 @@ class MusicBackupTest {
     }
 
     @Test
-    fun aCustomPlaylistOrderFollowsThePlaylistsToTheirNewIds() = devices { source, target ->
-        source.fill()
-        val names = listOf("Loved", "Music ▸ Night", "Road")
-        val ids = source.playlists.all().associate { it.name to it.id }
-        source.preferences.update { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to
-            CollectionLayout(sort = CollectionSort.CUSTOM, order = names.map { name -> ids.getValue(name) }))) }
-        val text = source.backup.export()
-        assertFalse(ids.values.any { it in text })
-        target.sameSongs()
-        target.backup.restore(text)
-        val restored = target.playlists.all().associate { it.id to it.name }
-        assertEquals(names, target.preferences.load().collectionLayouts.getValue(LibraryTab.PLAYLISTS).order.map { restored.getValue(it) })
+    fun aCustomPlaylistOrderFollowsThePlaylistsToTheirNewIds() {
+        for (olderBackup in listOf(false, true)) devices { source, target ->
+            source.fill()
+            val names = listOf("Loved", "Music ▸ Night", "Road")
+            val ids = source.playlists.all().associate { it.name to it.id }
+            source.preferences.update { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to
+                CollectionLayout(sort = CollectionSort.CUSTOM, order = names.map { name -> ids.getValue(name) }))) }
+            val exported = source.backup.export()
+            val text = if (olderBackup) JsonObject(Json.parseToJsonElement(exported).jsonObject - "playlistOrder").toString() else exported
+            assertFalse(ids.values.any { it in text })
+            target.sameSongs()
+            target.backup.restore(text)
+            val restored = target.playlists.all().associate { it.id to it.name }
+            assertEquals(names, target.preferences.load().collectionLayouts.getValue(LibraryTab.PLAYLISTS).order.map { restored.getValue(it) })
+        }
     }
 
     @Test

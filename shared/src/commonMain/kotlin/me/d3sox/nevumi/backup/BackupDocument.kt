@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ScrobblingProfile
 import me.d3sox.nevumi.library.LibraryQuery
+import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.playback.EqualizerProfile
 import me.d3sox.nevumi.playlists.PlaylistSort
@@ -30,8 +31,8 @@ data class BackupDocument(
     val createdAt: Long,
     val appVersion: String = "",
     val settings: MusicSettings? = null,
-    /** False when playlists were excluded. Backups made before export choices included their order. */
-    val playlistOrderIncluded: Boolean = true,
+    /** Null preserves the destination's order; empty clears it. Older full backups store their order in settings. */
+    val playlistOrder: List<String>? = settings?.collectionLayout(LibraryTab.PLAYLISTS)?.order,
     val tracks: Map<String, BackupTrack> = emptyMap(),
     val playlists: List<BackupPlaylist> = emptyList(),
     val savedQueues: List<BackupSavedQueue> = emptyList(),
