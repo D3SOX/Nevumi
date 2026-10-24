@@ -407,12 +407,14 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
                             AppIconButton(AppIcon.DOWN, stringResource(Res.string.player_collapse)) { show(PlayerPanel.MINI) }
                             val playingContext = stringResource(Res.string.player_playing_context)
+                            val liveQueue = state.savedQueues.firstOrNull { it.id == state.queue.selectedSavedQueueId }
+                            val manualTrack = state.queue.entries.getOrNull(state.queue.currentIndex)?.section == QueueSection.MANUAL
                             Column(Modifier.weight(1f).clickable {
-                                if (state.queue.entries.getOrNull(state.queue.currentIndex)?.section == QueueSection.MANUAL) show(PlayerPanel.QUEUE)
+                                if (liveQueue != null || manualTrack) show(PlayerPanel.QUEUE)
                                 else navigateContext(state.queue.origin ?: me.d3sox.nevumi.queue.QueueOrigin(), current.id)
                             }.semantics { contentDescription = playingContext }, horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(stringResource(Res.string.player_playing_from), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                PlayerMarquee(if (state.queue.entries.getOrNull(state.queue.currentIndex)?.section == QueueSection.MANUAL) stringResource(Res.string.queue_export_up_next) else state.queue.contextName,
+                                PlayerMarquee(liveQueue?.name ?: if (manualTrack) stringResource(Res.string.queue_export_up_next) else state.queue.contextName,
                                     MaterialTheme.typography.titleSmall, centerProgress = 1f)
                             }
                             AppIconButton(AppIcon.MORE, stringResource(Res.string.player_track_options, current.metadata.title), onClick = openPlayingMenu)
