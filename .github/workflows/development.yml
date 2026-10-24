@@ -126,6 +126,9 @@ jobs:
             local latest
             latest="$(gh api "repos/$GH_REPO/git/ref/heads/master" --jq .object.sha)" || exit 1
             if [[ "$latest" != "$GITHUB_SHA" ]]; then
+              if [[ "${1:-}" == draft ]]; then
+                gh release delete "$tag" --yes --cleanup-tag
+              fi
               echo "::notice::Skipping development publication because master has a newer commit."
               exit 0
             fi
@@ -152,4 +155,5 @@ jobs:
               --title "Nevumi development ${GITHUB_SHA:0:12}" --notes-file notes.txt
           fi
           gh release upload "$tag" --clobber "${assets[@]}"
+          skip_if_superseded draft
           gh release edit "$tag" --draft=false

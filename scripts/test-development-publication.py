@@ -42,6 +42,8 @@ elif arguments[:2] == ['release', 'view']:
     if not os.environ.get('PUBLISHED'):
         sys.exit(1)
     print('false')
+elif arguments[:2] == ['release', 'upload'] and os.environ.get('ADVANCE_ON_UPLOAD'):
+    Path(os.environ['ADVANCED']).touch()
 """
             for command in ["git", "gh"]:
                 executable = directory / command
@@ -89,6 +91,13 @@ elif arguments[:2] == ['release', 'view']:
         self.assertNotEqual(0, result.returncode)
         self.assertNotIn("Skipping", result.stdout)
         self.assertNotIn("gh release", calls)
+
+    def test_master_advancing_during_upload_removes_the_unpublished_draft(self):
+        result, calls = self.publish(ADVANCE_ON_UPLOAD="1")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("Skipping development publication", result.stdout)
+        self.assertIn("gh release delete development-123 --yes --cleanup-tag", calls)
+        self.assertNotIn("gh release edit", calls)
 
     def test_an_api_failure_is_not_treated_as_a_superseded_build(self):
         result, calls = self.publish(API_FAIL="1")
