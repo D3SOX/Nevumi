@@ -219,7 +219,7 @@ class SourcePlaybackTest {
             assertEquals(failed.queue.currentEntryId, recovered.playback.entryId)
             assertEquals(track.id, recovered.playback.trackId)
             assertEquals(null, recovered.error)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -252,7 +252,7 @@ class SourcePlaybackTest {
             assertEquals(song.sizeBytes, Files.size(Path.of(downloaded.path!!)))
             assertEquals(original.id, streamed.playback.trackId)
         } finally {
-            controller?.close(); offline?.closeAndJoin(); connection.disconnect(); http.close(); store.close()
+            controller?.closeAndJoin(); offline?.closeAndJoin(); connection.disconnect(); http.close(); store.close()
             directory.toFile().deleteRecursively()
         }
     }
@@ -278,7 +278,7 @@ class SourcePlaybackTest {
             assertEquals(1, playing.queue.entries.size)
             assertEquals(null, playing.error)
             assertEquals(true, library.findTrack(original.id)!!.sources.first { it.kind == SourceKind.LOCAL }.available)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -307,7 +307,7 @@ class SourcePlaybackTest {
             player.playTrack(original.id).join()
             val playing = withTimeout(3_000) { player.state.first { it.playback.playing && it.playback.durationMs > 0 } }
             assertEquals(3_000L, playing.playback.durationMs)
-        } finally { controller?.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller?.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -325,6 +325,6 @@ class SourcePlaybackTest {
             controller.playTrack(original.id).join()
             val playing = withTimeout(3_000) { controller.state.first { it.playback.playing && it.playback.durationMs == 3_000L } }
             assertEquals(original.id, playing.playback.trackId)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 }

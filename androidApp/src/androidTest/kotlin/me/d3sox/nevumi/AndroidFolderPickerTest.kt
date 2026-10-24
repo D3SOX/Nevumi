@@ -67,13 +67,24 @@ class AndroidFolderPickerTest {
                 compose.onNodeWithContentDescription("Add included folder").performClick()
                 chooseFolder()
                 compose.waitUntil(10_000) { app.controller.state.value.preferences.includeFolders == listOf(path) }
-                compose.onNodeWithContentDescription("Remove included folder: $path").assertIsDisplayed()
+                fun folderButton(description: String): SemanticsNodeInteraction {
+                    compose.waitUntil(10_000) {
+                        compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().size == 1
+                    }
+                    return compose.onNodeWithContentDescription(description)
+                }
+                folderButton("Remove included folder: $path").assertIsDisplayed()
                 compose.onNodeWithContentDescription("Add excluded folder").performScrollTo().performClick()
                 chooseFolder()
                 compose.waitUntil(10_000) { app.controller.state.value.preferences.excludeFolders == listOf(path) }
-                compose.onNodeWithContentDescription("Remove excluded folder: $path").performScrollTo().performClick()
+                folderButton("Remove excluded folder: $path").performScrollTo().performClick()
                 compose.waitUntil(10_000) { app.controller.state.value.preferences.excludeFolders.isEmpty() }
-                compose.onNodeWithContentDescription("Remove included folder: $path").performScrollTo().performClick()
+                // The preferences flow can update before the UI. Wait for the row to disappear so the
+                // next button's callback cannot restore an excluded folder from the previous composition.
+                compose.waitUntil(10_000) {
+                    compose.onAllNodesWithContentDescription("Remove excluded folder: $path").fetchSemanticsNodes().isEmpty()
+                }
+                folderButton("Remove included folder: $path").performScrollTo().performClick()
                 compose.waitUntil(10_000) { app.controller.state.value.preferences.includeFolders.isEmpty() }
                 assertEquals(emptyList<String>(), app.controller.state.value.preferences.excludeFolders)
             }

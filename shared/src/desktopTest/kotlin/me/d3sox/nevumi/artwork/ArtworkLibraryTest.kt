@@ -153,7 +153,7 @@ class ArtworkLibraryTest {
             val track = library.tracks().single()
             http.close()
             assertContentEquals(png, ArtworkLibrary(directory.resolve("artwork").toString()).read(track.id))
-        } finally { controller.close(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -185,7 +185,7 @@ class ArtworkLibraryTest {
             controller.refreshServer().join()
             kotlin.test.assertTrue("cover-8" in requests.take(6), "The missing cover must not wait behind covers the library already holds: $requests")
             assertEquals(8, requests.size)
-        } finally { controller.close(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -253,7 +253,7 @@ class ArtworkLibraryTest {
             controller.editPlaylist(playlist.id, "Mix", "", removeCover = true).join()
             assertEquals(1, deletions)
             assertContentEquals(artworkPreview(generated), artwork.read(key))
-        } finally { controller.close(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test

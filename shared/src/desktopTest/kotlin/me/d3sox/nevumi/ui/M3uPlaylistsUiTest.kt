@@ -51,6 +51,6 @@ class M3uPlaylistsUiTest {
                 waitUntil(timeoutMillis = 3_000) { Files.exists(exported) }
                 assertEquals(listOf(song.id), runBlocking { M3uPlaylists(library, playlists).import("Round trip", Files.readString(exported)).playlist.trackIds })
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 }

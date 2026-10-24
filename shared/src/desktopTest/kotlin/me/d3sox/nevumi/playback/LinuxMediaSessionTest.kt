@@ -292,7 +292,7 @@ class LinuxMediaSessionTest {
             val finished = call("org.freedesktop.DBus.Properties.Get", "org.mpris.MediaPlayer2.Player", "PlaybackStatus")
             assertTrue(finished.contains("Stopped"), finished)
         } finally {
-            session?.close(); controller.close(); store.close()
+            session?.close(); runBlocking { controller.closeAndJoin() }; store.close()
             daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
             directory.toFile().deleteRecursively()
         }
@@ -351,7 +351,7 @@ class LinuxMediaSessionTest {
             assertTrue(player.contains("'mpris:length': <int64 3000000>"), player)
             assertTrue(player.contains("objectpath '/org/mpris/MediaPlayer2/track/"), player)
         } finally {
-            monitor?.destroyForcibly(); session?.close(); controller.close(); store.close()
+            monitor?.destroyForcibly(); session?.close(); runBlocking { controller.closeAndJoin() }; store.close()
             daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
             directory.toFile().deleteRecursively()
         }
@@ -396,7 +396,7 @@ class LinuxMediaSessionTest {
             val skipped = withTimeout(3_000) { controller.state.first { it.playback.trackId == next && it.playback.durationMs > 0 } }
             assertEquals(false, skipped.playback.playing)
         } finally {
-            session?.close(); controller.close(); store.close()
+            session?.close(); runBlocking { controller.closeAndJoin() }; store.close()
             daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
             directory.toFile().deleteRecursively()
         }

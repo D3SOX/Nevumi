@@ -95,6 +95,12 @@ class AndroidMilkDropUiTest {
                 compose.onNodeWithContentDescription("MilkDrop visualization").assertDoesNotExist()
                 compose.waitUntil(15_000) { !VisualizerPcm.enabled }
                 compose.onNodeWithContentDescription("MilkDrop visualizer").performClick()
+                // Reopening loads the preset library again, just as the first open does. The
+                // audio tap cannot start until that finishes on the CI emulator's slow storage.
+                compose.waitUntil(60_000) {
+                    compose.onAllNodesWithContentDescription("MilkDrop visualization").fetchSemanticsNodes().size == 1
+                }
+                compose.onNodeWithContentDescription("MilkDrop visualization").assertIsDisplayed()
                 compose.waitUntil(15_000) { VisualizerPcm.enabled }
                 compose.onNodeWithText("Flexi + Rovastar - postcard from Fractopia").assertExists()
                 compose.onNodeWithText("Unlock preset").assertExists()

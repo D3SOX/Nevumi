@@ -103,6 +103,6 @@ class SourceImportTest {
 
             assertEquals(setOf("Long Way Home", "Northern Light", "Night Walk", "Server original") to remote.id,
                 controller.state.value.tracks.map { it.metadata.title }.toSet() to queue.snapshot().currentTrackId)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 }

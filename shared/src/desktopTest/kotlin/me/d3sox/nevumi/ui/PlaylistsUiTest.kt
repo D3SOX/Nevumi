@@ -107,7 +107,7 @@ class PlaylistsUiTest {
                 onNodeWithText("Alpha").assertIsDisplayed()
                 assertEquals(LibrarySort.RATING, runBlocking { playlists.all().single().rule!!.sort })
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -151,7 +151,7 @@ class PlaylistsUiTest {
                 onNodeWithText("Own playlist").assertIsDisplayed()
                 onNodeWithContentDescription("Playlist membership: Shared music").assertIsNotEnabled().assertIsOn()
             }
-        } finally { controller.close(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -205,7 +205,7 @@ class PlaylistsUiTest {
                 onNodeWithText("Server playlist").assertIsDisplayed()
             }
         } finally {
-            controller.close()
+            runBlocking { controller.closeAndJoin() }
             runBlocking {
                 changes.closeAndJoin()
                 connection.client()?.let { client -> client.playlists().filter { it.name == name || it.name == "Nevumi pending ${playlist.id}" }
@@ -246,7 +246,7 @@ class PlaylistsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.single { it.name == "Evening" }.trackIds.size == 2 }
                 assertEquals(tracks.map { it.id }, runBlocking { playlists.all().single { it.name == "Evening" }.trackIds })
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -278,7 +278,7 @@ class PlaylistsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.size == 1 }
                 assertEquals(listOf(expected), controller.state.value.playlists.single().trackIds)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -324,7 +324,7 @@ class PlaylistsUiTest {
                 assertEquals("Rock", runBlocking { playlists.get(smart.id)!!.rule!!.genre })
                 onNodeWithText("No songs here yet").assertIsDisplayed()
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -348,7 +348,7 @@ class PlaylistsUiTest {
                 assertEquals(null, runBlocking { playlists.get(playlist.id) })
                 onNodeWithContentDescription("New playlist").assertIsDisplayed()
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -392,7 +392,7 @@ class PlaylistsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.single().trackIds == expected }
                 assertEquals(expected, runBlocking { playlists.get(playlist.id)?.trackIds })
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -418,7 +418,7 @@ class PlaylistsUiTest {
                 assertEquals(playlist.trackIds.take(1), runBlocking { playlists.get(playlist.id)?.trackIds })
                 onAllNodesWithText("Repeated song").assertCountEquals(1)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -459,7 +459,7 @@ class PlaylistsUiTest {
                 assertEquals(false, local.pendingSync)
             }
         } finally {
-            controller.close()
+            runBlocking { controller.closeAndJoin() }
             runBlocking { changes.closeAndJoin(); client.deletePlaylist(remote.id) }
             store.close(); http.close(); directory.toFile().deleteRecursively()
         }
@@ -498,7 +498,7 @@ class PlaylistsUiTest {
                 onNodeWithText("Renamed from the app").assertIsDisplayed()
             }
         } finally {
-            controller.close()
+            runBlocking { controller.closeAndJoin() }
             runBlocking { changes.closeAndJoin(); client.deletePlaylist(remote.id); vault.delete("navidrome") }
             store.close(); http.close(); directory.toFile().deleteRecursively()
         }
@@ -526,7 +526,7 @@ class PlaylistsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 assertEquals(2 to 1, controller.state.value.queue.entries.size to controller.state.value.queue.currentIndex)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test

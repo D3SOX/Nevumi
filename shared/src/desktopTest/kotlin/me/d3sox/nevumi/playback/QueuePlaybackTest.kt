@@ -338,7 +338,7 @@ class QueuePlaybackTest {
             controller.skip(1).join()
             val selected = withTimeout(3_000) { controller.state.first { it.playback.trackId == third && it.playback.playing } }
             assertEquals(2, selected.queue.currentIndex)
-        } finally { release.countDown(); controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { release.countDown(); controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -358,7 +358,7 @@ class QueuePlaybackTest {
             controller.togglePlayback().join()
             val resumed = withTimeout(3_000) { controller.state.first { it.playback.playing && it.playback.positionMs >= 400 } }
             assertEquals(track.id, resumed.playback.trackId)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -380,7 +380,7 @@ class QueuePlaybackTest {
             val restarted = withTimeout(3_000) { controller.state.first { it.playback.playing && it.playback.positionMs < 500 } }
             assertEquals(finished.queue.currentEntryId, restarted.playback.entryId)
             assertEquals(track.id, restarted.playback.trackId)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -410,7 +410,7 @@ class QueuePlaybackTest {
             assertEquals(before.positionMs, after.playback.positionMs)
             assertEquals(before.currentEntryId, after.playback.entryId)
             assertEquals(false, after.playback.playing)
-        } finally { controller?.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller?.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -433,7 +433,7 @@ class QueuePlaybackTest {
             val selected = withTimeout(3_000) { controller.state.first { it.playback.trackId == next && it.playback.durationMs > 0 } }
             assertEquals(false, selected.playback.playing)
             assertEquals(next, selected.queue.currentTrackId)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -462,7 +462,7 @@ class QueuePlaybackTest {
             controller.playTrack(current.id, listOf(current.id) + missing.map { it.id } + after.id).join()
             withTimeout(3_000) { controller.state.first { it.playback.trackId == current.id } }
             assertEquals(listOf(current.id, after.id), handed.last())
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -495,7 +495,7 @@ class QueuePlaybackTest {
             controller.setQueueRepeat(RepeatMode.ALL).join()
             assertEquals(playable.map { it.id }, handed.last(), "Every playable song stays in queue order")
             assertEquals(RepeatMode.ALL, repeats.last(), "The decoder repeats the whole cycle itself")
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -529,7 +529,7 @@ class QueuePlaybackTest {
             val stuck = withTimeout(3_000) { controller.state.first { it.error != null } }
             assertEquals("No upcoming song has an available audio source", stuck.error)
             assertEquals(first, stuck.queue.currentTrackId)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -567,7 +567,7 @@ class QueuePlaybackTest {
             val advanced = withTimeout(5_000) { player.state.first { it.playback.trackId == remote.id && it.playback.playing } }
             assertEquals(remote.id, advanced.queue.currentTrackId)
         } finally {
-            controller?.close(); offline?.closeAndJoin(); connection.disconnect(); http.close(); store.close(); directory.toFile().deleteRecursively()
+            controller?.closeAndJoin(); offline?.closeAndJoin(); connection.disconnect(); http.close(); store.close(); directory.toFile().deleteRecursively()
         }
     }
 
@@ -600,7 +600,7 @@ class QueuePlaybackTest {
             assertEquals(song.sizeBytes, Files.size(Path.of(downloaded.path!!)))
             cache.enforceCacheBudget(0)
             assertEquals(false, library.findTrack(remote.id)!!.sources.any { it.kind == SourceKind.DOWNLOAD })
-        } finally { controller?.close(); offline?.closeAndJoin(); connection.disconnect(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller?.closeAndJoin(); offline?.closeAndJoin(); connection.disconnect(); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -634,7 +634,7 @@ class QueuePlaybackTest {
             }
             assertEquals(before.entries to before.currentEntryId, after.queue.entries to after.queue.currentEntryId)
             assertEquals(false, after.playback.playing)
-        } finally { controller?.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller?.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -654,6 +654,6 @@ class QueuePlaybackTest {
             } }
             assertEquals(tracks.getValue("Northern Light").id, advanced.queue.currentTrackId)
             assertEquals(advanced.queue.currentEntryId, controller.queue.snapshot().currentEntryId)
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 }

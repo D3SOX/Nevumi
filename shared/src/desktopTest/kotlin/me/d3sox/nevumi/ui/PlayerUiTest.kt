@@ -766,7 +766,7 @@ class PlayerUiTest {
                 waitForIdle()
                 assertEquals(baseline, onNodeWithTag("mini-player").fetchSemanticsNode().boundsInRoot.top, .5f)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -823,7 +823,7 @@ class PlayerUiTest {
                 assertEquals("Long Way Home", controller.state.value.tracks.first {
                     it.id == controller.state.value.queue.currentTrackId }.metadata.title)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -862,7 +862,7 @@ class PlayerUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.queue.context.first().id == last.id }
                 assertEquals(before.currentEntryId, controller.state.value.queue.currentEntryId)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -891,7 +891,7 @@ class PlayerUiTest {
                 val snapshot = controller.state.value.queue
                 assertEquals("Northern Light", controller.state.value.tracks.first { it.id == snapshot.currentTrackId }.metadata.title)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -922,7 +922,7 @@ class PlayerUiTest {
                 assertEquals(listOf("Long Way Home", "Night Walk", "Northern Light", "Night Walk", "Long Way Home")
                     to "Northern Light", snapshot.entries.map { titles[it.trackId] } to titles[snapshot.currentTrackId])
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -999,7 +999,7 @@ class PlayerUiTest {
                 }
                 onNodeWithTag("mini-player").assertIsDisplayed()
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -1020,6 +1020,6 @@ class PlayerUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.engine.status.value.playing }
                 onNodeWithContentDescription("Pause").assertExists()
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 }

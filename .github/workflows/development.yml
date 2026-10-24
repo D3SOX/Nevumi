@@ -122,11 +122,24 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          skip_if_superseded() {
+            local latest
+            latest="$(gh api "repos/$GH_REPO/git/ref/heads/master" --jq .object.sha)" || exit 1
+            if [[ "$latest" != "$GITHUB_SHA" ]]; then
+              echo "::notice::Skipping development publication because master has a newer commit."
+              exit 0
+            fi
+          }
+          skip_if_superseded
           cd development
           printf 'Development build from commit %s. Android installs as Nevumi dev. Linux packages replace Nevumi.\n' "$GITHUB_SHA" > notes.txt
           tag="development-$GITHUB_RUN_ID"
-          # Release creation needs an existing ref when newer commits change workflows.
-          git push origin "$GITHUB_SHA:refs/tags/$tag"
+          # A push can overtake the check above. Skip that build if GitHub rejects its tag.
+          if ! git push origin "$GITHUB_SHA:refs/tags/$tag"; then
+            skip_if_superseded
+            exit 1
+          fi
+          skip_if_superseded
           assets=(./*.apk ./*.pkg.tar.zst ./*.AppImage)
           if draft=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
             if [[ "$draft" == false ]]; then

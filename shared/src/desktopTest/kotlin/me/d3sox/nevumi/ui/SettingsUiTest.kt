@@ -174,7 +174,7 @@ class SettingsUiTest {
                 assertEquals(2.0, runBlocking { MusicPreferences(store).load() }.pitch)
                 assertEquals(1.5, controller.state.value.playback.speed)
             }
-            controller.close(); store.close()
+            runBlocking { controller.closeAndJoin() }; store.close()
             store = openMusicStore(database)
             controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
             runComposeUiTest {
@@ -186,7 +186,7 @@ class SettingsUiTest {
                 onNodeWithContentDescription("Playback speed").performScrollTo().assertRangeInfoEquals(androidx.compose.ui.semantics.ProgressBarRangeInfo(1.5f, 0.5f..2f, 29))
                 onNodeWithContentDescription("Playback pitch").performScrollTo().assertRangeInfoEquals(androidx.compose.ui.semantics.ProgressBarRangeInfo(12f, -12f..12f, 23))
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -206,7 +206,7 @@ class SettingsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.cacheBytes == 0L }
                 assertEquals(0L, runBlocking { preferences.load() }.cacheBytes)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -238,7 +238,7 @@ class SettingsUiTest {
                 onNodeWithContentDescription("Back").performClick()
                 assertEquals(Color.Black, onRoot().captureToImage().toPixelMap()[5, 5])
             }
-            controller.close(); store.close()
+            runBlocking { controller.closeAndJoin() }; store.close()
             store = openMusicStore(database)
             controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
             runComposeUiTest {
@@ -257,6 +257,6 @@ class SettingsUiTest {
                 assertEquals(listOf("Long Way Home", "Night Walk", "Northern Light", "Night Walk", "Long Way Home"),
                     controller.state.value.queue.entries.map { titles[it.trackId] })
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 }

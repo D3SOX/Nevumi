@@ -129,7 +129,7 @@ class LibraryUiTest {
                 onNodeWithContentDescription("Rating: 4 stars").assertDoesNotExist()
                 assertEquals(0, runBlocking { library.findTrack(track.id)!!.rating })
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -169,7 +169,7 @@ class LibraryUiTest {
                 onNodeWithText("Artists").performClick()
                 onNodeWithText("Artists").assertIsSelected()
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -193,7 +193,7 @@ class LibraryUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.tracks.all { it.favorite } }
                 assertEquals(2, runBlocking { library.tracks(LibraryQuery(favoritesOnly = true)).size })
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -446,7 +446,7 @@ class LibraryUiTest {
                 onNodeWithText("Night Walk").assertDoesNotExist()
                 onNodeWithText("Long Way Home").assertDoesNotExist()
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -472,6 +472,6 @@ class LibraryUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 assertEquals(3, controller.state.value.queue.entries.size)
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 }

@@ -57,7 +57,7 @@ class LinuxAudioControlsTest {
             val paused = withTimeout(3_000) { engine.status.first { !it.playing } }
             assertEquals(1.5, paused.speed)
         } finally {
-            session?.close(); controller.close(); store.close()
+            session?.close(); runBlocking { controller.closeAndJoin() }; store.close()
             daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
             directory.toFile().deleteRecursively()
         }
@@ -101,7 +101,7 @@ class LinuxAudioControlsTest {
             withTimeout(3_000) { engine.status.first { it.volume == 0.0 } }
             assertEquals(0.0, engine.status.value.volume)
         } finally {
-            session?.close(); controller.close(); store.close()
+            session?.close(); runBlocking { controller.closeAndJoin() }; store.close()
             daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
             directory.toFile().deleteRecursively()
         }

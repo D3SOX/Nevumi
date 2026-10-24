@@ -32,7 +32,7 @@ updates:
     directory: /scripts
     schedule:
       interval: weekly
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: /badges
     schedule:
       interval: weekly

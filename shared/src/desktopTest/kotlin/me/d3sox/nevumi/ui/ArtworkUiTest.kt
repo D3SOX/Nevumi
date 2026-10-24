@@ -144,7 +144,7 @@ class ArtworkUiTest {
                 waitUntil(timeoutMillis = 3_000) { queueColor() != red }
                 assertNotEquals(red, queueColor())
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -178,6 +178,6 @@ class ArtworkUiTest {
                 val pixels = onNodeWithContentDescription("Album artwork: Artwork Fixture").captureToImage().toPixelMap()
                 assertEquals(Color(0xFFE05040), pixels[pixels.width / 2, pixels.height / 2])
             }
-        } finally { controller.close(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 }

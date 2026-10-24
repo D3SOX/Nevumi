@@ -196,7 +196,7 @@ class DownloadUiTest {
                 onNode(hasText("Downloaded") and !hasClickAction()).assertIsDisplayed()
             }
         } finally {
-            controller?.close(); runBlocking { offline?.closeAndJoin() }
+            runBlocking { controller?.closeAndJoin(); offline?.closeAndJoin() }
             store.close(); http.close(); directory.toFile().deleteRecursively()
         }
     }
@@ -235,7 +235,7 @@ class DownloadUiTest {
                 val saved = runBlocking { playlists.all().single() }
                 assertEquals(true to listOf(track.id), saved.autoDownload to saved.trackIds)
             }
-        } finally { controller.close(); runBlocking { offline.closeAndJoin() }; store.close(); http.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin(); offline.closeAndJoin() }; store.close(); http.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -268,6 +268,6 @@ class DownloadUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 assertEquals(track.id, controller.state.value.playback.trackId)
             }
-        } finally { controller.close(); runBlocking { offline.closeAndJoin() }; store.close(); http.close(); directory.toFile().deleteRecursively() }
+        } finally { runBlocking { controller.closeAndJoin(); offline.closeAndJoin() }; store.close(); http.close(); directory.toFile().deleteRecursively() }
     }
 }
