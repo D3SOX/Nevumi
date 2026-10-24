@@ -52,7 +52,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 data class ServerPlaylist(val id: String, val name: String, val songIds: List<String>, val changed: String,
     val owner: String, val description: String = "", val coverArt: String? = null, val created: String = "",
-    /** Navidrome marks smart playlists and playlists it syncs from a file as read-only, even for their owner. */
+    /** Navidrome locks tracks in smart and file-synced playlists; their owner can still edit metadata. */
     val readOnly: Boolean = false)
 
 /** A user's play queue as Subsonic clients share it. [changedBy] names the client that saved it, if the server says. */
@@ -230,6 +230,12 @@ class NavidromeClient(
     }
 
     suspend fun deletePlaylist(id: String) { request("deletePlaylist", listOf("id" to id)) }
+
+    suspend fun updatePlaylistDetails(id: String, name: String, description: String): ServerPlaylist = serverRequest {
+        require(name.isNotBlank()) { "Name the playlist" }
+        request("updatePlaylist", listOf("playlistId" to id, "name" to name.trim(), "comment" to description))
+        playlist(id)
+    }
 
     suspend fun setRating(songId: String, rating: Int) {
         require(rating in 0..5) { "Choose a rating from one to five stars, or zero to clear it" }

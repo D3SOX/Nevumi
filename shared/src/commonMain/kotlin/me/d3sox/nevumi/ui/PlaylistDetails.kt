@@ -137,7 +137,7 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
                     fun close(action: () -> Unit) { options = false; action() }
                     QueueActionMenuItems(orderedIds, controller) { options = false }
                     HorizontalDivider()
-                    if (playlist.server?.readOnly != true) {
+                    if (playlist.server?.canEditMetadata(state.server) != false) {
                         AppMenuItem({ Text(stringResource(Res.string.library_edit_playlist)) }, { close(edit) }, leadingIcon = { Icon(AppIcon.EDIT.vector, null) })
                         AppMenuItem({ Text(stringResource(Res.string.library_delete_playlist)) }, { close(delete) }, leadingIcon = { Icon(AppIcon.REMOVE.vector, null) })
                     }

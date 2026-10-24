@@ -122,7 +122,7 @@ class PlaylistController internal constructor(private val context: ControllerCon
         require(name.isNotBlank()) { "Name the playlist" }
         val collections = requireNotNull(playlists) { "Playlists are unavailable" }
         val previous = requireNotNull(collections.get(playlistId)) { "Playlist is missing" }
-        require(previous.server?.readOnly != true) { "Only the owner can edit this playlist" }
+        require(previous.server?.canEditMetadata(context.state.value.server) != false) { "Only the owner can edit this playlist" }
         val link = previous.server
         if (link != null && (cover != null || removeCover)) {
             val client = serverPlaylistClient(link)

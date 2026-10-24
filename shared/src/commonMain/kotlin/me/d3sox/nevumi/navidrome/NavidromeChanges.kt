@@ -270,7 +270,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                     val key = "playlist-removal:${removal.playlist.id}"
                     if (store.read<PlaylistRemoval>(key) == removal) {
                         store.put("playlist:${removal.playlist.id}", "playlists", removal.playlist.copy(pendingSync = true,
-                            server = link.copy(id = remote.id),
+                            server = link.copy(id = remote.id, readOnly = remote.readOnly || remote.owner != connection.username),
                             conflict = PlaylistConflict(remote.name, remote.songIds, remoteTracks, deletionRequested = true, description = remote.description)))
                         store.database.records().delete(key)
                     }
@@ -310,8 +310,8 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 if (!retained) return@attempt
             }
             val remote = connection.playlist(requireNotNull(link.id))
-            if (remote.readOnly) {
-                // The server refuses every edit to it, so retrying would only repeat the refusal.
+            if (remote.readOnly && (remote.owner != connection.username || songIds != link.baselineSongIds)) {
+                // Locked tracks cannot be replaced. Metadata-only edits by the owner can still be sent below.
                 // Its change time stays unrecorded so the next pull imports the rest of this version, such as a new cover.
                 val remoteTracks = localTracks(remote, connection)
                 val discarded = store.transaction {
@@ -330,15 +330,21 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 store.transaction {
                     val current = playlists.get(playlist.id) ?: return@transaction
                     store.put("playlist:${playlist.id}", "playlists", current.copy(
+                        server = link.copy(readOnly = remote.readOnly || remote.owner != connection.username),
                         conflict = PlaylistConflict(remote.name, remote.songIds, remoteTracks, description = remote.description)))
                 }
                 return@attempt
             }
-            val saved = if (alreadySaved) remote else connection.savePlaylist(playlist.name, songIds, link.id, description = playlist.description)
+            val saved = when {
+                alreadySaved -> remote
+                songIds == link.baselineSongIds -> connection.updatePlaylistDetails(requireNotNull(link.id), playlist.name, playlist.description)
+                else -> connection.savePlaylist(playlist.name, songIds, link.id, description = playlist.description)
+            }
             store.transaction {
                 val current = playlists.get(playlist.id) ?: return@transaction
                 store.put("playlist:${playlist.id}", "playlists", current.copy(
-                    server = link.copy(baselineName = saved.name, baselineSongIds = saved.songIds, baselineDescription = saved.description),
+                    server = link.copy(baselineName = saved.name, baselineSongIds = saved.songIds, baselineDescription = saved.description,
+                        readOnly = saved.readOnly || saved.owner != connection.username),
                     pendingSync = current.revision != playlist.revision))
             }
         }

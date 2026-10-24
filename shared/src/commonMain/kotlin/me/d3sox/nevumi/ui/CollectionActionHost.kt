@@ -107,7 +107,7 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
                 AppMenuItem(text = { Text(stringResource(Res.string.download)) }, leadingIcon = { Icon(AppIcon.DOWNLOAD.vector, null) }, onClick = { close { controller.downloadTracks(trackIds) } })
             if (playlist != null) {
                 HorizontalDivider()
-                if (playlist.server?.readOnly != true) {
+                if (playlist.server?.canEditMetadata(state.server) != false) {
                     AppMenuItem(text = { Text(stringResource(Res.string.library_edit_playlist)) }, leadingIcon = { Icon(AppIcon.EDIT.vector, null) }, onClick = { close { editing = true } })
                     if (playlist.rule != null) AppMenuItem(text = { Text(stringResource(Res.string.edit_rules)) }, onClick = { close { rules = true } })
                     AppMenuItem(text = { Text(stringResource(Res.string.library_delete_playlist)) }, leadingIcon = { Icon(AppIcon.REMOVE.vector, null) }, onClick = { close { deleting = true } })
