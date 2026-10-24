@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
+import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.LibrarySort
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.playlists.playlistedTrackIds
@@ -57,9 +58,6 @@ import me.d3sox.nevumi.resources.album
 import me.d3sox.nevumi.resources.artist
 import me.d3sox.nevumi.resources.ascending
 import me.d3sox.nevumi.resources.descending
-import me.d3sox.nevumi.resources.downloads
-import me.d3sox.nevumi.resources.library_all_sources
-import me.d3sox.nevumi.resources.library_device
 import me.d3sox.nevumi.resources.library_filters
 import me.d3sox.nevumi.resources.library_last_played
 import me.d3sox.nevumi.resources.library_nevumi_logo
@@ -76,12 +74,12 @@ import me.d3sox.nevumi.resources.most_played
 import me.d3sox.nevumi.resources.music_sources
 import me.d3sox.nevumi.resources.recently_added
 import me.d3sox.nevumi.resources.search
-import me.d3sox.nevumi.resources.server
 import me.d3sox.nevumi.resources.settings
 import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.songs_of_total
+import org.jetbrains.compose.resources.pluralStringResource
 import me.d3sox.nevumi.resources.title
 import me.d3sox.nevumi.resources.unknown_artist
-import org.jetbrains.compose.resources.StringResource
 
 @Composable
 internal fun LibraryScreens(state: AppState, controller: MusicController, modifier: Modifier = Modifier,
@@ -148,24 +146,36 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     }
     // Sort and filter choices answer at once; a library change, such as one song's favorite, re-sorts in the background.
     val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders)
-    val tracks = rememberDerived(null, trackChoices, listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
+    // The unfiltered count is what the library shows without its source and filters, so the header can say "4 of 12 songs".
+    val (tracks, unfilteredCount) = rememberDerived(null, trackChoices, listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
-        val visible = state.tracks.filter { track ->
-            val localAllowed = folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
-            localAllowed || sources != SourceKind.LOCAL && track.sources.any { it.kind != SourceKind.LOCAL }
-        }
-        filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now, playlisted)
+        fun localAllowed(track: Track) =
+            folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
+        val unfiltered = state.tracks.filter { track -> localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL } }
+        val visible = if (sources == SourceKind.LOCAL) unfiltered.filter(::localAllowed) else unfiltered
+        filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now, playlisted) to
+            unfiltered.size
+    }
+    val displayedCount = remember(tracks, tabs[currentIndex]) {
+        if (tabs[currentIndex] == LibraryTab.FAVORITES) tracks.count { it.favorite } else tracks.size
     }
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages, LocalDerivedResults provides derived) {
     Column(modifier.fillMaxWidth()) {
+        // Search ignores the source and library filters, and Playlists only follow the source.
+        val libraryFiltersApply = tabs[currentIndex] !in setOf(LibraryTab.SEARCH, LibraryTab.PLAYLISTS)
         if (selection.active) SongSelectionHeader(selection, controller)
         else if (tabs[currentIndex] != LibraryTab.SEARCH) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 64.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.foundation.Image(org.jetbrains.compose.resources.painterResource(me.d3sox.nevumi.resources.Res.drawable.nevumi_logo),
                     stringResource(Res.string.library_nevumi_logo), Modifier.size(40.dp))
-                Text(if (tabs[currentIndex] == LibraryTab.HOME) stringResource(LibraryTab.HOME.label) else countLabel(tracks.size, Res.plurals.songs), style = MaterialTheme.typography.titleSmall,
+                if (libraryFiltersApply && tabs[currentIndex] != LibraryTab.HOME && (sources != null || filter.hasActiveFilters())) Row(Modifier.clickable(onClickLabel = stringResource(Res.string.library_filters)) { filters = true },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(AppIcon.FILTER.vector, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    Text(pluralStringResource(Res.plurals.songs_of_total, unfilteredCount, displayedCount, unfilteredCount),
+                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                } else Text(if (tabs[currentIndex] == LibraryTab.HOME) stringResource(LibraryTab.HOME.label) else countLabel(displayedCount, Res.plurals.songs), style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (LibraryTab.SEARCH !in tabs) AppIconButton(AppIcon.SEARCH, stringResource(Res.string.search), onClick = onSearch)
@@ -199,14 +209,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             Box {
                 AppIconButton(AppIcon.MENU, stringResource(Res.string.music_sources)) { sourceMenu = true }
                 DropdownMenu(sourceMenu, { sourceMenu = false }) {
-                    listOf<Pair<SourceKind?, StringResource>>(null to Res.string.library_all_sources, SourceKind.LOCAL to Res.string.library_device,
-                        SourceKind.SERVER to Res.string.server, SourceKind.DOWNLOAD to Res.string.downloads).forEach { (value, name) ->
-                        AppMenuItem(modifier = Modifier.semantics { selected = value == sources }, text = { Text(stringResource(name)) }, leadingIcon = { Icon(when {
-                            value == SourceKind.SERVER -> AppIcon.CLOUD.vector
-                            value == SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD.vector
-                            value == SourceKind.LOCAL -> AppIcon.DEVICE.vector
-                            else -> AppIcon.LIBRARY.vector
-                        }, null) }, trailingIcon = { if (value == sources) Icon(AppIcon.CHECK.vector, null) }, onClick = { controller.updatePreferences { it.copy(sourceFilter = value) }; sourceMenu = false })
+                    listOf(null, SourceKind.LOCAL, SourceKind.SERVER, SourceKind.DOWNLOAD).forEach { value ->
+                        AppMenuItem(modifier = Modifier.semantics { selected = value == sources }, text = { Text(stringResource(value.sourceName())) },
+                            leadingIcon = { Icon(value.sourceIcon().vector, null) }, trailingIcon = { if (value == sources) Icon(AppIcon.CHECK.vector, null) }, onClick = { controller.updatePreferences { it.copy(sourceFilter = value) }; sourceMenu = false })
                     }
                     HorizontalDivider()
                     AppMenuItem(text = { Text(stringResource(Res.string.library_filters)) }, leadingIcon = { Icon(AppIcon.FILTER.vector, null) },
@@ -214,6 +219,10 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 }
             }
         }
+        // The selection header replaces the source menu that the source chip opens.
+        if (!selection.active && tabs[currentIndex] != LibraryTab.SEARCH) ActiveLibraryFilters(if (libraryFiltersApply) filter else LibraryQuery(), sources, edit = { filters = true },
+            editSource = { sourceMenu = true }, change = { value -> controller.updatePreferences { it.copy(libraryFilter = value) } },
+            changeSource = { value -> controller.updatePreferences { it.copy(sourceFilter = value) } })
         // Like Namida, slide the incoming tab over the stationary previous page, skipping intermediate tabs.
         transition.AnimatedContent(Modifier.weight(1f).fillMaxWidth().clipToBounds()
             .consumeWindowInsets(PaddingValues(bottom = navigationHeight)).testTag("library-pager"), transitionSpec = {
