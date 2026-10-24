@@ -35,7 +35,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
@@ -64,6 +66,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.all
+import me.d3sox.nevumi.resources.audio_effects
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.clear
 import me.d3sox.nevumi.resources.export_queue
@@ -420,12 +423,12 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             if (maxWidth > maxHeight) Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                                 PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxHeight(), motion)
-                                PlayerControls(state, controller, current, requested, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
+                                PlayerControls(state, controller, current, requested, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
                             } else Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(24.dp)) {
                                 PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxWidth(), motion)
                                 PlayerControls(state, controller, current, requested,
-                                    Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
+                                    Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
                             }
                         }
 
@@ -715,7 +718,7 @@ private fun PlayerCover(state: AppState, controller: MusicController, track: Tra
 @Composable
 private fun PlayerControls(state: AppState, controller: MusicController, current: Track, requested: Boolean,
     modifier: Modifier, motion: PlayerMotion, visible: Boolean, artworkSwipe: PlayingArtworkSwipe,
-    onRepeatCount: () -> Unit, onQueue: () -> Unit, onOutput: () -> Unit, onVisualizer: () -> Unit, onPlaybackSettings: () -> Unit) {
+    onRepeatCount: () -> Unit, onQueue: () -> Unit, onOutput: () -> Unit, onVisualizer: () -> Unit, onAudioEffects: () -> Unit, onPlaybackSettings: () -> Unit) {
     var seeking by remember(state.playback.entryId) { mutableStateOf<Float?>(null) }
     var seekRequest by remember(state.playback.entryId) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -739,9 +742,8 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
         val highest = peaks.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
         peaks.map { kotlin.math.sqrt((it / highest).coerceIn(0f, 1f)) }
     }
-    BoxWithConstraints(modifier.widthIn(max = 640.dp)) {
-    val compactScroll = maxHeight < 340.dp
-    Column(Modifier.fillMaxWidth().then(if (compactScroll) Modifier.verticalScroll(rememberScrollState()) else Modifier), horizontalAlignment = Alignment.CenterHorizontally,
+    val controlsScroll = rememberScrollState()
+    Column(modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(controlsScroll, enabled = controlsScroll.maxValue > 0), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe)
         Column(Modifier.fillMaxWidth()) {
@@ -784,7 +786,6 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
                             style = MaterialTheme.typography.labelMedium)
                     }
                 }
-                LyricsButton(controller)
                 Text(playbackTime(durationMs), style = MaterialTheme.typography.labelMedium)
             }
         }
@@ -802,28 +803,56 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
             AppIconButton(AppIcon.NEXT, stringResource(Res.string.next_track), Modifier.size(48.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.NEXT, visible))) { controller.skip(1) }
             PlayerRepeatControl(state.queue, controller, onRepeatCount, Modifier.size(48.dp))
         }
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically) {
-                Row {
-                    AppIconButton(AppIcon.DEVICES, stringResource(Res.string.player_audio_output), onClick = onOutput)
-                    MilkDropButton(onVisualizer)
-                }
-                Row {
-                    AppIconButton(AppIcon.SETTINGS, stringResource(Res.string.player_playback_settings), onClick = onPlaybackSettings)
-                    AppIconButton(AppIcon.QUEUE, stringResource(Res.string.queue), onClick = onQueue)
-                }
-            }
-            Box(Modifier.fillMaxWidth().padding(horizontal = 96.dp), contentAlignment = Alignment.Center) {
-                if (state.preferences.showAudioInfo) state.playback.audioInfo?.let { info ->
-                    Text(audioInfoLabel(info), style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("playing-audio-info"))
-                }
-            }
-        }
+        PlayerToolbar(controller, state.playback.audioInfo?.takeIf { state.preferences.showAudioInfo }?.let(::audioInfoLabel),
+            onOutput, onVisualizer, onAudioEffects, onPlaybackSettings, onQueue)
         AppVolume(controller)
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun PlayerToolbar(controller: MusicController, audioInfo: String?, onOutput: () -> Unit, onVisualizer: () -> Unit,
+    onAudioEffects: () -> Unit, onPlaybackSettings: () -> Unit, onQueue: () -> Unit, modifier: Modifier = Modifier) {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelMedium
+    val density = LocalDensity.current
+    val leftButtons: @Composable () -> Unit = {
+        AppIconButton(AppIcon.DEVICES, stringResource(Res.string.player_audio_output), onClick = onOutput)
+        MilkDropButton(onVisualizer)
+        AppIconButton(AppIcon.EQUALIZER, stringResource(Res.string.audio_effects), onClick = onAudioEffects)
+    }
+    val rightButtons: @Composable () -> Unit = {
+        AppIconButton(AppIcon.SETTINGS, stringResource(Res.string.player_playback_settings), onClick = onPlaybackSettings)
+        LyricsButton(controller)
+        AppIconButton(AppIcon.QUEUE, stringResource(Res.string.queue), onClick = onQueue)
+    }
+    val info: @Composable (Modifier) -> Unit = { textModifier ->
+        if (audioInfo != null) Text(audioInfo, style = style,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = textModifier.testTag("playing-audio-info"))
+    }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val groupWidth = 48.dp * 3
+        val infoWidth = with(density) { (maxWidth - groupWidth * 2 - 16.dp).roundToPx() }
+        val inline = audioInfo != null && infoWidth > 0 && !measurer.measure(audioInfo, style,
+            maxLines = 2, constraints = Constraints(maxWidth = infoWidth)).hasVisualOverflow
+        val actionsPerRow = if (maxWidth < groupWidth * 2) 3 else 6
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (inline) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.width(groupWidth)) { leftButtons() }
+                    info(Modifier.weight(1f).padding(horizontal = 8.dp))
+                    Row(Modifier.width(groupWidth), horizontalArrangement = Arrangement.End) { rightButtons() }
+                }
+            } else {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp),
+                    maxItemsInEachRow = actionsPerRow) {
+                    leftButtons()
+                    rightButtons()
+                }
+            }
+            if (!inline) info(Modifier.fillMaxWidth())
+        }
     }
 }
 

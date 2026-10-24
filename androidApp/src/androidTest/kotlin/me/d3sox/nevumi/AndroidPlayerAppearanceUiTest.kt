@@ -82,7 +82,16 @@ class AndroidPlayerAppearanceUiTest {
                 assertCover("Album artwork: A song 31")
                 compose.onNodeWithContentDescription("Previous track").assertIsDisplayed()
                 compose.onNodeWithText("Previous").assertDoesNotExist()
+                compose.waitUntil(5_000) { app.controller.state.value.playback.audioInfo != null }
+                compose.waitUntil(5_000) { compose.onAllNodesWithTag("playing-audio-info").fetchSemanticsNodes().isNotEmpty() }
+                val audioInfo = compose.onNodeWithTag("playing-audio-info")
+                if (runCatching { audioInfo.assertIsDisplayed() }.isFailure) audioInfo.performScrollTo()
+                audioInfo.assertIsDisplayed()
                 capture("now-playing")
+                compose.onNodeWithContentDescription("Audio effects").performClick()
+                compose.onNodeWithText("Audio effects").assertIsDisplayed()
+                compose.onNodeWithContentDescription("Back").performClick()
+                compose.onNodeWithContentDescription("Previous track").assertIsDisplayed()
                 compose.onNodeWithContentDescription("Queue").performClick()
                 compose.onNodeWithTag("queue-entry:${app.controller.state.value.queue.currentEntryId}").assertIsDisplayed()
                 assertCover("Queue artwork: ${app.controller.state.value.queue.currentEntryId}")

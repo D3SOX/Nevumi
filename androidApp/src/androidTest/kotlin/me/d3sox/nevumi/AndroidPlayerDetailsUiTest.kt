@@ -63,9 +63,13 @@ class AndroidPlayerDetailsUiTest {
                     app.controller.reload().join()
                 }
                 val root = compose.onRoot()
-                val titleY = (foreground.first().fetchSemanticsNode().boundsInRoot.center.y - root.fetchSemanticsNode().boundsInRoot.top).toInt()
+                val titleBounds = foreground.first().fetchSemanticsNode().boundsInRoot
+                val rootBounds = root.fetchSemanticsNode().boundsInRoot
+                val titleY = (titleBounds.center.y - rootBounds.top).toInt()
+                // Sample beside the title; the glow fades toward the screen edge as artwork shrinks.
+                val titleX = (titleBounds.left - rootBounds.left - 8).toInt().coerceAtLeast(0)
                 compose.waitUntil(5_000) {
-                    val color = root.captureToImage().toPixelMap()[8, titleY]
+                    val color = root.captureToImage().toPixelMap()[titleX, titleY]
                     color.red > .1f && color.red > color.blue + .05f
                 }
                 foreground.forEachIndexed { index, node ->
@@ -259,6 +263,11 @@ class AndroidPlayerDetailsUiTest {
                     runBlocking { app.controller.playTrack(tracks[index].id).join(); app.controller.pause().join() }
                     compose.waitUntil(5_000) { app.controller.state.value.playback.audioInfo?.let { it.format == format && it.sampleRateHz == 44_100 } == true }
                     if (index == 0) compose.onNodeWithTag("mini-player").performClick()
+                    compose.waitUntil(5_000) {
+                        runCatching {
+                            compose.onNodeWithTag("playing-audio-info").assertIsDisplayed().assertTextContains(format, substring = true)
+                        }.isSuccess
+                    }
                     val details = compose.onNodeWithTag("playing-audio-info").assertIsDisplayed()
                     details.assertTextContains(format, substring = true).assertTextContains("44.1 kHz", substring = true)
                     if (format == "WAV") details.assertTextEquals("WAV · 706 kb/s · 44.1 kHz")

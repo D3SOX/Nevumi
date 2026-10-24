@@ -60,7 +60,7 @@ internal fun PlaybackQuickSettings(state: AppState, controller: MusicController,
                 val milkDrop = state.preferences.milkDrop
                 fun visualizer(update: (me.d3sox.nevumi.visualizer.MilkDropSettings) -> me.d3sox.nevumi.visualizer.MilkDropSettings) =
                     controller.updatePreferences { it.copy(milkDrop = update(it.milkDrop)) }
-                SettingsToggle(stringResource(Res.string.player_visualizer_background), AppIcon.WAVEFORM, stringResource(Res.string.player_visualizer_background_text),
+                SettingsToggle(stringResource(Res.string.player_visualizer_background), AppIcon.VISUALIZER, stringResource(Res.string.player_visualizer_background_text),
                     milkDrop.background) { enabled -> visualizer { it.copy(background = enabled) } }
                 if (milkDrop.background) {
                     SettingsSlider(stringResource(Res.string.player_dim_background), AppIcon.DARK_THEME, milkDrop.backgroundDim, 0f..1f, 19,

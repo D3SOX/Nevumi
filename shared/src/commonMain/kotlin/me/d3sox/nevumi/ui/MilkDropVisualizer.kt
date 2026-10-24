@@ -66,7 +66,7 @@ import me.d3sox.nevumi.resources.sources_unfavorite_preset
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun MilkDropButton(open: () -> Unit) = AppIconButton(AppIcon.WAVEFORM, stringResource(Res.string.sources_milkdrop_visualizer), onClick = open)
+internal fun MilkDropButton(open: () -> Unit) = AppIconButton(AppIcon.VISUALIZER, stringResource(Res.string.sources_milkdrop_visualizer), onClick = open)
 
 @Composable
 internal expect fun MilkDropVisualizer(state: AppState, controller: MusicController, close: () -> Unit)

@@ -182,6 +182,7 @@ internal enum class AppIcon(val vector: ImageVector) {
     QR_SCAN(Icons.Rounded.QrCodeScanner),
     HOME(Icons.Rounded.Home),
     WAVEFORM(Icons.Rounded.Waves),
+    VISUALIZER(Icons.Rounded.AutoAwesome),
     SWIPE_RIGHT(Icons.Rounded.SwipeRight),
     SWIPE_LEFT(Icons.Rounded.SwipeLeft),
     QUICK_ACTION(Icons.Rounded.Bolt),
