@@ -1,9 +1,11 @@
 package me.d3sox.nevumi.app
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -49,11 +51,13 @@ class ServerQueueController internal constructor(private val context: Controller
 
     /** Checks the server once the persisted queue is loaded, then saves later queue and transport changes. */
     internal fun start() = context.action(serialized = false) {
-        check(force = true)
-        started = true
         coroutineScope {
-            launch { checkWhenEnabled() }
-            uploadChanges()
+            val startupCheck = async {
+                check(force = true)
+                started = true
+            }
+            launch { startupCheck.await(); checkWhenEnabled() }
+            uploadChanges(startupCheck)
         }
     }
 
@@ -108,13 +112,16 @@ class ServerQueueController internal constructor(private val context: Controller
     }
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-    private suspend fun uploadChanges() {
+    private suspend fun uploadChanges(startupCheck: Deferred<Unit>) {
         val queueChanges = context.state.map { it.queue.entries to it.queue.currentEntryId }.distinctUntilChanged().drop(1)
         val playing = engine.status.map { it.playWhenReady }.distinctUntilChanged()
         // A song that keeps playing saves its position now and then, so a device that stops without pausing loses little.
         val progress = playing.flatMapLatest { if (it) flow { while (true) { delay(UPLOAD_INTERVAL_MS); emit(Unit) } } else emptyFlow() }
         merge(queueChanges.map { }, playing.drop(1).map { }, context.seeks.map { }, progress)
-            .debounce(UPLOAD_DELAY_MS).collect { upload() }
+            .debounce(UPLOAD_DELAY_MS).collect {
+                startupCheck.await()
+                upload()
+            }
     }
 
     private suspend fun upload() {

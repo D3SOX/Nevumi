@@ -45,6 +45,23 @@ import kotlin.test.assertTrue
 
 class ServerQueueSyncTest {
     @Test
+    fun changesDuringTheStartupReadAreUploadedOnlyAfterItCompletes() = withQueueServer {
+        val readGate = CompletableDeferred<Unit>()
+        queueReadGate = readGate
+        val player = start(SilentEngine())
+        withTimeout(5_000) { queueChecks.first { it > 0 } }
+        player.playTrack(tracks[0].id).join()
+        player.seek(80_000).join()
+        player.pause().join()
+        delay(3_500)
+        assertTrue(!saved.isCompleted, "The initial read must finish before any upload")
+        readGate.complete(Unit)
+        val upload = withTimeout(10_000) { saved.await() }
+        assertEquals("s1", upload.currentId)
+        assertEquals(80_000, upload.positionMs)
+    }
+
+    @Test
     fun aQueueFromAnotherAppIsOfferedResumedAtItsPositionAndThenSavedBackButNeverOfferedToItsOwnDevice() = withQueueServer {
         val engine = SilentEngine()
         val player = start(engine)
@@ -145,6 +162,7 @@ private class QueueServer(scope: CoroutineScope, val store: MusicStore, val libr
     val preferences: MusicPreferences) : CoroutineScope by scope {
     @Volatile var remote = """{"current":"s2","position":42000,"changedBy":"Feishin","entry":[{"id":"s1"},{"id":"s2"},{"id":"s3"}]}"""
     val queueChecks = MutableStateFlow(0)
+    @Volatile var queueReadGate: CompletableDeferred<Unit>? = null
     val saved = CompletableDeferred<ServerPlayQueue>()
     val uploads = MutableStateFlow<List<ServerPlayQueue>>(emptyList())
     val controllers = mutableListOf<MusicController>()
@@ -160,7 +178,11 @@ private fun withQueueServer(block: suspend QueueServer.() -> Unit) = runBlocking
     lateinit var server: QueueServer
     val http = HttpClient(MockEngine { request ->
         val body = when (request.url.encodedPath) {
-            "/rest/getPlayQueue.view" -> """"playQueue":${server.remote}""".also { server.queueChecks.update { it + 1 } }
+            "/rest/getPlayQueue.view" -> {
+                server.queueChecks.update { it + 1 }
+                server.queueReadGate?.await()
+                """"playQueue":${server.remote}"""
+            }
             "/rest/savePlayQueue.view" -> "".also {
                 val upload = ServerPlayQueue(request.url.parameters.getAll("id").orEmpty(), request.url.parameters["current"]!!,
                     request.url.parameters["position"]!!.toLong())
