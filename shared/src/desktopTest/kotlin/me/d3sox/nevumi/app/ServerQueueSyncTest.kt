@@ -77,6 +77,25 @@ class ServerQueueSyncTest {
     }
 
     @Test
+    fun anOldQueueOfferCannotPlaySongsFromAnotherAccount() = withQueueServer {
+        val engine = SilentEngine()
+        val player = start(engine)
+        val offer = withTimeout(5_000) { player.notices.first() }
+        val otherAccount = ServerProfile("https://music.example", "other")
+        for (i in 1..3) library.importTrack(TrackMetadata("Other song $i"),
+            TrackSource("server:${otherAccount.serverId}:s$i", SourceKind.SERVER, "s$i"))
+        connection.connect(otherAccount.baseUrl, ServerCredentials(otherAccount.username, "test"))
+        player.refresh()
+        assertEquals(otherAccount.serverId, player.state.value.server?.serverId)
+        val queueBefore = player.state.value.queue
+        val playbackBefore = engine.status.value
+        requireNotNull(offer.play).invoke().join()
+        assertEquals(queueBefore, player.state.value.queue)
+        assertEquals(playbackBefore, engine.status.value)
+        assertEquals(null, player.state.value.error)
+    }
+
+    @Test
     fun seeksAfterThePauseUploadSaveTheNewPosition() = withQueueServer {
         val player = start(SilentEngine())
         val offer = withTimeout(5_000) { player.notices.first() }

@@ -84,7 +84,7 @@ class ServerQueueController internal constructor(private val context: Controller
         offered = remote
         val title = tracks.first { it.id == trackId }.metadata.title
         val notice = ActionNotice(if (remote.changedBy.isBlank()) Res.string.notice_continue_server_queue else Res.string.notice_continue_queue_from,
-            arguments = listOfNotNull(title, remote.changedBy.ifBlank { null }), play = { resume(remote) })
+            arguments = listOfNotNull(title, remote.changedBy.ifBlank { null }), play = { resume(remote, connection.serverId) })
         // Notices are not replayed, and Android can start the app for its playback service before any window collects them.
         context.scope.launch {
             context.mutableNotices.subscriptionCount.first { it > 0 }
@@ -92,8 +92,8 @@ class ServerQueueController internal constructor(private val context: Controller
         }
     }
 
-    private fun resume(remote: ServerPlayQueue): Job = context.action {
-        val serverId = requireNotNull(context.state.value.server) { "Connect to your music server first" }.serverId
+    private fun resume(remote: ServerPlayQueue, serverId: String): Job = context.action {
+        if (context.state.value.server?.serverId != serverId || navidrome?.profile()?.serverId != serverId) return@action
         val songs = serverSongs(context.state.value.tracks, serverId)
         val available = remote.songIds.filter { it in songs }
         val index = available.indexOf(remote.currentId)
