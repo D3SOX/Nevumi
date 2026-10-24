@@ -44,7 +44,7 @@ class ServerQueueController internal constructor(private val context: Controller
     private var checkedAt: TimeMark? = null
     /** The server whose queue this session has read; uploads wait for it, so they never replace a queue nobody saw. */
     private var checkedServer: String? = null
-    private var offered: ServerPlayQueue? = null
+    private var offered: Pair<String, ServerPlayQueue>? = null
 
     private val enabled: Boolean get() = navidrome != null && context.state.value.server != null &&
         context.state.value.preferences.syncPlayQueue
@@ -77,7 +77,9 @@ class ServerQueueController internal constructor(private val context: Controller
         val connection = connection() ?: return
         val remote = try { connection.playQueue() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return }
         checkedServer = connection.serverId
-        if (remote == null || engine.status.value.playWhenReady || remote == offered ||
+        if (remote == null) return
+        val offer = connection.serverId to remote
+        if (engine.status.value.playWhenReady || offer == offered ||
             remote.copy(changedBy = "") == attempt { navidrome?.uploadedPlayQueue(connection.serverId) }) return
         val tracks = context.state.value.tracks
         val songs = serverSongs(tracks, connection.serverId)
@@ -85,14 +87,15 @@ class ServerQueueController internal constructor(private val context: Controller
         val local = localQueue(queue.snapshot(), tracks, connection.serverId)
         if (local != null && local.songIds == remote.songIds && local.currentId == remote.currentId &&
             abs(local.positionMs - remote.positionMs) < SAME_POSITION_MS) return
-        offered = remote
+        offered = offer
         val title = tracks.first { it.id == trackId }.metadata.title
         val notice = ActionNotice(if (remote.changedBy.isBlank()) Res.string.notice_continue_server_queue else Res.string.notice_continue_queue_from,
             arguments = listOfNotNull(title, remote.changedBy.ifBlank { null }), play = { resume(remote, connection.serverId) })
         // Notices are not replayed, and Android can start the app for its playback service before any window collects them.
         context.scope.launch {
             context.mutableNotices.subscriptionCount.first { it > 0 }
-            if (offered == remote && !engine.status.value.playWhenReady) context.mutableNotices.tryEmit(notice)
+            if (offered == offer && context.state.value.server?.serverId == connection.serverId &&
+                !engine.status.value.playWhenReady) context.mutableNotices.tryEmit(notice)
         }
     }
 

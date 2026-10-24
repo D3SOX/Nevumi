@@ -8,6 +8,7 @@ import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -109,13 +110,14 @@ class ServerQueueSyncTest {
     }
 
     @Test
-    fun anOldQueueOfferCannotPlaySongsFromAnotherAccount() = withQueueServer {
+    fun switchingAccountsOffersIdenticalQueuesAgainAndRejectsTheOldOffer() = withQueueServer {
         val engine = SilentEngine()
         val player = start(engine)
         val offer = withTimeout(5_000) { player.notices.first() }
         val otherAccount = ServerProfile("https://music.example", "other")
         for (i in 1..3) library.importTrack(TrackMetadata("Other song $i"),
             TrackSource("server:${otherAccount.serverId}:s$i", SourceKind.SERVER, "s$i"))
+        val nextOffer = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(5_000) { player.notices.first() } }
         connection.connect(otherAccount.baseUrl, ServerCredentials(otherAccount.username, "test"))
         player.refresh()
         assertEquals(otherAccount.serverId, player.state.value.server?.serverId)
@@ -125,6 +127,10 @@ class ServerQueueSyncTest {
         assertEquals(queueBefore, player.state.value.queue)
         assertEquals(playbackBefore, engine.status.value)
         assertEquals(null, player.state.value.error)
+        val otherOffer = nextOffer.await()
+        assertEquals(listOf("Other song 2", "Feishin"), otherOffer.arguments)
+        requireNotNull(otherOffer.play).invoke().join()
+        assertEquals("Other song 2", player.state.value.tracks.first { it.id == player.state.value.queue.currentTrackId }.metadata.title)
     }
 
     @Test
