@@ -31,6 +31,14 @@ class ReplayGainTest {
     }
 
     @Test
+    fun albumModeUsesTheSongPeakWhenFallingBackToSongGain() {
+        val tags = ReplayGainTags(trackGainDb = 6.0, trackPeak = 0.5, albumPeak = 0.9)
+        val settings = ReplayGain(ReplayGainMode.ALBUM)
+        assertEquals(6.0, settings.gainDb(tags))
+        assertEquals(-20 * log10(0.9), settings.gainDb(tags.copy(trackPeak = null)), 1e-9)
+    }
+
+    @Test
     fun thePeakLimitsBoostsSoTheLoudestSampleDoesNotClip() {
         val tags = ReplayGainTags(trackGainDb = 2.0, trackPeak = 0.5, albumGainDb = -8.0, albumPeak = 0.9)
         assertEquals(-20 * log10(0.5), ReplayGain(ReplayGainMode.TRACK, preampDb = 6.0).gainDb(tags), 1e-9)

@@ -19,8 +19,9 @@ data class ReplayGain(val mode: ReplayGainMode = ReplayGainMode.OFF, val preampD
      */
     internal fun gainDb(tags: ReplayGainTags?): Double {
         if (mode == ReplayGainMode.OFF || tags == null) return 0.0
-        val gain = (if (mode == ReplayGainMode.TRACK) tags.trackGainDb else tags.albumGainDb ?: tags.trackGainDb) ?: return 0.0
-        val peak = if (mode == ReplayGainMode.TRACK) tags.trackPeak ?: tags.albumPeak else tags.albumPeak ?: tags.trackPeak
+        val useTrack = mode == ReplayGainMode.TRACK || tags.albumGainDb == null
+        val gain = (if (useTrack) tags.trackGainDb else tags.albumGainDb) ?: return 0.0
+        val peak = if (useTrack) tags.trackPeak ?: tags.albumPeak else tags.albumPeak ?: tags.trackPeak
         return if (peak != null) minOf(gain + preampDb, -20 * log10(peak)) else gain + preampDb
     }
 }
