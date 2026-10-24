@@ -51,6 +51,10 @@ import me.d3sox.nevumi.resources.settings_keywords_confirm_up_next_interruption
 import me.d3sox.nevumi.resources.settings_keywords_connect_last_fm
 import me.d3sox.nevumi.resources.settings_keywords_connect_listenbrainz
 import me.d3sox.nevumi.resources.settings_keywords_crossfade
+import me.d3sox.nevumi.resources.settings_keywords_replay_gain
+import me.d3sox.nevumi.resources.settings_keywords_sync_play_queue
+import me.d3sox.nevumi.resources.sources_sync_play_queue
+import me.d3sox.nevumi.resources.settings_replay_gain
 import me.d3sox.nevumi.resources.settings_keywords_customize_home
 import me.d3sox.nevumi.resources.settings_keywords_download_network
 import me.d3sox.nevumi.resources.settings_keywords_exclude_folders
@@ -153,6 +157,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             category("Playback", AppIcon.PLAY, Res.string.settings_playback_speed to Res.string.settings_keywords_playback_speed,
                 Res.string.settings_playback_pitch to Res.string.settings_keywords_playback_pitch,
                 Res.string.crossfade to Res.string.settings_keywords_crossfade,
+                Res.string.settings_replay_gain to Res.string.settings_keywords_replay_gain,
                 Res.string.settings_show_audio_info to Res.string.settings_keywords_show_audio_info,
                 Res.string.lyrics_setting_online to Res.string.lyrics_keywords_online,
                 Res.string.settings_show_previous_tracks to Res.string.settings_keywords_show_previous_tracks,
@@ -168,6 +173,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             add(SettingEntry(Res.string.settings_manage_downloads, "Downloads & cache", AppIcon.DOWNLOAD, Res.string.settings_keywords_manage_downloads,
                 "Manage downloads"))
             add(SettingEntry(Res.string.music_server, "Music server", AppIcon.SERVER, Res.string.settings_keywords_music_server))
+            add(SettingEntry(Res.string.sources_sync_play_queue, "Music server", AppIcon.QUEUE, Res.string.settings_keywords_sync_play_queue))
             category("Listening & scrobbling", AppIcon.HISTORY, Res.string.record_listening_history to Res.string.settings_keywords_record_listening_history,
                 Res.string.settings_clear_listening_history to Res.string.settings_keywords_clear_listening_history)
             if (controller.scrobblingAvailable) {

@@ -8,6 +8,7 @@ import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.LibraryTab
 import kotlinx.serialization.Serializable
 import me.d3sox.nevumi.playback.AudioEffects
+import me.d3sox.nevumi.playback.ReplayGain
 import me.d3sox.nevumi.resources.*
 import org.jetbrains.compose.resources.StringResource
 
@@ -68,6 +69,9 @@ data class MusicSettings(
     val audioEffects: AudioEffects = AudioEffects(),
     val crossfadeDurationMs: Long = 0,
     val gaplessPlayback: Boolean = true,
+    val replayGain: ReplayGain = ReplayGain(),
+    /** Shares the queue with the music server, so other devices and Subsonic apps can continue it. Off until chosen, as it writes to the server. */
+    val syncPlayQueue: Boolean = false,
     val milkDrop: me.d3sox.nevumi.visualizer.MilkDropSettings = me.d3sox.nevumi.visualizer.MilkDropSettings(),
     val showRemainingTime: Boolean = false,
     val showPreviousQueueTracks: Boolean = true,
@@ -127,6 +131,7 @@ class MusicPreferences(private val store: MusicStore) {
         require(settings.pitch in 0.5..2.0) { "Playback pitch must be between 0.5 and 2" }
         require(settings.marqueeSpeed in 0.5..3.0) { "Title scroll speed must be between 0.5 and 3" }
         settings.audioEffects.validate()
+        settings.replayGain.validate()
         require(settings.crossfadeDurationMs in 0..12_000) { "Crossfade must be between 0 and 12 seconds" }
         require(settings.previousQueueTrackLimit in 1..100) { "Choose between 1 and 100 previous tracks" }
         require(settings.queueRecoveryIntervalMinutes in 1..60) { "Choose a recovery interval between 1 and 60 minutes" }

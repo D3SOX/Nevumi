@@ -318,6 +318,13 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         applyAudioFilters()
         mutableStatus.update { it.copy(audioEffects = effects) }
     }
+    override fun setReplayGain(replayGain: ReplayGain) = synchronized(lock) {
+        check(!closed)
+        replayGain.validate()
+        // mpv reads the tags itself, including from streams, and lowers gains that would clip the stored peak.
+        checked(native.mpv_set_property_string(handle, "replaygain", replayGain.mode.name.lowercase().replace("off", "no")))
+        checked(native.mpv_set_property_string(handle, "replaygain-preamp", replayGain.preampDb.toString()))
+    }
     private fun applyAudioFilters() {
         val effects = audioEffects
         val filters = buildList {

@@ -26,6 +26,7 @@ import io.ktor.http.fromHttpToGmtDate
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.readAvailable
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -53,6 +54,10 @@ data class ServerPlaylist(val id: String, val name: String, val songIds: List<St
     val owner: String, val description: String = "", val coverArt: String? = null, val created: String = "",
     /** Navidrome marks smart playlists and playlists it syncs from a file as read-only, even for their owner. */
     val readOnly: Boolean = false)
+
+/** A user's play queue as Subsonic clients share it. [changedBy] names the client that saved it, if the server says. */
+@Serializable
+data class ServerPlayQueue(val songIds: List<String>, val currentId: String, val positionMs: Long, val changedBy: String = "")
 
 class ServerCredentials(val username: String, internal val password: String) {
     override fun toString(): String = "ServerCredentials(username=$username, password=[redacted])"
@@ -234,6 +239,22 @@ class NavidromeClient(
     suspend fun scrobble(songId: String, startedAt: Long, submission: Boolean) {
         require(startedAt >= 0) { "The listening timestamp cannot be negative" }
         request("scrobble", listOf("id" to songId, "time" to startedAt.toString(), "submission" to submission.toString()))
+    }
+
+    /** Null when no client has saved a queue, or the saved queue has no current song. */
+    suspend fun playQueue(): ServerPlayQueue? = serverRequest {
+        val queue = try { request("getPlayQueue")["playQueue"]?.jsonObject } catch (missing: NavidromeException) {
+            if (missing.code == 70) null else throw missing
+        } ?: return@serverRequest null
+        val songIds = queue["entry"]?.jsonArray.orEmpty().map { it.jsonObject.getValue("id").jsonPrimitive.content }
+        val current = queue["current"]?.jsonPrimitive?.content?.takeIf { it in songIds } ?: return@serverRequest null
+        ServerPlayQueue(songIds, current, queue["position"]?.jsonPrimitive?.content?.toLongOrNull()?.coerceAtLeast(0) ?: 0,
+            queue["changedBy"]?.jsonPrimitive?.content.orEmpty())
+    }
+
+    suspend fun savePlayQueue(queue: ServerPlayQueue) {
+        require(queue.currentId in queue.songIds && queue.positionMs >= 0) { "The current song must be in the queue" }
+        request("savePlayQueue", queue.songIds.map { "id" to it } + listOf("current" to queue.currentId, "position" to queue.positionMs.toString()))
     }
 
     private fun parsePlaylist(playlist: JsonObject): ServerPlaylist = ServerPlaylist(

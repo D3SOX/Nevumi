@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.compose.ui.test.*
@@ -16,6 +17,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -218,9 +220,9 @@ class AndroidFileEditingUiTest {
                 compose.onNodeWithText("2 songs selected").assertIsDisplayed()
                 compose.onNodeWithContentDescription("Selection actions").performClick()
                 compose.onNodeWithText("Edit tags").performClick()
-                compose.onNodeWithText("Change album").performScrollTo().performClick()
+                enableTag("Change album", "Album")
                 compose.onNode(hasText("Album") and hasSetTextAction()).performScrollTo().performTextReplacement("Android shared album")
-                compose.onNodeWithText("Change year").performScrollTo().performClick()
+                enableTag("Change year", "Year")
                 compose.onNode(hasText("Year") and hasSetTextAction()).performScrollTo().performTextReplacement("2026")
                 compose.onNodeWithText("Save changes").performClick()
                 compose.waitUntil(8_000) {
@@ -237,17 +239,21 @@ class AndroidFileEditingUiTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as MusicApplication
         val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
-        ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
-            "pm grant ${app.packageName} $permission")).use { it.readBytes() }
+        fun shell(command: String) = ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
+        shell("pm grant ${app.packageName} $permission")
         val resolver = app.contentResolver
         val bytes = instrumentation.context.assets.open("fixture.flac").use { it.readBytes() }
-        val uri = requireNotNull(resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, ContentValues().apply {
-            put(MediaStore.Audio.Media.DISPLAY_NAME, "fixture.flac")
-            put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/Nevumi-editor-${UUID.randomUUID()}")
-            put(MediaStore.Audio.Media.IS_PENDING, 1)
-        }))
-        requireNotNull(resolver.openOutputStream(uri)).use { it.write(bytes) }
-        resolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
+        // A shell-owned fixture always exercises the write-consent path, instead of depending on MediaStore ownership after undo.
+        val directory = "Music/Nevumi-editor-${UUID.randomUUID()}/"
+        shell("content insert --uri content://media/external/audio/media --bind _display_name:s:fixture.flac --bind relative_path:s:$directory --bind is_pending:i:0")
+        val created = shell("content query --uri content://media/external/audio/media --projection _id --where relative_path='$directory'")
+        val row = requireNotNull(Regex("_id=(\\d+)").find(created)) { "Music fixture missing: $created" }.groupValues[1]
+        val uri = android.net.Uri.parse("content://media/external/audio/media/$row")
+        val descriptors = instrumentation.uiAutomation.executeShellCommandRw("content write --uri $uri")
+        ParcelFileDescriptor.AutoCloseOutputStream(descriptors[1]).use { it.write(bytes) }
+        ParcelFileDescriptor.AutoCloseInputStream(descriptors[0]).use { it.readBytes() }
+        shell("content update --uri $uri --bind is_pending:i:0")
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
                 runBlocking { app.controller.importSource("device").join() }
@@ -261,7 +267,7 @@ class AndroidFileEditingUiTest {
                 compose.onNode(hasText("Title") and hasSetTextAction()).performTextReplacement("Android edited music")
                 compose.onNode(hasText("Year") and hasSetTextAction()).performScrollTo().performTextReplacement("2026")
                 compose.onNodeWithText("Save changes").performClick()
-                compose.waitUntil(15_000) {
+                awaitFileEdit(app) {
                     app.controller.state.value.tracks.any { track -> track.sources.any { source -> source.location == uri.toString() } && track.metadata.title == "Android edited music" && track.metadata.year == 2026 } &&
                         compose.onAllNodesWithText("Save changes").fetchSemanticsNodes().isEmpty()
                 }
@@ -270,7 +276,7 @@ class AndroidFileEditingUiTest {
                 compose.onNodeWithContentDescription("Track options: Android edited music").performClick()
                 compose.onNodeWithText("File actions").performClick()
                 compose.openFileAction("Undo file edit")
-                compose.waitUntil(5_000) {
+                awaitFileEdit(app) {
                     app.controller.state.value.tracks.any { track -> track.sources.any { source -> source.location == uri.toString() } && track.metadata.title == "Northern Light" }
                 }
                 assertTrue(requireNotNull(resolver.openInputStream(uri)).use { it.readBytes() }.contentEquals(bytes))
@@ -280,14 +286,14 @@ class AndroidFileEditingUiTest {
                 compose.waitUntil(5_000) { compose.onAllNodes(hasText("fixture.flac") and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
                 compose.onNode(hasText("File name") and hasSetTextAction()).performTextReplacement("Android renamed music.flac")
                 compose.onNodeWithText("Rename", substring = false).performClick()
-                compose.waitUntil(5_000) { app.controller.state.value.fileEdits.any { it.changedName == "Android renamed music.flac" && it.applied && !it.undone } }
+                awaitFileEdit(app) { app.controller.state.value.fileEdits.any { it.changedName == "Android renamed music.flac" && it.applied && !it.undone } }
                 requireNotNull(resolver.query(uri, arrayOf(MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)).use { cursor ->
                     check(cursor.moveToFirst()); org.junit.Assert.assertEquals("Android renamed music.flac", cursor.getString(0))
                 }
                 compose.onNode(hasContentDescription("Track options: Northern Light") and
                     hasAnyAncestor(hasTestTag("track-row:${app.controller.state.value.songAt(uri.toString())!!.id}"))).performClick()
                 compose.openFileAction("Undo file edit")
-                compose.waitUntil(5_000) { app.controller.state.value.fileEdits.filter { it.changedName == "Android renamed music.flac" }.all { it.undone } }
+                awaitFileEdit(app) { app.controller.state.value.fileEdits.filter { it.changedName == "Android renamed music.flac" }.all { it.undone } }
                 requireNotNull(resolver.query(uri, arrayOf(MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)).use { cursor ->
                     check(cursor.moveToFirst()); org.junit.Assert.assertEquals("fixture.flac", cursor.getString(0))
                 }
@@ -301,6 +307,34 @@ class AndroidFileEditingUiTest {
                 ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
                     "content delete --uri $uri")).use { it.readBytes() }
             }
+        }
+    }
+
+    private fun enableTag(toggle: String, field: String) {
+        // Keyboard insets can still move the dialog after scrolling. Invoke the checkbox action without stale touch coordinates.
+        compose.onNodeWithText(toggle).performScrollTo().performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText(toggle).assertIsOn()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText(field) and hasSetTextAction() and isEnabled()).fetchSemanticsNodes().size == 1
+        }
+    }
+
+    private fun awaitFileEdit(app: MusicApplication, completed: () -> Boolean) {
+        var answeredRequest: String? = null
+        compose.waitUntil(15_000) {
+            // Restoring a MediaStore file can change ownership, so a later edit may need Android's write consent.
+            app.mediaWriteRequests.pending.value?.takeIf { it.id != answeredRequest }?.let { request ->
+                runBlocking {
+                    withTimeout(15_000) {
+                        InstrumentationRegistry.getInstrumentation().uiAutomation.clickSystemDialogButton {
+                            it.text?.toString()?.equals("Allow", ignoreCase = true) == true
+                        }
+                    }
+                }
+                answeredRequest = request.id
+            }
+            assertEquals(null, app.controller.state.value.error)
+            completed()
         }
     }
 

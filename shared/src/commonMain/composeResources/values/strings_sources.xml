@@ -139,6 +139,8 @@
     <string name="sources_disconnect_music_server_question">Disconnect music server?</string>
     <string name="sources_disconnect_music_server_description">Songs from this server stay in your library but can\'t be streamed until you reconnect. Downloaded songs keep playing.</string>
     <string name="sources_disconnect_music_server_sftp">Server file editing (SFTP) is disconnected too.</string>
+    <string name="sources_sync_play_queue">Sync queue with server</string>
+    <string name="sources_sync_play_queue_description">Save your queue to the server and offer to continue a queue from another device or Subsonic app</string>
 
     <!-- ServerRefreshStatus -->
     <string name="sources_refresh_stage_connecting">Connecting to the music server</string>

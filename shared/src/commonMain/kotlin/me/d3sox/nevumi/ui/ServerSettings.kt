@@ -25,6 +25,8 @@ import me.d3sox.nevumi.resources.sources_password
 import me.d3sox.nevumi.resources.sources_refresh_library
 import me.d3sox.nevumi.resources.sources_server_address
 import me.d3sox.nevumi.resources.sources_server_intro
+import me.d3sox.nevumi.resources.sources_sync_play_queue
+import me.d3sox.nevumi.resources.sources_sync_play_queue_description
 import me.d3sox.nevumi.resources.sources_user_on_server
 import me.d3sox.nevumi.resources.sources_username
 import org.jetbrains.compose.resources.stringResource
@@ -43,12 +45,18 @@ internal fun ServerSettings(state: AppState, controller: MusicController, onClos
     val server = state.server.takeUnless { editing }
     SettingsScreen(onDismissRequest = onClose, title = { Text(stringResource(Res.string.music_server)) }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (server != null) SettingsCard(AppIcon.SERVER) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(Res.string.sources_connected), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(Res.string.sources_user_on_server, server.username, server.baseUrl.substringAfter("://")), style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ActionButton(stringResource(Res.string.sources_disconnect), AppIcon.UNLINK, enabled = !state.loading, style = ActionStyle.DESTRUCTIVE) { disconnecting = true }
+            if (server != null) {
+                SettingsCard(AppIcon.SERVER) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(Res.string.sources_connected), style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(Res.string.sources_user_on_server, server.username, server.baseUrl.substringAfter("://")), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        ActionButton(stringResource(Res.string.sources_disconnect), AppIcon.UNLINK, enabled = !state.loading, style = ActionStyle.DESTRUCTIVE) { disconnecting = true }
+                    }
+                }
+                SettingsToggle(stringResource(Res.string.sources_sync_play_queue), AppIcon.QUEUE,
+                    stringResource(Res.string.sources_sync_play_queue_description), state.preferences.syncPlayQueue) { enabled ->
+                    controller.updatePreferences { it.copy(syncPlayQueue = enabled) }
                 }
             } else {
                 Text(stringResource(Res.string.sources_server_intro))
