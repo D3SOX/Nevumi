@@ -74,14 +74,16 @@ internal fun LyricsPanel(state: AppState, controller: MusicController, modifier:
         when (val current = lyrics) {
             LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 val loading = stringResource(Res.string.lyrics_loading)
-                CircularProgressIndicator(Modifier.semantics { contentDescription = loading })
+                CircularProgressIndicator(Modifier.semantics { contentDescription = loading },
+                    color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
             LyricsState.None -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(Res.string.lyrics_none), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                 if (!state.preferences.fetchLyricsOnline) Text(stringResource(Res.string.lyrics_none_online_hint),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                TextButton({ controller.lyricsController.refresh() }) { Text(stringResource(Res.string.retry)) }
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, textAlign = TextAlign.Center)
+                TextButton({ controller.lyricsController.refresh() },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSecondaryContainer)) { Text(stringResource(Res.string.retry)) }
             }
             is LyricsState.Available -> Column(Modifier.fillMaxSize()) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -90,7 +92,7 @@ internal fun LyricsPanel(state: AppState, controller: MusicController, modifier:
                         style = MaterialTheme.typography.titleMedium)
                 }
                 Text(stringResource(current.lyrics.source.label()), Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
-                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, textAlign = TextAlign.Center)
             }
         }
     }
@@ -124,7 +126,7 @@ private fun SyncedLyrics(lyrics: Lyrics, controller: MusicController) {
                 Text(line.text.ifBlank { "♪" }, Modifier.fillMaxWidth().clickable(onClickLabel = seekLabel) { controller.seek(line.startMs) }
                     .padding(vertical = 8.dp).testTag("lyrics-line-$index").semantics { selected = current },
                     style = MaterialTheme.typography.titleLarge, fontWeight = if (current) FontWeight.Bold else FontWeight.Normal,
-                    color = if (current) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = .5f))
+                    color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
     }

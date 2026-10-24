@@ -208,7 +208,7 @@ private fun MilkDropPresetPicker(presets: List<MilkDropPresetInfo>, selected: In
                             MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
                             headlineColor = if (index == selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
                             supportingColor = if (index == selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            trailingIconColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                            trailingIconColor = if (index == selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant),
                         modifier = Modifier.selectable(index == selected, enabled = !settings.favoritesOnly || preset.id in settings.favorites,
                             role = Role.RadioButton) { select(index) })
                 }
