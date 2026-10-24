@@ -16,6 +16,9 @@ import kotlin.time.TimeSource
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.channels.BufferOverflow
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.playlists.Playlist
 import me.d3sox.nevumi.playlists.PlaylistServer
@@ -37,6 +40,9 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
     private val scope = CoroutineScope(supervisor + Dispatchers.IO)
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private val playlists = Playlists(store, library = library)
+    private val mutableDiscardedEdits = MutableSharedFlow<String>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    /** Names of playlists whose local edit gave way to the server's version because the server keeps them read-only. */
+    val discardedEdits = mutableDiscardedEdits.asSharedFlow()
     private var started = false
 
     fun start() {
@@ -186,7 +192,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 val ids = remote.songIds.map { mapping[it] ?: if (changedOnly) return@transaction null
                     else throw IllegalArgumentException("Refresh the server library before importing its playlists") }
                 val link = PlaylistServer(connection.serverId, remote.id, remote.name, remote.songIds, remote.owner,
-                    readOnly = remote.owner != connection.username, baselineDescription = remote.description, coverArt = remote.coverArt,
+                    readOnly = remote.readOnly || remote.owner != connection.username, baselineDescription = remote.description, coverArt = remote.coverArt,
                     changed = remote.changed)
                 fun time(value: String) = kotlin.time.Instant.parseOrNull(value)?.toEpochMilliseconds()
                 val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
@@ -259,10 +265,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 try { connection.playlist(link.id) }
                 catch (error: NavidromeException) { if (error.code != 70) throw error else null }
             if (remote != null && (remote.name != link.baselineName || remote.songIds != link.baselineSongIds || remote.description != link.baselineDescription)) {
-                val tracks = library.tracks()
-                val remoteTracks = remote.songIds.map { songId -> requireNotNull(tracks.firstOrNull { track ->
-                    track.sources.any { it.kind == SourceKind.SERVER && it.location == songId && it.id.startsWith("server:${connection.serverId}:") }
-                }) { "Refresh the server library before resolving this playlist" }.id }
+                val remoteTracks = localTracks(remote, connection)
                 store.transaction {
                     val key = "playlist-removal:${removal.playlist.id}"
                     if (store.read<PlaylistRemoval>(key) == removal) {
@@ -307,12 +310,23 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 if (!retained) return@attempt
             }
             val remote = connection.playlist(requireNotNull(link.id))
+            if (remote.readOnly) {
+                // The server refuses every edit to it, so retrying would only repeat the refusal.
+                // Its change time stays unrecorded so the next pull imports the rest of this version, such as a new cover.
+                val remoteTracks = localTracks(remote, connection)
+                val discarded = store.transaction {
+                    val current = playlists.get(playlist.id) ?: return@transaction false
+                    store.put("playlist:${playlist.id}", "playlists", current.copy(name = remote.name, trackIds = remoteTracks,
+                        description = remote.description, pendingSync = false, server = link.copy(baselineName = remote.name,
+                            baselineSongIds = remote.songIds, baselineDescription = remote.description, readOnly = true, changed = "")))
+                    true
+                }
+                if (discarded) mutableDiscardedEdits.emit(remote.name)
+                return@attempt
+            }
             val alreadySaved = remote.name == playlist.name && remote.songIds == songIds && remote.description == playlist.description
             if (!alreadySaved && (remote.name != link.baselineName || remote.songIds != link.baselineSongIds || remote.description != link.baselineDescription)) {
-                val tracks = library.tracks()
-                val remoteTracks = remote.songIds.map { songId -> requireNotNull(tracks.firstOrNull { track ->
-                    track.sources.any { it.kind == SourceKind.SERVER && it.location == songId && it.id.startsWith("server:${connection.serverId}:") }
-                }) { "Refresh the server library before resolving this playlist" }.id }
+                val remoteTracks = localTracks(remote, connection)
                 store.transaction {
                     val current = playlists.get(playlist.id) ?: return@transaction
                     store.put("playlist:${playlist.id}", "playlists", current.copy(
@@ -341,5 +355,12 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         requireNotNull(library.findTrack(id)?.sources?.firstOrNull {
             it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
         }) { "Server playlists can only contain tracks from their server" }.location
+    }
+
+    private suspend fun localTracks(remote: ServerPlaylist, connection: NavidromeClient): List<String> {
+        val tracks = library.tracks()
+        return remote.songIds.map { songId -> requireNotNull(tracks.firstOrNull { track ->
+            track.sources.any { it.kind == SourceKind.SERVER && it.location == songId && it.id.startsWith("server:${connection.serverId}:") }
+        }) { "Refresh the server library before resolving this playlist" }.id }
     }
 }

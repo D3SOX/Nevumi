@@ -13,6 +13,7 @@
     <string name="notice_added_to_playlist">Added to playlist</string>
     <string name="notice_playlists_updated">Playlists updated</string>
     <string name="notice_playlist_updated">Playlist updated</string>
+    <string name="notice_playlist_edit_discarded">“%1$s” is read-only on the server, so your edit was undone</string>
     <string name="notice_removed_from_queue">Removed from queue</string>
     <string name="notice_queue_cleared">Queue cleared</string>
     <string name="notice_moved_to_up_next">Moved to Up next</string>

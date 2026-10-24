@@ -50,7 +50,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
 data class ServerPlaylist(val id: String, val name: String, val songIds: List<String>, val changed: String,
-    val owner: String, val description: String = "", val coverArt: String? = null, val created: String = "")
+    val owner: String, val description: String = "", val coverArt: String? = null, val created: String = "",
+    /** Navidrome marks smart playlists and playlists it syncs from a file as read-only, even for their owner. */
+    val readOnly: Boolean = false)
 
 class ServerCredentials(val username: String, internal val password: String) {
     override fun toString(): String = "ServerCredentials(username=$username, password=[redacted])"
@@ -119,6 +121,9 @@ private suspend fun downloadCallback(block: suspend () -> Unit) {
 }
 
 internal const val CONCURRENT_REQUESTS = 6
+
+// Navidrome draws covers for half as many requests as it has CPU cores, at least two, and queues the rest; on a small server more would wait out their timeout.
+internal const val CONCURRENT_COVERS = 2
 
 /** Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server. */
 class NavidromeClient(
@@ -235,7 +240,8 @@ class NavidromeClient(
         playlist.getValue("id").jsonPrimitive.content, playlist.getValue("name").jsonPrimitive.content,
         playlist["entry"]?.jsonArray.orEmpty().map { it.jsonObject.getValue("id").jsonPrimitive.content },
         playlist["changed"]?.jsonPrimitive?.content.orEmpty(), playlist["owner"]?.jsonPrimitive?.content.orEmpty(), playlist["comment"]?.jsonPrimitive?.content.orEmpty(),
-        playlist["coverArt"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }, playlist["created"]?.jsonPrimitive?.content.orEmpty())
+        playlist["coverArt"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }, playlist["created"]?.jsonPrimitive?.content.orEmpty(),
+        playlist["readonly"]?.jsonPrimitive?.booleanOrNull == true)
 
     private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject = serverRequest { timedRequest {
         val salt = Uuid.random().toString()
