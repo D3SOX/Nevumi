@@ -16,13 +16,17 @@ import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.filterTracks
+import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.listeningStatistics
 
 @Serializable
 data class PlaylistServer(val serverId: String, val id: String?, val baselineName: String,
     val baselineSongIds: List<String>, val owner: String, val readOnly: Boolean = false, val baselineDescription: String = "",
-    val coverArt: String? = null, val changed: String = "")
+    val coverArt: String? = null, val changed: String = "") {
+    // Navidrome's readonly flag also covers generated or file-synced tracks; their owner can still edit details and delete the playlist.
+    fun canEditMetadata(profile: ServerProfile?): Boolean = !readOnly || (profile?.serverId == serverId && profile.username == owner)
+}
 
 @Serializable
 data class PlaylistConflict(val name: String, val songIds: List<String>, val trackIds: List<String>, val deletionRequested: Boolean = false, val description: String = "")
@@ -153,7 +157,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     suspend fun rename(id: String, name: String) = store.transaction {
         require(name.isNotBlank()) { "Name the playlist" }
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
-        requireEditable(playlist)
+        requireMetadataEditable(playlist)
         store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(), updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
@@ -169,7 +173,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     suspend fun edit(id: String, name: String, description: String) = store.transaction {
         require(name.isNotBlank()) { "Name the playlist" }
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
-        requireEditable(playlist)
+        requireMetadataEditable(playlist)
         store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(), description = description.trim(), updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
@@ -184,7 +188,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     }
     suspend fun delete(id: String) = store.transaction {
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
-        requireEditable(playlist)
+        requireMetadataEditable(playlist)
         if (playlist.server != null) store.put("playlist-removal:$id", "playlist-removals", PlaylistRemoval(playlist))
         store.database.records().delete("playlist:$id")
     }
@@ -199,7 +203,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     }
     suspend fun resolveConflict(id: String, keepLocal: Boolean) = store.transaction {
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
-        requireEditable(playlist)
+        requireMetadataEditable(playlist)
         val conflict = requireNotNull(playlist.conflict) { "Playlist has no conflict" }
         val link = requireNotNull(playlist.server)
         if (keepLocal && conflict.deletionRequested) {
@@ -210,7 +214,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         }
         store.put("playlist:$id", "playlists", playlist.copy(
             name = if (keepLocal) playlist.name else conflict.name,
-            trackIds = if (keepLocal) playlist.trackIds else conflict.trackIds,
+            trackIds = if (keepLocal && !link.readOnly) playlist.trackIds else conflict.trackIds,
             description = if (keepLocal) playlist.description else conflict.description,
             server = link.copy(baselineName = conflict.name, baselineSongIds = conflict.songIds, baselineDescription = conflict.description),
             pendingSync = keepLocal, conflict = null, updatedAt = clock(), revision = Uuid.random().toString()))
@@ -224,5 +228,8 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     }
     private fun requireEditable(playlist: Playlist) {
         require(playlist.server?.readOnly != true) { "Only the owner can edit this Navidrome playlist" }
+    }
+    private suspend fun requireMetadataEditable(playlist: Playlist) {
+        require(playlist.server?.canEditMetadata(store.read<ServerProfile>("server:navidrome")) != false) { "Only the owner can edit this Navidrome playlist" }
     }
 }

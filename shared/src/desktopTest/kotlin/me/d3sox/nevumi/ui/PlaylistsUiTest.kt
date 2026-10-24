@@ -26,6 +26,54 @@ import io.ktor.client.engine.mock.respond
 @OptIn(ExperimentalTestApi::class)
 class PlaylistsUiTest {
     @Test
+    fun anOwnedServerPlaylistWithReadOnlyTracksStillOffersEditingAndDeletion() {
+        val directory = Files.createTempDirectory("owned-read-only-playlist-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val profile = ServerProfile("https://music.example.test", "fixture")
+        val http = HttpClient(MockEngine { error("No server request is needed to edit cached metadata") })
+        val vault = object : me.d3sox.nevumi.security.CredentialVault {
+            override suspend fun save(key: String, secret: String) = Unit
+            override suspend fun read(key: String): String? = null
+            override suspend fun delete(key: String) = Unit
+        }
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        runBlocking {
+            store.put("server:navidrome", "servers", profile)
+            val song = library.importTrack(TrackMetadata("Server song"), TrackSource("server:${profile.serverId}:song", SourceKind.SERVER, "song"))
+            val playlist = playlists.create("Evening", listOf(song.id, song.id))
+            store.put("playlist:${playlist.id}", "playlists", playlist.copy(server =
+                me.d3sox.nevumi.playlists.PlaylistServer(profile.serverId, "mix", playlist.name, listOf("song", "song"), profile.username, readOnly = true)))
+        }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
+            NavidromeConnection(store, http, vault), playlists = playlists)
+        try {
+            androidx.compose.ui.test.v2.runSkikoComposeUiTest(size = androidx.compose.ui.geometry.Size(420f, 900f)) {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.isNotEmpty() && controller.state.value.server != null }
+                openLibraryPage("Playlists")
+                onNodeWithText("Evening").performClick()
+                onNodeWithContentDescription("Playlist options").performClick()
+                onNodeWithText("Edit playlist").assertIsDisplayed()
+                onNodeWithText("Delete playlist").assertIsDisplayed()
+                onNodeWithText("Export M3U").assertIsDisplayed()
+                onNodeWithText("Rearrange").assertDoesNotExist()
+                captureUiSnapshot("owned-server-playlist-options", onNode(isPopup()))
+                onNodeWithText("Edit playlist").performClick()
+                onNodeWithContentDescription("Playlist title").performTextReplacement("After hours")
+                onNodeWithContentDescription("Playlist description").performTextInput("Music for late evenings")
+                onNodeWithText("Save").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.single().name == "After hours" }
+                onNodeWithText("Music for late evenings").assertIsDisplayed()
+                onNodeWithContentDescription("Playlist options").performClick()
+                onNodeWithText("Delete playlist").performClick()
+                onNodeWithText("Delete", substring = false).performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.isEmpty() }
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun aSmartPlaylistCanUseAValidatedRatingRangeAndUpdateWhenASongsRatingChanges() {
         val directory = Files.createTempDirectory("rating-rule-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())

@@ -25,6 +25,72 @@ import kotlinx.coroutines.delay
 
 class NavidromeChangesTest {
     @Test
+    fun anOwnerCanEditAndDeleteAPlaylistWhoseTracksAreReadOnly() = runBlocking {
+        val directory = Files.createTempDirectory("owned-read-only-playlist")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        var name = "Evening"
+        var description = ""
+        var songCount = 2
+        val mutations = mutableListOf<String>()
+        val http = HttpClient(MockEngine { request ->
+            when (val endpoint = request.url.encodedPath.substringAfterLast('/')) {
+                "getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"mix"}]}}}""")
+                "getPlaylist.view" -> respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"mix","name":"$name","comment":"$description","owner":"fixture","readonly":true,"entry":[${List(songCount) { """{"id":"song"}""" }.joinToString(",")}]}}}""")
+                "updatePlaylist.view" -> {
+                    assertNull(request.url.parameters["songIdToAdd"])
+                    assertNull(request.url.parameters["songIndexToRemove"])
+                    name = request.url.parameters["name"]!!
+                    description = request.url.parameters["comment"]!!
+                    mutations += endpoint
+                    respond("""{"subsonic-response":{"status":"ok"}}""")
+                }
+                "deletePlaylist.view" -> { mutations += endpoint; respond("""{"subsonic-response":{"status":"ok"}}""") }
+                else -> error("Unexpected request: $endpoint")
+            }
+        })
+        try {
+            val library = MusicLibrary(store)
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "test"))
+            store.put("server:navidrome", "servers", ServerProfile("https://music.example.test", client.username))
+            val changes = NavidromeChanges(store, library) { client }
+            val song = changes.importSong(client, ServerSong("song", TrackMetadata("Song")))
+            changes.importPlaylists(client)
+            val playlists = Playlists(store)
+            val playlist = playlists.all().single()
+            assertFailsWith<IllegalArgumentException> { playlists.replaceTracks(playlist.id, emptyList()) }
+            assertFailsWith<IllegalArgumentException> { playlists.append(playlist.id, song.id) }
+            assertFailsWith<IllegalArgumentException> { playlists.moveTrack(playlist.id, 0, 1) }
+            playlists.edit(playlist.id, "After hours", "Music for late evenings")
+            changes.synchronize()
+            val saved = playlists.get(playlist.id)!!
+            assertEquals("After hours", name)
+            assertEquals("Music for late evenings", description)
+            assertEquals(listOf(song.id, song.id), saved.trackIds)
+            assertFalse(saved.pendingSync)
+            assertEquals(true, saved.server?.readOnly)
+            assertEquals(listOf("updatePlaylist.view"), mutations)
+            // The server can regenerate songs while an offline metadata edit is waiting.
+            playlists.rename(playlist.id, "Night music")
+            songCount = 3
+            changes.synchronize()
+            assertNotNull(playlists.get(playlist.id)!!.conflict)
+            playlists.resolveConflict(playlist.id, keepLocal = true)
+            changes.synchronize()
+            assertEquals("Night music", name)
+            assertEquals(List(3) { song.id }, playlists.get(playlist.id)!!.trackIds)
+            assertFalse(playlists.get(playlist.id)!!.pendingSync)
+            // A matching username on a different server does not establish ownership.
+            store.put("server:navidrome", "servers", ServerProfile("https://other.example.test", client.username))
+            assertFailsWith<IllegalArgumentException> { playlists.edit(playlist.id, "Other", "") }
+            assertFailsWith<IllegalArgumentException> { playlists.delete(playlist.id) }
+            store.put("server:navidrome", "servers", ServerProfile("https://music.example.test", client.username))
+            playlists.delete(playlist.id)
+            changes.synchronize()
+            assertEquals(listOf("updatePlaylist.view", "updatePlaylist.view", "deletePlaylist.view"), mutations)
+        } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun pullingPlaylistsImportsServerEditsAndDownloadsCoversOnlyWhenAPlaylistChanged() = runBlocking {
         val directory = Files.createTempDirectory("nevumi-pull-playlists")
         val store = openMusicStore(directory.resolve("library.db").toString())
