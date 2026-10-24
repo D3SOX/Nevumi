@@ -29,14 +29,20 @@ data class ReplayGain(val mode: ReplayGainMode = ReplayGainMode.OFF, val preampD
 internal data class ReplayGainTags(val trackGainDb: Double? = null, val trackPeak: Double? = null,
     val albumGainDb: Double? = null, val albumPeak: Double? = null)
 
-private val leadingNumber = Regex("""^[+-]?(\d+([.,]\d*)?|[.,]\d+)""")
+private const val numberPattern = """[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)"""
+private val numberValue = Regex(numberPattern)
+private val gainValue = Regex("($numberPattern)(?:\\s*dB)?", RegexOption.IGNORE_CASE)
 
 /** Reads ReplayGain 2 tags, then Opus R128 gains for what is still missing. Keys are case-insensitive. */
 internal fun replayGainTags(tags: Iterable<Pair<String, String>>): ReplayGainTags? {
     val values = HashMap<String, Double>()
     for ((key, value) in tags) {
-        val number = leadingNumber.find(value.trim())?.value?.replace(',', '.')?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: continue
-        values.putIfAbsent(key.trim().lowercase(), number)
+        val name = key.trim().lowercase()
+        val text = value.trim()
+        val parsed = if (name == "replaygain_track_gain" || name == "replaygain_album_gain")
+            gainValue.matchEntire(text)?.groupValues?.get(1) else numberValue.matchEntire(text)?.value
+        val number = parsed?.replace(',', '.')?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: continue
+        values.putIfAbsent(name, number)
     }
     // R128 gains are Q7.8 integers relative to -23 LUFS; ReplayGain's reference is 5 dB louder.
     fun gain(name: String) = (values["replaygain_${name}_gain"] ?: values["r128_${name}_gain"]?.let { it / 256 + 5 })

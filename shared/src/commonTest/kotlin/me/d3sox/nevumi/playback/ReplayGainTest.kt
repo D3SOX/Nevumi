@@ -15,6 +15,16 @@ class ReplayGainTest {
     }
 
     @Test
+    fun ignoresMalformedValuesInsteadOfApplyingTheirNumericPrefix() {
+        for (value in listOf("+12 bananas", "6 dB trailing", "1.2.3", "2e3", "NaN", "Infinity")) {
+            assertNull(replayGainTags(listOf("REPLAYGAIN_TRACK_GAIN" to value)))
+        }
+        assertNull(replayGainTags(listOf("REPLAYGAIN_TRACK_PEAK" to "0.9 junk")))
+        assertNull(replayGainTags(listOf("R128_TRACK_GAIN" to "256 junk")))
+        assertEquals(ReplayGainTags(trackGainDb = 1.5), replayGainTags(listOf("REPLAYGAIN_TRACK_GAIN" to " +1,5 dB ")))
+    }
+
+    @Test
     fun convertsOpusR128GainsOnlyWhereReplayGainTagsAreMissing() {
         val tags = replayGainTags(listOf("R128_TRACK_GAIN" to "-512", "R128_ALBUM_GAIN" to "256", "REPLAYGAIN_ALBUM_GAIN" to "-3 dB"))
         assertEquals(ReplayGainTags(trackGainDb = 3.0, albumGainDb = -3.0), tags)
