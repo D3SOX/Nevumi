@@ -30,6 +30,8 @@ data class BackupDocument(
     val createdAt: Long,
     val appVersion: String = "",
     val settings: MusicSettings? = null,
+    /** False when playlists were excluded. Backups made before export choices included their order. */
+    val playlistOrderIncluded: Boolean = true,
     val tracks: Map<String, BackupTrack> = emptyMap(),
     val playlists: List<BackupPlaylist> = emptyList(),
     val savedQueues: List<BackupSavedQueue> = emptyList(),

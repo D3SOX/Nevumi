@@ -37,6 +37,7 @@ import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.settings.CollectionLayout
 import me.d3sox.nevumi.queue.QueueOrigin
 import me.d3sox.nevumi.settings.CollectionSort
+import me.d3sox.nevumi.settings.CollectionView
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -164,6 +165,41 @@ class MusicBackupTest {
         assertTrue(summary.signInRequired.isEmpty())
         assertEquals(listOf("Northern Light", "Long Way Home", "Night Walk"),
             target.titles(target.playlists.all().single { it.name == "Road" }.trackIds))
+    }
+
+    @Test
+    fun restoringSettingsWithoutPlaylistsPreservesTheTargetsPlaylistOrder() = devices { source, target ->
+        val sourcePlaylist = source.playlists.create("Source", emptyList())
+        val sourceLayout = CollectionLayout(view = CollectionView.LIST, sort = CollectionSort.CUSTOM, order = listOf(sourcePlaylist.id))
+        source.preferences.update { it.copy(themeMode = ThemeMode.DARK, collectionLayouts = mapOf(LibraryTab.PLAYLISTS to sourceLayout)) }
+        val first = target.playlists.create("First", emptyList())
+        val second = target.playlists.create("Second", emptyList())
+        val order = listOf(second.id, first.id)
+        target.preferences.update { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to CollectionLayout(order = order))) }
+
+        val text = source.backup.export(sections = setOf(BackupSection.SETTINGS))
+        assertFalse(sourcePlaylist.id in text)
+        target.backup.restore(text)
+
+        val restored = target.preferences.load()
+        assertEquals(ThemeMode.DARK, restored.themeMode)
+        assertEquals(sourceLayout.copy(order = order), restored.collectionLayout(LibraryTab.PLAYLISTS))
+        assertEquals(setOf(first.id, second.id), target.playlists.all().map { it.id }.toSet())
+    }
+
+    @Test
+    fun fullBackupsCanClearTheTargetsPlaylistOrder() {
+        for (explicitEmptyOrder in listOf(false, true)) devices { source, target ->
+            if (explicitEmptyOrder) source.preferences.update { it.copy(collectionLayouts = mapOf(
+                LibraryTab.PLAYLISTS to CollectionLayout(sort = CollectionSort.CUSTOM, order = emptyList()))) }
+            val playlist = target.playlists.create("Target", emptyList())
+            target.preferences.update { it.copy(collectionLayouts = mapOf(
+                LibraryTab.PLAYLISTS to CollectionLayout(sort = CollectionSort.CUSTOM, order = listOf(playlist.id)))) }
+
+            target.backup.restore(source.backup.export())
+
+            assertTrue(target.preferences.load().collectionLayout(LibraryTab.PLAYLISTS).order.isEmpty())
+        }
     }
 
     @Test

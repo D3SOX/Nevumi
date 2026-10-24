@@ -101,6 +101,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             savedQueues.flatMap { saved -> saved.snapshot.entries.map { it.trackId } } + listens.map { it.trackId }).toSet()
         val profiles = BackupSection.SERVICE_PROFILES in sections
         val document = BackupDocument(createdAt = clock(), appVersion = appVersion, settings = settings,
+            playlistOrderIncluded = BackupSection.PLAYLISTS in sections,
             tracks = referenced.mapNotNull { tracks[it] }.associate { it.id to it.toBackup().copy(
                 favorite = BackupSection.FAVORITES in sections && it.favorite, rating = if (BackupSection.RATINGS in sections) it.rating else 0) },
             playlists = playlists, savedQueues = savedQueues, listens = listens,
@@ -125,6 +126,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             // A backup from an older version may lack newer Home sections or sources; keep its order and add the missing ones.
             preferences.update { current -> restored.copy(includeFolders = current.includeFolders, excludeFolders = current.excludeFolders,
                 libraryPositions = current.libraryPositions,
+                collectionLayouts = if (document.playlistOrderIncluded) restored.collectionLayouts else restored.collectionLayouts +
+                    (LibraryTab.PLAYLISTS to restored.collectionLayout(LibraryTab.PLAYLISTS).copy(order = current.collectionLayout(LibraryTab.PLAYLISTS).order)),
                 homeSections = restored.homeSections.distinct() + HomeSectionId.entries.filterNot { it in restored.homeSections },
                 sourcePriority = restored.sourcePriority.distinct() + SourceKind.entries.filterNot { it in restored.sourcePriority }) }
         } != null
@@ -193,7 +196,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             playlistsAdded++
         }
         // The restored custom Playlists order named playlists by their place in the backup; point it at the playlists here.
-        if (settings) preferences.update { restored ->
+        if (settings && document.playlistOrderIncluded) preferences.update { restored ->
             val layout = restored.collectionLayouts[LibraryTab.PLAYLISTS] ?: return@update restored
             restored.copy(collectionLayouts = restored.collectionLayouts + (LibraryTab.PLAYLISTS to layout.copy(order = layout.order.mapNotNull { id ->
                 if (id.startsWith(BACKUP_PLAYLIST)) restoredPlaylists[id] else id
