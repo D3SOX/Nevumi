@@ -71,6 +71,8 @@ import me.d3sox.nevumi.resources.settings_any_network
 import me.d3sox.nevumi.resources.settings_appearance
 import me.d3sox.nevumi.resources.settings_appearance_description
 import me.d3sox.nevumi.resources.settings_audio_effects_description
+import me.d3sox.nevumi.resources.settings_backup_restore
+import me.d3sox.nevumi.resources.settings_backup_restore_description
 import me.d3sox.nevumi.resources.settings_clear_all_favorites
 import me.d3sox.nevumi.resources.settings_clear_all_favorites_message
 import me.d3sox.nevumi.resources.settings_clear_all_ratings
@@ -188,6 +190,7 @@ internal fun settingsPageTitle(page: String): String = stringResource(when (page
     "Downloads & cache" -> Res.string.settings_downloads_cache
     "Listening & scrobbling" -> Res.string.settings_listening_scrobbling
     "Files & recovery" -> Res.string.settings_files_recovery
+    "Backup & restore" -> Res.string.settings_backup_restore
     "Music server" -> Res.string.music_server
     "Manage downloads" -> Res.string.settings_manage_downloads
     "Audio effects" -> Res.string.audio_effects
@@ -481,6 +484,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                     }
                 }
             }
+            if (category == "Backup & restore") BackupSettings(controller)
             if (category == null) {
                 SettingsGroup {
                 SettingsLink(stringResource(Res.string.settings_appearance), AppIcon.THEME, stringResource(Res.string.settings_appearance_description)) { categoryState.value = "Appearance" }
@@ -499,9 +503,10 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 if (controller.pairedDevices != null) SettingsLink(stringResource(Res.string.paired_devices), AppIcon.DEVICES, stringResource(Res.string.settings_paired_devices_description), pairedDevices)
                 if (controller.fileEditingAvailable || controller.serverFilesAvailable) SettingsLink(stringResource(Res.string.settings_files_recovery), AppIcon.UNDO, stringResource(Res.string.settings_files_recovery_description)) { categoryState.value = "Files & recovery" }
                 SettingsLink(stringResource(Res.string.saved_queues), AppIcon.QUEUE, stringResource(Res.string.settings_saved_queues_description), savedQueues)
+                if (controller.backupController.backupAvailable) SettingsLink(stringResource(Res.string.settings_backup_restore), AppIcon.BACKUP_FILES,
+                    stringResource(Res.string.settings_backup_restore_description)) { categoryState.value = "Backup & restore" }
                 SettingsLink(stringResource(Res.string.about_nevumi), AppIcon.INFO, stringResource(Res.string.settings_about_nevumi_description)) { about = true }
                 }
-                BackupSettings(controller)
             }
         }
     })

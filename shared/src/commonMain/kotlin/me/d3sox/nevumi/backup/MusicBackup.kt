@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.backup
 
 import kotlinx.serialization.SerializationException
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -48,7 +49,14 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
     private val history = ListeningHistory(store, library)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    suspend fun export(appVersion: String = ""): String {
+    val lastExportedAt = store.database.records().observeRevision("backup-metadata").map { store.read<Long>("backup:last-exported-at") }
+
+    internal suspend fun recordSuccessfulExport() {
+        store.put("backup:last-exported-at", "backup-metadata", clock())
+    }
+
+    suspend fun export(appVersion: String = "", sections: Set<BackupSection> = BackupSection.entries.toSet()): String {
+        require(sections.isNotEmpty()) { "Choose at least one backup section" }
         val tracks = library.tracks().associateBy { it.id }
         // Android names local folders relative to its storage, like "Music/Sky", which looks like a server folder; a folder that
         // holds a song from this device is local however it is written.
@@ -61,13 +69,18 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         // Playlist IDs differ on every device, so a custom Playlists order names each playlist by its place in the backup.
         val playlistPositions = storedPlaylists.withIndex().associate { it.value.id to "$BACKUP_PLAYLIST${it.index}" }
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
-        val settings = preferences.load().let { it.copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap(),
+        val settings = if (BackupSection.SETTINGS in sections) preferences.load().let { it.copy(includeFolders = emptyList(), excludeFolders = emptyList(), libraryPositions = emptyMap(),
             libraryFilter = it.libraryFilter.copy(folder = it.libraryFilter.folder?.takeUnless(::isDeviceFolder)),
             // A custom Folders order names local folders by their paths.
-            collectionLayouts = it.collectionLayouts.mapValues { (tab, layout) -> layout.copy(order = layout.order.filterNot(::isDeviceFolder)
-                .map { id -> if (tab == LibraryTab.PLAYLISTS) playlistPositions[id] ?: id else id }) }) }
-        val listened = history.all()
-        val playlists = storedPlaylists.map { playlist ->
+            collectionLayouts = it.collectionLayouts.mapValues { (tab, layout) ->
+                val order = if (tab == LibraryTab.PLAYLISTS && BackupSection.PLAYLISTS !in sections) emptyList()
+                    else layout.order.filterNot(::isDeviceFolder)
+                        .map { id -> if (tab == LibraryTab.PLAYLISTS) playlistPositions[id] ?: id else id }
+                layout.copy(order = order)
+            }) }
+            else null
+        val listened = if (BackupSection.LISTENING_HISTORY in sections || BackupSection.PLAYLISTS in sections) history.all() else emptyList()
+        val playlists = if (BackupSection.PLAYLISTS in sections) storedPlaylists.map { playlist ->
             val rule = playlist.rule
             // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
             if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name,
@@ -75,25 +88,28 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
             else BackupPlaylist(playlist.name, if (rule == null) playlist.trackIds else emptyList(), rule,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
-        }
-        val savedQueues = queue.saved().filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
+        } else emptyList()
+        val savedQueues = if (BackupSection.SAVED_QUEUES in sections) queue.saved().filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
             // A queue played from a local folder is named after its path, which device sync also replaces.
             val folder = saved.snapshot.origin?.tab == LibraryTab.FOLDERS || isDeviceFolder(saved.snapshot.contextName)
             BackupSavedQueue(saved.name, saved.snapshot.copy(selectedSavedQueueId = null, origin = null,
                 contextName = if (folder) "Library" else saved.snapshot.contextName), saved.kind, saved.capturedAt)
-        }
-        val listens = listened.map { it.copy(importedAt = null, metadata = it.metadata.copy(folder = "")) }
-        val referenced = (tracks.values.filter { it.favorite || it.rating != 0 }.map { it.id } + playlists.flatMap { it.trackKeys } +
+        } else emptyList()
+        val listens = if (BackupSection.LISTENING_HISTORY in sections) listened.map { it.copy(importedAt = null, metadata = it.metadata.copy(folder = "")) } else emptyList()
+        val referenced = (tracks.values.filter { (BackupSection.FAVORITES in sections && it.favorite) ||
+            (BackupSection.RATINGS in sections && it.rating != 0) }.map { it.id } + playlists.flatMap { it.trackKeys } +
             savedQueues.flatMap { saved -> saved.snapshot.entries.map { it.trackId } } + listens.map { it.trackId }).toSet()
+        val profiles = BackupSection.SERVICE_PROFILES in sections
         val document = BackupDocument(createdAt = clock(), appVersion = appVersion, settings = settings,
-            tracks = referenced.mapNotNull { tracks[it] }.associate { it.id to it.toBackup() },
+            tracks = referenced.mapNotNull { tracks[it] }.associate { it.id to it.toBackup().copy(
+                favorite = BackupSection.FAVORITES in sections && it.favorite, rating = if (BackupSection.RATINGS in sections) it.rating else 0) },
             playlists = playlists, savedQueues = savedQueues, listens = listens,
-            scrobblingProfiles = scrobbling?.profiles().orEmpty(),
-            server = store.read<ServerProfile>("server:navidrome"),
-            sftpProfiles = store.list<SftpConfiguration>("sftp-profiles"),
+            scrobblingProfiles = if (profiles) scrobbling?.profiles().orEmpty() else emptyList(),
+            server = if (profiles) store.read<ServerProfile>("server:navidrome") else null,
+            sftpProfiles = if (profiles) store.list<SftpConfiguration>("sftp-profiles") else emptyList(),
             // A viewer address can carry a password; it is fetched from sc-gate-dl again on first use.
-            soundCloud = store.read<SoundCloudProfile>("soundcloud:profile")?.copy(browserViewUrl = null),
-            equalizerProfiles = equalizer?.saved().orEmpty())
+            soundCloud = if (profiles) store.read<SoundCloudProfile>("soundcloud:profile")?.copy(browserViewUrl = null) else null,
+            equalizerProfiles = if (BackupSection.EQUALIZER_PROFILES in sections) equalizer?.saved().orEmpty() else emptyList())
         return json.encodeToString(document)
     }
 

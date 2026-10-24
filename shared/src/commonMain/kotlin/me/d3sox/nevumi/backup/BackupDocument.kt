@@ -16,6 +16,8 @@ import me.d3sox.nevumi.soundcloud.SoundCloudProfile
 internal const val BACKUP_FORMAT = "nevumi-backup"
 internal const val BACKUP_VERSION = 1
 
+enum class BackupSection { SETTINGS, PLAYLISTS, SAVED_QUEUES, FAVORITES, RATINGS, LISTENING_HISTORY, SERVICE_PROFILES, EQUALIZER_PROFILES }
+
 /**
  * Everything a backup file holds. Songs are listed once in [tracks] under a key that only has meaning inside the file;
  * playlists, saved queues, listens and flags refer to songs by that key, and a restore matches each song to the library.

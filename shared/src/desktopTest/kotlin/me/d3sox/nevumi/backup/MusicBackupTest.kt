@@ -2,6 +2,7 @@ package me.d3sox.nevumi.backup
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ListeningHistory
@@ -123,6 +124,51 @@ class MusicBackupTest {
         library.importTrack(nightWalk, TrackSource("local:a", SourceKind.LOCAL, "/other/c.wav"))
         library.importTrack(longWay.copy(title = longWayTitle), serverSource)
         library.importTrack(northern.copy(title = northernTitle), TrackSource("local:b", SourceKind.LOCAL, "/other/a.flac"))
+    }
+
+    @Test
+    fun exportingOneSectionExcludesEveryOtherSection() {
+        for (section in BackupSection.entries) devices { source, _ ->
+            source.fill()
+            val document = Json.decodeFromString<BackupDocument>(source.backup.export(sections = setOf(section)))
+            val included = buildSet {
+                if (document.settings != null) add(BackupSection.SETTINGS)
+                if (document.playlists.isNotEmpty()) add(BackupSection.PLAYLISTS)
+                if (document.savedQueues.isNotEmpty()) add(BackupSection.SAVED_QUEUES)
+                if (document.tracks.values.any { it.favorite }) add(BackupSection.FAVORITES)
+                if (document.tracks.values.any { it.rating != 0 }) add(BackupSection.RATINGS)
+                if (document.listens.isNotEmpty()) add(BackupSection.LISTENING_HISTORY)
+                if (document.scrobblingProfiles.isNotEmpty() || document.server != null || document.sftpProfiles.isNotEmpty() || document.soundCloud != null)
+                    add(BackupSection.SERVICE_PROFILES)
+                if (document.equalizerProfiles.isNotEmpty()) add(BackupSection.EQUALIZER_PROFILES)
+            }
+            assertEquals(setOf(section), included, "Exporting $section included other data")
+            if (section in setOf(BackupSection.SETTINGS, BackupSection.SERVICE_PROFILES, BackupSection.EQUALIZER_PROFILES))
+                assertTrue(document.tracks.isEmpty())
+        }
+    }
+
+    @Test
+    fun restoringOnlyPlaylistsLeavesSettingsFavoritesRatingsAndHistoryAlone() = devices { source, target ->
+        source.fill()
+        target.sameSongs()
+        val settings = target.preferences.load()
+        val summary = target.backup.restore(source.backup.export(sections = setOf(BackupSection.PLAYLISTS)))
+        assertEquals(3, summary.playlistsAdded)
+        assertFalse(summary.settings)
+        assertEquals(settings, target.preferences.load())
+        assertTrue(target.library.tracks().none { it.favorite || it.rating != 0 })
+        assertTrue(target.history.all().isEmpty())
+        assertTrue(target.queue.saved().isEmpty())
+        assertTrue(target.equalizer.saved().isEmpty())
+        assertTrue(summary.signInRequired.isEmpty())
+        assertEquals(listOf("Northern Light", "Long Way Home", "Night Walk"),
+            target.titles(target.playlists.all().single { it.name == "Road" }.trackIds))
+    }
+
+    @Test
+    fun exportingNothingIsRejected() = devices { source, _ ->
+        assertFailsWith<IllegalArgumentException> { source.backup.export(sections = emptySet()) }
     }
 
     @Test

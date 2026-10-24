@@ -9,8 +9,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.withLock
 import me.d3sox.nevumi.backup.BackupFormatException
+import me.d3sox.nevumi.backup.BackupSection
 import me.d3sox.nevumi.backup.MusicBackup
 import me.d3sox.nevumi.backup.RestoreSummary
 import me.d3sox.nevumi.resources.Res
@@ -36,11 +38,15 @@ class BackupController internal constructor(private val context: ControllerConte
     val backupAvailable: Boolean get() = backup != null
     private val mutableStatus = MutableStateFlow(BackupStatus())
     val status = mutableStatus.asStateFlow()
+    val lastExportedAt = backup?.lastExportedAt ?: flowOf(null)
 
-    fun export(files: BackupFiles, appVersion: String = "") = run(Res.string.backup_error_export) {
+    fun export(files: BackupFiles, appVersion: String = "", sections: Set<BackupSection> = BackupSection.entries.toSet()) = run(Res.string.backup_error_export) {
         // One consistent snapshot of the app's data; the lock is released before the save dialog waits for the user.
-        val text = context.operations.withLock { requireNotNull(backup).export(appVersion) }
-        if (files.save(backupFileName(Clock.System.now().toEpochMilliseconds()), text)) context.confirm(Res.string.backup_notice_exported)
+        val text = context.operations.withLock { requireNotNull(backup).export(appVersion, sections) }
+        if (files.save(backupFileName(Clock.System.now().toEpochMilliseconds()), text)) {
+            withContext(NonCancellable) { requireNotNull(backup).recordSuccessfulExport() }
+            context.confirm(Res.string.backup_notice_exported)
+        }
     }
 
     fun restore(files: BackupFiles) = run(Res.string.backup_error_restore) {
