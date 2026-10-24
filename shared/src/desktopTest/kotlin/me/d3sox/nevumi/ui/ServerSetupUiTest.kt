@@ -193,7 +193,7 @@ class ServerSetupUiTest {
                 waitUntil(timeoutMillis = 5_000) {
                     onAllNodesWithText("Northern Light").fetchSemanticsNodes().isNotEmpty()
                 }
-                onNodeWithText("3 songs").assertExists()
+                onNodeWithContentDescription("Songs, 3 songs").assertExists()
             }
         } finally {
             runBlocking { controller.closeAndJoin(); vault.delete("navidrome") }

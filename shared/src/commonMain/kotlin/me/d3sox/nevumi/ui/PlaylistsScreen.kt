@@ -171,6 +171,13 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         } }) { page ->
     val playlist = state.playlists.firstOrNull { it.id == page }
     val pageFolder = page?.takeIf { playlist == null && it.startsWith(PLAYLIST_FOLDER_PREFIX) }?.removePrefix(PLAYLIST_FOLDER_PREFIX)
+    if (playlist == null) {
+        val songCount = remember(visiblePlaylists, pageFolder) {
+            pageFolder?.let { folder -> visiblePlaylists.filter { isInFolder(it.folder, folder) }
+                .flatMap { it.trackIds }.distinct().size }
+        }
+        ReportLibraryHeader(pageFolder, songCount)
+    }
     Column(Modifier.fillMaxSize()) {
         if (fileBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         fileMessage?.let { Text(it, Modifier.padding(horizontal = 24.dp)) }
@@ -229,10 +236,13 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
                         }) else null, finishRearranging = if (rearrangingSongs) ({ rearrangingSongs = false }) else null)
             }
             CompositionLocalProvider(LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, playlist.id)) {
-            if (rearrangingSongs && editable) PlaylistRearrangeList(playlist, state, controller, Modifier.weight(1f), header)
+            if (rearrangingSongs && editable) {
+                ReportLibraryHeader(playlist.title, ordered.size)
+                PlaylistRearrangeList(playlist, state, controller, Modifier.weight(1f), header)
+            }
             else SongList(ordered.map { it.value }, controller, Modifier.weight(1f), playlist.id.takeIf { editable },
                 scrollIndicator = { "${it + 1} / ${playlist.trackIds.size}" }, contextName = playlist.name,
-                playlistPositions = ordered.map { it.index }, shuffleContext = playlist.shuffle, header = header)
+                playlistPositions = ordered.map { it.index }, shuffleContext = playlist.shuffle, header = header, headerTitle = playlist.title)
             }
         }
     }

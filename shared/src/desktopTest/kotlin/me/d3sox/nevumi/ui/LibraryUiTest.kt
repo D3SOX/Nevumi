@@ -38,7 +38,7 @@ class LibraryUiTest {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
-                onNodeWithText("1 of 3 songs").assertIsDisplayed()
+                onNodeWithContentDescription("Favorites, 1 of 2 songs").assertIsDisplayed()
                 onNodeWithText("Song 0").assertIsDisplayed()
                 onNodeWithText("Song 2").assertDoesNotExist()
                 onNodeWithText("Clear favorites").assertDoesNotExist()
@@ -262,17 +262,17 @@ class LibraryUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 assertEquals(listOf(expected), controller.state.value.queue.entries.map { it.trackId })
                 onNodeWithText("Genre: Ambient").assertIsDisplayed()
-                onNodeWithText("1 of 3 songs").assertIsDisplayed()
+                onNodeWithContentDescription("1 of 3 songs", substring = true).assertIsDisplayed()
                 onNodeWithContentDescription("Remove filter: Year: 2020–2030").performClick()
                 onNodeWithText("Year: 2020–2030").assertDoesNotExist()
-                onNodeWithText("2 of 3 songs").assertIsDisplayed()
+                onNodeWithContentDescription("2 of 3 songs", substring = true).assertIsDisplayed()
                 onNodeWithText("Old ambient").assertIsDisplayed()
                 onNodeWithText("New rock").assertDoesNotExist()
                 onNodeWithText("Genre: Ambient").performClick()
                 onNodeWithText("Genre").assertTextContains("Ambient")
                 onNodeWithText("Clear filters").performClick()
                 onNodeWithText("Genre: Ambient").assertDoesNotExist()
-                onNodeWithText("3 songs").assertIsDisplayed()
+                onNodeWithContentDescription("3 songs", substring = true).assertIsDisplayed()
                 onNodeWithText("Old ambient").assertIsDisplayed()
                 onNodeWithText("New rock").assertIsDisplayed()
             }
@@ -347,10 +347,10 @@ class LibraryUiTest {
                 onNodeWithText("Mixed song").assertIsDisplayed()
                 onNodeWithText("Device song").assertDoesNotExist()
                 onNodeWithText("Downloaded song").assertDoesNotExist()
-                onNodeWithText("2 of 4 songs").assertIsDisplayed()
+                onNodeWithContentDescription("2 of 4 songs", substring = true).assertIsDisplayed()
                 onNodeWithContentDescription("Remove filter: Server").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.sourceFilter == null }
-                onNodeWithText("4 songs").assertIsDisplayed()
+                onNodeWithContentDescription("4 songs", substring = true).assertIsDisplayed()
                 onNodeWithContentDescription("Music sources").performClick()
                 onNodeWithText("Server").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.sourceFilter == SourceKind.SERVER }

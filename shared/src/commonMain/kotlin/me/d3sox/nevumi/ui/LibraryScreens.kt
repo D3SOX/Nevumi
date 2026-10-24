@@ -31,6 +31,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
@@ -87,6 +89,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     onNavigationHeight: (Int) -> Unit = {}, initialTab: LibraryTab? = null, onTabSelected: (LibraryTab) -> Unit = {}, onSettings: () -> Unit = {}, onSearch: () -> Unit = {}) {
     val selection = remember { SongSelection() }
     val songPages = remember { SongGesturePages() }
+    val headers = remember { mutableStateMapOf<LibraryTab, LibraryHeaderContext>() }
     val tabs = remember(state.preferences.libraryTabs, destination) {
         (state.preferences.libraryTabs + listOfNotNull(destination?.tab)).distinct()
     }
@@ -147,20 +150,37 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     // Sort and filter choices answer at once; a library change, such as one song's favorite, re-sorts in the background.
     val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders)
     // The unfiltered count is what the library shows without its source and filters, so the header can say "4 of 12 songs".
-    val (tracks, unfilteredCount) = rememberDerived(null, trackChoices, listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
+    val (tracks, unfilteredTracks) = rememberDerived(null, trackChoices, listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         fun localAllowed(track: Track) =
             folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
         val unfiltered = state.tracks.filter { track -> localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL } }
         val visible = if (sources == SourceKind.LOCAL) unfiltered.filter(::localAllowed) else unfiltered
         filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now, playlisted) to
-            unfiltered.size
+            unfiltered
     }
-    val displayedCount = remember(tracks, tabs[currentIndex]) {
-        if (tabs[currentIndex] == LibraryTab.FAVORITES) tracks.count { it.favorite } else tracks.size
+    val currentTab = tabs[currentIndex]
+    val headerContext = headers[currentTab]
+    val headerTitle = headerContext?.title ?: stringResource(currentTab.label)
+    val displayedCount = headerContext?.songCount ?: when (currentTab) {
+        LibraryTab.HOME, LibraryTab.PLAYLISTS -> null
+        LibraryTab.HISTORY, LibraryTab.STATISTICS, LibraryTab.RECOMMENDATIONS -> 0
+        LibraryTab.FAVORITES -> tracks.count { it.favorite }
+        else -> tracks.size
+    }
+    val headerTotal = remember(unfilteredTracks, currentTab) {
+        if (currentTab == LibraryTab.FAVORITES) unfilteredTracks.count { it.favorite } else unfilteredTracks.size
+    }
+    val filteredCount = headerContext?.title == null && currentTab in setOf(LibraryTab.SONGS, LibraryTab.RECENT,
+        LibraryTab.FAVORITES, LibraryTab.ALBUMS, LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS) &&
+        (sources != null || filter.hasActiveFilters())
+    val headerCount = displayedCount?.let { count ->
+        if (filteredCount) pluralStringResource(Res.plurals.songs_of_total, headerTotal, count, headerTotal)
+        else countLabel(count, Res.plurals.songs)
     }
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
-    CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages, LocalDerivedResults provides derived) {
+    CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages,
+        LocalDerivedResults provides derived, LocalLibraryHeaders provides headers) {
     Column(modifier.fillMaxWidth()) {
         // Search ignores the source and library filters, and Playlists only follow the source.
         val libraryFiltersApply = tabs[currentIndex] !in setOf(LibraryTab.SEARCH, LibraryTab.PLAYLISTS)
@@ -170,16 +190,21 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.foundation.Image(org.jetbrains.compose.resources.painterResource(me.d3sox.nevumi.resources.Res.drawable.nevumi_logo),
                     stringResource(Res.string.library_nevumi_logo), Modifier.size(40.dp))
-                if (libraryFiltersApply && tabs[currentIndex] != LibraryTab.HOME && (sources != null || filter.hasActiveFilters())) Row(Modifier.clickable(onClickLabel = stringResource(Res.string.library_filters)) { filters = true },
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(AppIcon.FILTER.vector, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text(pluralStringResource(Res.plurals.songs_of_total, unfilteredCount, displayedCount, unfilteredCount),
-                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                } else Text(if (tabs[currentIndex] == LibraryTab.HOME) stringResource(LibraryTab.HOME.label) else countLabel(displayedCount, Res.plurals.songs), style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.weight(1f)
+                    .then(if (filteredCount) Modifier.clickable(onClickLabel = stringResource(Res.string.library_filters)) { filters = true } else Modifier)
+                    .testTag("library-header").clearAndSetSemantics {
+                        contentDescription = listOfNotNull(headerTitle, headerCount).joinToString(", ")
+                        heading()
+                    }) {
+                    Text(headerTitle, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (headerCount != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (filteredCount) Icon(AppIcon.FILTER.vector, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(headerCount, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = if (filteredCount) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
             if (LibraryTab.SEARCH !in tabs) AppIconButton(AppIcon.SEARCH, stringResource(Res.string.search), onClick = onSearch)
-            val currentTab = tabs[currentIndex]
             val activeSongLists = songPages.activeLists[currentTab] ?: 0
             val sortable = currentTab in setOf(LibraryTab.SONGS, LibraryTab.FAVORITES) ||
                 activeSongLists > 0 && currentTab in setOf(LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS)
@@ -310,8 +335,10 @@ private fun groupedCollections(tracks: List<Track>, unknownName: String, keys: (
 internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: MusicController,
     modifier: Modifier = Modifier, playlistId: String? = null, statistics: Map<String, ListeningStatistics>? = null,
     extraInfo: Map<String, String> = emptyMap(), entryInfo: ((Int) -> String)? = null, scrollSort: LibrarySort = LibrarySort.TITLE, scrollIndicator: ((Int) -> String)? = null, header: (@Composable () -> Unit)? = null, contextName: String = "Library", playlistPositions: List<Int>? = null,
-    shuffleContext: Boolean = false) {
+    shuffleContext: Boolean = false, headerTitle: String? = null) {
     val songPages = LocalSongGesturePages.current
+    val origin = LocalLibraryOrigin.current
+    ReportLibraryHeader(headerTitle ?: contextName.takeIf { origin.collectionId != null }, tracks.size)
     val active = LocalNavigationActive.current
     val tab = LocalLibraryOrigin.current.tab
     DisposableEffect(songPages, active, tab) {

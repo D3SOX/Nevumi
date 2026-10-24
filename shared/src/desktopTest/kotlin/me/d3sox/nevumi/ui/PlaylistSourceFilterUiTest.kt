@@ -52,6 +52,7 @@ class PlaylistSourceFilterUiTest {
                 onNodeWithText("Mixed playlist").assertIsDisplayed()
                 onNodeWithText("2 playlists").assertIsDisplayed()
                 onNodeWithText("Offline").performClick()
+                onNodeWithTag("library-header").assertContentDescriptionEquals("Offline, 1 song")
                 onNodeWithText("Saved mix").assertIsDisplayed()
                 onNodeWithText("Remote mix").assertDoesNotExist()
                 onNodeWithText("Online only").assertDoesNotExist()

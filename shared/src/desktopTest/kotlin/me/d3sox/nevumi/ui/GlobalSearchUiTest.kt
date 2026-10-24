@@ -177,7 +177,7 @@ class GlobalSearchUiTest {
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("track-actions").fetchSemanticsNodes().isEmpty() }
                 onNodeWithContentDescription("Close search").performClick()
                 onNodeWithTag("home-page").assertIsDisplayed()
-                onNodeWithContentDescription("Home").assertIsSelected()
+                onNode(hasContentDescription("Home") and hasAnyAncestor(hasTestTag("library-navigation"))).assertIsSelected()
                 assertNull(controller.state.value.error)
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }

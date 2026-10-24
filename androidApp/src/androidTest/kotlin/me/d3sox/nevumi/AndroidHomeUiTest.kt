@@ -52,7 +52,7 @@ class AndroidHomeUiTest {
                 compose.waitUntil(5_000) { controller.state.value.preferences.lastLibraryTab == LibraryTab.HOME }
                 assertNull(runBlocking { MusicPreferences(app.store).load() }.startupTab)
                 scenario.recreate()
-                compose.onNodeWithContentDescription("Home").assertIsSelected()
+                compose.onNode(hasContentDescription("Home") and hasAnyAncestor(hasTestTag("library-navigation"))).assertIsSelected()
                 compose.onNodeWithTag("home-page").assertIsDisplayed()
             }
         } finally { runBlocking { controller.pause().join() }; file.delete() }
