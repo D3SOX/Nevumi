@@ -26,7 +26,7 @@ class LibraryUiTest {
         val songs = runBlocking {
             preferences.update { it.copy(libraryTabs = listOf(LibraryTab.FAVORITES), startupTab = LibraryTab.FAVORITES,
                 libraryFilter = LibraryQuery(genre = "Ambient")) }
-            listOf("Ambient", "Rock", "Jazz").mapIndexed { index, genre ->
+            listOf("Ambient", "Rock", "Ambient").mapIndexed { index, genre ->
                 library.importTrack(TrackMetadata("Song $index", genres = listOf(genre)),
                     TrackSource("local:$index", SourceKind.LOCAL, "/music/$index.flac")).also {
                     if (index < 2) library.setFavorite(it.id, true)
@@ -38,6 +38,9 @@ class LibraryUiTest {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                onNodeWithText("1 of 3 songs").assertIsDisplayed()
+                onNodeWithText("Song 0").assertIsDisplayed()
+                onNodeWithText("Song 2").assertDoesNotExist()
                 onNodeWithText("Clear favorites").assertDoesNotExist()
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Library & gestures").performClick()

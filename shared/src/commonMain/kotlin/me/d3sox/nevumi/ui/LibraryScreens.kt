@@ -156,6 +156,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now, playlisted) to
             unfiltered.size
     }
+    val displayedCount = remember(tracks, tabs[currentIndex]) {
+        if (tabs[currentIndex] == LibraryTab.FAVORITES) tracks.count { it.favorite } else tracks.size
+    }
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages, LocalDerivedResults provides derived) {
     Column(modifier.fillMaxWidth()) {
@@ -170,9 +173,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 if (libraryFiltersApply && tabs[currentIndex] != LibraryTab.HOME && (sources != null || filter.hasActiveFilters())) Row(Modifier.clickable(onClickLabel = stringResource(Res.string.library_filters)) { filters = true },
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(AppIcon.FILTER.vector, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text(pluralStringResource(Res.plurals.songs_of_total, unfilteredCount, tracks.size, unfilteredCount),
+                    Text(pluralStringResource(Res.plurals.songs_of_total, unfilteredCount, displayedCount, unfilteredCount),
                         style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                } else Text(if (tabs[currentIndex] == LibraryTab.HOME) stringResource(LibraryTab.HOME.label) else countLabel(tracks.size, Res.plurals.songs), style = MaterialTheme.typography.titleSmall,
+                } else Text(if (tabs[currentIndex] == LibraryTab.HOME) stringResource(LibraryTab.HOME.label) else countLabel(displayedCount, Res.plurals.songs), style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (LibraryTab.SEARCH !in tabs) AppIconButton(AppIcon.SEARCH, stringResource(Res.string.search), onClick = onSearch)
