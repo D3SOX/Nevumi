@@ -42,7 +42,6 @@ import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.album
 import me.d3sox.nevumi.resources.artist
 import me.d3sox.nevumi.resources.ascending
-import me.d3sox.nevumi.resources.back
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.descending
 import me.d3sox.nevumi.resources.disabled
@@ -96,7 +95,7 @@ internal fun Playlist.artworkPath(state: AppState, custom: Boolean = true): Stri
 
 @Composable
 internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: MusicController,
-    orderedIds: List<String>, back: () -> Unit, edit: () -> Unit, delete: () -> Unit, export: () -> Unit, editRules: () -> Unit,
+    orderedIds: List<String>, edit: () -> Unit, delete: () -> Unit, export: () -> Unit, editRules: () -> Unit,
     publish: (() -> Unit)?, resolve: () -> Unit, busy: Boolean, rearrange: (() -> Unit)? = null,
     finishRearranging: (() -> Unit)? = null) {
     val path = playlist.artworkPath(state)
@@ -121,7 +120,6 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
         Box(Modifier.fillMaxWidth().height(200.dp)) {
             CollectionArtwork(path, playlist.name, AppIcon.QUEUE,
                 Modifier.size(200.dp).align(Alignment.Center).semantics { contentDescription = artworkDescription })
-            AppIconButton(AppIcon.BACK, stringResource(Res.string.back), Modifier.align(Alignment.TopStart), onClick = back)
         }
         Text(playlist.title, style = MaterialTheme.typography.headlineMedium)
         val kind = playlist.folder?.let { stringResource(if (playlist.rule == null) Res.string.library_playlist_in_folder else Res.string.library_smart_playlist_in_folder, it) }

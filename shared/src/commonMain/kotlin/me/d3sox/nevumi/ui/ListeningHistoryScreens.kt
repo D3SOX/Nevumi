@@ -90,10 +90,10 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
         }
     }
     Column(Modifier.fillMaxSize()) {
-    if (group != null) CollectionHeader(group.displayName()) { selected = null }
     if (grouping == "Songs" || group != null) SongList((group?.trackIds ?: report.songs.flatMap { it.trackIds }).mapNotNull(catalog::get),
         controller, Modifier.weight(1f).fillMaxWidth().testTag("statistics-most-played"), statistics = songStatistics, scrollSort = me.d3sox.nevumi.library.LibrarySort.PLAY_COUNT,
-        header = header, contextName = group?.displayName() ?: "Statistics", headerTitle = group?.displayName())
+        header = header, contextName = group?.displayName() ?: "Statistics", headerTitle = group?.displayName(),
+        headerBack = group?.let { { selected = null } })
     else {
         ReportLibraryHeader(songCount = report.songs.size)
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("statistics-ranking"), state = rememberLibraryListState(controller, "statistics:$grouping:$period")) {

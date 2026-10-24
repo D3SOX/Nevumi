@@ -24,7 +24,6 @@ import kotlin.random.Random
 import org.jetbrains.compose.resources.stringResource
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.add_to_queue
-import me.d3sox.nevumi.resources.back
 import me.d3sox.nevumi.resources.download
 import me.d3sox.nevumi.resources.library_collection_artwork
 import me.d3sox.nevumi.resources.library_collection_options
@@ -36,7 +35,7 @@ import me.d3sox.nevumi.resources.play_next
 import me.d3sox.nevumi.resources.songs
 
 @Composable
-internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state: AppState, controller: MusicController, back: () -> Unit) {
+internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state: AppState, controller: MusicController) {
     val artwork = collection.tracks.firstNotNullOfOrNull { state.artwork[it.id] }
     val origin = LocalLibraryOrigin.current
     val bitmap = rememberArtwork(artwork, 128)
@@ -55,7 +54,6 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
         Box(Modifier.fillMaxWidth().height(200.dp)) {
             CollectionArtwork(artwork, collection.title, tab.icon(), Modifier.size(200.dp).align(Alignment.Center)
                 .semantics { contentDescription = artworkDescription })
-            AppIconButton(AppIcon.BACK, stringResource(Res.string.back), Modifier.align(Alignment.TopStart), onClick = back)
         }
         Text(collection.title, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

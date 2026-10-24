@@ -522,7 +522,8 @@ class PlaylistsUiTest {
                 onNodeWithText("Save").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.any { it.name == "Road ▸ Coast ▸ Cliffs ▸ Dawn" } }
                 onNodeWithContentDescription("Back").performClick()
-                onNodeWithText("Road ▸ Coast ▸ Cliffs").assertIsDisplayed()
+                onNodeWithTag("library-header").assertContentDescriptionEquals("Road ▸ Coast ▸ Cliffs, 0 songs")
+                assertLibraryBackInHeader()
                 onNodeWithText("Dawn").assertIsDisplayed()
                 onNodeWithContentDescription("Back").performClick()
                 onNodeWithText("Cliffs").assertIsDisplayed()
@@ -550,7 +551,8 @@ class PlaylistsUiTest {
                 onNodeWithText("Save").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.single { it.id == morning }.name == "Trips ▸ Morning" }
                 onNodeWithContentDescription("Back").performClick()
-                onNodeWithText("Trips").assertIsDisplayed()
+                onNodeWithTag("library-header").assertContentDescriptionEquals("Trips, 0 songs")
+                assertLibraryBackInHeader()
                 onNodeWithText("Morning").assertIsDisplayed()
                 onNodeWithContentDescription("Back").performClick()
                 onNodeWithText("Road").assertIsDisplayed()

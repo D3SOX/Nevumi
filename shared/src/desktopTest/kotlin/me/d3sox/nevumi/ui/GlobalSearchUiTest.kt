@@ -160,6 +160,8 @@ class GlobalSearchUiTest {
                 assertEquals(songs.map { it.id }, runBlocking { queue.snapshot().entries.map { it.trackId } })
                 onNodeWithContentDescription("Open album: Arc album").performClick()
                 onNodeWithContentDescription("Track options: Arc song 3").assertIsDisplayed()
+                onNodeWithContentDescription("Back").assertDoesNotExist()
+                onAllNodesWithContentDescription("Close search").assertCountEquals(1)
                 onNodeWithContentDescription("Close search").performClick()
                 onNodeWithTag("search-type:PLAYLISTS").performClick()
                 onNodeWithTag("search-type:PLAYLISTS").assertIsSelected()

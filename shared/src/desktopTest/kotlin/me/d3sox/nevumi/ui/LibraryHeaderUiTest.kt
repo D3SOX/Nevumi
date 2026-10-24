@@ -34,7 +34,8 @@ class LibraryHeaderUiTest {
         val (songs, playlist) = runBlocking {
             preferences.update { it.copy(libraryTabs = LibraryTab.entries, startupTab = LibraryTab.SONGS) }
             val songs = (1..3).map { index ->
-                library.importTrack(TrackMetadata("Song $index", artist = "Evening artist", album = "Evening album"),
+                library.importTrack(TrackMetadata("Song $index", artist = "Evening artist", album = "Evening album",
+                    albumArtist = "Evening album artist", genres = listOf("Evening genre"), folder = "Evening folder"),
                     TrackSource("local:$index", SourceKind.LOCAL, "/music/$index.flac"))
             }
             library.setFavorite(songs.first().id, true)
@@ -57,17 +58,34 @@ class LibraryHeaderUiTest {
                 header("Favorites, 1 of 1 song").assertHasClickAction().performClick()
                 onNodeWithText("Cancel").performClick()
                 runBlocking { controller.updatePreferences { it.copy(sourceFilter = null) }.join() }
-                openLibraryPage("Albums")
-                onNodeWithText("Evening album").performClick()
-                header("Evening album, 3 songs")
-                onNodeWithContentDescription("Back").performClick()
-                header("Albums, 3 songs")
+                for ((tab, collection) in listOf("Albums" to "Evening album", "Artists" to "Evening artist",
+                    "Album artists" to "Evening album artist", "Genres" to "Evening genre", "Folders" to "Evening folder")) {
+                    openLibraryPage(tab)
+                    onNodeWithText(collection).performClick()
+                    header("$collection, 3 songs")
+                    assertLibraryBackInHeader()
+                    if (tab == "Albums") {
+                        capture("album-header-$name")
+                        onNode(hasScrollToIndexAction()).performScrollToIndex(3)
+                        assertLibraryBackInHeader()
+                    }
+                    onNodeWithContentDescription("Back").performClick()
+                    header("$tab, 3 songs")
+                    onNodeWithContentDescription("Back").assertDoesNotExist()
+                    onNodeWithContentDescription("Nevumi logo").assertIsDisplayed()
+                }
                 openLibraryPage("Playlists")
                 header("Playlists")
                 onNodeWithText(title).performClick()
                 header("$title, 2 songs")
+                assertLibraryBackInHeader()
                 onNodeWithContentDescription("Settings").assertIsDisplayed()
                 capture("playlist-header-$name")
+                onNodeWithContentDescription("Playlist options").performClick()
+                onNodeWithText("Rearrange").performClick()
+                assertLibraryBackInHeader()
+                onNodeWithContentDescription("Finish rearranging").performClick()
+                assertLibraryBackInHeader()
                 runBlocking { controller.removePlaylistTrack(playlist.id, 0).join() }
                 header("$title, 1 song")
                 openLibraryPage("Songs")
@@ -80,15 +98,29 @@ class LibraryHeaderUiTest {
                 header("Playlists")
                 onNodeWithText("Evening mixes").performClick()
                 header("Evening mixes, 2 songs")
+                assertLibraryBackInHeader()
+                onAllNodesWithText("Evening mixes", useUnmergedTree = true).assertCountEquals(1)
                 capture("playlist-folder-header-$name")
                 onNodeWithText("Nested").performClick()
                 header("Evening mixes ▸ Nested, 1 song")
+                assertLibraryBackInHeader()
                 onNodeWithContentDescription("Back").performClick()
                 header("Evening mixes, 2 songs")
                 onNodeWithContentDescription("Back").performClick()
                 header("Playlists")
+                onNodeWithContentDescription("Back").assertDoesNotExist()
+                onNodeWithContentDescription("Nevumi logo").assertIsDisplayed()
                 onNodeWithText("Empty mixes").performClick()
                 header("Empty mixes, 0 songs")
+                openLibraryPage("Home")
+                onNodeWithContentDescription("Open mix: Favorites mix").performClick()
+                header("Favorites mix, 1 song")
+                assertLibraryBackInHeader()
+                onAllNodesWithText("Favorites mix", useUnmergedTree = true).assertCountEquals(1)
+                capture("home-mix-header-$name")
+                onNodeWithContentDescription("Back").performClick()
+                header("Home")
+                onNodeWithContentDescription("Back").assertDoesNotExist()
                 openLibraryPage("History")
                 header("History, 0 songs")
                 openLibraryPage("Favorites")
@@ -100,6 +132,8 @@ class LibraryHeaderUiTest {
 
     private fun ComposeUiTest.capture(name: String) {
         System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { output ->
+            mainClock.advanceTimeByFrame()
+            waitForIdle()
             val pixels = onRoot().captureToImage().toPixelMap()
             val image = BufferedImage(pixels.width, pixels.height, BufferedImage.TYPE_INT_ARGB)
             for (y in 0 until pixels.height) for (x in 0 until pixels.width) image.setRGB(x, y, pixels[x, y].toArgb())
