@@ -13,12 +13,14 @@ data class ReplayGain(val mode: ReplayGainMode = ReplayGainMode.OFF, val preampD
         require(preampDb in -15.0..15.0) { "ReplayGain preamp must be between -15 and 15 dB" }
     }
 
-    /** The gain for a file with [tags], lowered where its stored peak would clip. Each mode falls back to the other's tags. */
+    /**
+     * The gain for a file with [tags], lowered where a stored peak would clip. Album mode falls back to the song gain, as mpv
+     * does on desktop. A missing peak falls back to the other one; a song's peak never exceeds its album's.
+     */
     internal fun gainDb(tags: ReplayGainTags?): Double {
         if (mode == ReplayGainMode.OFF || tags == null) return 0.0
-        val track = tags.trackGainDb?.let { it to tags.trackPeak }
-        val album = tags.albumGainDb?.let { it to tags.albumPeak }
-        val (gain, peak) = (if (mode == ReplayGainMode.TRACK) track ?: album else album ?: track) ?: return 0.0
+        val gain = (if (mode == ReplayGainMode.TRACK) tags.trackGainDb else tags.albumGainDb ?: tags.trackGainDb) ?: return 0.0
+        val peak = if (mode == ReplayGainMode.TRACK) tags.trackPeak ?: tags.albumPeak else tags.albumPeak ?: tags.trackPeak
         return if (peak != null) minOf(gain + preampDb, -20 * log10(peak)) else gain + preampDb
     }
 }

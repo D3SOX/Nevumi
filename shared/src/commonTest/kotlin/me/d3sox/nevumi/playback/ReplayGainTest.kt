@@ -21,11 +21,11 @@ class ReplayGainTest {
     }
 
     @Test
-    fun eachModeFallsBackToTheOtherGainAndUntaggedFilesStayUnchanged() {
+    fun albumModeFallsBackToTheSongGainAsMpvDoesAndUntaggedFilesStayUnchanged() {
         val trackOnly = ReplayGainTags(trackGainDb = -7.0)
         val albumOnly = ReplayGainTags(albumGainDb = -4.0)
         assertEquals(-7.0, ReplayGain(ReplayGainMode.ALBUM).gainDb(trackOnly))
-        assertEquals(-4.0, ReplayGain(ReplayGainMode.TRACK).gainDb(albumOnly))
+        assertEquals(0.0, ReplayGain(ReplayGainMode.TRACK).gainDb(albumOnly))
         assertEquals(0.0, ReplayGain(ReplayGainMode.TRACK, preampDb = 6.0).gainDb(null))
         assertEquals(0.0, ReplayGain(ReplayGainMode.OFF).gainDb(trackOnly))
     }
@@ -36,5 +36,7 @@ class ReplayGainTest {
         assertEquals(-20 * log10(0.5), ReplayGain(ReplayGainMode.TRACK, preampDb = 6.0).gainDb(tags), 1e-9)
         assertEquals(2.0, ReplayGain(ReplayGainMode.TRACK).gainDb(tags))
         assertEquals(-5.0, ReplayGain(ReplayGainMode.ALBUM, preampDb = 3.0).gainDb(tags))
+        // Without an album peak, the song's own peak still keeps an album boost from clipping.
+        assertEquals(-20 * log10(0.9), ReplayGain(ReplayGainMode.ALBUM).gainDb(ReplayGainTags(albumGainDb = 6.0, trackPeak = 0.9)), 1e-9)
     }
 }
