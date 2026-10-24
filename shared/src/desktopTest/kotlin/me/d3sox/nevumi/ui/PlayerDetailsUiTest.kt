@@ -2,11 +2,14 @@ package me.d3sox.nevumi.ui
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.MusicController
@@ -128,7 +131,7 @@ class PlayerDetailsUiTest {
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
         try {
             runComposeUiTest {
-                setContent { MusicPlayerApp(controller) }
+                setContent { Box(Modifier.size(360.dp, 660.dp)) { MusicPlayerApp(controller) } }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
@@ -137,6 +140,7 @@ class PlayerDetailsUiTest {
                 val output = onNodeWithContentDescription("Audio output").fetchSemanticsNode().boundsInRoot
                 val queue = onNodeWithContentDescription("Queue").fetchSemanticsNode().boundsInRoot
                 assertTrue(kotlin.math.abs(label.center.x - (output.center.x + queue.center.x) / 2) < 2f)
+                onNodeWithContentDescription("App volume").performScrollTo().assertIsDisplayed()
                 onNodeWithContentDescription("Collapse").performClick()
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Playback").performScrollTo().performClick()
@@ -165,7 +169,7 @@ class PlayerDetailsUiTest {
                     CompositionLocalProvider(LocalDensity provides Density(1f, fontScale)) {
                         MaterialTheme {
                             PlayerToolbar(controller, "WAV · 706 kb/s · 44.1 kHz", onOutput = {}, onVisualizer = {},
-                                onAudioEffects = { effectsOpened++ }, onPlaybackSettings = {}, onQueue = {}, modifier = Modifier.width(width))
+                                onAudioEffects = { effectsOpened++ }, onPlaybackSettings = {}, onQueue = {}, modifier = Modifier.width(width).testTag("test-toolbar"))
                         }
                     }
                 }
@@ -189,6 +193,15 @@ class PlayerDetailsUiTest {
                 assertInfo(inline = true)
                 runOnIdle { fontScale = 2f }
                 assertInfo(inline = false)
+                runOnIdle { fontScale = 1f; width = 272.dp }
+                val toolbar = onNodeWithTag("test-toolbar").fetchSemanticsNode().boundsInRoot
+                for (label in listOf("Audio output", "MilkDrop visualizer", "Audio effects", "Playback settings", "Lyrics", "Queue")) {
+                    val node = onNodeWithContentDescription(label).assertIsDisplayed().fetchSemanticsNode()
+                    val touch = node.touchBoundsInRoot
+                    assertTrue(touch.width >= 48f && touch.height >= 48f, "$label keeps its touch target: $touch")
+                    assertTrue(touch.left >= toolbar.left && touch.right <= toolbar.right,
+                        "$label stays within the toolbar")
+                }
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

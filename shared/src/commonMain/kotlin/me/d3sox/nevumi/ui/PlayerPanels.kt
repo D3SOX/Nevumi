@@ -742,9 +742,8 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
         val highest = peaks.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
         peaks.map { kotlin.math.sqrt((it / highest).coerceIn(0f, 1f)) }
     }
-    BoxWithConstraints(modifier.widthIn(max = 640.dp)) {
-    val compactScroll = maxHeight < 340.dp
-    Column(Modifier.fillMaxWidth().then(if (compactScroll) Modifier.verticalScroll(rememberScrollState()) else Modifier), horizontalAlignment = Alignment.CenterHorizontally,
+    val controlsScroll = rememberScrollState()
+    Column(modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(controlsScroll, enabled = controlsScroll.maxValue > 0), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe)
         Column(Modifier.fillMaxWidth()) {
@@ -808,9 +807,9 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
             onOutput, onVisualizer, onAudioEffects, onPlaybackSettings, onQueue)
         AppVolume(controller)
     }
-    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlayerToolbar(controller: MusicController, audioInfo: String?, onOutput: () -> Unit, onVisualizer: () -> Unit,
     onAudioEffects: () -> Unit, onPlaybackSettings: () -> Unit, onQueue: () -> Unit, modifier: Modifier = Modifier) {
@@ -837,13 +836,17 @@ internal fun PlayerToolbar(controller: MusicController, audioInfo: String?, onOu
         val infoWidth = with(density) { (maxWidth - groupWidth * 2 - 16.dp).roundToPx() }
         val inline = audioInfo != null && infoWidth > 0 && !measurer.measure(audioInfo, style,
             maxLines = 2, constraints = Constraints(maxWidth = infoWidth)).hasVisualOverflow
+        val actionsPerRow = if (maxWidth < groupWidth * 2) 3 else 6
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                if (inline) {
+            if (inline) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.width(groupWidth)) { leftButtons() }
                     info(Modifier.weight(1f).padding(horizontal = 8.dp))
                     Row(Modifier.width(groupWidth), horizontalArrangement = Arrangement.End) { rightButtons() }
-                } else {
+                }
+            } else {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp),
+                    maxItemsInEachRow = actionsPerRow) {
                     leftButtons()
                     rightButtons()
                 }
