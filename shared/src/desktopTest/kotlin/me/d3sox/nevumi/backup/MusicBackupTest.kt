@@ -77,7 +77,7 @@ class MusicBackupTest {
         val preferences = MusicPreferences(store)
         suspend fun id(title: String) = library.tracks().single { it.metadata.title == title }.id
         suspend fun titles(ids: List<String>) = ids.map { id -> library.findTrack(id)!!.metadata.title }
-        override fun close() { soundCloud.close(); scrobbling.close(); http.close(); store.close() }
+        override fun close() = runBlocking { soundCloud.closeAndJoin(); scrobbling.closeAndJoin(); http.close(); store.close() }
     }
 
     private fun devices(block: suspend (Device, Device) -> Unit) = runBlocking {
