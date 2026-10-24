@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Exercise the packaged desktop app on an owned display and private session bus."""
 import os
+import ctypes
 from pathlib import Path
+import re
 import selectors
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -36,7 +39,91 @@ def stop(process):
         process.wait(timeout=5)
 
 
+def close_window(window_id, display_name):
+    class ClientMessage(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_int), ("serial", ctypes.c_ulong), ("send_event", ctypes.c_int),
+                    ("display", ctypes.c_void_p), ("window", ctypes.c_ulong), ("message_type", ctypes.c_ulong),
+                    ("format", ctypes.c_int), ("data", ctypes.c_long * 5)]
+
+    class Event(ctypes.Union):
+        _fields_ = [("message", ClientMessage), ("padding", ctypes.c_long * 24)]
+
+    x11 = ctypes.CDLL("libX11.so.6")
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+    x11.XInternAtom.restype = ctypes.c_ulong
+    x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.POINTER(Event)]
+    x11.XFlush.argtypes = [ctypes.c_void_p]
+    x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+    display = x11.XOpenDisplay(display_name.encode())
+    if not display:
+        raise AssertionError("Could not connect to the test display")
+    try:
+        event = Event()
+        event.message = ClientMessage(33, 0, 1, display, window_id,
+                                      x11.XInternAtom(display, b"WM_PROTOCOLS", 0), 32,
+                                      (ctypes.c_long * 5)(x11.XInternAtom(display, b"WM_DELETE_WINDOW", 0), 0, 0, 0, 0))
+        if not x11.XSendEvent(display, window_id, 0, 0, ctypes.byref(event)):
+            raise AssertionError("Could not request a normal window close")
+        x11.XFlush(display)
+    finally:
+        x11.XCloseDisplay(display)
+
+
 class LinuxPlayerTest(unittest.TestCase):
+    def test_window_opens_and_closes_while_desktop_services_are_still_starting(self):
+        self.assertTrue(APP.is_file(), "Run :desktopApp:createDistributable first")
+        with tempfile.TemporaryDirectory(prefix="nevumi-startup-") as temporary:
+            directory = Path(temporary)
+            display = app = None
+            with socket.socket(socket.AF_UNIX) as stalled_bus, (directory / "session.log").open("w+") as log:
+                stalled_bus.bind(str(directory / "system-bus"))
+                stalled_bus.listen(1)
+                try:
+                    display = subprocess.Popen(
+                        ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x900x24", "-nolisten", "tcp", "-noreset"],
+                        stdout=subprocess.PIPE, stderr=log, text=True,
+                    )
+                    display_name = ":" + first_line(display, timeout=30)
+                    environment = dict(os.environ, DISPLAY=display_name, SKIKO_RENDER_API="SOFTWARE",
+                                       DBUS_SYSTEM_BUS_ADDRESS="unix:path=" + str(directory / "system-bus"),
+                                       DBUS_SESSION_BUS_ADDRESS="unix:path=" + str(directory / "session-bus"),
+                                       XDG_CONFIG_HOME=str(directory / "config"), XDG_CACHE_HOME=str(directory / "cache"))
+                    environment.pop("WAYLAND_DISPLAY", None)
+                    app = subprocess.Popen([str(APP), "--data-dir=" + str(directory / "music"), "--audio-output=null"],
+                                           env=environment, stdout=log, stderr=log)
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        window = subprocess.run(["xwininfo", "-name", "Nevumi"], env=environment,
+                                                capture_output=True, text=True, timeout=3)
+                        if "Map State: IsViewable" in window.stdout:
+                            break
+                        if app.poll() is not None:
+                            log.seek(0)
+                            self.fail("Desktop player exited: " + log.read())
+                        with selectors.DefaultSelector() as delay:
+                            delay.select(0.1)
+                    else:
+                        log.seek(0)
+                        self.fail("The window waited for desktop services: " + log.read())
+                    # A connected service that never answers must not hold the first window hostage.
+                    stalled_bus.settimeout(3)
+                    connection, _ = stalled_bus.accept()
+                    with connection:
+                        window_id = int(re.search(r"Window id: (0x[0-9a-f]+)", window.stdout).group(1), 16)
+                        close_window(window_id, display_name)
+                        try:
+                            app.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            log.seek(0)
+                            self.fail("Closing the window waited for desktop services: " + log.read())
+                finally:
+                    stop(app)
+                    stop(display)
+                    if display is not None:
+                        display.stdout.close()
+
     def test_packaged_visualizer_loads_its_native_libraries_and_renders_audio(self):
         self.assertTrue(APP.is_file(), "Run :desktopApp:createDistributable first")
         with tempfile.TemporaryDirectory(prefix="nevumi-packaged-visualizer-") as temporary:
@@ -219,6 +306,13 @@ public class TlsProbe {
                                   "org.freedesktop.DBus.Properties.GetAll", "org.mpris.MediaPlayer2.Player")
                     self.assertIn("'PlaybackStatus': <'Stopped'>", player)
                     self.assertIn("'Volume': <1.0>", player)
+                    window = subprocess.run(["xwininfo", "-name", "Nevumi"], env=environment,
+                                            capture_output=True, text=True, timeout=3)
+                    self.assertEqual(0, window.returncode, window.stderr)
+                    window_id = int(re.search(r"Window id: (0x[0-9a-f]+)", window.stdout).group(1), 16)
+                    close_window(window_id, display_name)
+                    app.wait(timeout=10)
+                    self.assertEqual(0, app.returncode)
                     log.seek(0)
                     output = log.read()
                     self.assertNotIn("pure virtual method called", output)
