@@ -92,8 +92,11 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
     Column(Modifier.fillMaxSize()) {
     if (group != null) CollectionHeader(group.displayName()) { selected = null }
     if (grouping == "Songs" || group != null) SongList((group?.trackIds ?: report.songs.flatMap { it.trackIds }).mapNotNull(catalog::get),
-        controller, Modifier.weight(1f).fillMaxWidth().testTag("statistics-most-played"), statistics = songStatistics, scrollSort = me.d3sox.nevumi.library.LibrarySort.PLAY_COUNT, header = header, contextName = group?.displayName() ?: "Statistics")
-    else LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("statistics-ranking"), state = rememberLibraryListState(controller, "statistics:$grouping:$period")) {
+        controller, Modifier.weight(1f).fillMaxWidth().testTag("statistics-most-played"), statistics = songStatistics, scrollSort = me.d3sox.nevumi.library.LibrarySort.PLAY_COUNT,
+        header = header, contextName = group?.displayName() ?: "Statistics", headerTitle = group?.displayName())
+    else {
+        ReportLibraryHeader(songCount = report.songs.size)
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("statistics-ranking"), state = rememberLibraryListState(controller, "statistics:$grouping:$period")) {
             item(key = "statistics-header") { header() }
             if (ranks.isEmpty()) item { Text(stringResource(Res.string.sources_statistics_empty), Modifier.padding(24.dp)) }
             if (grouping == "Genres") item { Text(stringResource(Res.string.sources_statistics_genres_hint), Modifier.padding(horizontal = 24.dp),
@@ -107,6 +110,7 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
                         Text(formatListeningStatistics(rank.playCount, rank.listenedMs))
                     } })
             }
+        }
     }
     }
     }

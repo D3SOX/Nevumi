@@ -30,7 +30,7 @@ class CollectionSortingUiTest {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
-                onNodeWithText("1 song").assertIsDisplayed()
+                onNodeWithContentDescription("Songs, 1 song").assertIsDisplayed()
                 openLibraryPage("Albums")
                 onNodeWithText("1 album").assertIsDisplayed()
                 onNodeWithText("Album").performClick()
