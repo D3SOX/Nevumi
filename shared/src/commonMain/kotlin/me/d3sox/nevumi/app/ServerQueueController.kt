@@ -4,6 +4,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -37,6 +40,8 @@ class ServerQueueController internal constructor(private val context: Controller
     private val queue: PlaybackQueue, private val engine: PlaybackEngine, private val navidrome: NavidromeConnection?) {
     private var started = false
     private var checkedAt: TimeMark? = null
+    /** The server whose queue this session has read; uploads wait for it, so they never replace a queue nobody saw. */
+    private var checkedServer: String? = null
     private var offered: ServerPlayQueue? = null
 
     private val enabled: Boolean get() = navidrome != null && context.state.value.server != null &&
@@ -44,20 +49,32 @@ class ServerQueueController internal constructor(private val context: Controller
 
     /** Checks the server once the persisted queue is loaded, then saves later queue and transport changes. */
     internal fun start() = context.action(serialized = false) {
-        check()
+        check(force = true)
         started = true
-        uploadChanges()
+        coroutineScope {
+            launch { checkWhenEnabled() }
+            uploadChanges()
+        }
     }
 
     /** Called when the app comes to the foreground; at most one check runs per interval. */
     fun checkServerQueue(): Job = context.action(serialized = false) { if (started) check() }
 
-    private suspend fun check() {
-        if (!enabled || engine.status.value.playWhenReady || checkedAt?.let { it.elapsedNow() < CHECK_INTERVAL } == true) return
+    /** Turning sync on, or connecting another server, reads that server's queue before this device may replace it. */
+    private suspend fun checkWhenEnabled() {
+        context.state.map { state -> state.server?.serverId?.takeIf { state.preferences.syncPlayQueue } }.distinctUntilChanged().drop(1)
+            .collect { serverId -> checkedServer = null; if (serverId != null) check(force = true) }
+    }
+
+    /** Reads the server's queue even while this device plays, so uploads may follow; only the offer waits for a pause. */
+    private suspend fun check(force: Boolean = false) {
+        if (!enabled || !force && checkedAt?.let { it.elapsedNow() < CHECK_INTERVAL } == true) return
         checkedAt = TimeSource.Monotonic.markNow()
         val connection = connection() ?: return
-        val remote = attempt { connection.playQueue() } ?: return
-        if (remote == offered || remote.copy(changedBy = "") == attempt { navidrome?.uploadedPlayQueue() }) return
+        val remote = try { connection.playQueue() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return }
+        checkedServer = connection.serverId
+        if (remote == null || engine.status.value.playWhenReady || remote == offered ||
+            remote.copy(changedBy = "") == attempt { navidrome?.uploadedPlayQueue() }) return
         val tracks = context.state.value.tracks
         val songs = serverSongs(tracks, connection.serverId)
         val trackId = songs[remote.currentId] ?: return
@@ -66,9 +83,13 @@ class ServerQueueController internal constructor(private val context: Controller
             abs(local.positionMs - remote.positionMs) < SAME_POSITION_MS) return
         offered = remote
         val title = tracks.first { it.id == trackId }.metadata.title
-        context.mutableNotices.tryEmit(ActionNotice(
-            if (remote.changedBy.isBlank()) Res.string.notice_continue_server_queue else Res.string.notice_continue_queue_from,
-            arguments = listOfNotNull(title, remote.changedBy.ifBlank { null }), play = { resume(remote) }))
+        val notice = ActionNotice(if (remote.changedBy.isBlank()) Res.string.notice_continue_server_queue else Res.string.notice_continue_queue_from,
+            arguments = listOfNotNull(title, remote.changedBy.ifBlank { null }), play = { resume(remote) })
+        // Notices are not replayed, and Android can start the app for its playback service before any window collects them.
+        context.scope.launch {
+            context.mutableNotices.subscriptionCount.first { it > 0 }
+            if (offered == remote && !engine.status.value.playWhenReady) context.mutableNotices.tryEmit(notice)
+        }
     }
 
     private fun resume(remote: ServerPlayQueue): Job = context.action {
@@ -98,6 +119,8 @@ class ServerQueueController internal constructor(private val context: Controller
     private suspend fun upload() {
         if (!enabled) return
         val connection = connection() ?: return
+        // A server that could not be read yet, such as one unreachable at startup, is read now; the next change uploads.
+        if (checkedServer != connection.serverId) return check(force = true)
         val local = localQueue(queue.snapshot(), context.state.value.tracks, connection.serverId) ?: return
         if (local == attempt { navidrome?.uploadedPlayQueue() }) return
         if (attempt { connection.savePlayQueue(local) } != null) attempt { navidrome?.rememberUploadedPlayQueue(local) }
