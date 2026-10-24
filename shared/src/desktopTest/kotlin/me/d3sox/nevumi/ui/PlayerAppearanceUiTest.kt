@@ -171,8 +171,8 @@ class PlayerAppearanceUiTest {
                     }
                 }
                 assertRed("Mini-player artwork: Track 70")
-                onNodeWithContentDescription("Album artwork: Track 70", useUnmergedTree = true).assertIsNotDisplayed()
-                onNodeWithContentDescription("Queue artwork: ${controller.state.value.queue.currentEntryId}", useUnmergedTree = true).assertIsNotDisplayed()
+                onNodeWithContentDescription("Album artwork: Track 70", useUnmergedTree = true).assertDoesNotExist()
+                onNodeWithContentDescription("Queue artwork: ${controller.state.value.queue.currentEntryId}", useUnmergedTree = true).assertDoesNotExist()
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithTag("mini-player").assertDoesNotExist()
                 assertRed("Album artwork: Track 70")
