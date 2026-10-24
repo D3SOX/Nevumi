@@ -32,6 +32,7 @@ import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.notice_continue_queue_from
 import me.d3sox.nevumi.security.SecretServiceVault
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
 import java.util.UUID
@@ -67,7 +68,9 @@ class ServerQueueSyncTest {
         try {
             connection.connect("https://music.example", ServerCredentials("test", "test"))
             val engine = SilentEngine()
-            val player = MusicController(library, PlaybackQueue(store), engine, connection)
+            val preferences = MusicPreferences(store)
+            preferences.update { it.copy(syncPlayQueue = true) }
+            val player = MusicController(library, PlaybackQueue(store), engine, connection, preferences = preferences)
             controller = player
             val offer = withTimeout(5_000) { player.notices.first() }
             assertEquals(Res.string.notice_continue_queue_from, offer.message)
@@ -89,7 +92,7 @@ class ServerQueueSyncTest {
             assertEquals(100_000, PlaybackQueue(store).snapshot().positionMs)
             remote = """{"current":"s2","position":42000,"changedBy":"Nevumi","entry":[{"id":"s1"},{"id":"s2"},{"id":"s3"}]}"""
             val checks = queueChecks.value
-            val restarted = MusicController(library, PlaybackQueue(store), SilentEngine(), connection)
+            val restarted = MusicController(library, PlaybackQueue(store), SilentEngine(), connection, preferences = preferences)
             controller = restarted
             val notices = mutableListOf<ActionNotice>()
             val listening = launch(start = CoroutineStart.UNDISPATCHED) { restarted.notices.collect { notices += it } }
