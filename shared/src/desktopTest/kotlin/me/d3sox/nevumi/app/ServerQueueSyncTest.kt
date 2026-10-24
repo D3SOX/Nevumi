@@ -77,6 +77,21 @@ class ServerQueueSyncTest {
     }
 
     @Test
+    fun changingAccountsDoesNotReuseThePreviousAccountsUpload() = withQueueServer {
+        val uploaded = ServerPlayQueue(listOf("s1", "s2", "s3"), "s2", 42_000)
+        val firstAccount = requireNotNull(connection.profile()).serverId
+        connection.rememberUploadedPlayQueue(firstAccount, uploaded)
+        connection.connect("https://music.example", ServerCredentials("other", "test"))
+        val secondAccount = requireNotNull(connection.profile()).serverId
+        assertEquals(null, connection.uploadedPlayQueue(secondAccount))
+        assertEquals(uploaded, connection.uploadedPlayQueue(firstAccount))
+        connection.rememberUploadedPlayQueue(secondAccount, uploaded.copy(positionMs = 60_000))
+        assertEquals(uploaded, connection.uploadedPlayQueue(firstAccount))
+        connection.disconnect()
+        assertEquals(null, connection.uploadedPlayQueue(secondAccount))
+    }
+
+    @Test
     fun anOldQueueOfferCannotPlaySongsFromAnotherAccount() = withQueueServer {
         val engine = SilentEngine()
         val player = start(engine)

@@ -74,7 +74,7 @@ class ServerQueueController internal constructor(private val context: Controller
         val remote = try { connection.playQueue() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return }
         checkedServer = connection.serverId
         if (remote == null || engine.status.value.playWhenReady || remote == offered ||
-            remote.copy(changedBy = "") == attempt { navidrome?.uploadedPlayQueue() }) return
+            remote.copy(changedBy = "") == attempt { navidrome?.uploadedPlayQueue(connection.serverId) }) return
         val tracks = context.state.value.tracks
         val songs = serverSongs(tracks, connection.serverId)
         val trackId = songs[remote.currentId] ?: return
@@ -123,8 +123,8 @@ class ServerQueueController internal constructor(private val context: Controller
         // A server that could not be read yet, such as one unreachable at startup, is read now; the next change uploads.
         if (checkedServer != connection.serverId) return check(force = true)
         val local = localQueue(queue.snapshot(), context.state.value.tracks, connection.serverId) ?: return
-        if (local == attempt { navidrome?.uploadedPlayQueue() }) return
-        if (attempt { connection.savePlayQueue(local) } != null) attempt { navidrome?.rememberUploadedPlayQueue(local) }
+        if (local == attempt { navidrome?.uploadedPlayQueue(connection.serverId) }) return
+        if (attempt { connection.savePlayQueue(local) } != null) attempt { navidrome?.rememberUploadedPlayQueue(connection.serverId, local) }
     }
 
     private fun localQueue(snapshot: QueueSnapshot, tracks: List<Track>, serverId: String): ServerPlayQueue? {
