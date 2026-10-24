@@ -69,7 +69,8 @@ class AndroidLibraryControlsTest {
                 compose.onNodeWithContentDescription("Search your library").assertTextContains("Library control")
                 compose.onNodeWithContentDescription("Close search").performClick()
                 compose.onNodeWithContentDescription("Music sources").performClick()
-                compose.onNodeWithText("Server").assertIsSelected().performClick()
+                // The source chip under the header also reads "Server", so pick the menu item.
+                compose.onNode(hasText("Server") and hasAnyAncestor(isPopup())).assertIsSelected().performClick()
                 compose.onNodeWithContentDescription("Song order").performClick()
                 compose.onNodeWithText("Artist").assertIsSelected().performClick()
                 compose.onNodeWithContentDescription("Song order").performClick()
