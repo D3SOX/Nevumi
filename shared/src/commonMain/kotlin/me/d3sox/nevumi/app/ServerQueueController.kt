@@ -113,7 +113,8 @@ class ServerQueueController internal constructor(private val context: Controller
         val playing = engine.status.map { it.playWhenReady }.distinctUntilChanged()
         // A song that keeps playing saves its position now and then, so a device that stops without pausing loses little.
         val progress = playing.flatMapLatest { if (it) flow { while (true) { delay(UPLOAD_INTERVAL_MS); emit(Unit) } } else emptyFlow() }
-        merge(queueChanges.map { }, playing.drop(1).map { }, progress).debounce(UPLOAD_DELAY_MS).collect { upload() }
+        merge(queueChanges.map { }, playing.drop(1).map { }, context.seeks.map { }, progress)
+            .debounce(UPLOAD_DELAY_MS).collect { upload() }
     }
 
     private suspend fun upload() {

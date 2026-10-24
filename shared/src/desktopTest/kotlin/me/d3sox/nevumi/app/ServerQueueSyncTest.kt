@@ -77,6 +77,21 @@ class ServerQueueSyncTest {
     }
 
     @Test
+    fun seeksAfterThePauseUploadSaveTheNewPosition() = withQueueServer {
+        val player = start(SilentEngine())
+        val offer = withTimeout(5_000) { player.notices.first() }
+        requireNotNull(offer.play).invoke().join()
+        withTimeout(10_000) { saved.await() }
+        player.seek(50_000).join()
+        player.pause().join()
+        withTimeout(10_000) { uploads.first { it.lastOrNull()?.positionMs == 50_000L } }
+        player.seek(80_000).join()
+        withTimeout(10_000) { uploads.first { it.lastOrNull()?.positionMs == 80_000L } }
+        player.seekCurrentEntry(requireNotNull(player.state.value.queue.currentEntryId), 100_000).join()
+        withTimeout(10_000) { uploads.first { it.lastOrNull()?.positionMs == 100_000L } }
+    }
+
+    @Test
     fun turningSyncOnReadsTheServerQueueAndOffersItEvenWhenTheOfferWaitsForTheWindow() = withQueueServer {
         preferences.update { it.copy(syncPlayQueue = false) }
         val player = start(SilentEngine())
@@ -97,6 +112,7 @@ private class QueueServer(scope: CoroutineScope, val store: MusicStore, val libr
     @Volatile var remote = """{"current":"s2","position":42000,"changedBy":"Feishin","entry":[{"id":"s1"},{"id":"s2"},{"id":"s3"}]}"""
     val queueChecks = MutableStateFlow(0)
     val saved = CompletableDeferred<ServerPlayQueue>()
+    val uploads = MutableStateFlow<List<ServerPlayQueue>>(emptyList())
     val controllers = mutableListOf<MusicController>()
 
     fun start(engine: PlaybackEngine) = MusicController(library, PlaybackQueue(store), engine, connection, preferences = preferences)
@@ -112,8 +128,10 @@ private fun withQueueServer(block: suspend QueueServer.() -> Unit) = runBlocking
         val body = when (request.url.encodedPath) {
             "/rest/getPlayQueue.view" -> """"playQueue":${server.remote}""".also { server.queueChecks.update { it + 1 } }
             "/rest/savePlayQueue.view" -> "".also {
-                server.saved.complete(ServerPlayQueue(request.url.parameters.getAll("id").orEmpty(), request.url.parameters["current"]!!,
-                    request.url.parameters["position"]!!.toLong()))
+                val upload = ServerPlayQueue(request.url.parameters.getAll("id").orEmpty(), request.url.parameters["current"]!!,
+                    request.url.parameters["position"]!!.toLong())
+                server.saved.complete(upload)
+                server.uploads.update { it + upload }
             }
             else -> ""
         }
