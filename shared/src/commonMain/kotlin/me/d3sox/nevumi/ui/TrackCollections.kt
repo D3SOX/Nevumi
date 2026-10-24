@@ -10,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
@@ -18,7 +17,6 @@ import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.recentAt
 import me.d3sox.nevumi.resources.Res
-import me.d3sox.nevumi.resources.back
 import me.d3sox.nevumi.resources.library_disc_track
 import me.d3sox.nevumi.resources.songs
 import org.jetbrains.compose.resources.stringResource
@@ -62,18 +60,10 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
             SongList(collection.tracks, controller, Modifier.weight(1f), statistics = statistics, scrollSort = state.preferences.songSort,
                 scrollIndicator = if (tab == LibraryTab.ALBUMS) { index ->
                     positions.getOrNull(index) ?: "${index + 1} / ${collection.tracks.size}"
-                } else null, contextName = collection.title,
-                header = if (!selecting) ({ CollectionHero(collection, tab, state, controller) { selected = null } }) else null)
+                } else null, contextName = collection.title, headerBack = { selected = null },
+                header = if (!selecting) ({ CollectionHero(collection, tab, state, controller) }) else null)
             }
         }
-    }
-}
-
-@Composable
-internal fun CollectionHeader(title: String, back: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        AppIconButton(AppIcon.BACK, stringResource(Res.string.back), onClick = back)
-        Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 

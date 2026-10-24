@@ -39,7 +39,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.apply
-import me.d3sox.nevumi.resources.back
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.delete
 import me.d3sox.nevumi.resources.done
@@ -176,16 +175,13 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
             pageFolder?.let { folder -> visiblePlaylists.filter { isInFolder(it.folder, folder) }
                 .flatMap { it.trackIds }.distinct().size }
         }
-        ReportLibraryHeader(pageFolder, songCount)
+        ReportLibraryHeader(pageFolder, songCount,
+            onBack = pageFolder?.let { { folder = parentFolder(it) } })
     }
     Column(Modifier.fillMaxSize()) {
         if (fileBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         fileMessage?.let { Text(it, Modifier.padding(horizontal = 24.dp)) }
         if (pageFolder != null) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppIconButton(AppIcon.BACK, stringResource(Res.string.back)) { folder = parentFolder(pageFolder) }
-                Text(pageFolder, style = MaterialTheme.typography.titleLarge)
-            }
             val entries = remember(visiblePlaylists, state.artwork, recentAt, pageFolder) { collections(pageFolder) }
             CompositionLocalProvider(LocalLibraryScrollKey provides "${LocalLibraryScrollKey.current}:folder:$pageFolder") {
                 CollectionBrowser(entries, me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, state, controller, Modifier.weight(1f),
@@ -218,7 +214,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
                 } == true }
             val editable = playlist.rule == null && playlist.server?.readOnly != true
             val header: @Composable () -> Unit = {
-                    PlaylistHero(playlist, state, controller, ordered.map { it.value.id }, back = ::closePlaylist, edit = { renaming = true }, delete = { deleting = true }, export = {
+                    PlaylistHero(playlist, state, controller, ordered.map { it.value.id }, edit = { renaming = true }, delete = { deleting = true }, export = {
                         scope.launch {
                             fileBusy = true; fileMessage = null
                             try {
@@ -237,12 +233,13 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
             }
             CompositionLocalProvider(LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, playlist.id)) {
             if (rearrangingSongs && editable) {
-                ReportLibraryHeader(playlist.title, ordered.size)
+                ReportLibraryHeader(playlist.title, ordered.size, onBack = { closePlaylist() })
                 PlaylistRearrangeList(playlist, state, controller, Modifier.weight(1f), header)
             }
             else SongList(ordered.map { it.value }, controller, Modifier.weight(1f), playlist.id.takeIf { editable },
                 scrollIndicator = { "${it + 1} / ${playlist.trackIds.size}" }, contextName = playlist.name,
-                playlistPositions = ordered.map { it.index }, shuffleContext = playlist.shuffle, header = header, headerTitle = playlist.title)
+                playlistPositions = ordered.map { it.index }, shuffleContext = playlist.shuffle, header = header, headerTitle = playlist.title,
+                headerBack = { closePlaylist() })
             }
         }
     }

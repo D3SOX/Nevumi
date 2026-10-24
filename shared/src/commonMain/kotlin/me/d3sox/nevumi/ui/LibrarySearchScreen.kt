@@ -109,7 +109,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 if (opened != null) CompositionLocalProvider(LocalLibraryOrigin provides QueueOrigin(requireNotNull(openedType?.tab), opened.id),
                     LocalLibraryScrollKey provides "search-detail:${openedType?.name}:${opened.id}") {
                     SongList(opened.tracks, controller, playlistId = opened.id.takeIf { openedType == SearchType.PLAYLISTS }, contextName = opened.title,
-                        header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) { openedId = null } })
+                        header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) })
                 } else if (query.isBlank()) {
                     if (type == SearchType.SOUNDCLOUD) SearchPrompt(AppIcon.CLOUD, stringResource(Res.string.sources_search_soundcloud_prompt), Modifier.align(Alignment.Center))
                     else SearchPrompt(AppIcon.MUSIC, stringResource(Res.string.sources_enter_search_term), Modifier.align(Alignment.Center))

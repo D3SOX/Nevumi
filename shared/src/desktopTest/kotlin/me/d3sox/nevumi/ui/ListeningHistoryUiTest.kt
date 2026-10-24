@@ -96,8 +96,14 @@ class ListeningHistoryUiTest {
                     onNode(hasText(category) and hasAnyAncestor(isPopup())).performClick()
                     onNode(hasText(name) and hasAnyAncestor(hasTestTag("statistics-ranking"))).performClick()
                     onNodeWithText("Northern Light").assertIsDisplayed()
+                    assertLibraryBackInHeader()
+                    onAllNodes(hasText(name) and !hasAnyAncestor(hasTestTag("statistics-most-played")),
+                        useUnmergedTree = true).assertCountEquals(1)
+                    captureUiSnapshot("statistics-${category.lowercase()}-header")
                     onNodeWithText("Back to rankings").assertDoesNotExist()
                     onNodeWithContentDescription("Back").performClick()
+                    onNodeWithContentDescription("Back").assertDoesNotExist()
+                    onNodeWithContentDescription("Nevumi logo").assertIsDisplayed()
                 }
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }

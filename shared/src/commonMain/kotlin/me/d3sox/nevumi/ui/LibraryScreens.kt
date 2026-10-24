@@ -59,6 +59,7 @@ import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.album
 import me.d3sox.nevumi.resources.artist
 import me.d3sox.nevumi.resources.ascending
+import me.d3sox.nevumi.resources.back
 import me.d3sox.nevumi.resources.descending
 import me.d3sox.nevumi.resources.library_filters
 import me.d3sox.nevumi.resources.library_last_played
@@ -188,7 +189,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         else if (tabs[currentIndex] != LibraryTab.SEARCH) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 64.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.foundation.Image(org.jetbrains.compose.resources.painterResource(me.d3sox.nevumi.resources.Res.drawable.nevumi_logo),
+                val onBack = headerContext?.onBack
+                if (onBack != null) AppIconButton(AppIcon.BACK, stringResource(Res.string.back), onClick = onBack)
+                else androidx.compose.foundation.Image(org.jetbrains.compose.resources.painterResource(me.d3sox.nevumi.resources.Res.drawable.nevumi_logo),
                     stringResource(Res.string.library_nevumi_logo), Modifier.size(40.dp))
                 Column(Modifier.weight(1f)
                     .then(if (filteredCount) Modifier.clickable(onClickLabel = stringResource(Res.string.library_filters)) { filters = true } else Modifier)
@@ -335,10 +338,10 @@ private fun groupedCollections(tracks: List<Track>, unknownName: String, keys: (
 internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: MusicController,
     modifier: Modifier = Modifier, playlistId: String? = null, statistics: Map<String, ListeningStatistics>? = null,
     extraInfo: Map<String, String> = emptyMap(), entryInfo: ((Int) -> String)? = null, scrollSort: LibrarySort = LibrarySort.TITLE, scrollIndicator: ((Int) -> String)? = null, header: (@Composable () -> Unit)? = null, contextName: String = "Library", playlistPositions: List<Int>? = null,
-    shuffleContext: Boolean = false, headerTitle: String? = null) {
+    shuffleContext: Boolean = false, headerTitle: String? = null, headerBack: (() -> Unit)? = null) {
     val songPages = LocalSongGesturePages.current
     val origin = LocalLibraryOrigin.current
-    ReportLibraryHeader(headerTitle ?: contextName.takeIf { origin.collectionId != null }, tracks.size)
+    ReportLibraryHeader(headerTitle ?: contextName.takeIf { origin.collectionId != null }, tracks.size, headerBack)
     val active = LocalNavigationActive.current
     val tab = LocalLibraryOrigin.current.tab
     DisposableEffect(songPages, active, tab) {

@@ -87,10 +87,9 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
         if (mixId == "customize-home") HomeCustomization(state.preferences.homeSections, controller) { selected = null }
         else if (mix != null) Column(Modifier.fillMaxSize()) {
             val mixTitle = stringResource(mix.title)
-            CollectionHeader(mixTitle) { selected = null }
             CompositionLocalProvider(LocalLibraryOrigin provides QueueOrigin(LibraryTab.HOME, mix.id),
                 LocalLibraryScrollKey provides "home:mix:${mix.id}") {
-                SongList(mix.tracks, controller, Modifier.weight(1f), contextName = mixTitle,
+                SongList(mix.tracks, controller, Modifier.weight(1f), contextName = mixTitle, headerBack = { selected = null },
                     shuffleContext = true, header = {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(stringResource(mix.description), color = MaterialTheme.colorScheme.onSurfaceVariant)
