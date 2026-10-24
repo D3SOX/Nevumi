@@ -26,16 +26,26 @@ import kotlinx.coroutines.delay
 class NavidromeChangesTest {
     @Test
     fun anOwnerCanEditAndDeleteAPlaylistWhoseTracksAreReadOnly() = runBlocking {
+        checkOwnedPlaylistMetadataEdits(initiallyReadOnly = true)
+    }
+
+    @Test
+    fun metadataEditsSurviveAPlaylistBecomingReadOnlyBeforeConflictResolution() = runBlocking {
+        checkOwnedPlaylistMetadataEdits(initiallyReadOnly = false)
+    }
+
+    private suspend fun checkOwnedPlaylistMetadataEdits(initiallyReadOnly: Boolean) {
         val directory = Files.createTempDirectory("owned-read-only-playlist")
         val store = openMusicStore(directory.resolve("library.db").toString())
         var name = "Evening"
         var description = ""
         var songCount = 2
+        var readOnly = initiallyReadOnly
         val mutations = mutableListOf<String>()
         val http = HttpClient(MockEngine { request ->
             when (val endpoint = request.url.encodedPath.substringAfterLast('/')) {
                 "getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"mix"}]}}}""")
-                "getPlaylist.view" -> respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"mix","name":"$name","comment":"$description","owner":"fixture","readonly":true,"entry":[${List(songCount) { """{"id":"song"}""" }.joinToString(",")}]}}}""")
+                "getPlaylist.view" -> respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"mix","name":"$name","comment":"$description","owner":"fixture","readonly":$readOnly,"entry":[${List(songCount) { """{"id":"song"}""" }.joinToString(",")}]}}}""")
                 "updatePlaylist.view" -> {
                     assertNull(request.url.parameters["songIdToAdd"])
                     assertNull(request.url.parameters["songIndexToRemove"])
@@ -57,9 +67,11 @@ class NavidromeChangesTest {
             changes.importPlaylists(client)
             val playlists = Playlists(store)
             val playlist = playlists.all().single()
-            assertFailsWith<IllegalArgumentException> { playlists.replaceTracks(playlist.id, emptyList()) }
-            assertFailsWith<IllegalArgumentException> { playlists.append(playlist.id, song.id) }
-            assertFailsWith<IllegalArgumentException> { playlists.moveTrack(playlist.id, 0, 1) }
+            if (initiallyReadOnly) {
+                assertFailsWith<IllegalArgumentException> { playlists.replaceTracks(playlist.id, emptyList()) }
+                assertFailsWith<IllegalArgumentException> { playlists.append(playlist.id, song.id) }
+                assertFailsWith<IllegalArgumentException> { playlists.moveTrack(playlist.id, 0, 1) }
+            }
             playlists.edit(playlist.id, "After hours", "Music for late evenings")
             changes.synchronize()
             val saved = playlists.get(playlist.id)!!
@@ -67,13 +79,15 @@ class NavidromeChangesTest {
             assertEquals("Music for late evenings", description)
             assertEquals(listOf(song.id, song.id), saved.trackIds)
             assertFalse(saved.pendingSync)
-            assertEquals(true, saved.server?.readOnly)
+            assertEquals(initiallyReadOnly, saved.server?.readOnly)
             assertEquals(listOf("updatePlaylist.view"), mutations)
             // The server can regenerate songs while an offline metadata edit is waiting.
             playlists.rename(playlist.id, "Night music")
             songCount = 3
+            readOnly = true
             changes.synchronize()
             assertNotNull(playlists.get(playlist.id)!!.conflict)
+            assertEquals(true, playlists.get(playlist.id)!!.server?.readOnly, "Conflicts must record the server's current track permission")
             playlists.resolveConflict(playlist.id, keepLocal = true)
             changes.synchronize()
             assertEquals("Night music", name)

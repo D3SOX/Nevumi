@@ -270,7 +270,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                     val key = "playlist-removal:${removal.playlist.id}"
                     if (store.read<PlaylistRemoval>(key) == removal) {
                         store.put("playlist:${removal.playlist.id}", "playlists", removal.playlist.copy(pendingSync = true,
-                            server = link.copy(id = remote.id),
+                            server = link.copy(id = remote.id, readOnly = remote.readOnly || remote.owner != connection.username),
                             conflict = PlaylistConflict(remote.name, remote.songIds, remoteTracks, deletionRequested = true, description = remote.description)))
                         store.database.records().delete(key)
                     }
@@ -330,6 +330,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 store.transaction {
                     val current = playlists.get(playlist.id) ?: return@transaction
                     store.put("playlist:${playlist.id}", "playlists", current.copy(
+                        server = link.copy(readOnly = remote.readOnly || remote.owner != connection.username),
                         conflict = PlaylistConflict(remote.name, remote.songIds, remoteTracks, description = remote.description)))
                 }
                 return@attempt
