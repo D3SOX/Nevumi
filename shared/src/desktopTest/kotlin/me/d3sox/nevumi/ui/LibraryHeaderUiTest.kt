@@ -38,6 +38,9 @@ class LibraryHeaderUiTest {
                     TrackSource("local:$index", SourceKind.LOCAL, "/music/$index.flac"))
             }
             library.setFavorite(songs.first().id, true)
+            playlists.create("Evening mixes ▸ Shared songs", listOf(songs[0].id, songs[1].id, songs[0].id))
+            playlists.create("Evening mixes ▸ Nested ▸ Another mix", listOf(songs[1].id))
+            playlists.create("Empty mixes ▸ Empty playlist", emptyList())
             songs to playlists.create(title, listOf(songs.first().id, songs.first().id))
         }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
@@ -75,6 +78,17 @@ class LibraryHeaderUiTest {
                 header("$title, 0 songs")
                 onNodeWithContentDescription("Back").performClick()
                 header("Playlists")
+                onNodeWithText("Evening mixes").performClick()
+                header("Evening mixes, 2 songs")
+                capture("playlist-folder-header-$name")
+                onNodeWithText("Nested").performClick()
+                header("Evening mixes ▸ Nested, 1 song")
+                onNodeWithContentDescription("Back").performClick()
+                header("Evening mixes, 2 songs")
+                onNodeWithContentDescription("Back").performClick()
+                header("Playlists")
+                onNodeWithText("Empty mixes").performClick()
+                header("Empty mixes, 0 songs")
                 openLibraryPage("History")
                 header("History, 0 songs")
                 openLibraryPage("Favorites")

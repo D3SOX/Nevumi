@@ -171,7 +171,13 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         } }) { page ->
     val playlist = state.playlists.firstOrNull { it.id == page }
     val pageFolder = page?.takeIf { playlist == null && it.startsWith(PLAYLIST_FOLDER_PREFIX) }?.removePrefix(PLAYLIST_FOLDER_PREFIX)
-    if (playlist == null) ReportLibraryHeader(pageFolder)
+    if (playlist == null) {
+        val songCount = remember(visiblePlaylists, pageFolder) {
+            pageFolder?.let { folder -> visiblePlaylists.filter { isInFolder(it.folder, folder) }
+                .flatMap { it.trackIds }.distinct().size }
+        }
+        ReportLibraryHeader(pageFolder, songCount)
+    }
     Column(Modifier.fillMaxSize()) {
         if (fileBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         fileMessage?.let { Text(it, Modifier.padding(horizontal = 24.dp)) }
