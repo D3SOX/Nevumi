@@ -115,7 +115,9 @@ class ReleasesController internal constructor(private val context: ControllerCon
                 if (onlyIfStale && !stale(releases)) return
                 context.update { it.copy(releaseRefresh = it.releaseRefresh.copy(running = true)) }
                 val followed = releases.followed()
-                releases.refresh(artistIds?.let { ids -> followed.filter { it.id in ids } })
+                val update = releases.refresh(artistIds?.let { ids -> followed.filter { it.id in ids } })
+                update.failure?.let { error = it.message ?: "Could not refresh releases" }
+                update.announced
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { error = failure.message ?: "Could not refresh releases"; emptyList() }
             try { publish(releases) }

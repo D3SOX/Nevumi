@@ -119,6 +119,9 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
     private fun escape(text: String) = text.replace(Regex("""[\\+\-!():^\[\]"{}~*?|&/]""")) { "\\${it.value}" }
 }
 
+/** What a refresh found: the new releases recent enough to announce, and the first failure if any artist could not be checked. */
+data class ReleaseUpdate(val announced: List<ArtistRelease>, val failure: Exception? = null)
+
 internal val musicBrainzId = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 /**
@@ -154,10 +157,10 @@ class ArtistReleases(private val store: MusicStore, private val musicBrainz: Mus
     }
 
     /**
-     * Fetches the releases of [artists], by default every followed one, and returns those that are new and recent enough to
-     * announce. Artists that fail keep their earlier releases; the first failure is thrown after the others are done.
+     * Fetches the releases of [artists], by default every followed one. Artists that fail keep their earlier releases; the
+     * others' new releases are still returned, as they will not count as new again.
      */
-    suspend fun refresh(artists: List<FollowedArtist>? = null): List<ArtistRelease> {
+    suspend fun refresh(artists: List<FollowedArtist>? = null): ReleaseUpdate {
         val since = releaseDate(now() - WINDOW_DAYS * DAY_MS)
         val announceSince = releaseDate(now() - ANNOUNCE_DAYS * DAY_MS)
         val announced = mutableListOf<ArtistRelease>()
@@ -186,8 +189,7 @@ class ArtistReleases(private val store: MusicStore, private val musicBrainz: Mus
                 if (failure == null && artists == null) store.put(REFRESHED_KEY, REFRESHED_KIND, now())
             }
         }
-        failure?.let { throw it }
-        return announced.distinctBy { it.id }
+        return ReleaseUpdate(announced.distinctBy { it.id }, failure)
     }
 
     companion object {

@@ -17,14 +17,16 @@ internal class FakeMusicBrainz {
     val groups = mutableMapOf<String, MutableList<String>>()
     var artists = """{"artists":[]}"""
     var status = HttpStatusCode.OK
+    val failingArtists = mutableSetOf<String>()
     val covers = mutableMapOf<String, ByteArray>()
     val queries = mutableListOf<String>()
     val userAgents = mutableListOf<String?>()
     val http = HttpClient(MockEngine { request ->
         userAgents += request.headers[HttpHeaders.UserAgent]
         val json = headersOf(HttpHeaders.ContentType, "application/json")
-        if (status != HttpStatusCode.OK) return@MockEngine respond("{}", status, json)
         val query = request.url.parameters["query"].orEmpty()
+        if (status != HttpStatusCode.OK || failingArtists.any { "arid:$it" in query })
+            return@MockEngine respond("{}", if (status != HttpStatusCode.OK) status else HttpStatusCode.ServiceUnavailable, json)
         queries += query
         when {
             request.url.encodedPath.endsWith("/artist") -> respond(artists, headers = json)
@@ -65,7 +67,7 @@ class ArtistReleasesTest {
     @Test fun refreshingUpdatesReleasesInPlaceAndAnnouncesOnlyRecentOnesFoundAfterTheFirstCheck() = withReleases { releases, musicBrainz ->
         musicBrainz.groups[NOVA] = mutableListOf(musicBrainz.group(releaseId(1), "Old Light", "2026-03-01", NOVA to "Nova"))
         releases.follow(FollowedArtist(NOVA, "Nova"))
-        assertEquals(emptyList(), releases.refresh(), "An artist's releases at the time it is followed are not new")
+        assertEquals(ReleaseUpdate(emptyList()), releases.refresh(), "An artist's releases at the time it is followed are not new")
         assertEquals(listOf("Old Light"), releases.releases().map { it.title })
         assertTrue(musicBrainz.queries.last().contains("firstreleasedate:[2025-10-25 TO *]"), musicBrainz.queries.last())
 
@@ -73,11 +75,11 @@ class ArtistReleasesTest {
         musicBrainz.groups.getValue(NOVA) += listOf(
             musicBrainz.group(releaseId(2), "Upcoming", "2026-12-01", NOVA to "Nova", type = "Single"),
             musicBrainz.group(releaseId(3), "Just Catalogued", "2026-02-01", NOVA to "Nova"))
-        val announced = releases.refresh()
+        val announced = releases.refresh().announced
         assertEquals(listOf("Upcoming"), announced.map { it.title }, "Only recent or upcoming new releases are announced")
         assertEquals(ReleaseType.SINGLE, announced.single().type)
 
-        assertEquals(emptyList(), releases.refresh(), "Refreshing again announces nothing twice")
+        assertEquals(ReleaseUpdate(emptyList()), releases.refresh(), "Refreshing again announces nothing twice")
         assertEquals(3, releases.releases().size, "Refreshing never duplicates a release")
         assertEquals(now, releases.refreshedAt())
 
@@ -106,14 +108,19 @@ class ArtistReleasesTest {
 
     @Test fun aFailingProviderKeepsTheCachedReleasesAndOtherArtistsRefresh() = withReleases { releases, musicBrainz ->
         musicBrainz.groups[NOVA] = mutableListOf(musicBrainz.group(releaseId(1), "Kept", "2026-09-01", NOVA to "Nova"))
+        musicBrainz.groups[ECHO] = mutableListOf()
         releases.follow(FollowedArtist(NOVA, "Nova"))
+        releases.follow(FollowedArtist(ECHO, "Echo"))
         releases.refresh()
         val refreshedAt = releases.refreshedAt()
 
         now += 86_400_000L
-        musicBrainz.status = HttpStatusCode.ServiceUnavailable
-        assertEquals("MusicBrainz is busy. Try again in a moment.", assertFailsWith<IllegalStateException> { releases.refresh() }.message)
-        assertEquals(listOf("Kept"), releases.releases().map { it.title })
+        musicBrainz.failingArtists += NOVA
+        musicBrainz.groups.getValue(ECHO) += musicBrainz.group(releaseId(2), "Fresh", "2026-10-26", ECHO to "Echo")
+        val update = releases.refresh()
+        assertEquals("MusicBrainz is busy. Try again in a moment.", update.failure?.message)
+        assertEquals(listOf("Fresh"), update.announced.map { it.title }, "Another artist's failure does not swallow this one's news")
+        assertEquals(listOf("Fresh", "Kept"), releases.releases().map { it.title }.sorted())
         assertEquals(refreshedAt, releases.refreshedAt(), "A failed refresh does not count as a complete one")
     }
 
