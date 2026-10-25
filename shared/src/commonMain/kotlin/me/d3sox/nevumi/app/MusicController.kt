@@ -74,6 +74,9 @@ data class AppState(
     val sleepTimerEndsAt: Long? = null,
     val soundCloud: SoundCloudProfile? = null,
     val soundCloudJobs: List<SoundCloudJob> = emptyList(),
+    val followedArtists: List<me.d3sox.nevumi.releases.FollowedArtist> = emptyList(),
+    val releases: List<me.d3sox.nevumi.releases.ArtistRelease> = emptyList(),
+    val releaseRefresh: ReleaseRefresh = ReleaseRefresh(),
 ) {
     /** Every song in any playlist; rows ask for membership, and scanning each playlist per row does not scale. */
     val playlistTrackIds: Set<String> by lazy { playlists.flatMapTo(HashSet()) { it.trackIds } }
@@ -111,7 +114,9 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private val soundCloud: SoundCloudDownloads? = null,
     discovery: me.d3sox.nevumi.navidrome.ServerDiscovery? = null,
     backup: me.d3sox.nevumi.backup.MusicBackup? = null,
-    lyrics: me.d3sox.nevumi.lyrics.LyricsLibrary? = null) : AutoCloseable {
+    lyrics: me.d3sox.nevumi.lyrics.LyricsLibrary? = null,
+    releases: me.d3sox.nevumi.releases.ArtistReleases? = null,
+    releaseNotifier: ReleaseNotifier? = null) : AutoCloseable {
     private val context = ControllerContext()
     private val loader = AppStateLoader(context, library, queue, preferences, navidrome, playlists, fileEdits, serverFiles, listeningHistory, artwork)
     val playbackController = PlaybackController(context, library, queue, engine, navidrome, sourceAccessible, preferences, offline,
@@ -130,6 +135,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val backupController = BackupController(context, loader, playbackController, fileEditController, queue, engine, backup)
     val lyricsController = LyricsController(context, lyrics)
     val serverQueueController = ServerQueueController(context, playbackController, queue, engine, navidrome)
+    val releasesController = ReleasesController(context, libraryController, releases, discovery, releaseNotifier)
     private val shutdown = Mutex()
     private var shutdownFinished = false
     val state = context.state
@@ -165,6 +171,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             loader.refreshDetails(loading = false)
             context.update { it.copy(loading = it.serverRefresh?.running == true, error = recoveryError ?: it.error) }
             serverQueueController.start()
+            releasesController.start()
         }
     }
 

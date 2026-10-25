@@ -41,7 +41,8 @@ enum class HomeSectionId(val label: StringResource) {
     RECENT_ALBUMS(Res.string.home_section_recent_albums), RECENT_ARTISTS(Res.string.home_section_recent_artists),
     TOP_ALBUMS(Res.string.home_section_top_albums), TOP_ARTISTS(Res.string.home_section_top_artists),
     REDISCOVER(Res.string.home_section_rediscover), PLAYLISTS(Res.string.home_section_playlists),
-    SAVED_QUEUES(Res.string.home_section_saved_queues), ADDED(Res.string.home_section_added)
+    SAVED_QUEUES(Res.string.home_section_saved_queues), ADDED(Res.string.home_section_added),
+    NEW_RELEASES(Res.string.home_section_new_releases)
 }
 
 @Serializable
@@ -84,6 +85,7 @@ data class MusicSettings(
     val showAudioInfo: Boolean = true,
     /** Off by default because searching LRCLIB sends the song's artist, title, album and length to a third party. */
     val fetchLyricsOnline: Boolean = false,
+    val notifyNewReleases: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,
@@ -114,7 +116,10 @@ data class MusicSettings(
 }
 
 class MusicPreferences(private val store: MusicStore) {
-    suspend fun load(): MusicSettings = store.read("settings:music") ?: MusicSettings()
+    // Settings saved by an older version lack the Home sections added since; they keep their order and gain the new ones.
+    suspend fun load(): MusicSettings = (store.read("settings:music") ?: MusicSettings()).let { settings ->
+        settings.copy(homeSections = settings.homeSections.distinct() + HomeSectionId.entries.filterNot { it in settings.homeSections })
+    }
     suspend fun update(change: (MusicSettings) -> MusicSettings): MusicSettings = store.transaction {
         val settings = change(load())
         require(settings.customColor in 0xFF000000..0xFFFFFFFF) { "Choose an opaque RGB color" }

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Followed artists and their new releases from MusicBrainz. -->
+<resources>
+    <string name="releases_title">New releases</string>
+    <string name="releases_follow">Follow</string>
+    <string name="releases_following">Following</string>
+    <string name="releases_follow_artist">Follow %1$s</string>
+    <string name="releases_unfollow_artist">Unfollow %1$s</string>
+    <string name="releases_searching">Searching MusicBrainz</string>
+    <string name="releases_choose_artist">Several artists on MusicBrainz match %1$s. Choose the one you mean.</string>
+    <string name="releases_no_artist">MusicBrainz has no artist named %1$s.</string>
+    <string name="releases_upcoming">Upcoming</string>
+    <string name="releases_recent">Recent</string>
+    <string name="releases_followed_artists">Artists you follow</string>
+    <string name="releases_follow_hint">Follow artists from their pages to see their new releases here.</string>
+    <string name="releases_none">No releases from the artists you follow in the last year.</string>
+    <string name="releases_refresh">Refresh releases</string>
+    <string name="releases_refresh_failed">Couldn’t refresh releases: %1$s. Saved releases are still shown.</string>
+    <string name="releases_updated">Updated %1$s</string>
+    <string name="releases_source">Nevumi asks MusicBrainz for releases by the artists you follow and loads their covers from the Cover Art Archive.</string>
+    <string name="releases_notify">Notify about new releases</string>
+    <string name="releases_notify_description">Checks for new releases twice a day and shows a notification when an artist you follow has one.</string>
+    <string name="releases_type_album">Album</string>
+    <string name="releases_type_single">Single</string>
+    <string name="releases_type_ep">EP</string>
+    <string name="releases_type_other">Release</string>
+    <string name="releases_in_library">In library</string>
+    <string name="releases_open_album">Open album</string>
+    <string name="releases_search_soundcloud">Search SoundCloud</string>
+    <string name="releases_open_musicbrainz">Open on MusicBrainz</string>
+    <string name="releases_release_options">Options for %1$s</string>
+    <string name="releases_close_options">Close release options</string>
+    <string name="releases_cover">Cover of %1$s</string>
+    <string name="releases_notification_one">New release from %1$s</string>
+    <string name="notice_following_artist">Following %1$s</string>
+    <string name="notice_unfollowed_artist">Unfollowed %1$s</string>
+</resources>

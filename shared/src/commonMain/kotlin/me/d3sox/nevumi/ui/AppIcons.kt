@@ -123,6 +123,10 @@ import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Sell
+import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.HowToReg
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -253,7 +257,11 @@ internal enum class AppIcon(val vector: ImageVector) {
     HIDDEN(Icons.Rounded.VisibilityOff),
     COPY(Icons.Rounded.ContentCopy),
     CLEAN_UP(Icons.Rounded.AutoFixHigh),
-    TAGS(Icons.Rounded.Sell);
+    TAGS(Icons.Rounded.Sell),
+    NEW_RELEASES(Icons.Rounded.NewReleases),
+    FOLLOW(Icons.Rounded.PersonAdd),
+    FOLLOWING(Icons.Rounded.HowToReg),
+    NOTIFICATIONS(Icons.Rounded.Notifications);
 }
 
 internal fun me.d3sox.nevumi.queue.QueueAction.icon() = when (this) {

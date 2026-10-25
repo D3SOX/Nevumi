@@ -28,11 +28,12 @@ import me.d3sox.nevumi.resources.discovery_similar_artists
 import me.d3sox.nevumi.resources.discovery_top_songs
 import org.jetbrains.compose.resources.stringResource
 
-/** The server's knowledge of an artist below the artist page's hero; shows nothing outside artist pages or without a server. */
+/** Following and the server's knowledge of an artist below the artist page's hero; shows nothing outside artist pages. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ArtistDiscovery(artist: String, tab: LibraryTab, state: AppState, controller: MusicController) {
-    if (tab != LibraryTab.ARTISTS && tab != LibraryTab.ALBUM_ARTISTS || artist.isBlank() || state.server == null) return
+    if (tab != LibraryTab.ARTISTS && tab != LibraryTab.ALBUM_ARTISTS || artist.isBlank()) return
+    if (state.server == null) return ArtistFollowButton(artist, state, controller)
     // The library is a key so a refresh or scan maps the server's songs and artists to the library again; details stay cached.
     val discovery by produceState<me.d3sox.nevumi.app.ArtistDiscovery?>(null, artist, state.server, state.libraryReady, state.tracks) {
         value = controller.discoveryController.artistInfo(artist)
@@ -41,8 +42,11 @@ internal fun ArtistDiscovery(artist: String, tab: LibraryTab, state: AppState, c
     val browser = LocalUriHandler.current
     var expanded by rememberSaveable(artist) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilledTonalButton({ controller.discoveryController.playSimilarToArtist(artist) }) {
-            Icon(AppIcon.RECOMMENDATIONS.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.discovery_play_similar))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ArtistFollowButton(artist, state, controller)
+            FilledTonalButton({ controller.discoveryController.playSimilarToArtist(artist) }) {
+                Icon(AppIcon.RECOMMENDATIONS.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.discovery_play_similar))
+            }
         }
         discovery?.let { info ->
             if (info.biography.isNotBlank()) {

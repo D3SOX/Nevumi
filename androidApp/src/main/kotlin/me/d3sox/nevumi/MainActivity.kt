@@ -74,6 +74,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // Turning on release notifications asks again, as it is a direct request for them.
+        val releaseNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                controller.releasesController.notificationRequests.collect {
+                    if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                        releaseNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        }
         val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
             else Manifest.permission.READ_EXTERNAL_STORAGE
         val request = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

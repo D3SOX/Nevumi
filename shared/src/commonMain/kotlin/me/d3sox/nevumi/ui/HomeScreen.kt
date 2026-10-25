@@ -81,10 +81,22 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     val playlists = remember(state.playlists, state.tracks, playlistLayout) {
         homePlaylists(state.playlists, playlistLayout, state.tracks.associate { it.id to it.recentAt })
     }
-    AnimatedNavigation(selected, null, canGoBack = backEnabled && selected != null,
-        onBack = { selected = null }, depth = { if (it == null) 0 else 1 }) { mixId ->
+    val releases = remember(state.releases, now) { releaseFeed(state.releases, me.d3sox.nevumi.releases.releaseDate(now)) }
+    val releaseAlbums = rememberDerived(null, emptyList(), listOf(state.releases, state.followedArtists, tracks)) {
+        releaseAlbums(state.releases, state.followedArtists, tracks)
+    }
+    var releaseOptions by remember { mutableStateOf<me.d3sox.nevumi.releases.ArtistRelease?>(null) }
+    // A SoundCloud search for a release returns to the page it was opened from.
+    var searchParent by rememberSaveable { mutableStateOf<String?>(null) }
+    val searching = selected?.startsWith(RELEASE_SEARCH) == true
+    AnimatedNavigation(selected, if (searching) searchParent else null, canGoBack = backEnabled && selected != null,
+        onBack = { selected = if (searching) searchParent else null },
+        depth = { when { it == null -> 0; it.startsWith(RELEASE_SEARCH) && searchParent != null -> 2; else -> 1 } }) { mixId ->
         val mix = feed.mixes.firstOrNull { it.id == mixId }
+        val searchedRelease = mixId?.takeIf { it.startsWith(RELEASE_SEARCH) }?.removePrefix(RELEASE_SEARCH)?.let { id -> state.releases.firstOrNull { it.id == id } }
         if (mixId == "customize-home") HomeCustomization(state.preferences.homeSections, controller) { selected = null }
+        else if (mixId == RELEASES) ReleaseFeedPage(state, releases, releaseAlbums, controller, { selected = null }) { releaseOptions = it }
+        else if (searchedRelease != null) ReleaseSoundCloudSearch(searchedRelease, state, controller) { selected = searchParent }
         else if (mix != null) Column(Modifier.fillMaxSize()) {
             val mixTitle = stringResource(mix.title)
             CompositionLocalProvider(LocalLibraryOrigin provides QueueOrigin(LibraryTab.HOME, mix.id),
@@ -191,14 +203,25 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
                     HomeSectionId.ADDED -> if (feed.added.isNotEmpty()) item(key = "added") {
                 HomeSongs(stringResource(section.label), feed.added, state, controller) { navigate(LibraryTab.RECENT, null) }
             }
+                    HomeSectionId.NEW_RELEASES -> if (controller.releasesController.available) item(key = "new-releases") {
+                HomeReleases(stringResource(section.label), state, releases, releaseAlbums, controller, { selected = RELEASES }) { releaseOptions = it }
+            }
                 }
             }
         }
     }
+    releaseOptions?.let { release ->
+        ReleaseOptions(release, releaseAlbums[release.id], state, { releaseOptions = null }) {
+            searchParent = selected; selected = RELEASE_SEARCH + release.id
+        }
+    }
 }
 
+private const val RELEASES = "releases"
+private const val RELEASE_SEARCH = "release-search:"
+
 @Composable
-private fun HomeSection(title: String, all: (() -> Unit)? = null, content: @Composable () -> Unit) {
+internal fun HomeSection(title: String, all: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Column(Modifier.testTag("home-section:$title"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)

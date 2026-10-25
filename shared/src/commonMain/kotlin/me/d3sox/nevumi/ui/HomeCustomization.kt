@@ -93,4 +93,5 @@ private fun HomeSectionId.icon(): AppIcon = when (this) {
     HomeSectionId.RECENT_ARTISTS, HomeSectionId.TOP_ARTISTS -> AppIcon.ARTIST
     HomeSectionId.PLAYLISTS, HomeSectionId.SAVED_QUEUES -> AppIcon.QUEUE
     HomeSectionId.ADDED -> AppIcon.RECENT
+    HomeSectionId.NEW_RELEASES -> AppIcon.NEW_RELEASES
 }
