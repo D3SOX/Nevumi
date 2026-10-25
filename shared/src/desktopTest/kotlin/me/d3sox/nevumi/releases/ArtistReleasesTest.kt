@@ -34,7 +34,9 @@ internal class FakeMusicBrainz {
                 val artist = Regex("arid:([0-9a-f-]+)").find(query)!!.groupValues[1]
                 val since = Regex("firstreleasedate:\\[(\\S+) TO").find(query)!!.groupValues[1]
                 val matching = groups[artist].orEmpty().filter { Regex("\"first-release-date\":\"([^\"]*)\"").find(it)!!.groupValues[1] >= since }
-                respond("""{"release-groups":[${matching.joinToString(",")}]}""", headers = json)
+                val offset = request.url.parameters["offset"]?.toInt() ?: 0
+                val limit = request.url.parameters["limit"]!!.toInt()
+                respond("""{"count":${matching.size},"release-groups":[${matching.drop(offset).take(limit).joinToString(",")}]}""", headers = json)
             }
             request.url.encodedPath.endsWith("/front-250") -> covers[request.url.encodedPath.split('/').dropLast(1).last()]
                 ?.let { respond(it, headers = headersOf(HttpHeaders.ContentType, "image/png")) } ?: respond("", HttpStatusCode.NotFound)
@@ -122,6 +124,17 @@ class ArtistReleasesTest {
         assertEquals(listOf("Fresh"), update.announced.map { it.title }, "Another artist's failure does not swallow this one's news")
         assertEquals(listOf("Fresh", "Kept"), releases.releases().map { it.title }.sorted())
         assertEquals(refreshedAt, releases.refreshedAt(), "A failed refresh does not count as a complete one")
+    }
+
+    @Test fun everyPageOfReleasesIsFetchedAndCreditsWithoutTheirOwnNameUseTheArtists() = withReleases { releases, musicBrainz ->
+        musicBrainz.groups[NOVA] = (1..230).map { musicBrainz.group(releaseId(it), "Release $it", "2026-09-01", NOVA to "Nova") }.toMutableList()
+        musicBrainz.groups.getValue(NOVA)[0] = """{"id":"${releaseId(1)}","title":"Unnamed credit","first-release-date":"2026-09-01",
+            "artist-credit":[{"joinphrase":" feat. ","artist":{"id":"$NOVA","name":"Nova"}},{"name":"Echo","artist":{"id":"$ECHO","name":"Echo"}}]}"""
+        releases.follow(FollowedArtist(NOVA, "Nova"))
+        releases.refresh()
+        assertEquals(230, releases.releases().size)
+        assertEquals(3, musicBrainz.queries.size)
+        assertEquals("Nova feat. Echo", releases.releases().first { it.title == "Unnamed credit" }.artist)
     }
 
     @Test fun artistSearchIdentifiesTheAppAndSearchesTheNameAsWritten() = withReleases { releases, musicBrainz ->

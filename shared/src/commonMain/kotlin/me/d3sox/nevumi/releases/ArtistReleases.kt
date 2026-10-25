@@ -72,12 +72,22 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
     /** The release groups crediting [artistId] that were first released on or after [since], a YYYY-MM-DD date. */
     suspend fun releases(artistId: String, since: String): List<ArtistRelease> {
         require(artistId.matches(musicBrainzId)) { "Not a MusicBrainz artist ID" }
-        val body = request("release-group", "arid:$artistId AND firstreleasedate:[$since TO *]", 100)
-        return body.array("release-groups").mapNotNull { group ->
+        // A search returns at most 100 release groups at a time; a missed page would never be announced.
+        val groups = mutableListOf<JsonObject>()
+        do {
+            val body = request("release-group", "arid:$artistId AND firstreleasedate:[$since TO *]", 100, groups.size)
+            val page = body.array("release-groups")
+            groups += page
+            val total = (body["count"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
+        } while (page.isNotEmpty() && groups.size < total)
+        return groups.mapNotNull { group ->
             val credits = group.array("artist-credit")
             ArtistRelease(id = group.text("id").ifBlank { return@mapNotNull null }, title = group.text("title"),
-                // Join phrases such as " & " carry their own spacing.
-                artist = credits.joinToString("") { it.text("name") + (it["joinphrase"] as? JsonPrimitive)?.contentOrNull.orEmpty() }.trim(),
+                // A credit may leave out its name when it is the artist's own; join phrases such as " & " carry their own spacing.
+                artist = credits.joinToString("") { credit ->
+                    credit.text("name").ifBlank { (credit["artist"] as? JsonObject)?.text("name").orEmpty() } +
+                        (credit["joinphrase"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                }.trim(),
                 artistIds = credits.mapNotNull { (it["artist"] as? JsonObject)?.text("id")?.ifBlank { null } },
                 date = group.text("first-release-date").ifBlank { return@mapNotNull null },
                 type = when (group.text("primary-type")) {
@@ -97,13 +107,14 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
         return response.readRawBytes()
     }
 
-    private suspend fun request(entity: String, query: String, limit: Int): JsonObject = pacing.withLock {
+    private suspend fun request(entity: String, query: String, limit: Int, offset: Int = 0): JsonObject = pacing.withLock {
         lastRequest?.let { delay(spacingMs - it.elapsedNow().inWholeMilliseconds) }
         try {
             val response = http.get("${baseUrl.trimEnd('/')}/$entity") {
                 header(HttpHeaders.UserAgent, userAgent)
                 parameter("query", query)
                 parameter("limit", limit)
+                if (offset > 0) parameter("offset", offset)
                 parameter("fmt", "json")
             }
             check(response.status != HttpStatusCode.ServiceUnavailable) { "MusicBrainz is busy. Try again in a moment." }
