@@ -34,7 +34,7 @@ class ReleaseJobService : JobService() {
                     // Turning notifications off leaves the job to cancel itself instead of racing the settings as they load.
                     if (!state.preferences.notifyNewReleases) getSystemService(JobScheduler::class.java).cancel(JOB)
                     else {
-                        controller.releasesController.refreshIfStale()
+                        controller.releasesController.refreshIfStale(ReleasesController.REFRESH_INTERVAL_MS / 2)
                         retry = controller.state.value.releaseRefresh.error != null
                     }
                 }

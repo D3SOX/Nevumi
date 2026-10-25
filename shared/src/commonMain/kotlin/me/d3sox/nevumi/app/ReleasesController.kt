@@ -96,8 +96,11 @@ class ReleasesController internal constructor(private val context: ControllerCon
     /** Refreshes every followed artist's releases, reporting a failure in [AppState.releaseRefresh]. */
     fun refresh(): Job = context.scope.launch { fetch(null) }
 
-    /** Refreshes when the last complete refresh is older than the interval; background jobs call this too. */
-    suspend fun refreshIfStale() = fetch(null, onlyIfStale = true)
+    /**
+     * Refreshes when the last complete refresh is older than [maxAgeMs]. A periodic job passes less than its period, as its
+     * runs are not evenly spaced and one just short of the period would otherwise skip a whole period.
+     */
+    suspend fun refreshIfStale(maxAgeMs: Long = REFRESH_INTERVAL_MS) = fetch(null, maxAgeMs)
 
     fun setNotifications(enabled: Boolean) {
         libraryController.updatePreferences { it.copy(notifyNewReleases = enabled) }
@@ -106,13 +109,15 @@ class ReleasesController internal constructor(private val context: ControllerCon
 
     suspend fun artwork(releaseId: String): ByteArray? = releases?.artwork(releaseId)
 
-    private suspend fun fetch(artistIds: List<String>?, onlyIfStale: Boolean = false) {
+    /** Refreshes [artistIds], or every followed artist; with [maxAgeMs], only when the last complete refresh is older. */
+    private suspend fun fetch(artistIds: List<String>?, maxAgeMs: Long? = null) {
         val releases = releases ?: return
-        refreshing.withLock {
+        // Every exit clears the flag, so a cancelled background job does not leave the feed showing a refresh forever.
+        refreshing.withLock { try {
             var error: String? = null
             val announced = try {
                 // Checked under the lock, so a refresh that just finished elsewhere is not repeated.
-                if (onlyIfStale && !stale(releases)) return
+                if (maxAgeMs != null && !stale(releases, maxAgeMs)) return
                 context.update { it.copy(releaseRefresh = it.releaseRefresh.copy(running = true)) }
                 val followed = releases.followed()
                 val update = releases.refresh(artistIds?.let { ids -> followed.filter { it.id in ids } })
@@ -125,13 +130,13 @@ class ReleasesController internal constructor(private val context: ControllerCon
             catch (_: Exception) { /* The feed keeps what it showed. */ }
             context.update { it.copy(releaseRefresh = it.releaseRefresh.copy(running = false, error = error)) }
             if (announced.isNotEmpty() && context.state.value.preferences.notifyNewReleases) announce(announced)
-        }
+        } finally { context.update { it.copy(releaseRefresh = it.releaseRefresh.copy(running = false)) } } }
     }
 
-    private suspend fun stale(releases: ArtistReleases): Boolean {
+    private suspend fun stale(releases: ArtistReleases, maxAgeMs: Long): Boolean {
         if (releases.followed().isEmpty()) return false
         val last = releases.refreshedAt() ?: return true
-        return now() - last !in 0 until REFRESH_INTERVAL_MS
+        return now() - last !in 0 until maxAgeMs
     }
 
     private suspend fun announce(new: List<ArtistRelease>) {
