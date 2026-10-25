@@ -29,6 +29,7 @@
     <string name="home_section_playlists">Your playlists</string>
     <string name="home_section_saved_queues">Saved queues</string>
     <string name="home_section_added">Recently added</string>
+    <string name="home_section_new_releases">New releases</string>
 
     <!-- QueueRecoveryMode -->
     <string name="queue_recovery_before_replace">Before replacing or clearing</string>

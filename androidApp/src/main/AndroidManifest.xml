@@ -39,6 +39,8 @@
             android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".SoundCloudDownloadService" android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".ReleaseJobService" android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <receiver android:name=".DownloadActionReceiver" android:exported="false" />
         <receiver android:name=".NowPlayingWidgetReceiver" android:exported="true" android:label="@string/now_playing_widget_label">
             <intent-filter>

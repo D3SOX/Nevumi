@@ -48,4 +48,8 @@
         <item quantity="one">%1$d folder</item>
         <item quantity="other">%1$d folders</item>
     </plurals>
+    <plurals name="releases_notification_many">
+        <item quantity="one">%1$d new release</item>
+        <item quantity="other">%1$d new releases</item>
+    </plurals>
 </resources>
