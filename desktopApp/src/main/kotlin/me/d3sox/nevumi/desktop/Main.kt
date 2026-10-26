@@ -145,8 +145,8 @@ private fun raiseRunningPlayer(): Boolean = try {
 } catch (_: Exception) { false }
 
 fun main(arguments: Array<String>) {
-    // Another data directory is another library, so it may run next to the usual one.
-    if (arguments.none { it.startsWith("--data-dir=") } && raiseRunningPlayer()) return
+    // Options such as another data directory or a folder to import need their own instance, so only a plain launch is handed over.
+    if (arguments.isEmpty() && raiseRunningPlayer()) return
     runApplication(arguments)
 }
 
