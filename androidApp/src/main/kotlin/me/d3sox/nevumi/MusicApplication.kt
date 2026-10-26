@@ -100,7 +100,7 @@ class MusicApplication : Application() {
             discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client),
             backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles),
             lyrics = me.d3sox.nevumi.lyrics.LyricsSources(store, me.d3sox.nevumi.lyrics.FileLyrics { contentResolver.openInputStream(Uri.parse(it)) },
-                connection::client, me.d3sox.nevumi.lyrics.LrcLibClient(http, version)),
+                connection::client, listOf(me.d3sox.nevumi.lyrics.LrcLibClient(http, version), me.d3sox.nevumi.lyrics.NetEaseClient(http, version))),
             releases = me.d3sox.nevumi.releases.ArtistReleases(store, me.d3sox.nevumi.releases.MusicBrainzClient(http, version)),
             releaseNotifier = AndroidReleaseNotifier(this))
         widgetUpdates = NowPlayingWidgetUpdates(this, controller).apply { resume() }

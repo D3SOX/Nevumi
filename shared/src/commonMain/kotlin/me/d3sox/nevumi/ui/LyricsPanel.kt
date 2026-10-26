@@ -37,6 +37,7 @@ import me.d3sox.nevumi.resources.lyrics_none_online_hint
 import me.d3sox.nevumi.resources.lyrics_seek_line
 import me.d3sox.nevumi.resources.lyrics_source_embedded
 import me.d3sox.nevumi.resources.lyrics_source_lrclib
+import me.d3sox.nevumi.resources.lyrics_source_netease
 import me.d3sox.nevumi.resources.lyrics_source_server
 import me.d3sox.nevumi.resources.lyrics_source_sidecar
 import me.d3sox.nevumi.resources.lyrics_title
@@ -137,4 +138,5 @@ private fun LyricsSource.label() = when (this) {
     LyricsSource.SIDECAR -> Res.string.lyrics_source_sidecar
     LyricsSource.SERVER -> Res.string.lyrics_source_server
     LyricsSource.LRCLIB -> Res.string.lyrics_source_lrclib
+    LyricsSource.NETEASE -> Res.string.lyrics_source_netease
 }

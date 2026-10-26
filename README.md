@@ -43,7 +43,7 @@ I started it because I couldn't find a music player with all the features I want
 - **New releases.** Follow an artist from their page, and Home lists their recent and upcoming releases from MusicBrainz. Nevumi can notify you about new ones. It contacts MusicBrainz only after you follow an artist.
 - **SoundCloud.** Search and download songs through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server, to your music server or your device. Nevumi never contacts SoundCloud.
 - **Playback.** Nevumi has gapless playback, crossfade, speed and pitch, repeat counts, an equalizer with AutoEQ headphone profiles, mono audio and a sleep timer.
-- **Lyrics.** Nevumi shows synced and plain lyrics from embedded tags, `.lrc` files next to the song and your music server. You can turn on LRCLIB lookups in Settings. Tap a line to jump to it.
+- **Lyrics.** Nevumi shows synced and plain lyrics from embedded tags, `.lrc` files next to the song and your music server. You can turn on LRCLIB lookups in Settings, and add NetEase Cloud Music for songs LRCLIB has no synced lyrics for. Tap a line to jump to it.
 - **Waveforms.** Nevumi draws waveforms from the actual audio and caches them.
 - **Tag editing.** Edit local tags and artwork, or your Navidrome files over SFTP. Look up metadata on MusicBrainz.
 - **Tailscale.** The built-in client reaches your servers on a tailnet without the Tailscale app or a VPN. Headscale works too.
@@ -54,6 +54,14 @@ I started it because I couldn't find a music player with all the features I want
 - **Desktop.** Linux has MPRIS media controls, right-click menus and a volume slider in the mini player.
 - **Widget.** Android has a home screen widget and a quick settings tile for the current song.
 - **Visualizer.** Nevumi runs MilkDrop presets through projectM. Over 10,000 presets ship with the app. You can search them, mark favorites and switch presets automatically.
+
+## Online lyrics
+
+Online lyrics lookups are off by default. Enable them in Settings to search LRCLIB, then separately enable NetEase Cloud Music to search it when LRCLIB has no synced result. NetEase receives the song's artist and title through undocumented web-player endpoints. These requests use no account, API key or paid subscription, but access can fail or require verification.
+
+Each NetEase lookup makes one search request and up to three lyric requests, with a ten-second timeout for the whole lookup. No published quota or third-party lyrics API agreement has been confirmed. Nevumi caches successful results in its local library database and reuses them without another online lookup. NetEase results show "Lyrics from NetEase Cloud Music".
+
+NetEase's permission for third-party lyric display, caching and redistribution has not been confirmed. Anonymous access does not establish permission to reuse lyrics, and attribution does not grant those rights.
 
 ## Screenshots
 

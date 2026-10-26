@@ -10,7 +10,10 @@
     <string name="lyrics_source_sidecar">Lyrics from a file next to the song</string>
     <string name="lyrics_source_server">Lyrics from your music server</string>
     <string name="lyrics_source_lrclib">Lyrics from LRCLIB</string>
+    <string name="lyrics_source_netease">Lyrics from NetEase Cloud Music</string>
     <string name="lyrics_setting_online">Find lyrics online</string>
-    <string name="lyrics_keywords_online">lyrics lrclib synced words text karaoke internet</string>
+    <string name="lyrics_keywords_online">lyrics lrclib netease 163 cloud music synced words text karaoke internet</string>
     <string name="lyrics_setting_online_description">Sends the artist, title, album and length of songs without lyrics to LRCLIB.</string>
+    <string name="lyrics_setting_netease">Also search NetEase Cloud Music</string>
+    <string name="lyrics_setting_netease_description">When LRCLIB has no synced lyrics, sends the song’s artist and title to NetEase Cloud Music, a Chinese streaming service. Its lyrics search isn’t an official API.</string>
 </resources>

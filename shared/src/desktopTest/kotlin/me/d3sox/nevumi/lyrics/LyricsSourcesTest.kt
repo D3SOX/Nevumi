@@ -7,6 +7,7 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
@@ -82,17 +83,17 @@ class LyricsSourcesTest {
             val identified = metadata.copy(recordingId = "11111111-2222-3333-4444-555555555555",
                 releaseId = "66666666-7777-8888-9999-000000000000", trackNumber = 1)
             val track = Track("phone-track", identified, listOf(TrackSource("local:x", SourceKind.LOCAL, directory.resolve("missing.flac").toString())))
-            var sources = LyricsSources(store, FileLyrics(), lrcLib = LrcLibClient(http, "1.0"))
-            assertNull(sources.lyrics(track, online = false))
+            var sources = LyricsSources(store, FileLyrics(), online = listOf(LrcLibClient(http, "1.0")))
+            assertNull(sources.lyrics(track, online = emptySet()))
             assertEquals(0, requests)
-            val found = assertNotNull(sources.lyrics(track, online = true))
+            val found = assertNotNull(sources.lyrics(track, online = setOf(LyricsSource.LRCLIB)))
             assertEquals(LyricsSource.LRCLIB, found.source)
             assertEquals(1, requests)
             store.close(); store = openMusicStore(database)
-            sources = LyricsSources(store, FileLyrics(), lrcLib = LrcLibClient(http, "1.0"))
+            sources = LyricsSources(store, FileLyrics(), online = listOf(LrcLibClient(http, "1.0")))
             // The same recording on another device has another track id and title spelling, but the same MusicBrainz identity.
             val elsewhere = Track("desktop-track", identified.copy(title = "northern light"), emptyList())
-            assertEquals(found, sources.lyrics(elsewhere, online = false))
+            assertEquals(found, sources.lyrics(elsewhere, online = emptySet()))
             assertEquals(1, requests)
             assertEquals(found, store.read<Lyrics>("lyrics:" + LyricsSources.cacheKey(identified)))
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
@@ -109,13 +110,85 @@ class LyricsSourcesTest {
             directory.resolve("song.lrc").toFile().writeText("[00:01.00]Sidecar")
             val track = Track("t", metadata, listOf(TrackSource("local:s", SourceKind.LOCAL, audio.path),
                 TrackSource("server:abc:1", SourceKind.SERVER, "1")))
-            val sources = LyricsSources(store, FileLyrics(), { error("The server must not be asked") }, LrcLibClient(http, "1.0"))
-            assertEquals(LyricsSource.SIDECAR, sources.lyrics(track, online = true)?.source)
+            val sources = LyricsSources(store, FileLyrics(), { error("The server must not be asked") }, listOf(LrcLibClient(http, "1.0")))
+            assertEquals(LyricsSource.SIDECAR, sources.lyrics(track, online = setOf(LyricsSource.LRCLIB))?.source)
             assertEquals(0, requests)
             // Failing sources leave nothing behind and do not throw.
-            assertNull(sources.lyrics(track.copy(sources = track.sources.drop(1)), online = true))
+            assertNull(sources.lyrics(track.copy(sources = track.sources.drop(1)), online = setOf(LyricsSource.LRCLIB)))
             assertEquals(1, requests)
             assertNull(store.read<Lyrics>("lyrics:" + LyricsSources.cacheKey(metadata)))
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun netEaseTakesTheFirstCopyOfTheSameRecordingWithLyricsAndDropsItsCredits() = runBlocking {
+        val searches = mutableListOf<String?>()
+        val lyricIds = mutableListOf<String?>()
+        var lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:01.000] 作曲 : Someone\n[00:02.50]你说：First line\n[00:04.00]Second"}}"""
+        val netEase = NetEaseClient(http { request ->
+            if (request.url.encodedPath == "/api/cloudsearch/pc") {
+                searches += request.url.parameters["s"]
+                respond("""{"code":200,"result":{"songs":[
+                    {"id":1,"name":"Northern Light (Live)","ar":[{"name":"Fixture Artist"}],"dt":184000},
+                    {"id":2,"name":"Northern Light","ar":[{"name":"Someone Else"}],"dt":184000},
+                    {"id":6,"name":"Northern Light","ar":[{"name":"Fixture Artists"}],"dt":184000},
+                    {"id":3,"name":"Northern Light","ar":[{"name":"Fixture Artist"}],"dt":240000},
+                    {"id":4,"name":"NORTHERN LIGHT","ar":[{"name":"Fixture Artist (测试)"}],"dt":183900},
+                    {"id":5,"name":"Northern-Light","ar":[{"name":"FIXTURE ARTIST"}],"dt":185000}]}}""", headers = json)
+            } else {
+                val id = request.url.parameters["id"]
+                lyricIds += id
+                respond(when (id) { "4" -> """{"code":200,"lrc":{"lyric":"Plain copy"}}"""; else -> lyric }, headers = json)
+            }
+        }, "1.0")
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(2_500, "你说：First line"), LyricLine(4_000, "Second"))), netEase.lyrics(metadata))
+        assertEquals(listOf<String?>("Fixture Artist Northern Light"), searches)
+        // Other versions, artists and lengths are never fetched, and a plain copy gives way to a synced one.
+        assertEquals(listOf<String?>("4", "5"), lyricIds)
+        for (opening in listOf("I : remember", "僕 : まだ", "2 : 1", "你说 : First line")) {
+            lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:00.100]制作人 : Someone\n[00:00.200]录音师 : Someone\n[00:00.300]混音工程师 : Someone\n[00:01.00]$opening"}}"""
+            assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, opening))), netEase.lyrics(metadata))
+        }
+        lyric = """{"code":200,"lrc":{"lyric":""}}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, plain = "Plain copy"), netEase.lyrics(metadata))
+        lyric = """{"code":200,"pureMusic":true,"lrc":{"lyric":"[00:00.00]纯音乐，请欣赏"}}"""
+        assertNull(netEase.lyrics(metadata))
+        assertNull(netEase.lyrics(metadata.copy(title = "Unknown song")))
+    }
+
+    @Test fun netEaseReportsARefusalSentWithHttpOk() = runBlocking {
+        val netEase = NetEaseClient(http { respond("""{"code":-462,"message":"Verify your phone"}""", headers = json) }, "1.0")
+        assertFailsWith<IllegalStateException> { netEase.lyrics(metadata) }
+        Unit
+    }
+
+    @Test fun onlineServicesAreAskedInOrderUntilOneHasSyncedLyrics() = runBlocking {
+        val asked = mutableListOf<LyricsSource>()
+        fun service(source: LyricsSource, answer: suspend () -> Lyrics?) = object : OnlineLyrics {
+            override val source = source
+            override suspend fun lyrics(metadata: TrackMetadata): Lyrics? { asked += source; return answer() }
+        }
+        val track = Track("t", metadata, emptyList())
+        val synced = Lyrics(LyricsSource.NETEASE, listOf(LyricLine(0, "Synced")))
+        val plain = Lyrics(LyricsSource.LRCLIB, plain = "Plain")
+        suspend fun find(lrcLib: suspend () -> Lyrics?, netEase: suspend () -> Lyrics?, online: Set<LyricsSource>): Lyrics? {
+            asked.clear()
+            return LyricsSources(null, null, online = listOf(service(LyricsSource.LRCLIB, lrcLib), service(LyricsSource.NETEASE, netEase)),
+                onlineTimeoutMillis = 200).lyrics(track, online)
+        }
+        val both = setOf(LyricsSource.LRCLIB, LyricsSource.NETEASE)
+        assertNull(find({ plain }, { synced }, emptySet()))
+        assertEquals(emptyList<LyricsSource>(), asked)
+        // Synced lyrics from a later service beat plain text from an earlier one, which stays as the fallback.
+        assertEquals(synced, find({ plain }, { synced }, both))
+        assertEquals(plain, find({ plain }, { null }, both))
+        assertEquals(listOf(LyricsSource.LRCLIB, LyricsSource.NETEASE), asked)
+        assertEquals(plain, find({ plain }, { synced }, setOf(LyricsSource.LRCLIB)))
+        assertEquals(listOf(LyricsSource.LRCLIB), asked)
+        assertEquals(synced.copy(source = LyricsSource.LRCLIB), find({ synced.copy(source = LyricsSource.LRCLIB) }, { error("unused") }, both))
+        assertEquals(listOf(LyricsSource.LRCLIB), asked)
+        // A failing or stalled service gives way to the next one.
+        assertEquals(synced, find({ error("HTTP 503") }, { synced }, both))
+        assertEquals(synced, find({ awaitCancellation() }, { synced }, both))
+        assertEquals(plain, find({ plain }, { awaitCancellation() }, both))
     }
 }
