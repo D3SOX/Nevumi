@@ -34,18 +34,22 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         }
     }
 
-    override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> = withContext(Dispatchers.IO) {
+    override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> =
+        scan(location, force, onProgress, followRules = true)
+
+    override suspend fun scanSong(location: String): List<Track> = scan(location, force = false, onProgress = {}, followRules = false)
+
+    private suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit,
+        followRules: Boolean): List<Track> = withContext(Dispatchers.IO) {
         val root = File(location).canonicalFile
         // File edits rescan a single file; only folders are library roots.
         if (root.isDirectory) library.rememberLocalRoot(root.path)
         val folders = library.localFolderRules()
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
-        // A single file was chosen on its own, so the folder rules that shape the library do not apply to it.
-        val files = if (root.isFile) listOf(root).filter { it.extension.lowercase() in localMusicExtensions }
-            else root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter { it.isFile && it.extension.lowercase() in
-                localMusicExtensions && folders.allows(it.canonicalFile.parent.orEmpty(),
-                    it.canonicalFile.parentFile?.relativeToOrNull(root)?.path) }.toList()
+        val files = root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter { it.isFile && it.extension.lowercase() in
+            localMusicExtensions && (!followRules || folders.allows(it.canonicalFile.parent.orEmpty(),
+                it.canonicalFile.parentFile?.relativeToOrNull(root)?.path)) }.toList()
         onProgress(LocalScanProgress(0, files.size))
         val imported = files.mapIndexedNotNull { index, file ->
             try {

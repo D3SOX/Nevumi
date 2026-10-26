@@ -222,20 +222,22 @@ class LibraryController internal constructor(private val context: ControllerCont
             if (allowed.included.isEmpty() && sources.roots().none { LocalFolderRules(listOf(it)).allows(folder) }) importSources(listOf(folder))
         }
         if (songs.isEmpty()) return emptyList()
-        importSources(songs)
+        importSources(songs, chosenSongs = true)
         val tracks = context.state.value.tracks
         return songs.mapNotNull { path ->
             tracks.firstOrNull { track -> track.sources.any { it.kind == SourceKind.LOCAL && it.location == path } }?.id
         }.distinct()
     }
 
-    private suspend fun importSources(locations: List<String>) = imports.withLock {
+    /** Scans [locations]; [chosenSongs] are files the user picked, indexed even outside the library's folders. */
+    private suspend fun importSources(locations: List<String>, chosenSongs: Boolean = false) = imports.withLock {
         context.update { it.copy(loading = true, error = null) }
         var lastProgress = 0L
         try {
             val sources = requireNotNull(localSources) { "Local music access is unavailable" }
             val songs = locations.sumOf { location ->
-                sources.scan(location, onProgress = { progress ->
+                if (chosenSongs) sources.scanSong(location).size
+                else sources.scan(location, onProgress = { progress ->
                     val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
                     if (progress.processed == 0 || progress.processed == progress.total || now - lastProgress >= 100) {
                         lastProgress = now

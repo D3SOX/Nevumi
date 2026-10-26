@@ -20,6 +20,7 @@ class WatchingLocalFiles(private val library: MusicLibrary, artwork: ArtworkLibr
     override suspend fun pendingRefreshLocations(): List<String> =
         (scanner.pendingRefreshLocations() + (roots() - scanner.roots().toSet())).distinct()
     override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> = scanner.scan(location, force, onProgress)
+    override suspend fun scanSong(location: String): List<Track> = scanner.scanSong(location)
 
     override val changes: Flow<Unit> = flow {
         FileSystems.getDefault().newWatchService().use { watcher ->
