@@ -43,6 +43,9 @@ import me.d3sox.nevumi.sftp.*
 import me.d3sox.nevumi.soundcloud.*
 import me.d3sox.nevumi.navidrome.ServerRefreshProgress
 import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.getString
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.drop_queue_name
 
 data class AppState(
     val tracks: List<Track> = emptyList(),
@@ -190,6 +193,11 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun rescanLocalMusic() = libraryController.rescanLocalMusic()
     fun updateLocalFolders(included: List<String>, excluded: List<String>) = libraryController.updateLocalFolders(included, excluded)
     fun importSource(location: String) = libraryController.importSource(location)
+    /** Adds [folders] to the library, then plays [songs], which may live outside it. */
+    fun addMusic(folders: List<String>, songs: List<String>) = context.action(serialized = false) {
+        val ids = libraryController.addMusic(folders, songs)
+        if (ids.isNotEmpty()) playTrack(ids.first(), ids, 0, contextName = getString(Res.string.drop_queue_name)).join()
+    }
     fun dismissError(error: String) = context.dismissError(error)
 
     // File editing

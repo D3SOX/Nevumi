@@ -87,6 +87,10 @@ import me.d3sox.nevumi.resources.settings_colors_artwork
 import me.d3sox.nevumi.resources.settings_colors_custom
 import me.d3sox.nevumi.resources.settings_colors_system
 import me.d3sox.nevumi.resources.settings_confirm_queue_jumps
+import me.d3sox.nevumi.resources.settings_keep_playing
+import me.d3sox.nevumi.resources.settings_keep_playing_description
+import me.d3sox.nevumi.resources.settings_tray_icon
+import me.d3sox.nevumi.resources.settings_tray_icon_description
 import me.d3sox.nevumi.resources.settings_confirm_queue_jumps_description
 import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption
 import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption_description
@@ -384,6 +388,12 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             }
             SettingsToggle(stringResource(Res.string.settings_confirm_up_next_interruption), AppIcon.CONFIRM, stringResource(Res.string.settings_confirm_up_next_interruption_description), settings.confirmNextUpInterruption) {
                 enabled -> controller.updatePreferences { it.copy(confirmNextUpInterruption = enabled) }
+            }
+            if (desktopWindowSettings) {
+                SettingsToggle(stringResource(Res.string.settings_keep_playing), AppIcon.HEADPHONES, stringResource(Res.string.settings_keep_playing_description),
+                    settings.keepPlayingInBackground) { enabled -> controller.updatePreferences { it.copy(keepPlayingInBackground = enabled) } }
+                SettingsToggle(stringResource(Res.string.settings_tray_icon), AppIcon.DESKTOP, stringResource(Res.string.settings_tray_icon_description),
+                    settings.trayIcon) { enabled -> controller.updatePreferences { it.copy(trayIcon = enabled) } }
             }
             if (settings.showPreviousQueueTracks) {
                 SettingsSlider(stringResource(Res.string.settings_previous_track_limit), AppIcon.REPEAT_COUNT, settings.previousQueueTrackLimit.toFloat(), 1f..100f, 98,

@@ -259,4 +259,42 @@ class LocalFilesTest {
             assertEquals(listOf(music.toFile().canonicalPath), library.localRoots())
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun scanningAFolderInsideALibraryRootIndexesItWithoutAddingAnotherRoot() = runBlocking {
+        val directory = Files.createTempDirectory("nested-root")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val music = Files.createDirectory(directory.resolve("music"))
+            val album = Files.createDirectory(music.resolve("Album"))
+            val library = MusicLibrary(store)
+            val scanner = LocalFiles(library)
+            scanner.scan(music.toString())
+            Files.copy(Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac"), album.resolve("song.flac"))
+            assertEquals("Northern Light", scanner.scan(album.toString()).single().metadata.title)
+            // Rescans walk every root, so a folder inside one would be scanned twice.
+            assertEquals(listOf(music.toFile().canonicalPath), library.localRoots())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aDroppedSongInAnExcludedFolderStaysPlayableAfterRescans() = runBlocking {
+        val directory = Files.createTempDirectory("dropped-excluded-song").toRealPath()
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val music = Files.createDirectory(directory.resolve("music"))
+            val hidden = Files.createDirectory(music.resolve("Hidden"))
+            val song = Files.copy(Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac"),
+                hidden.resolve("song.flac"))
+            me.d3sox.nevumi.settings.MusicPreferences(store).update { it.copy(excludeFolders = listOf(hidden.toString())) }
+            val library = MusicLibrary(store)
+            val scanner = LocalFiles(library)
+            assertEquals(emptyList(), scanner.scan(music.toString()))
+            val dropped = scanner.scanSong(song.toString()).single()
+            // A change elsewhere in the folder rescans it by its rules; the song the user chose stays.
+            assertEquals(listOf(dropped.id), scanner.scan(music.toString()).map { it.id })
+            assertEquals(true, library.findTrack(dropped.id)!!.sources.single().available)
+            assertEquals(emptyList(), scanner.pendingRefreshLocations())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
 }

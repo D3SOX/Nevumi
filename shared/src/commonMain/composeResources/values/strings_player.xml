@@ -214,6 +214,13 @@
     <string name="player_clear_previous_title">Clear previous?</string>
     <string name="player_clear_next_title">Clear next?</string>
     <string name="player_clear_all_title">Clear all?</string>
+    <!-- Linux desktop: tray icon and dropping files on the window -->
+    <string name="tray_show">Show Nevumi</string>
+    <string name="tray_quit">Quit</string>
+    <string name="drop_music">Drop folders to add them to your library, or songs to play them</string>
+    <string name="drop_unsupported">Drop music folders or MP3, FLAC and WAV files</string>
+    <string name="drop_folder_excluded">Your excluded folder %1$s also hides %2$s. Remove that exclusion in Settings › Local music to add it.</string>
+    <string name="drop_queue_name">Dropped songs</string>
     <plurals name="player_rating_stars">
         <item quantity="one">Rating: %1$d star</item>
         <item quantity="other">Rating: %1$d stars</item>

@@ -401,4 +401,39 @@ class LinuxMediaSessionTest {
             directory.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun desktopMediaControlsShowTheWindowAndQuitWhenTheAppAllowsIt() = runBlocking {
+        val directory = Files.createTempDirectory("music-mpris-window")
+        val address = "unix:path=${directory.resolve("bus")}"
+        val daemon = ProcessBuilder("dbus-daemon", "--session", "--nofork", "--print-address=1", "--address=$address")
+            .redirectError(directory.resolve("bus.log").toFile()).start()
+        assertTrue(daemon.inputStream.bufferedReader().readLine().startsWith("unix:path="))
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+        var session: LinuxMediaSession? = null
+        fun call(method: String, vararg arguments: String): String {
+            val process = ProcessBuilder(listOf("gdbus", "call", "--address", address, "--dest", "org.mpris.MediaPlayer2.nevumi",
+                "--object-path", "/org/mpris/MediaPlayer2", "--method", method) + arguments).redirectErrorStream(true).start()
+            try {
+                assertTrue(process.waitFor(5, TimeUnit.SECONDS), "D-Bus client timed out")
+                val result = process.inputStream.bufferedReader().readText()
+                assertEquals(0, process.exitValue(), result)
+                return result
+            } finally { process.destroyForcibly() }
+        }
+        try {
+            session = LinuxMediaSession(controller, address, raise = { requests += "raise" }, quit = { requests += "quit" })
+            val properties = call("org.freedesktop.DBus.Properties.GetAll", "org.mpris.MediaPlayer2")
+            assertTrue(properties.contains("'CanQuit': <true>") && properties.contains("'CanRaise': <true>"), properties)
+            call("org.mpris.MediaPlayer2.Raise")
+            call("org.mpris.MediaPlayer2.Quit")
+            assertEquals(listOf("raise", "quit"), requests)
+        } finally {
+            session?.close(); controller.closeAndJoin(); store.close()
+            daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
+            directory.toFile().deleteRecursively()
+        }
+    }
 }

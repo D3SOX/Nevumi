@@ -105,6 +105,10 @@
     <string name="settings_confirm_up_next_interruption">Confirm interrupting Up next</string>
     <string name="settings_confirm_up_next_interruption_description">Ask before starting other music while Up next is active</string>
     <string name="settings_previous_track_limit">Previous track limit</string>
+    <string name="settings_keep_playing">Keep playing after closing</string>
+    <string name="settings_keep_playing_description">Closing the window while music plays hides it. Reopen Nevumi from the tray icon or your media controls</string>
+    <string name="settings_tray_icon">Tray icon</string>
+    <string name="settings_tray_icon_description">Closing the window keeps Nevumi in the system tray, where you can control playback, reopen it or quit</string>
 
     <!-- Waveforms -->
     <string name="settings_prepare_automatically">Prepare automatically</string>
@@ -229,6 +233,8 @@
     <string name="settings_keywords_previous_track_limit">queue history count</string>
     <string name="settings_keywords_confirm_queue_jumps">confirmation skip play now</string>
     <string name="settings_keywords_confirm_up_next_interruption">confirmation replace queue starting music album playlist</string>
+    <string name="settings_keywords_keep_playing">background close window hide minimize quit tray</string>
+    <string name="settings_keywords_tray_icon">system tray status notifier panel background quit</string>
     <string name="settings_keywords_prepare_all_waveforms">audio waveform background cache precompute progress</string>
     <string name="settings_keywords_prepare_automatically">audio waveform background cache precompute</string>
     <string name="settings_keywords_audio_effects">equalizer headphone profiles mono balance limiter preamp</string>

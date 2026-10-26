@@ -8,6 +8,9 @@ import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.wav.WavTag
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 
+/** The audio formats a local scan indexes. */
+val localMusicExtensions = setOf("mp3", "wav", "flac")
+
 class LocalFiles(private val library: MusicLibrary, private val artwork: ArtworkLibrary? = null) : LocalSources {
     // Earlier versions registered every edited file as a root; ignore those so they stop being rescanned.
     override suspend fun roots(): List<String> = library.localRoots().filterNot { File(it).isFile }
@@ -15,12 +18,13 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
     override suspend fun pendingRefreshLocations(): List<String> = withContext(Dispatchers.IO) {
         val indexed = library.tracks().flatMap { it.sources }.filter { it.kind == SourceKind.LOCAL }.associateBy { it.id }
         val folders = library.localFolderRules()
+        val chosen = library.chosenSongs()
         roots().filter { location ->
             if (location.startsWith("content:") || location == "device") return@filter false
             val root = File(location).canonicalFile
             val files = root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter {
-                it.isFile && it.extension.lowercase() in setOf("mp3", "wav", "flac") &&
-                    folders.allows(it.canonicalFile.parent.orEmpty(), it.canonicalFile.parentFile?.relativeToOrNull(root)?.path)
+                it.isFile && it.extension.lowercase() in localMusicExtensions && (it.canonicalPath in chosen ||
+                    folders.allows(it.canonicalFile.parent.orEmpty(), it.canonicalFile.parentFile?.relativeToOrNull(root)?.path))
             }.associateBy { "local:${it.canonicalPath}" }
             files.any { (id, file) ->
                 val source = indexed[id]
@@ -31,16 +35,26 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         }
     }
 
-    override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> = withContext(Dispatchers.IO) {
+    override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> =
+        scan(location, force, onProgress, followRules = true)
+
+    override suspend fun scanSong(location: String): List<Track> = scan(location, force = false, onProgress = {}, followRules = false)
+
+    private suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit,
+        followRules: Boolean): List<Track> = withContext(Dispatchers.IO) {
         val root = File(location).canonicalFile
-        // File edits rescan a single file; only folders are library roots.
-        if (root.isDirectory) library.rememberLocalRoot(root.path)
+        // File edits rescan a single file; only folders are library roots, and rescans already cover folders inside one.
+        if (root.isDirectory && library.localRoots().none { root.toPath().startsWith(File(it).canonicalFile.toPath()) })
+            library.rememberLocalRoot(root.path)
+        // Songs the user chose stay wherever they are, also when a rescan follows the folder rules.
+        if (!followRules) library.rememberChosenSong(root.path)
         val folders = library.localFolderRules()
+        val chosen = library.chosenSongs()
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
         val files = root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter { it.isFile && it.extension.lowercase() in
-            setOf("mp3", "wav", "flac") && folders.allows(it.canonicalFile.parent.orEmpty(),
-                it.canonicalFile.parentFile?.relativeToOrNull(root)?.path) }.toList()
+            localMusicExtensions && (!followRules || it.canonicalPath in chosen || folders.allows(it.canonicalFile.parent.orEmpty(),
+                it.canonicalFile.parentFile?.relativeToOrNull(root)?.path)) }.toList()
         onProgress(LocalScanProgress(0, files.size))
         val imported = files.mapIndexedNotNull { index, file ->
             try {

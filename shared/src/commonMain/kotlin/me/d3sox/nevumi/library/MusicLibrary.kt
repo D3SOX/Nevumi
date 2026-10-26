@@ -177,6 +177,13 @@ class MusicLibrary(private val store: MusicStore) {
 
     internal suspend fun localRoots(): List<String> = store.list<LibraryRoot>("library-roots").map { it.location }.sorted()
 
+    /** Remembers a song the user chose directly, so it stays in the library even where the folder rules leave its folder out. */
+    internal suspend fun rememberChosenSong(location: String) {
+        store.put("chosen-song:${location.encodeUtf8().sha256().hex()}", "chosen-songs", ChosenSong(location))
+    }
+
+    internal suspend fun chosenSongs(): Set<String> = store.list<ChosenSong>("chosen-songs").mapTo(mutableSetOf()) { it.location }
+
     internal suspend fun localIndexStamp(location: String): String? = store.read("local-index:$location")
 
     internal suspend fun saveLocalIndexStamp(location: String, stamp: String) {
@@ -371,6 +378,9 @@ class MusicLibrary(private val store: MusicStore) {
 
 @Serializable
 private data class LibraryRoot(val location: String)
+
+@Serializable
+private data class ChosenSong(val location: String)
 
 @Serializable
 private data class SourceOwner(val trackId: String)

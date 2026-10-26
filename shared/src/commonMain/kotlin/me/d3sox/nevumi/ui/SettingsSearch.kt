@@ -43,6 +43,8 @@ import me.d3sox.nevumi.resources.settings_confirm_queue_jumps
 import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption
 import me.d3sox.nevumi.resources.settings_exclude_folders
 import me.d3sox.nevumi.resources.settings_include_folders
+import me.d3sox.nevumi.resources.settings_keep_playing
+import me.d3sox.nevumi.resources.settings_tray_icon
 import me.d3sox.nevumi.resources.settings_keywords_about_nevumi
 import me.d3sox.nevumi.resources.settings_keywords_amoled_black
 import me.d3sox.nevumi.resources.settings_keywords_audio_effects
@@ -55,6 +57,8 @@ import me.d3sox.nevumi.resources.settings_keywords_confirm_up_next_interruption
 import me.d3sox.nevumi.resources.settings_keywords_connect_last_fm
 import me.d3sox.nevumi.resources.settings_keywords_connect_listenbrainz
 import me.d3sox.nevumi.resources.settings_keywords_crossfade
+import me.d3sox.nevumi.resources.settings_keywords_keep_playing
+import me.d3sox.nevumi.resources.settings_keywords_tray_icon
 import me.d3sox.nevumi.resources.settings_keywords_replay_gain
 import me.d3sox.nevumi.resources.settings_keywords_sync_play_queue
 import me.d3sox.nevumi.resources.sources_sync_play_queue
@@ -168,6 +172,10 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_previous_track_limit to Res.string.settings_keywords_previous_track_limit,
                 Res.string.settings_confirm_queue_jumps to Res.string.settings_keywords_confirm_queue_jumps,
                 Res.string.settings_confirm_up_next_interruption to Res.string.settings_keywords_confirm_up_next_interruption)
+            if (desktopWindowSettings) {
+                add(SettingEntry(Res.string.settings_keep_playing, "Playback", AppIcon.HEADPHONES, Res.string.settings_keywords_keep_playing))
+                add(SettingEntry(Res.string.settings_tray_icon, "Playback", AppIcon.DESKTOP, Res.string.settings_keywords_tray_icon))
+            }
             category("Waveforms", AppIcon.WAVEFORM, Res.string.settings_prepare_all_waveforms to Res.string.settings_keywords_prepare_all_waveforms,
                 Res.string.settings_prepare_automatically to Res.string.settings_keywords_prepare_automatically)
             add(SettingEntry(Res.string.audio_effects, "Playback", AppIcon.EQUALIZER, Res.string.settings_keywords_audio_effects, "Audio effects"))

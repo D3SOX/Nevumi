@@ -88,6 +88,10 @@ data class MusicSettings(
     /** Also off by default, and only asked when LRCLIB has no synced lyrics, as NetEase Cloud Music's lyrics search is not a documented API. */
     val fetchLyricsFromNetEase: Boolean = false,
     val notifyNewReleases: Boolean = false,
+    /** Linux: closing the window while music plays hides it instead of quitting. */
+    val keepPlayingInBackground: Boolean = false,
+    /** Linux: a system tray icon with playback controls; closing the window then hides it to the tray. */
+    val trayIcon: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,
