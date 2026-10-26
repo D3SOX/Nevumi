@@ -130,12 +130,13 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
             connection.exportObject(ITEM_PATH, this)
             connection.exportObject(MENU_PATH, menu)
             connection.requestBusName(busName)
-            // The tray host may restart, as Plasma's panel does on updates; a new watcher needs to learn about the icon again.
+            // The tray host may start later, as at login or when GNOME's AppIndicator extension is enabled, or restart, as
+            // Plasma's panel does on updates; each new watcher needs to learn about the icon.
             connection.addSigHandler(DBus.NameOwnerChanged::class.java) { change ->
                 if (change.name == WATCHER && change.newOwner.isNotEmpty()) scope.launch { runCatching { register() } }
             }
-            register()
         } catch (error: Exception) { scope.cancel(); connection.close(); throw error }
+        runCatching { register() }
         scope.launch {
             controller.state.map(::menuState).distinctUntilChanged().drop(1).collect {
                 revision++

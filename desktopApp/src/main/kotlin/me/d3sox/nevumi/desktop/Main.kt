@@ -132,7 +132,10 @@ private fun raiseRunningPlayer(): Boolean = try {
     DBusConnectionBuilder.forSessionBus().withShared(false).build().use { connection ->
         val name = "org.mpris.MediaPlayer2.nevumi"
         val path = "/org/mpris/MediaPlayer2"
-        connection.getRemoteObject("org.freedesktop.DBus", "/org/freedesktop/DBus", DBus::class.java).NameHasOwner(name) &&
+        val bus = connection.getRemoteObject("org.freedesktop.DBus", "/org/freedesktop/DBus", DBus::class.java)
+        // An instance with its own data directory holds another library, so it is not the one to show.
+        bus.NameHasOwner(name) &&
+            java.io.File("/proc/${bus.GetConnectionUnixProcessID(name).toLong()}/cmdline").readText().split('\u0000').none { it.startsWith("--data-dir=") } &&
             connection.getRemoteObject(name, path, Properties::class.java).Get<Boolean>("org.mpris.MediaPlayer2", "CanRaise") &&
             run { connection.getRemoteObject(name, path, MprisApplication::class.java).Raise(); true }
     }

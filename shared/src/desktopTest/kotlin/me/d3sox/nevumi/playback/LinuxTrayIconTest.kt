@@ -100,4 +100,29 @@ class LinuxTrayIconTest {
             directory.toFile().deleteRecursively()
         }
     }
+
+    @Test fun theIconAppearsWhenTheTrayHostStartsAfterNevumi() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-tray-late")
+        val address = "unix:path=${directory.resolve("bus")}"
+        val daemon = ProcessBuilder("dbus-daemon", "--session", "--nofork", "--print-address=1", "--address=$address")
+            .redirectError(directory.resolve("bus.log").toFile()).start()
+        assertTrue(daemon.inputStream.bufferedReader().readLine().startsWith("unix:path="))
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val watcher = Watcher()
+        var tray: LinuxTrayIcon? = null
+        var watcherConnection: org.freedesktop.dbus.connections.impl.DBusConnection? = null
+        try {
+            tray = LinuxTrayIcon(controller, null, {}, {}, address)
+            watcherConnection = DBusConnectionBuilder.forAddress(address).withShared(false).build().apply {
+                exportObject(watcher.objectPath, watcher); requestBusName("org.kde.StatusNotifierWatcher")
+            }
+            withTimeout(3_000) { while (watcher.services.isEmpty()) kotlinx.coroutines.delay(20) }
+            assertEquals(listOf("org.kde.StatusNotifierItem-${ProcessHandle.current().pid()}-1"), watcher.services)
+        } finally {
+            tray?.close(); watcherConnection?.close(); controller.closeAndJoin(); store.close()
+            daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
+            directory.toFile().deleteRecursively()
+        }
+    }
 }
