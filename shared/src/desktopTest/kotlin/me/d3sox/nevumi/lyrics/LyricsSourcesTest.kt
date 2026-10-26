@@ -144,6 +144,8 @@ class LyricsSourcesTest {
         assertEquals(listOf<String?>("Fixture Artist Northern Light"), searches)
         // Other versions, artists and lengths are never fetched, and a plain copy gives way to a synced one.
         assertEquals(listOf<String?>("4", "5"), lyricIds)
+        lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:01.00]I : remember"}}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "I : remember"))), netEase.lyrics(metadata))
         lyric = """{"code":200,"lrc":{"lyric":""}}"""
         assertEquals(Lyrics(LyricsSource.NETEASE, plain = "Plain copy"), netEase.lyrics(metadata))
         lyric = """{"code":200,"pureMusic":true,"lrc":{"lyric":"[00:00.00]纯音乐，请欣赏"}}"""

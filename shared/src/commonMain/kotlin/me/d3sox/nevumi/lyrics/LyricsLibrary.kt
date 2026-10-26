@@ -194,8 +194,8 @@ class NetEaseClient(private val http: HttpClient, version: String, private val b
     }
 
     private companion object {
-        // The catalogue writes its own credits with a spaced colon, which lyrics rarely open with.
-        val credit = Regex("""^[^:：]{1,20}\s[:：]\s""")
+        // The catalogue writes its own credits as a Chinese label and a spaced colon, which lyrics rarely open with.
+        val credit = Regex("""^[^\sA-Za-z:：]{1,10}\s[:：]\s""")
         val nonWord = Regex("""[^\p{L}\p{N}]+""")
     }
 }
