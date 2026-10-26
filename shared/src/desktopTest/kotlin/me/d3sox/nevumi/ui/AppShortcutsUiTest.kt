@@ -104,6 +104,18 @@ class AppShortcutsUiTest {
                 withModifier(KeyEvent.CTRL_DOWN_MASK, KeyEvent.VK_F)
                 onNodeWithContentDescription("Search your library").assertIsFocused()
 
+                // A selected song replaces the search field. Ctrl+F restores it and its focus.
+                onNodeWithContentDescription("Search your library").performTextReplacement("song")
+                onNodeWithTag("track-row:${first.id}").performTouchInput { longClick() }
+                onNodeWithText("Select song").performClick()
+                onNodeWithContentDescription("Clear selection").assertIsDisplayed()
+                onNodeWithContentDescription("Search your library").assertDoesNotExist()
+                runOnIdle { window.requestFocus() }
+                withModifier(KeyEvent.CTRL_DOWN_MASK, KeyEvent.VK_F)
+                onNodeWithContentDescription("Clear selection").assertDoesNotExist()
+                onNodeWithContentDescription("Search your library").assertIsFocused().assertTextEquals("song")
+                captureUiSnapshot("shortcuts-search-after-selection", onNodeWithTag("app-window"))
+
                 withModifier(KeyEvent.CTRL_DOWN_MASK, KeyEvent.VK_Q)
                 assertEquals(1, quits)
             }

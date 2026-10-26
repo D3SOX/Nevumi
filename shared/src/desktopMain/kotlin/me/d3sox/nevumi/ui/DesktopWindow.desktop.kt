@@ -34,10 +34,11 @@ import java.net.URI
 internal actual val desktopWindowSettings = true
 
 /**
- * Whether closing the window hides it instead of quitting: always with the tray icon, which brings it back,
- * and while music plays when it should keep playing.
+ * Hides the window only when a registered tray or media session can restore it, and the user enabled
+ * the tray icon or background playback for music that is playing.
  */
-fun AppState.closeHidesWindow() = preferences.trayIcon || preferences.keepPlayingInBackground && playback.playing
+fun AppState.closeHidesWindow(trayAvailable: Boolean, mediaControlsAvailable: Boolean) =
+    (trayAvailable || mediaControlsAvailable) && (preferences.trayIcon || preferences.keepPlayingInBackground && playback.playing)
 
 /** Sorts dropped file URIs into music folders and songs, as canonical paths; other files are left out. */
 internal fun droppedMusic(uris: List<String>): Pair<List<String>, List<String>> {

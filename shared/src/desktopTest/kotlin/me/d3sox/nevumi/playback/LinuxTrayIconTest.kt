@@ -65,6 +65,7 @@ class LinuxTrayIconTest {
             tray = LinuxTrayIcon(controller, BufferedImage(512, 512, BufferedImage.TYPE_INT_ARGB), { shown.incrementAndGet() },
                 { quit.incrementAndGet() }, address)
             assertEquals(listOf(service), watcher.services)
+            assertTrue(tray.registered)
             // Tray hosts check the reply types: a revision, then the root item with its properties and its children as variants.
             assertTrue(Regex("""^\(uint32 \d+, \(0, \{'children-display': <'submenu'>}, \[<\(1, \{""").containsMatchIn(layout()), layout())
             val properties = call("/StatusNotifierItem", "org.freedesktop.DBus.Properties.GetAll", "org.kde.StatusNotifierItem")
@@ -90,10 +91,11 @@ class LinuxTrayIconTest {
 
             // Plasma's panel can restart; the new tray host learns about the icon again.
             watcherConnection.close()
+            withTimeout(3_000) { while (tray.registered) kotlinx.coroutines.delay(20) }
             watcherConnection = DBusConnectionBuilder.forAddress(address).withShared(false).build().apply {
                 exportObject(watcher.objectPath, watcher); requestBusName("org.kde.StatusNotifierWatcher")
             }
-            withTimeout(3_000) { while (watcher.services.size < 2) kotlinx.coroutines.delay(20) }
+            withTimeout(3_000) { while (watcher.services.size < 2 || !tray.registered) kotlinx.coroutines.delay(20) }
         } finally {
             tray?.close(); watcherConnection.close(); controller.closeAndJoin(); store.close()
             daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
@@ -114,10 +116,13 @@ class LinuxTrayIconTest {
         var watcherConnection: org.freedesktop.dbus.connections.impl.DBusConnection? = null
         try {
             tray = LinuxTrayIcon(controller, null, {}, {}, address)
+            assertEquals(false, tray.registered)
             watcherConnection = DBusConnectionBuilder.forAddress(address).withShared(false).build().apply {
                 exportObject(watcher.objectPath, watcher); requestBusName("org.kde.StatusNotifierWatcher")
             }
-            withTimeout(3_000) { while (watcher.services.isEmpty()) kotlinx.coroutines.delay(20) }
+            withTimeout(3_000) { while (watcher.services.isEmpty() || !tray.registered) kotlinx.coroutines.delay(20) }
+            watcherConnection.close()
+            withTimeout(3_000) { while (tray.registered) kotlinx.coroutines.delay(20) }
             assertEquals(listOf("org.kde.StatusNotifierItem-${ProcessHandle.current().pid()}-1"), watcher.services)
         } finally {
             tray?.close(); watcherConnection?.close(); controller.closeAndJoin(); store.close()

@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 
-private class DesktopPlayer(val controller: MusicController, val close: suspend () -> Unit)
+private class DesktopPlayer(val controller: MusicController, val mediaControlsAvailable: Boolean, val close: suspend () -> Unit)
 
 private suspend fun closeResources(resources: List<suspend () -> Unit>) {
     var failure: Throwable? = null
@@ -114,10 +114,13 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
             releaseNotifier = me.d3sox.nevumi.releases.LinuxReleaseNotifier())
         resources += { controller.closeAndJoin() }
         option("--import-folder")?.let { controller.importSource(it) }
-        try { runInterruptible { LinuxMediaSession(controller, raise = raise, quit = quit).also { resources += { it.close() } } } }
+        val mediaControlsAvailable = try {
+            runInterruptible { LinuxMediaSession(controller, raise = raise, quit = quit).also { resources += { it.close() } } }
+            true
+        }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { System.err.println("Desktop media controls unavailable: ${error.message}") }
-        return DesktopPlayer(controller) { closeResources(resources) }
+            catch (error: Exception) { System.err.println("Desktop media controls unavailable: ${error.message}"); false }
+        return DesktopPlayer(controller, mediaControlsAvailable) { closeResources(resources) }
     } catch (error: Throwable) {
         withContext(NonCancellable) {
             try { closeResources(resources) }
@@ -154,7 +157,9 @@ private fun runApplication(arguments: Array<String>) = application {
     var raised by remember { mutableIntStateOf(0) }
     var controller by remember { mutableStateOf<MusicController?>(null) }
     var startupError by remember { mutableStateOf<String?>(null) }
-    val initialized = remember { CompletableDeferred<MusicController>() }
+    var mediaControlsAvailable by remember { mutableStateOf(false) }
+    var activeTray by remember { mutableStateOf<LinuxTrayIcon?>(null) }
+    val initialized = remember { CompletableDeferred<DesktopPlayer>() }
     val windowState = rememberWindowState(size = DpSize(1100.dp, 800.dp))
     lateinit var startup: Job
     fun quit() {
@@ -178,7 +183,7 @@ private fun runApplication(arguments: Array<String>) = application {
             try {
                 val opened = openPlayer(arguments, showLater, quitLater)
                 try {
-                    initialized.complete(opened.controller)
+                    initialized.complete(opened)
                     awaitCancellation()
                 } finally { withContext(NonCancellable) { opened.close() } }
             } catch (cancelled: CancellationException) {
@@ -198,17 +203,22 @@ private fun runApplication(arguments: Array<String>) = application {
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) { System.err.println("Tray icon unavailable: ${error.message}"); return@LaunchedEffect }
-        try { awaitCancellation() } finally { tray.close() }
+        activeTray = tray
+        try { awaitCancellation() } finally { activeTray = null; tray.close() }
     }
     Window(title = "Nevumi", icon = painterResource("nevumi.png"), state = windowState, visible = visible,
         onKeyEvent = { shortcuts?.onKeyEvent(it) == true },
         onCloseRequest = {
             // The tray icon or the desktop's media controls bring a hidden window back.
-            if (controller?.state?.value?.closeHidesWindow() == true) visible = false else quit()
+            if (controller?.state?.value?.closeHidesWindow(activeTray?.registered == true, mediaControlsAvailable) == true) visible = false else quit()
         }) {
         LaunchedEffect(startup) {
             startup.start()
-            try { controller = initialized.await() }
+            try {
+                val opened = initialized.await()
+                mediaControlsAvailable = opened.mediaControlsAvailable
+                controller = opened.controller
+            }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Throwable) { startupError = error.message ?: error.toString() }
         }

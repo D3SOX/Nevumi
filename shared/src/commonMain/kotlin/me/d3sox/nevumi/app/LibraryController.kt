@@ -218,8 +218,9 @@ class LibraryController internal constructor(private val context: ControllerCont
             rules.excludedParent(folder)?.let { parent -> error(getString(Res.string.drop_folder_excluded, parent, folder)) }
             val allowed = rules.allowing(folder)
             if (allowed != rules) updateLocalFolders(allowed.included, allowed.excluded).join()
-            // Without included folders, the library is made of the scanned folders, so a new one needs a scan of its own.
-            if (allowed.included.isEmpty() && sources.roots().none { LocalFolderRules(listOf(it)).allows(folder) }) importSources(listOf(folder))
+            // Unchanged rules did not scan anything; a newly added root also needs its own scan.
+            if (allowed == rules || allowed.included.isEmpty() && sources.roots().none { LocalFolderRules(listOf(it)).allows(folder) })
+                importSources(listOf(folder))
         }
         if (songs.isEmpty()) return emptyList()
         importSources(songs, chosenSongs = true)

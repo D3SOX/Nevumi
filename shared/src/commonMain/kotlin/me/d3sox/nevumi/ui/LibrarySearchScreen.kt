@@ -83,6 +83,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     val opened = results.collections[openedType].orEmpty().firstOrNull { it.id == openedId }
     val active = LocalNavigationActive.current
     LaunchedEffect(active) { if (!active) selection.clear() }
+    // Restore the search field before its focus effect runs, including while the selection header replaces it.
+    LaunchedEffect(focusRequest) { selection.clear() }
     if (active && (selection.active || opened != null)) PlatformBackHandler {
         if (selection.active) selection.clear() else openedId = null
     }

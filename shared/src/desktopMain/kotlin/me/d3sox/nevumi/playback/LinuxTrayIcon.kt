@@ -124,6 +124,8 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
     }
     @Volatile private var revision = 1L
     private val menu = Menu()
+    @Volatile var registered = false
+        private set
 
     init {
         try {
@@ -133,7 +135,10 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
             // The tray host may start later, as at login or when GNOME's AppIndicator extension is enabled, or restart, as
             // Plasma's panel does on updates; each new watcher needs to learn about the icon.
             connection.addSigHandler(DBus.NameOwnerChanged::class.java) { change ->
-                if (change.name == WATCHER && change.newOwner.isNotEmpty()) scope.launch { runCatching { register() } }
+                if (change.name == WATCHER) {
+                    registered = false
+                    if (change.newOwner.isNotEmpty()) scope.launch { runCatching { register() } }
+                }
             }
         } catch (error: Exception) { scope.cancel(); connection.close(); throw error }
         runCatching { register() }
@@ -153,6 +158,7 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
     private fun register() {
         connection.getRemoteObject(WATCHER, "/StatusNotifierWatcher", StatusNotifierWatcher::class.java)
             .RegisterStatusNotifierItem(busName)
+        registered = true
     }
 
     override fun getObjectPath() = ITEM_PATH
@@ -183,7 +189,7 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
 
     override fun <A> Set(interfaceName: String, propertyName: String, value: A) = throw DBusExecutionException("Property is read only")
 
-    override fun close() { scope.cancel(); connection.close() }
+    override fun close() { registered = false; scope.cancel(); connection.close() }
 
     /** What the menu shows; a change makes tray hosts load it again. */
     private fun menuState(state: AppState) = listOf(state.playback.playing, state.playback.trackId != null,

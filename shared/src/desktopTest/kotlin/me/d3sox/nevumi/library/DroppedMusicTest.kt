@@ -56,6 +56,30 @@ class DroppedMusicTest {
         } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test fun droppingAnAlreadyIncludedFolderIndexesNewSongsImmediately() = runBlocking {
+        for (explicitInclude in listOf(false, true)) {
+            val directory = Files.createTempDirectory("dropped-included").toRealPath()
+            val store = openMusicStore(directory.resolve("library.db").toString())
+            val music = Files.createDirectories(directory.resolve("Music"))
+            val album = Files.createDirectories(music.resolve("Album"))
+            val preferences = MusicPreferences(store)
+            val included = if (explicitInclude) listOf(music.toString()) else emptyList()
+            preferences.update { it.copy(includeFolders = included) }
+            val library = MusicLibrary(store)
+            // No filesystem watcher: the drop itself must discover the newly added song.
+            val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), localSources = LocalFiles(library),
+                preferences = preferences)
+            try {
+                withTimeout(3_000) { controller.state.first { it.libraryReady } }
+                controller.importSource(music.toString()).join()
+                val song = Files.copy(fixtures.resolve("fixture.flac"), album.resolve("new.flac"))
+                controller.addMusic(listOf(album.toString()), emptyList()).join()
+                assertTrue(controller.state.value.tracks.any { track -> track.sources.any { it.location == song.toString() && it.available } })
+                assertEquals(included, controller.state.value.preferences.includeFolders)
+            } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+        }
+    }
+
     @Test fun droppingIntoAnExcludedFolderOrNothingPlayableExplainsWhy() = runBlocking {
         val directory = Files.createTempDirectory("dropped-excluded").toRealPath()
         val store = openMusicStore(directory.resolve("library.db").toString())
