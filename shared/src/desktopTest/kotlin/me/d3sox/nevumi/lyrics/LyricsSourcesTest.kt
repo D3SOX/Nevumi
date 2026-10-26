@@ -123,7 +123,7 @@ class LyricsSourcesTest {
     @Test fun netEaseTakesTheFirstCopyOfTheSameRecordingWithLyricsAndDropsItsCredits() = runBlocking {
         val searches = mutableListOf<String?>()
         val lyricIds = mutableListOf<String?>()
-        var lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:01.000]作曲：Someone\n[00:02.50]First: line\n[00:04.00]Second"}}"""
+        var lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:01.000] 作曲 : Someone\n[00:02.50]你说：First line\n[00:04.00]Second"}}"""
         val netEase = NetEaseClient(http { request ->
             if (request.url.encodedPath == "/api/cloudsearch/pc") {
                 searches += request.url.parameters["s"]
@@ -137,13 +137,15 @@ class LyricsSourcesTest {
             } else {
                 val id = request.url.parameters["id"]
                 lyricIds += id
-                respond(if (id == "4") """{"code":200,"lrc":{"lyric":""}}""" else lyric, headers = json)
+                respond(when (id) { "4" -> """{"code":200,"lrc":{"lyric":"Plain copy"}}"""; else -> lyric }, headers = json)
             }
         }, "1.0")
-        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(2_500, "First: line"), LyricLine(4_000, "Second"))), netEase.lyrics(metadata))
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(2_500, "你说：First line"), LyricLine(4_000, "Second"))), netEase.lyrics(metadata))
         assertEquals(listOf<String?>("Fixture Artist Northern Light"), searches)
-        // Other versions, artists and lengths are never fetched, and an empty copy gives way to the next one.
+        // Other versions, artists and lengths are never fetched, and a plain copy gives way to a synced one.
         assertEquals(listOf<String?>("4", "5"), lyricIds)
+        lyric = """{"code":200,"lrc":{"lyric":""}}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, plain = "Plain copy"), netEase.lyrics(metadata))
         lyric = """{"code":200,"pureMusic":true,"lrc":{"lyric":"[00:00.00]纯音乐，请欣赏"}}"""
         assertNull(netEase.lyrics(metadata))
         assertNull(netEase.lyrics(metadata.copy(title = "Unknown song")))

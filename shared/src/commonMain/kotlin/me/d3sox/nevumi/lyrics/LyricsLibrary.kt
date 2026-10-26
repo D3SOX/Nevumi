@@ -143,13 +143,18 @@ class NetEaseClient(private val http: HttpClient, version: String, private val b
             parameter("type", 1)
             parameter("limit", 10)
         }["result"]?.jsonObject?.get("songs")?.jsonArray.orEmpty().map { it.jsonObject }
-        // The catalogue often holds the same recording more than once, and only some copies have lyrics.
-        return songs.filter { matches(it, metadata) }.take(3).firstNotNullOfOrNull { song ->
-            val id = song["id"]?.jsonPrimitive?.longOrNull ?: return@firstNotNullOfOrNull null
+        // The catalogue often holds the same recording more than once, and only some copies have synced lyrics.
+        var plain: Lyrics? = null
+        for (song in songs.filter { matches(it, metadata) }.take(3)) {
+            val id = song["id"]?.jsonPrimitive?.longOrNull ?: continue
             val body = request("song/lyric") { parameter("id", id); parameter("lv", 1) }
             if (body["pureMusic"]?.jsonPrimitive?.booleanOrNull == true) return null
-            body["lrc"]?.jsonObject?.get("lyric")?.jsonPrimitive?.contentOrNull?.let { LrcParser.parse(it, LyricsSource.NETEASE) }?.withoutCredits()
+            val found = body["lrc"]?.jsonObject?.get("lyric")?.jsonPrimitive?.contentOrNull
+                ?.let { LrcParser.parse(it, LyricsSource.NETEASE) }?.withoutCredits() ?: continue
+            if (found.synced) return found
+            plain = plain ?: found
         }
+        return plain
     }
 
     private suspend fun request(path: String, parameters: HttpRequestBuilder.() -> Unit): JsonObject {
@@ -189,8 +194,8 @@ class NetEaseClient(private val http: HttpClient, version: String, private val b
     }
 
     private companion object {
-        // A short Chinese label before any colon, as in "词：Someone", or any label before the spaced colon the catalogue adds itself.
-        val credit = Regex("""^(?:[^\sA-Za-z:：]{1,10}\s*[:：]|[^:：]{1,20}\s[:：]\s)""")
+        // The catalogue writes its own credits with a spaced colon, which lyrics rarely open with.
+        val credit = Regex("""^[^:：]{1,20}\s[:：]\s""")
         val nonWord = Regex("""[^\p{L}\p{N}]+""")
     }
 }
