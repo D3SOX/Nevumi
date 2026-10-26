@@ -43,7 +43,7 @@ I started it because I couldn't find a music player with all the features I want
 - **New releases.** Follow an artist from their page, and Home lists their recent and upcoming releases from MusicBrainz. Nevumi can notify you about new ones. It contacts MusicBrainz only after you follow an artist.
 - **SoundCloud.** Search and download songs through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server, to your music server or your device. Nevumi never contacts SoundCloud.
 - **Playback.** Nevumi has gapless playback, crossfade, speed and pitch, repeat counts, an equalizer with AutoEQ headphone profiles, mono audio and a sleep timer.
-- **Lyrics.** Nevumi shows synced and plain lyrics from embedded tags, `.lrc` files next to the song and your music server. You can turn on LRCLIB lookups in Settings. Tap a line to jump to it.
+- **Lyrics.** Nevumi shows synced and plain lyrics from embedded tags, `.lrc` files next to the song and your music server. You can turn on LRCLIB lookups in Settings, and add NetEase Cloud Music for songs LRCLIB has no synced lyrics for. Tap a line to jump to it.
 - **Waveforms.** Nevumi draws waveforms from the actual audio and caches them.
 - **Tag editing.** Edit local tags and artwork, or your Navidrome files over SFTP. Look up metadata on MusicBrainz.
 - **Tailscale.** The built-in client reaches your servers on a tailnet without the Tailscale app or a VPN. Headscale works too.

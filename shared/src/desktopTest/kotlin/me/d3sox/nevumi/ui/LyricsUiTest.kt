@@ -31,7 +31,7 @@ class LyricsUiTest {
         val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac").toString()
         val track = runBlocking { library.importTrack(TrackMetadata("Lyrics fixture", durationMs = 10_000), TrackSource("lyrics", SourceKind.LOCAL, audio)) }
         val lyrics = object : LyricsLibrary {
-            override suspend fun lyrics(track: Track, online: Boolean) = Lyrics(LyricsSource.EMBEDDED, lines)
+            override suspend fun lyrics(track: Track, online: Set<LyricsSource>) = Lyrics(LyricsSource.EMBEDDED, lines)
         }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), lyrics = lyrics)
         PlayerLyrics.visible = false
@@ -59,17 +59,22 @@ class LyricsUiTest {
     @Test fun onlineLyricsAreOffUntilTheListenerTurnsThemOn() {
         val directory = Files.createTempDirectory("lyrics-setting")
         val store = openMusicStore(directory.resolve("music.db").toString())
-        val lyrics = object : LyricsLibrary { override suspend fun lyrics(track: Track, online: Boolean): Lyrics? = null }
+        val lyrics = object : LyricsLibrary { override suspend fun lyrics(track: Track, online: Set<LyricsSource>): Lyrics? = null }
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), lyrics = lyrics)
         try {
             runComposeUiTest {
                 setContent { MaterialTheme { LyricsSettings(controller.state.collectAsState().value.preferences, controller) } }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
                 assertFalse(controller.state.value.preferences.fetchLyricsOnline)
+                onNodeWithContentDescription("Also search NetEase Cloud Music").assertDoesNotExist()
                 onNodeWithText("Sends the artist, title, album and length of songs without lyrics to LRCLIB.").assertExists()
                 onNodeWithContentDescription("Find lyrics online").assertIsOff().performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.fetchLyricsOnline }
                 onNodeWithContentDescription("Find lyrics online").assertIsOn()
+                // NetEase stays off, and only appears once online lyrics are on.
+                onNodeWithText("When LRCLIB has no synced lyrics, sends the song’s artist and title to NetEase Cloud Music, a Chinese streaming service. Its lyrics search isn’t an official API.").assertExists()
+                onNodeWithContentDescription("Also search NetEase Cloud Music").assertIsOff().performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.fetchLyricsFromNetEase }
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

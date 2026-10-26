@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 /** Where a song's lyrics were found. */
 @Serializable
-enum class LyricsSource { EMBEDDED, SIDECAR, SERVER, LRCLIB }
+enum class LyricsSource { EMBEDDED, SIDECAR, SERVER, LRCLIB, NETEASE }
 
 /** One synced line that starts at [startMs]; an empty [text] marks an instrumental break. */
 @Serializable

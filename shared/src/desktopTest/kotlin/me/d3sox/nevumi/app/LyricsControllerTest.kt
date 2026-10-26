@@ -26,10 +26,10 @@ class LyricsControllerTest {
         val library = MusicLibrary(store)
         val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/fixture.flac").toString()
         val songs = (0..1).map { library.importTrack(TrackMetadata("Song $it"), TrackSource("local:$it", SourceKind.LOCAL, audio)) }
-        val calls = java.util.Collections.synchronizedList(mutableListOf<Pair<String, Boolean>>())
+        val calls = java.util.Collections.synchronizedList(mutableListOf<Pair<String, Set<LyricsSource>>>())
         var release = CompletableDeferred<Unit>()
         val lyrics = object : LyricsLibrary {
-            override suspend fun lyrics(track: Track, online: Boolean): Lyrics? {
+            override suspend fun lyrics(track: Track, online: Set<LyricsSource>): Lyrics? {
                 calls += track.id to online
                 release.await()
                 return if (track.id == songs[0].id) Lyrics(LyricsSource.EMBEDDED, listOf(LyricLine(0, track.metadata.title))) else null
@@ -49,21 +49,24 @@ class LyricsControllerTest {
             release.complete(Unit)
             val shown = withTimeout(3_000) { player.lyricsController.lyrics.first { it is LyricsState.Available } }
             assertEquals("Song 0", (shown as LyricsState.Available).lyrics.lines.single().text)
-            assertEquals(listOf(songs[0].id to false), calls)
+            assertEquals(listOf(songs[0].id to emptySet<LyricsSource>()), calls)
 
             player.updatePreferences { it.copy(fetchLyricsOnline = true) }.join()
             // A new lookup may leave the state equal to the old one, which a state flow does not emit again, so wait for the call.
             awaitCalls(2)
             withTimeout(3_000) { player.lyricsController.lyrics.first { it is LyricsState.Available } }
-            assertEquals(songs[0].id to true, calls.last())
+            assertEquals(songs[0].id to setOf(LyricsSource.LRCLIB), calls.last())
 
             player.skip(1).join()
             awaitCalls(3)
             withTimeout(3_000) { player.lyricsController.lyrics.first { it == LyricsState.None } }
-            assertEquals(songs[1].id to true, calls.last())
+            assertEquals(songs[1].id to setOf(LyricsSource.LRCLIB), calls.last())
+            player.updatePreferences { it.copy(fetchLyricsFromNetEase = true) }.join()
+            awaitCalls(4)
+            assertEquals(songs[1].id to setOf(LyricsSource.LRCLIB, LyricsSource.NETEASE), calls.last())
             release = CompletableDeferred(Unit)
             player.lyricsController.refresh()
-            awaitCalls(4)
+            awaitCalls(5)
             withTimeout(3_000) { player.lyricsController.lyrics.first { it == LyricsState.None } }
             Unit
         } finally { watching.cancel(); player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }

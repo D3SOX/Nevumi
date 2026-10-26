@@ -85,6 +85,8 @@ data class MusicSettings(
     val showAudioInfo: Boolean = true,
     /** Off by default because searching LRCLIB sends the song's artist, title, album and length to a third party. */
     val fetchLyricsOnline: Boolean = false,
+    /** Also off by default, and only asked when LRCLIB has no synced lyrics, as NetEase Cloud Music's lyrics search is not a documented API. */
+    val fetchLyricsFromNetEase: Boolean = false,
     val notifyNewReleases: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
