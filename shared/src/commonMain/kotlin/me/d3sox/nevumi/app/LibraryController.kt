@@ -11,7 +11,9 @@ import me.d3sox.nevumi.artwork.ArtworkLibrary
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.history.ListeningHistory
 import me.d3sox.nevumi.library.LibraryTab
+import me.d3sox.nevumi.library.LocalFolderRules
 import me.d3sox.nevumi.library.LocalSources
+import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.MusicFileEdits
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.Track
@@ -19,6 +21,8 @@ import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.playback.PlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.drop_folder_excluded
+import me.d3sox.nevumi.resources.drop_unsupported
 import me.d3sox.nevumi.resources.notice_added_to_favorites
 import me.d3sox.nevumi.resources.notice_rated_one_star
 import me.d3sox.nevumi.resources.notice_rated_stars
@@ -28,6 +32,7 @@ import me.d3sox.nevumi.resources.notice_removed_from_favorites
 import me.d3sox.nevumi.settings.LibraryPosition
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.settings.MusicSettings
+import org.jetbrains.compose.resources.getString
 
 /** Keeps the library in the app state: local music scans, linked songs, favorites, ratings, covers and the preferences. */
 @OptIn(FlowPreview::class)
@@ -197,22 +202,50 @@ class LibraryController internal constructor(private val context: ControllerCont
         localSources?.roots()?.forEach { importSource(it).join() }
         context.operations.withLock { loader.refresh() }
     }
-    fun importSource(location: String) = context.action(serialized = false) {
-        imports.withLock {
-            context.update { it.copy(loading = true, error = null) }
-            var lastProgress = 0L
-            try {
-                val songs = requireNotNull(localSources) { "Local music access is unavailable" }.scan(location, onProgress = { progress ->
+    fun importSource(location: String) = context.action(serialized = false) { importSources(listOf(location)) }
+
+    /**
+     * Adds dropped [folders] to the library and indexes the dropped [songs] wherever they are.
+     * Returns the ids of the [songs], in their order, so they can be played.
+     */
+    internal suspend fun addMusic(folders: List<String>, songs: List<String>): List<String> {
+        if (folders.isEmpty() && songs.isEmpty()) error(getString(Res.string.drop_unsupported))
+        val sources = requireNotNull(localSources) { "Local music access is unavailable" }
+        for (folder in folders) {
+            val settings = context.state.value.preferences
+            val rules = LocalFolderRules(settings.includeFolders, settings.excludeFolders)
+            // Lifting an excluded parent would add everything else in it too, so leave that choice to Local music settings.
+            rules.excludedParent(folder)?.let { parent -> error(getString(Res.string.drop_folder_excluded, parent, folder)) }
+            val allowed = rules.allowing(folder)
+            if (allowed != rules) updateLocalFolders(allowed.included, allowed.excluded).join()
+            // Without included folders, the library is made of the scanned folders, so a new one needs a scan of its own.
+            if (allowed.included.isEmpty() && sources.roots().none { LocalFolderRules(listOf(it)).allows(folder) }) importSources(listOf(folder))
+        }
+        if (songs.isEmpty()) return emptyList()
+        importSources(songs)
+        val tracks = context.state.value.tracks
+        return songs.mapNotNull { path ->
+            tracks.firstOrNull { track -> track.sources.any { it.kind == SourceKind.LOCAL && it.location == path } }?.id
+        }.distinct()
+    }
+
+    private suspend fun importSources(locations: List<String>) = imports.withLock {
+        context.update { it.copy(loading = true, error = null) }
+        var lastProgress = 0L
+        try {
+            val sources = requireNotNull(localSources) { "Local music access is unavailable" }
+            val songs = locations.sumOf { location ->
+                sources.scan(location, onProgress = { progress ->
                     val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
                     if (progress.processed == 0 || progress.processed == progress.total || now - lastProgress >= 100) {
                         lastProgress = now
                         context.update { it.copy(localScan = progress) }
                     }
-                })
-                linkSameFiles()
-                context.operations.withLock { loader.refresh() }
-                context.update { it.copy(lastLocalScanCount = songs.size) }
-            } finally { context.update { it.copy(localScan = null) } }
-        }
+                }).size
+            }
+            linkSameFiles()
+            context.operations.withLock { loader.refresh() }
+            context.update { it.copy(lastLocalScanCount = songs) }
+        } finally { context.update { it.copy(localScan = null) } }
     }
 }

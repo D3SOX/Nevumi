@@ -59,7 +59,8 @@ private fun SearchType.collectionDescriptions() = when (this) {
 }
 
 @Composable
-internal fun LibrarySearchScreen(state: AppState, controller: MusicController, bottomSpace: Dp, dismiss: (() -> Unit)?, onSettings: (() -> Unit)? = null) {
+internal fun LibrarySearchScreen(state: AppState, controller: MusicController, bottomSpace: Dp, dismiss: (() -> Unit)?, onSettings: (() -> Unit)? = null,
+    focusRequest: Int = 0) {
     var search by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     val query = search.text
     var type by rememberSaveable { mutableStateOf(SearchType.ALL) }
@@ -97,7 +98,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, stringResource(Res.string.sources_clear_search)) { search = TextFieldValue(); openedId = null } },
                     modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = searchLabel })
                 if (onSettings != null) AppIconButton(AppIcon.SETTINGS, stringResource(Res.string.settings)) { stopTyping(); onSettings() }
-                LaunchedEffect(Unit) { focus.requestFocus() }
+                // Each new request, such as Ctrl+F while search is open, puts the cursor back in the field.
+                LaunchedEffect(focusRequest) { focus.requestFocus() }
             }
             if (opened == null) LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(SearchType.entries.filter { it != SearchType.SOUNDCLOUD || state.soundCloud != null }, key = { it }) { category ->

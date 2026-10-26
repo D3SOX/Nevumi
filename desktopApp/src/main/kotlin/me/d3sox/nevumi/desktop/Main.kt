@@ -19,14 +19,21 @@ import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playback.CrossfadePlaybackEngine
 import me.d3sox.nevumi.playback.LinuxMediaSession
+import me.d3sox.nevumi.playback.LinuxTrayIcon
+import me.d3sox.nevumi.playback.MprisApplication
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.security.SecretServiceVault
 import me.d3sox.nevumi.storage.openMusicStore
+import me.d3sox.nevumi.ui.AppShortcuts
+import me.d3sox.nevumi.ui.closeHidesWindow
 import me.d3sox.nevumi.ui.MusicPlayerApp
 import me.d3sox.nevumi.ui.MusicPlayerStartup
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import java.io.File
+import org.freedesktop.dbus.connections.impl.DBusConnectionBuilder
+import org.freedesktop.dbus.interfaces.DBus
+import org.freedesktop.dbus.interfaces.Properties
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.downloads.LinuxDownloadNetwork
 import me.d3sox.nevumi.downloads.DownloadNetwork
@@ -38,6 +45,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runInterruptible
@@ -60,7 +68,7 @@ private suspend fun closeResources(resources: List<suspend () -> Unit>) {
     failure?.let { throw it }
 }
 
-private suspend fun openPlayer(arguments: Array<String>): DesktopPlayer {
+private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit: () -> Unit): DesktopPlayer {
     val resources = mutableListOf<suspend () -> Unit>()
     try {
         fun option(name: String) = arguments.firstOrNull { it.startsWith("$name=") }?.substringAfter('=')
@@ -106,7 +114,7 @@ private suspend fun openPlayer(arguments: Array<String>): DesktopPlayer {
             releaseNotifier = me.d3sox.nevumi.releases.LinuxReleaseNotifier())
         resources += { controller.closeAndJoin() }
         option("--import-folder")?.let { controller.importSource(it) }
-        try { runInterruptible { LinuxMediaSession(controller).also { resources += { it.close() } } } }
+        try { runInterruptible { LinuxMediaSession(controller, raise = raise, quit = quit).also { resources += { it.close() } } } }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { System.err.println("Desktop media controls unavailable: ${error.message}") }
         return DesktopPlayer(controller) { closeResources(resources) }
@@ -119,17 +127,53 @@ private suspend fun openPlayer(arguments: Array<String>): DesktopPlayer {
     }
 }
 
-fun main(arguments: Array<String>) = application {
+/** Asks a running Nevumi to show its window instead of starting a second one; false when there is none to ask. */
+private fun raiseRunningPlayer(): Boolean = try {
+    DBusConnectionBuilder.forSessionBus().withShared(false).build().use { connection ->
+        val name = "org.mpris.MediaPlayer2.nevumi"
+        val path = "/org/mpris/MediaPlayer2"
+        connection.getRemoteObject("org.freedesktop.DBus", "/org/freedesktop/DBus", DBus::class.java).NameHasOwner(name) &&
+            connection.getRemoteObject(name, path, Properties::class.java).Get<Boolean>("org.mpris.MediaPlayer2", "CanRaise") &&
+            run { connection.getRemoteObject(name, path, MprisApplication::class.java).Raise(); true }
+    }
+} catch (_: Exception) { false }
+
+fun main(arguments: Array<String>) {
+    // Another data directory is another library, so it may run next to the usual one.
+    if (arguments.none { it.startsWith("--data-dir=") } && raiseRunningPlayer()) return
+    runApplication(arguments)
+}
+
+private fun runApplication(arguments: Array<String>) = application {
     val lifecycle = rememberCoroutineScope()
     var closing by remember { mutableStateOf(false) }
+    var visible by remember { mutableStateOf(true) }
+    var raised by remember { mutableIntStateOf(0) }
     var controller by remember { mutableStateOf<MusicController?>(null) }
     var startupError by remember { mutableStateOf<String?>(null) }
     val initialized = remember { CompletableDeferred<MusicController>() }
-    val startup = remember {
+    val windowState = rememberWindowState(size = DpSize(1100.dp, 800.dp))
+    lateinit var startup: Job
+    fun quit() {
+        if (closing) return
+        closing = true
+        lifecycle.launch {
+            try {
+                startup.cancel()
+                if (controller != null) startup.join()
+                else withTimeoutOrNull(2_000) { startup.join() }
+            } finally { exitApplication() }
+        }
+    }
+    fun show() { visible = true; windowState.isMinimized = false; raised++ }
+    // The desktop asks for these on D-Bus threads; the window state belongs to the UI thread.
+    val showLater = { lifecycle.launch { show() }; Unit }
+    val quitLater = { lifecycle.launch { quit() }; Unit }
+    startup = remember {
         // A blocked service must not keep the application's UI scope alive after the window closes.
         CoroutineScope(Dispatchers.IO).launch(start = CoroutineStart.LAZY) {
             try {
-                val opened = openPlayer(arguments)
+                val opened = openPlayer(arguments, showLater, quitLater)
                 try {
                     initialized.complete(opened.controller)
                     awaitCancellation()
@@ -140,18 +184,24 @@ fun main(arguments: Array<String>) = application {
             } catch (error: Throwable) { initialized.completeExceptionally(error) }
         }
     }
-    Window(title = "Nevumi", icon = painterResource("nevumi.png"), state = rememberWindowState(size = DpSize(1100.dp, 800.dp)),
-        onCloseRequest = {
-            if (!closing) {
-                closing = true
-                lifecycle.launch {
-                    try {
-                        startup.cancel()
-                        if (controller != null) startup.join()
-                        else withTimeoutOrNull(2_000) { startup.join() }
-                    } finally { exitApplication() }
-                }
+    val ready = controller
+    val shortcuts = remember(ready) { ready?.let { AppShortcuts(it, ::quit) } }
+    val trayIcon by produceState(false, ready) { ready?.state?.collect { value = it.preferences.trayIcon } }
+    if (ready != null && trayIcon) LaunchedEffect(ready) {
+        val tray = try {
+            runInterruptible(Dispatchers.IO) {
+                val icon = DesktopPlayer::class.java.getResource("/nevumi.png")?.let(javax.imageio.ImageIO::read)
+                LinuxTrayIcon(ready, icon, showLater, quitLater)
             }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { System.err.println("Tray icon unavailable: ${error.message}"); return@LaunchedEffect }
+        try { awaitCancellation() } finally { tray.close() }
+    }
+    Window(title = "Nevumi", icon = painterResource("nevumi.png"), state = windowState, visible = visible,
+        onKeyEvent = { shortcuts?.onKeyEvent(it) == true },
+        onCloseRequest = {
+            // The tray icon or the desktop's media controls bring a hidden window back.
+            if (controller?.state?.value?.closeHidesWindow() == true) visible = false else quit()
         }) {
         LaunchedEffect(startup) {
             startup.start()
@@ -159,8 +209,8 @@ fun main(arguments: Array<String>) = application {
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Throwable) { startupError = error.message ?: error.toString() }
         }
-        val ready = controller
-        if (ready != null) MusicPlayerApp(ready)
+        LaunchedEffect(raised) { if (raised > 0) window.toFront() }
+        if (ready != null) MusicPlayerApp(ready, shortcuts = shortcuts)
         else MusicPlayerStartup(startupError)
     }
 }

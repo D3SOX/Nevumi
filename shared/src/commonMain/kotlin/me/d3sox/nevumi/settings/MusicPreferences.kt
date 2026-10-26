@@ -86,6 +86,10 @@ data class MusicSettings(
     /** Off by default because searching LRCLIB sends the song's artist, title, album and length to a third party. */
     val fetchLyricsOnline: Boolean = false,
     val notifyNewReleases: Boolean = false,
+    /** Linux: closing the window while music plays hides it instead of quitting. */
+    val keepPlayingInBackground: Boolean = false,
+    /** Linux: a system tray icon with playback controls; closing the window then hides it to the tray. */
+    val trayIcon: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,

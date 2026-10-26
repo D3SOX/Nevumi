@@ -68,7 +68,9 @@ interface MprisApplication : DBusInterface {
     fun Quit()
 }
 
-class LinuxMediaSession(private val controller: MusicController, address: String? = null) :
+/** MPRIS media controls; [raise] and [quit], when given, let the desktop show the window and quit Nevumi. */
+class LinuxMediaSession(private val controller: MusicController, address: String? = null,
+    private val raise: (() -> Unit)? = null, private val quit: (() -> Unit)? = null) :
     MprisPlayer, MprisApplication, Properties, AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val stopped = MutableStateFlow(false)
@@ -142,16 +144,16 @@ class LinuxMediaSession(private val controller: MusicController, address: String
         if (trackId.path == trackPath(entryId) && position >= 0)
             controller.seekCurrentEntry(entryId, position / 1_000)
     }
-    override fun Raise() = Unit
-    override fun Quit() = Unit
+    override fun Raise() { raise?.invoke() }
+    override fun Quit() { quit?.invoke() }
 
     override fun GetAll(interfaceName: String): Map<String, Variant<*>> {
         if (interfaceName == "org.mpris.MediaPlayer2") return mapOf(
             "Identity" to Variant("Nevumi"),
             "DesktopEntry" to Variant("me.d3sox.nevumi"),
             "HasTrackList" to Variant(false),
-            "CanQuit" to Variant(false),
-            "CanRaise" to Variant(false),
+            "CanQuit" to Variant(quit != null),
+            "CanRaise" to Variant(raise != null),
             "SupportedUriSchemes" to Variant(emptyList<String>(), "as"),
             "SupportedMimeTypes" to Variant(emptyList<String>(), "as"),
         )

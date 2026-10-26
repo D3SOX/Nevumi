@@ -8,6 +8,9 @@ import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.wav.WavTag
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 
+/** The audio formats a local scan indexes. */
+val localMusicExtensions = setOf("mp3", "wav", "flac")
+
 class LocalFiles(private val library: MusicLibrary, private val artwork: ArtworkLibrary? = null) : LocalSources {
     // Earlier versions registered every edited file as a root; ignore those so they stop being rescanned.
     override suspend fun roots(): List<String> = library.localRoots().filterNot { File(it).isFile }
@@ -19,7 +22,7 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
             if (location.startsWith("content:") || location == "device") return@filter false
             val root = File(location).canonicalFile
             val files = root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter {
-                it.isFile && it.extension.lowercase() in setOf("mp3", "wav", "flac") &&
+                it.isFile && it.extension.lowercase() in localMusicExtensions &&
                     folders.allows(it.canonicalFile.parent.orEmpty(), it.canonicalFile.parentFile?.relativeToOrNull(root)?.path)
             }.associateBy { "local:${it.canonicalPath}" }
             files.any { (id, file) ->
@@ -38,9 +41,11 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         val folders = library.localFolderRules()
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
-        val files = root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter { it.isFile && it.extension.lowercase() in
-            setOf("mp3", "wav", "flac") && folders.allows(it.canonicalFile.parent.orEmpty(),
-                it.canonicalFile.parentFile?.relativeToOrNull(root)?.path) }.toList()
+        // A single file was chosen on its own, so the folder rules that shape the library do not apply to it.
+        val files = if (root.isFile) listOf(root).filter { it.extension.lowercase() in localMusicExtensions }
+            else root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter { it.isFile && it.extension.lowercase() in
+                localMusicExtensions && folders.allows(it.canonicalFile.parent.orEmpty(),
+                    it.canonicalFile.parentFile?.relativeToOrNull(root)?.path) }.toList()
         onProgress(LocalScanProgress(0, files.size))
         val imported = files.mapIndexedNotNull { index, file ->
             try {

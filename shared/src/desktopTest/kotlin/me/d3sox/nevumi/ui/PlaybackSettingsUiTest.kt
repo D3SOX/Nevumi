@@ -74,4 +74,28 @@ class PlaybackSettingsUiTest {
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test fun linuxWindowSettingsKeepMusicPlayingAndShowTheTrayIconWhenChosen() {
+        val directory = Files.createTempDirectory("nevumi-window-settings")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                assertFalse(controller.state.value.preferences.keepPlayingInBackground)
+                assertFalse(controller.state.value.preferences.trayIcon)
+                onNodeWithContentDescription("Settings").performClick()
+                onNodeWithText("Playback").performScrollTo().performClick()
+                onNodeWithContentDescription("Keep playing after closing").performScrollTo().performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.preferences.keepPlayingInBackground }
+                onNodeWithContentDescription("Tray icon").performScrollTo().performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.preferences.trayIcon }
+                onNodeWithContentDescription("Back").performClick()
+                onNodeWithContentDescription("Search settings").performClick()
+                onNodeWithContentDescription("Search settings query").performTextInput("tray")
+                onNodeWithText("Tray icon").assertIsDisplayed()
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
 }

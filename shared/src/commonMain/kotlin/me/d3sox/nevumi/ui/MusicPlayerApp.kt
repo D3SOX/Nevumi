@@ -57,7 +57,7 @@ private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES,
 @Composable
 fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null, artworkPicker: ArtworkPicker? = null,
     playlistFiles: PlaylistFiles? = null, equalizerFiles: EqualizerFiles? = null, folderPicker: FolderPicker? = null,
-    audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null, backupFiles: BackupFiles? = null) {
+    audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null, backupFiles: BackupFiles? = null, shortcuts: AppShortcuts? = null) {
     val picker = artworkPicker ?: rememberArtworkPicker()
     val files = playlistFiles ?: rememberPlaylistFiles()
     val equalizerDocuments = equalizerFiles ?: rememberEqualizerFiles()
@@ -153,6 +153,14 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         var returnToSettings by rememberSaveable { mutableStateOf(false) }
         fun closePage() { page = if (returnToSettings) AppPage.SETTINGS else AppPage.LIBRARY }
         fun openPage(next: AppPage) { returnToSettings = true; page = next }
+        var searchFocus by remember { mutableIntStateOf(0) }
+        LaunchedEffect(shortcuts) {
+            shortcuts?.searches?.collect {
+                returnToSettings = false; page = AppPage.SEARCH; searchFocus++
+                scope.launch { playerSheet.animateTo(PlayerPanel.MINI, spring()) }
+            }
+        }
+        MusicDropTarget(controller) {
         Surface(Modifier.fillMaxSize().testTag("app-window")) {
             TrackMenuHost {
             // Screens handle IME padding themselves so keyboard dismissal cannot resize page transitions.
@@ -164,7 +172,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                 when (destination) {
                     AppPage.SEARCH -> Box(Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize().then(if (hasPlayer && playerSheet.targetValue != PlayerPanel.MINI) Modifier.clearAndSetSemantics {} else Modifier)) {
-                            LibrarySearchScreen(libraryState, controller, if (hasPlayer) 96.dp else 0.dp, ::closePage)
+                            LibrarySearchScreen(libraryState, controller, if (hasPlayer) 96.dp else 0.dp, ::closePage, focusRequest = searchFocus)
                         }
                     }
                     AppPage.SERVER -> ServerSettings(state, controller, ::closePage)
@@ -232,6 +240,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                 }.testTag("action-snackbar").padding(horizontal = 16.dp)) { data -> ActionSnackbar(data, ::openNotice) }
                 }
             }
+        }
         }
         }
     }

@@ -51,7 +51,7 @@ I started it because I couldn't find a music player with all the features I want
 - **Device sync.** Pair devices with a QR code to sync playlists, favorites, ratings, history and saved queues.
 - **Backup.** Export settings, playlists, saved queues, history, favorites, ratings and connection profiles to one JSON file. Restore it on another device. The backup never includes passwords or keys.
 - **Themes.** Pick light, dark, system or artwork-based colors, or a custom palette.
-- **Desktop.** Linux has MPRIS media controls, right-click menus and a volume slider in the mini player.
+- **Desktop.** Linux has MPRIS media controls, right-click menus and a volume slider in the mini player. Space plays and pauses, Ctrl+←/→ change songs, Shift+←/→ seek and Ctrl+F searches. Drop folders on the window to add them to your library, or songs to play them. An optional tray icon and background playback keep music going after you close the window.
 - **Widget.** Android has a home screen widget and a quick settings tile for the current song.
 - **Visualizer.** Nevumi runs MilkDrop presets through projectM. Over 10,000 presets ship with the app. You can search them, mark favorites and switch presets automatically.
 

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.Edit
@@ -261,7 +262,8 @@ internal enum class AppIcon(val vector: ImageVector) {
     NEW_RELEASES(Icons.Rounded.NewReleases),
     FOLLOW(Icons.Rounded.PersonAdd),
     FOLLOWING(Icons.Rounded.HowToReg),
-    NOTIFICATIONS(Icons.Rounded.Notifications);
+    NOTIFICATIONS(Icons.Rounded.Notifications),
+    DESKTOP(Icons.Rounded.DesktopWindows);
 }
 
 internal fun me.d3sox.nevumi.queue.QueueAction.icon() = when (this) {
