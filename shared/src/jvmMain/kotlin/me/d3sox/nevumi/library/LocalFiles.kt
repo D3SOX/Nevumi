@@ -42,8 +42,9 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
     private suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit,
         followRules: Boolean): List<Track> = withContext(Dispatchers.IO) {
         val root = File(location).canonicalFile
-        // File edits rescan a single file; only folders are library roots.
-        if (root.isDirectory) library.rememberLocalRoot(root.path)
+        // File edits rescan a single file; only folders are library roots, and rescans already cover folders inside one.
+        if (root.isDirectory && library.localRoots().none { root.toPath().startsWith(File(it).canonicalFile.toPath()) })
+            library.rememberLocalRoot(root.path)
         val folders = library.localFolderRules()
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()

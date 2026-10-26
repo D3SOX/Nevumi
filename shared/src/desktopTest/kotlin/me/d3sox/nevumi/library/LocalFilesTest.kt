@@ -259,4 +259,21 @@ class LocalFilesTest {
             assertEquals(listOf(music.toFile().canonicalPath), library.localRoots())
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun scanningAFolderInsideALibraryRootIndexesItWithoutAddingAnotherRoot() = runBlocking {
+        val directory = Files.createTempDirectory("nested-root")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val music = Files.createDirectory(directory.resolve("music"))
+            val album = Files.createDirectory(music.resolve("Album"))
+            val library = MusicLibrary(store)
+            val scanner = LocalFiles(library)
+            scanner.scan(music.toString())
+            Files.copy(Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac"), album.resolve("song.flac"))
+            assertEquals("Northern Light", scanner.scan(album.toString()).single().metadata.title)
+            // Rescans walk every root, so a folder inside one would be scanned twice.
+            assertEquals(listOf(music.toFile().canonicalPath), library.localRoots())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
 }
