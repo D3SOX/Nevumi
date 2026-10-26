@@ -55,6 +55,14 @@ I started it because I couldn't find a music player with all the features I want
 - **Widget.** Android has a home screen widget and a quick settings tile for the current song.
 - **Visualizer.** Nevumi runs MilkDrop presets through projectM. Over 10,000 presets ship with the app. You can search them, mark favorites and switch presets automatically.
 
+## Online lyrics
+
+Online lyrics lookups are off by default. Enable them in Settings to search LRCLIB, then separately enable NetEase Cloud Music to search it when LRCLIB has no synced result. NetEase receives the song's artist and title through undocumented web-player endpoints. These requests use no account, API key or paid subscription, but access can fail or require verification.
+
+Each NetEase lookup makes one search request and up to three lyric requests, with a ten-second timeout for the whole lookup. No published quota or third-party lyrics API agreement has been confirmed. Nevumi caches successful results in its local library database and reuses them without another online lookup. NetEase results show "Lyrics from NetEase Cloud Music".
+
+NetEase's permission for third-party lyric display, caching and redistribution has not been confirmed. Anonymous access does not establish permission to reuse lyrics, and attribution does not grant those rights.
+
 ## Screenshots
 
 These Android emulator screenshots use a fictional library.
