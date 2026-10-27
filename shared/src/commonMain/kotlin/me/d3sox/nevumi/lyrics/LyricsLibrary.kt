@@ -30,8 +30,16 @@ import me.d3sox.nevumi.sync.LibrarySync
 import kotlin.math.abs
 
 interface LyricsLibrary {
-    /** The lyrics of [track], asking the [online] lyrics services as a last resort. */
-    suspend fun lyrics(track: Track, online: Set<LyricsSource>): Lyrics?
+    /**
+     * The lyrics of [track], asking the [online] lyrics services as a last resort, or, with a [query] the listener wrote, only asking
+     * those services for it and keeping what they found as the song's lyrics.
+     */
+    suspend fun lyrics(track: Track, online: Set<LyricsSource>, query: LyricsQuery? = null): Lyrics?
+}
+
+/** What the online lyrics services are asked for in place of a song's own tags. */
+data class LyricsQuery(val title: String, val artist: String, val album: String = "") {
+    constructor(metadata: TrackMetadata) : this(metadata.title, metadata.artist, metadata.album)
 }
 
 /** A lyrics service on the internet that finds a song by its tags. */
@@ -53,18 +61,24 @@ interface LyricsFiles {
 class LyricsSources(private val store: MusicStore?, private val files: LyricsFiles?,
     private val server: suspend () -> NavidromeClient? = { null }, private val online: List<OnlineLyrics> = emptyList(),
     private val onlineTimeoutMillis: Long = 10_000) : LyricsLibrary {
-    override suspend fun lyrics(track: Track, online: Set<LyricsSource>): Lyrics? {
+    override suspend fun lyrics(track: Track, online: Set<LyricsSource>, query: LyricsQuery?): Lyrics? {
+        // Untagged files have no portable key, so lyrics found for them are kept for this device's copy alone.
+        val key = "lyrics:" + (cacheKey(track.metadata) ?: "track:${track.id}")
+        if (query != null) {
+            val found = onlineLyrics(track.metadata.copy(title = query.title.trim(), artist = query.artist.trim(), album = query.album.trim()), online)
+            if (found != null) store?.put(key, KIND, found)
+            return found
+        }
         val local = track.sources.filter { it.available && (it.kind == SourceKind.LOCAL || it.kind == SourceKind.DOWNLOAD) }
         if (files != null) {
             local.firstNotNullOfOrNull { attempt { files.embedded(it) } }?.let { return it }
             local.firstNotNullOfOrNull { attempt { files.sidecar(it) } }?.let { return it }
         }
         // The server is asked first, so its lyrics replace an online result kept while it was unreachable.
-        val key = cacheKey(track.metadata)?.let { "lyrics:$it" }
         val found = attempt { serverLyrics(track) }
-            ?: key?.let { store?.read<Lyrics>(it) }?.let { return it }
+            ?: store?.read<Lyrics>(key)?.let { return it }
             ?: onlineLyrics(track.metadata, online)
-        if (found != null && key != null) store?.put(key, KIND, found)
+        if (found != null) store?.put(key, KIND, found)
         return found
     }
 

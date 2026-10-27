@@ -157,7 +157,8 @@ class PlayerDetailsUiTest {
         val directory = Files.createTempDirectory("player-toolbar")
         val store = openMusicStore(directory.resolve("music.db").toString())
         val lyrics = object : me.d3sox.nevumi.lyrics.LyricsLibrary {
-            override suspend fun lyrics(track: Track, online: Set<me.d3sox.nevumi.lyrics.LyricsSource>): me.d3sox.nevumi.lyrics.Lyrics? = null
+            override suspend fun lyrics(track: Track, online: Set<me.d3sox.nevumi.lyrics.LyricsSource>,
+                query: me.d3sox.nevumi.lyrics.LyricsQuery?): me.d3sox.nevumi.lyrics.Lyrics? = null
         }
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), lyrics = lyrics)
         var width by mutableStateOf(540.dp)

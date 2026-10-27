@@ -28,9 +28,16 @@ import kotlinx.coroutines.flow.map
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.LyricsState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.lyrics.Lyrics
+import me.d3sox.nevumi.lyrics.LyricsQuery
 import me.d3sox.nevumi.lyrics.LyricsSource
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.album
+import me.d3sox.nevumi.resources.artist
+import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.lyrics_edit_search
+import me.d3sox.nevumi.resources.lyrics_edit_search_description
 import me.d3sox.nevumi.resources.lyrics_loading
 import me.d3sox.nevumi.resources.lyrics_none
 import me.d3sox.nevumi.resources.lyrics_none_online_hint
@@ -42,6 +49,8 @@ import me.d3sox.nevumi.resources.lyrics_source_server
 import me.d3sox.nevumi.resources.lyrics_source_sidecar
 import me.d3sox.nevumi.resources.lyrics_title
 import me.d3sox.nevumi.resources.retry
+import me.d3sox.nevumi.resources.search
+import me.d3sox.nevumi.resources.title
 import org.jetbrains.compose.resources.stringResource
 
 /** Whether Now Playing shows lyrics in place of the artwork, kept while the app runs. */
@@ -71,6 +80,10 @@ internal fun LyricsCover(state: AppState, controller: MusicController, artworkAn
 @Composable
 internal fun LyricsPanel(state: AppState, controller: MusicController, modifier: Modifier = Modifier) {
     val lyrics by controller.lyricsController.lyrics.collectAsState()
+    // A search only reaches the online services, so it is offered while they may be asked.
+    val track = state.playback.trackId?.takeIf { state.preferences.fetchLyricsOnline }?.let { id -> state.tracks.firstOrNull { it.id == id } }
+    // The dialog closes when the song changes, so a search written for one song is never kept for the next.
+    var searching by remember(track?.id) { mutableStateOf(false) }
     Surface(modifier.testTag("lyrics-panel"), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
         when (val current = lyrics) {
             LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -83,8 +96,11 @@ internal fun LyricsPanel(state: AppState, controller: MusicController, modifier:
                 Text(stringResource(Res.string.lyrics_none), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                 if (!state.preferences.fetchLyricsOnline) Text(stringResource(Res.string.lyrics_none_online_hint),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, textAlign = TextAlign.Center)
-                TextButton({ controller.lyricsController.refresh() },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSecondaryContainer)) { Text(stringResource(Res.string.retry)) }
+                val colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton({ controller.lyricsController.refresh() }, colors = colors) { Text(stringResource(Res.string.retry)) }
+                    if (track != null) TextButton({ searching = true }, colors = colors) { Text(stringResource(Res.string.lyrics_edit_search)) }
+                }
             }
             is LyricsState.Available -> Column(Modifier.fillMaxSize()) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -92,11 +108,40 @@ internal fun LyricsPanel(state: AppState, controller: MusicController, modifier:
                     else Text(current.lyrics.plain, Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                         style = MaterialTheme.typography.titleMedium)
                 }
-                Text(stringResource(current.lyrics.source.label()), Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
-                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer, textAlign = TextAlign.Center)
+                Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 24.dp), Arrangement.Center, Alignment.CenterVertically) {
+                    Text(stringResource(current.lyrics.source.label()), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer, textAlign = TextAlign.Center)
+                    // Lyrics from the song's own files or server can only be fixed there, so only an online match can be searched again.
+                    if (track != null && current.lyrics.source in setOf(LyricsSource.LRCLIB, LyricsSource.NETEASE))
+                        IconButton({ searching = true }) { Icon(AppIcon.EDIT.vector, stringResource(Res.string.lyrics_edit_search), Modifier.size(18.dp)) }
+                }
             }
         }
     }
+    if (searching && track != null) LyricsSearchDialog(controller.lyricsController.query(track), { searching = false }) {
+        controller.lyricsController.search(track, it)
+    }
+}
+
+/** Lets the listener correct the title, artist and album the online services are asked for, which may be missing or spelled differently there. */
+@Composable
+private fun LyricsSearchDialog(initial: LyricsQuery, dismiss: () -> Unit, search: (LyricsQuery) -> Unit) {
+    var title by remember { mutableStateOf(initial.title) }
+    var artist by remember { mutableStateOf(initial.artist) }
+    var album by remember { mutableStateOf(initial.album) }
+    KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.lyrics_edit_search)) }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.title)) }, singleLine = true)
+            OutlinedTextField(artist, { artist = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.artist)) }, singleLine = true)
+            OutlinedTextField(album, { album = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.album)) }, singleLine = true)
+            Text(stringResource(Res.string.lyrics_edit_search_description), style = MaterialTheme.typography.bodySmall)
+        }
+    }, confirmButton = {
+        // Both services need a title and an artist to find a song.
+        TextButton(enabled = title.isNotBlank() && artist.isNotBlank(), onClick = { search(LyricsQuery(title, artist, album)); dismiss() }) {
+            Text(stringResource(Res.string.search))
+        }
+    }, dismissButton = { TextButton(dismiss) { Text(stringResource(Res.string.cancel)) } })
 }
 
 @Composable
