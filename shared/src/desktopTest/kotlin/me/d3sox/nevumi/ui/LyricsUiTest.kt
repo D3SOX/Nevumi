@@ -11,6 +11,7 @@ import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.lyrics.LyricLine
 import me.d3sox.nevumi.lyrics.Lyrics
 import me.d3sox.nevumi.lyrics.LyricsLibrary
+import me.d3sox.nevumi.lyrics.LyricsQuery
 import me.d3sox.nevumi.lyrics.LyricsSource
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
@@ -31,7 +32,7 @@ class LyricsUiTest {
         val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac").toString()
         val track = runBlocking { library.importTrack(TrackMetadata("Lyrics fixture", durationMs = 10_000), TrackSource("lyrics", SourceKind.LOCAL, audio)) }
         val lyrics = object : LyricsLibrary {
-            override suspend fun lyrics(track: Track, online: Set<LyricsSource>) = Lyrics(LyricsSource.EMBEDDED, lines)
+            override suspend fun lyrics(track: Track, online: Set<LyricsSource>, query: LyricsQuery?) = Lyrics(LyricsSource.EMBEDDED, lines)
         }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), lyrics = lyrics)
         PlayerLyrics.visible = false
@@ -59,7 +60,7 @@ class LyricsUiTest {
     @Test fun onlineLyricsAreOffUntilTheListenerTurnsThemOn() {
         val directory = Files.createTempDirectory("lyrics-setting")
         val store = openMusicStore(directory.resolve("music.db").toString())
-        val lyrics = object : LyricsLibrary { override suspend fun lyrics(track: Track, online: Set<LyricsSource>): Lyrics? = null }
+        val lyrics = object : LyricsLibrary { override suspend fun lyrics(track: Track, online: Set<LyricsSource>, query: LyricsQuery?): Lyrics? = null }
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), lyrics = lyrics)
         try {
             runComposeUiTest {
@@ -75,6 +76,55 @@ class LyricsUiTest {
                 onNodeWithText("When LRCLIB has no synced lyrics, sends the song’s artist and title to NetEase Cloud Music, a Chinese streaming service. Its lyrics search isn’t an official API.").assertExists()
                 onNodeWithContentDescription("Also search NetEase Cloud Music").assertIsOff().performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.fetchLyricsFromNetEase }
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun theListenerCanCorrectTheSongTheOnlineServicesAreAskedFor() {
+        val directory = Files.createTempDirectory("lyrics-search")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac").toString()
+        val track = runBlocking { library.importTrack(TrackMetadata("track01", "Someone", "Album"), TrackSource("lyrics", SourceKind.LOCAL, audio)) }
+        val next = runBlocking { library.importTrack(TrackMetadata("track02"), TrackSource("next", SourceKind.LOCAL, audio)) }
+        val asked = java.util.Collections.synchronizedList(mutableListOf<LyricsQuery?>())
+        val lyrics = object : LyricsLibrary {
+            override suspend fun lyrics(track: Track, online: Set<LyricsSource>, query: LyricsQuery?): Lyrics? {
+                asked += query
+                return query?.let { Lyrics(LyricsSource.LRCLIB, plain = "Words of ${it.title}") }
+            }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), lyrics = lyrics)
+        val search = "Edit lyrics search"
+        try {
+            runComposeUiTest {
+                setContent { MaterialTheme { LyricsPanel(controller.state.collectAsState().value, controller) } }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("No lyrics for this song").fetchSemanticsNodes().isNotEmpty() }
+                // Searching is only offered while the online services may be asked.
+                onNodeWithText(search).assertDoesNotExist()
+                runBlocking { controller.updatePreferences { it.copy(fetchLyricsOnline = true) }.join() }
+                onNodeWithText(search).performClick()
+                onNodeWithText("track01").performTextReplacement("Real title")
+                onNodeWithText("Album").performTextClearance()
+                onNodeWithText("Someone").performTextClearance()
+                onNodeWithText("Search").assertIsNotEnabled()
+                onNode(hasSetTextAction() and hasText("Artist")).performTextInput("Real artist")
+                onNodeWithText("Search").performClick()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Words of Real title").fetchSemanticsNodes().isNotEmpty() }
+                assertEquals(LyricsQuery("Real title", "Real artist", ""), asked.last())
+                // An online match can be searched again, starting from the last search.
+                onNodeWithContentDescription(search).performClick()
+                onNodeWithText("Real title").assertExists()
+                onNodeWithText("Cancel").performClick()
+                onNodeWithText("Real artist").assertDoesNotExist()
+                // A search written for one song is never kept for the next one.
+                onNodeWithContentDescription(search).performClick()
+                onNode(isDialog()).assertExists()
+                runBlocking { controller.playTrack(next.id).join(); controller.pause().join() }
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("No lyrics for this song").fetchSemanticsNodes().isNotEmpty() }
+                onNode(isDialog()).assertDoesNotExist()
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

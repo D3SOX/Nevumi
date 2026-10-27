@@ -120,6 +120,42 @@ class LyricsSourcesTest {
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test fun aWrittenQueryAsksOnlyTheOnlineServicesAndReplacesTheKeptLyrics() = runBlocking {
+        val directory = Files.createTempDirectory("lyrics-query")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val seen = mutableListOf<TrackMetadata>()
+        val service = object : OnlineLyrics {
+            override val source = LyricsSource.LRCLIB
+            override suspend fun lyrics(metadata: TrackMetadata): Lyrics? {
+                seen += metadata
+                return if (metadata.title == "Nothing") null else Lyrics(LyricsSource.LRCLIB, plain = metadata.title)
+            }
+        }
+        try {
+            val audio = directory.resolve("song.flac").toFile()
+            audio.writeBytes(byteArrayOf())
+            directory.resolve("song.lrc").toFile().writeText("[00:01.00]Sidecar")
+            val track = Track("t", metadata, listOf(TrackSource("local:s", SourceKind.LOCAL, audio.path)))
+            val sources = LyricsSources(store, FileLyrics(), online = listOf(service))
+            store.put("lyrics:" + LyricsSources.cacheKey(metadata), LyricsSources.KIND, Lyrics(LyricsSource.LRCLIB, plain = "Wrong match"))
+            // The sidecar and the kept lyrics are skipped, and the length still helps the service find the right version.
+            val query = LyricsQuery(" Northern Lights ", "Fixture Artist", "")
+            assertEquals(Lyrics(LyricsSource.LRCLIB, plain = "Northern Lights"), sources.lyrics(track, setOf(LyricsSource.LRCLIB), query))
+            assertEquals(metadata.copy(title = "Northern Lights", album = ""), seen.single())
+            assertEquals(Lyrics(LyricsSource.LRCLIB, plain = "Northern Lights"), store.read<Lyrics>("lyrics:" + LyricsSources.cacheKey(metadata)))
+            // A search that finds nothing keeps what was there, and the services are not asked while they are off.
+            assertNull(sources.lyrics(track, setOf(LyricsSource.LRCLIB), query.copy(title = "Nothing")))
+            assertNull(sources.lyrics(track, emptySet(), query))
+            assertEquals(2, seen.size)
+            assertEquals(Lyrics(LyricsSource.LRCLIB, plain = "Northern Lights"), store.read<Lyrics>("lyrics:" + LyricsSources.cacheKey(metadata)))
+            // An untagged file keeps what a search found under its own track.
+            val untagged = Track("untagged", TrackMetadata("track01"), emptyList())
+            assertNull(LyricsSources.cacheKey(untagged.metadata))
+            val found = sources.lyrics(untagged, setOf(LyricsSource.LRCLIB), LyricsQuery("Real title", "Real artist"))
+            assertEquals(found, sources.lyrics(untagged, emptySet()))
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun netEaseTakesTheFirstCopyOfTheSameRecordingWithLyricsAndDropsItsCredits() = runBlocking {
         val searches = mutableListOf<String?>()
         val lyricIds = mutableListOf<String?>()

@@ -11,6 +11,8 @@
     <string name="lyrics_source_server">Lyrics from your music server</string>
     <string name="lyrics_source_lrclib">Lyrics from LRCLIB</string>
     <string name="lyrics_source_netease">Lyrics from NetEase Cloud Music</string>
+    <string name="lyrics_edit_search">Edit lyrics search</string>
+    <string name="lyrics_edit_search_description">Asks the online lyrics services for this title, artist and album instead of the song’s tags. Lyrics found are kept for this song.</string>
     <string name="lyrics_setting_online">Find lyrics online</string>
     <string name="lyrics_keywords_online">lyrics lrclib netease 163 cloud music synced words text karaoke internet</string>
     <string name="lyrics_setting_online_description">Sends the artist, title, album and length of songs without lyrics to LRCLIB.</string>
