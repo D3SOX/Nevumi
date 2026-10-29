@@ -94,10 +94,9 @@
           <div class="links">
             <a class="button primary" href="https://github.com/D3SOX/Nevumi/releases"><svg class="icon" aria-hidden="true" focusable="false"><use href="assets/icons.svg#download"/></svg>Download for Linux</a>
           </div>
-          <details><summary><svg class="icon" aria-hidden="true" focusable="false"><use href="assets/icons.svg#expand_more"/></svg>Install on Arch Linux</summary><p>Download the signing key and check its fingerprint:</p><div class="code-block" data-copy-label="Copy signing key commands"><pre><code><span class="c">wget</span> <span class="o">-O</span> nevumi.asc <span class="s">https://nevumi.app/nevumi.asc</span>
-<span class="c">gpg</span> <span class="o">--show-keys --fingerprint</span> nevumi.asc</code></pre></div><p class="fingerprint">5948F17F1611CC2B995BC6121F0D542126D514AB</p><p>Import and trust the key, then add the repository:</p><div class="code-block" data-copy-label="Copy Arch repository commands"><pre><code><span class="c">sudo pacman-key</span> <span class="o">--add</span> nevumi.asc
-<span class="c">sudo pacman-key</span> <span class="o">--lsign-key</span> 5948F17F1611CC2B995BC6121F0D542126D514AB
-<span class="c">sudo tee</span> <span class="o">-a</span> /etc/pacman.conf <span class="o">&gt;</span>/dev/null <span class="o">&lt;&lt;</span><span class="s">'REPO'
+          <details><summary><svg class="icon" aria-hidden="true" focusable="false"><use href="assets/icons.svg#expand_more"/></svg>Install on Arch Linux</summary><p>Download the signing key and check its fingerprint:</p><div class="code-block" data-copy-label="Copy signing key commands"><pre><code><span class="c">curl</span> <span class="o">-fsSL -o</span> nevumi.asc <span class="s">https://nevumi.app/nevumi.asc</span>
+<span class="c">gpg</span> <span class="o">--show-keys --fingerprint</span> nevumi.asc</code></pre></div><p class="fingerprint">5948F17F1611CC2B995BC6121F0D542126D514AB</p><p>Import and trust the key:</p><div class="code-block" data-copy-label="Copy key trust commands"><pre><code><span class="c">sudo pacman-key</span> <span class="o">--add</span> nevumi.asc
+<span class="c">sudo pacman-key</span> <span class="o">--lsign-key</span> 5948F17F1611CC2B995BC6121F0D542126D514AB</code></pre></div><p>Add the repository, then install:</p><div class="code-block" data-copy-label="Copy Arch repository commands"><pre><code><span class="c">grep</span> <span class="o">-q</span> <span class="s">'^[[:space:]]*\[nevumi\][[:space:]]*$'</span> /etc/pacman.conf <span class="o">||</span> <span class="c">sudo tee</span> <span class="o">-a</span> /etc/pacman.conf <span class="o">&gt;</span>/dev/null <span class="o">&lt;&lt;</span><span class="s">'REPO'
 
 [nevumi]
 SigLevel = Required DatabaseRequired

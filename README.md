@@ -114,7 +114,7 @@ GitHub, Obtainium and this F-Droid repository distribute the same release APK an
 Download the repository signing key in a terminal and check its fingerprint:
 
 ```sh
-wget -O nevumi.asc https://nevumi.app/nevumi.asc
+curl -fsSL -o nevumi.asc https://nevumi.app/nevumi.asc
 gpg --show-keys --fingerprint nevumi.asc
 ```
 
@@ -129,10 +129,10 @@ sudo pacman-key --add nevumi.asc
 sudo pacman-key --lsign-key 5948F17F1611CC2B995BC6121F0D542126D514AB
 ```
 
-Add the repository with this terminal command:
+Add the repository with this terminal command. It skips the step when `/etc/pacman.conf` already has a `[nevumi]` section:
 
 ```sh
-sudo tee -a /etc/pacman.conf >/dev/null <<'REPO'
+grep -q '^[[:space:]]*\[nevumi\][[:space:]]*$' /etc/pacman.conf || sudo tee -a /etc/pacman.conf >/dev/null <<'REPO'
 
 [nevumi]
 SigLevel = Required DatabaseRequired
