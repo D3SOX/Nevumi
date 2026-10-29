@@ -132,7 +132,7 @@ sudo pacman-key --lsign-key 5948F17F1611CC2B995BC6121F0D542126D514AB
 Add the repository with this terminal command. It skips the step when pacman already has a `[nevumi]` repository:
 
 ```sh
-pacman-conf --repo-list | grep -qxF 'nevumi' ||
+sudo pacman-conf --repo-list | grep -qxF 'nevumi' ||
   printf '%s\n' '' '[nevumi]' 'SigLevel = Required DatabaseRequired' \
     'Server = https://nevumi.app/arch/$arch' |
   sudo tee -a /etc/pacman.conf >/dev/null
