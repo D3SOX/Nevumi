@@ -89,7 +89,7 @@ class SettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 assertEquals(listOf(edit.id), controller.state.value.fileEdits.map { it.id })
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Files & recovery").performScrollTo().performClick()

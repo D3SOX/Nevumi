@@ -131,8 +131,11 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         mutableState.update { it.copy(listeningPort = listener.localPort) }
         acceptor = scope.launch {
             while (isActive && !listener.isClosed) {
-                val socket = try { listener.accept() as SSLSocket } catch (error: Exception) {
-                    if (listener.isClosed) break else throw error
+                val socket = try { listener.accept() as SSLSocket } catch (_: Exception) {
+                    if (listener.isClosed) break
+                    // Failures such as running out of file descriptors are temporary, so keep listening after a pause.
+                    delay(1_000)
+                    continue
                 }
                 if (!slots.tryAcquire()) { socket.close(); continue }
                 sockets.add(socket)
@@ -240,9 +243,16 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
 
     private suspend fun handle(socket: SSLSocket) {
         socket.soTimeout = 15_000
-        socket.startHandshake()
-        val pin = SyncTls.fingerprint(socket.session.peerCertificates.single())
-        val request = read<SyncRequest>(socket)
+        // The connection holds a slot from before its handshake, so close it unless it identifies itself in time.
+        val deadline = scope.launch { delay(AUTHORIZATION_TIMEOUT_MS); runCatching { socket.close() } }
+        val (pin, request) = try {
+            socket.startHandshake()
+            val certificate = SyncTls.fingerprint(socket.session.peerCertificates.single())
+            // Any certificate passes while an invitation is open, so other devices may only send a pairing request.
+            val paired = state.value.peers.any { it.certificateSha256 == certificate }
+            if (paired) deadline.cancel()
+            certificate to read<SyncRequest>(socket, if (paired) MAX_FRAME else MAX_PAIRING_FRAME)
+        } finally { deadline.cancel() }
         require(request.version == 1 && request.deviceId != ownId && validId(request.deviceId) &&
             request.name.length in 1..80 && request.listeningPort in 1..65535) { "Invalid device request" }
         var awaitingMerge: SyncPeer? = null
@@ -364,10 +374,10 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         require(bytes.size in 1..MAX_FRAME) { "The shared library exceeds the transfer limit" }
         DataOutputStream(socket.outputStream).apply { writeInt(bytes.size); write(bytes); flush() }
     }
-    private inline fun <reified T> read(socket: SSLSocket): T {
+    private inline fun <reified T> read(socket: SSLSocket, limit: Int = MAX_FRAME): T {
         val input = DataInputStream(socket.inputStream)
         val size = input.readInt()
-        require(size in 1..MAX_FRAME) { "Invalid device message size" }
+        require(size in 1..limit) { "Invalid device message size" }
         return wire.decodeFromString<T>(ByteArray(size).also { input.readFully(it) }.toString(Charsets.UTF_8))
     }
     override fun close() {
@@ -381,6 +391,9 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
 
     companion object {
         private const val MAX_FRAME = 32 * 1024 * 1024
+        /** A pairing request carries only identifiers, a name and the secret. */
+        private const val MAX_PAIRING_FRAME = 16 * 1024
+        private const val AUTHORIZATION_TIMEOUT_MS = 30_000L
         private const val MATCHING_TIMEOUT_MS = 5 * 60_000
         /** Single byte a requester sends after merging a sync response. */
         private const val SYNC_MERGED = 0x06

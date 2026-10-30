@@ -16,6 +16,9 @@ import org.freedesktop.dbus.types.Variant
 import java.io.File
 import java.io.IOException
 import java.net.URI
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 
 @DBusInterfaceName("org.freedesktop.portal.FileChooser")
@@ -73,6 +76,21 @@ internal class PortalFileChooser(private val address: String? = null) {
                 }
             }
         }
+
+    /** Writes [text] to a file the user chooses, replacing it whole; false when the user cancels. */
+    suspend fun save(title: String, filter: PortalFilter, name: String, text: String): Boolean {
+        val file = choose(title, filter = filter, saveName = name) ?: return false
+        withContext(Dispatchers.IO) {
+            val temporary = Files.createTempFile(file.absoluteFile.parentFile.toPath(), ".nevumi-", ".tmp")
+            try {
+                Files.writeString(temporary, text, Charsets.UTF_8)
+                // Some network and FUSE file systems cannot replace a file atomically; a plain replace still keeps the export whole.
+                try { Files.move(temporary, file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING) }
+                catch (_: AtomicMoveNotSupportedException) { Files.move(temporary, file.toPath(), StandardCopyOption.REPLACE_EXISTING) }
+            } finally { Files.deleteIfExists(temporary) }
+        }
+        return true
+    }
 }
 
 internal fun portalFilter(name: String, vararg patterns: String) = PortalFilter(name,

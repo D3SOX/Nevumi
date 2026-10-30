@@ -13,6 +13,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import me.d3sox.nevumi.downloads.*
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.navidrome.*
@@ -462,6 +463,58 @@ class QueuePlaybackTest {
             controller.playTrack(current.id, listOf(current.id) + missing.map { it.id } + after.id).join()
             withTimeout(3_000) { controller.state.first { it.playback.trackId == current.id } }
             assertEquals(listOf(current.id, after.id), handed.last())
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun addingASongKeepsThePlayingSongInTheDecoderWhileItsFileIsBrieflyUnreachable() = runBlocking {
+        val directory = Files.createTempDirectory("unreachable-current-song")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val path = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac").toString()
+        val songs = listOf("Playing", "Added").map { library.importTrack(TrackMetadata(it), TrackSource("local:$it", SourceKind.LOCAL, path)) }
+        val reachable = AtomicBoolean(true)
+        val decoder = MpvPlaybackEngine("null")
+        val handed = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+        val engine = object : PlaybackEngine by decoder {
+            override fun updateQueue(tracks: List<PlayableTrack>) { handed += tracks.map { it.id }; decoder.updateQueue(tracks) }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), engine, sourceAccessible = { reachable.get() && FileAudioAccess.available(it) })
+        try {
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.playTrack(songs[0].id, listOf(songs[0].id)).join()
+            withTimeout(3_000) { controller.state.first { it.playback.trackId == songs[0].id && it.playback.durationMs > 0 } }
+            // A network share that stops answering for a moment must not take the playing song out of the decoder.
+            reachable.set(false)
+            controller.enqueue(songs[1].id, QueueAction.APPEND).join()
+            assertEquals(listOf(songs[0].id, songs[1].id), handed.last())
+            assertEquals(songs[0].id, controller.state.value.playback.trackId)
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aSongTheDecoderAdvancedToStaysInItWhileItsFileIsBrieflyUnreachable() = runBlocking {
+        val directory = Files.createTempDirectory("unreachable-advanced-song")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val path = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac").toString()
+        val songs = listOf("First", "Advanced", "Added").map { library.importTrack(TrackMetadata(it), TrackSource("local:$it", SourceKind.LOCAL, path)) }
+        val reachable = AtomicBoolean(true)
+        val decoder = MpvPlaybackEngine("null")
+        val handed = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+        val engine = object : PlaybackEngine by decoder {
+            override fun updateQueue(tracks: List<PlayableTrack>) { handed += tracks.map { it.id }; decoder.updateQueue(tracks) }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), engine, sourceAccessible = { reachable.get() && FileAudioAccess.available(it) })
+        try {
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.playTrack(songs[0].id, songs.take(2).map { it.id }).join()
+            // The decoder moves on by itself, without a queue edit that would resolve the next song as the current one.
+            withTimeout(10_000) { controller.state.first { it.playback.trackId == songs[1].id && it.playback.durationMs > 0 } }
+            reachable.set(false)
+            controller.enqueue(songs[2].id, QueueAction.APPEND).join()
+            assertTrue(songs[1].id in handed.last(), "The playing song left the decoder: ${handed.last()}")
+            assertEquals(songs[1].id, controller.state.value.playback.trackId)
         } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 

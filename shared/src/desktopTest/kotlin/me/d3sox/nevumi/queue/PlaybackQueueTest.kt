@@ -292,6 +292,18 @@ class PlaybackQueueTest {
         }
     }
 
+    @Test
+    fun playAfterContinuesFromThePreviousRequestWhenTheLastInsertedSongIsRemoved() = runBlocking {
+        withQueue { queue ->
+            queue.replace(listOf("playing", "album-next"))
+            queue.playNext("requested-one")
+            queue.playAfter("requested-two")
+            queue.remove(queue.snapshot().entries.single { it.trackId == "requested-two" }.id)
+            queue.playAfter("requested-three")
+            assertEquals(listOf("playing", "requested-one", "requested-three", "album-next"), queue.snapshot().entries.map { it.trackId })
+        }
+    }
+
     private suspend fun withQueue(block: suspend (PlaybackQueue) -> Unit) {
         val directory = Files.createTempDirectory("playback-queue-test")
         val store = openMusicStore(directory.resolve("queue.db").toString())

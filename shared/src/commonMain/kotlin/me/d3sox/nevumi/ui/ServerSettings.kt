@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.navidrome.ServerRefreshStage
+import me.d3sox.nevumi.navidrome.sendsPasswordInClearText
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.music_server
@@ -25,6 +26,7 @@ import me.d3sox.nevumi.resources.sources_password
 import me.d3sox.nevumi.resources.sources_refresh_library
 import me.d3sox.nevumi.resources.sources_server_address
 import me.d3sox.nevumi.resources.sources_server_intro
+import me.d3sox.nevumi.resources.sources_server_unencrypted_hint
 import me.d3sox.nevumi.resources.sources_sync_play_queue
 import me.d3sox.nevumi.resources.sources_sync_play_queue_description
 import me.d3sox.nevumi.resources.sources_user_on_server
@@ -60,7 +62,8 @@ internal fun ServerSettings(state: AppState, controller: MusicController, onClos
                 }
             } else {
                 Text(stringResource(Res.string.sources_server_intro))
-                OutlinedTextField(address, { address = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_server_address)) }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true)
+                OutlinedTextField(address, { address = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_server_address)) }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true,
+                    supportingText = if (sendsPasswordInClearText(address)) {{ Text(stringResource(Res.string.sources_server_unencrypted_hint)) }} else null)
                 OutlinedTextField(username, { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_username)) }, leadingIcon = { Icon(AppIcon.ARTIST.vector, null) }, singleLine = true)
                 OutlinedTextField(password, { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_password)) }, leadingIcon = { Icon(AppIcon.LOCK.vector, null) }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation())

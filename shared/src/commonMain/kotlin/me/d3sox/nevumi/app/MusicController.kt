@@ -17,7 +17,6 @@ import me.d3sox.nevumi.playback.RepeatMode
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.queue.QueueSnapshot
 import me.d3sox.nevumi.queue.SavedQueue
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
@@ -54,6 +53,8 @@ data class AppState(
     val playback: PlaybackStatus = PlaybackStatus(),
     val loading: Boolean = true,
     val libraryReady: Boolean = false,
+    /** Startup has finished: the settings are reloaded and the details, such as playlists and saved queues, are loaded. */
+    val started: Boolean = false,
     val error: String? = null,
     val playbackConfirmation: PlaybackConfirmation? = null,
     val server: ServerProfile? = null,
@@ -158,8 +159,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             var recoveryError: String? = null
             suspend fun recover(block: suspend () -> Unit) {
                 try { block() }
-                catch (cancelled: CancellationException) { throw cancelled }
-                catch (error: Exception) { if (recoveryError == null) recoveryError = error.message ?: "File recovery failed" }
+                catch (error: Exception) { rethrowCancellation(error); if (recoveryError == null) recoveryError = error.message ?: "File recovery failed" }
             }
             recover { fileEditController.recover(FileEditTarget.LOCAL) }
             recover { fileEditController.recover(FileEditTarget.SERVER) }
@@ -167,12 +167,12 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             recover { pairedDevices?.start() }
             recover { historyController.loadPendingLastFmAuthorization() }
             context.operations.withLock {
-                playbackController.applyPreferences()
+                recover { playbackController.applyPreferences() }
                 playbackController.loadPersistedQueue()
                 loader.refreshLibrary()
             }
             loader.refreshDetails(loading = false)
-            context.update { it.copy(loading = it.serverRefresh?.running == true, error = recoveryError ?: it.error) }
+            context.update { it.copy(loading = it.serverRefresh?.running == true, error = recoveryError ?: it.error, started = true) }
             serverQueueController.start()
             releasesController.start()
         }

@@ -56,13 +56,15 @@ class AudioDownloadsTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         val oldAudio = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
         val newAudio = byteArrayOf(11, 12, 13, 14, 15, 16, 17, 18)
-        var first = true
+        var attempts = 0
         var resumedValidator: String? = null
         val oldDate = "Sat, 10 Oct 2026 13:45:08 GMT"
         val newDate = "Sat, 10 Oct 2026 14:45:08 GMT"
         val http = HttpClient(MockEngine { request ->
-            if (first) {
-                first = false
+            attempts++
+            // The second attempt cannot reach the server, so it learns no validator.
+            if (attempts == 2) throw java.net.ConnectException("Connection refused")
+            if (attempts == 1) {
                 respond(oldAudio.copyOfRange(0, 4), headers = headersOf(HttpHeaders.ContentType to listOf("audio/flac"),
                     HttpHeaders.LastModified to listOf(oldDate), HttpHeaders.Date to listOf("Sat, 10 Oct 2026 13:50:08 GMT")))
             } else {
@@ -81,9 +83,10 @@ class AudioDownloadsTest {
             val client = NavidromeClient(http, "https://music.example", ServerCredentials("fixture", "test"))
             val downloads = AudioDownloads(store, library, client, directory.resolve("audio").toString())
             assertEquals(DownloadStatus.FAILED, downloads.download(track.id, song).status)
+            assertEquals(DownloadStatus.FAILED, downloads.download(track.id, song).status)
             val result = downloads.download(track.id, song)
             assertEquals(DownloadStatus.COMPLETE, result.status)
-            assertEquals(oldDate, resumedValidator)
+            assertEquals(oldDate, resumedValidator, "A failed attempt must keep the validator of the partial file")
             assertEquals(newAudio.toList(), File(result.path!!).readBytes().toList())
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
@@ -154,6 +157,40 @@ class AudioDownloadsTest {
             restored.remove(local.id)
             assertEquals(null, SourceResolver.resolve(reopened.tracks().single().sources, online = false))
             assertEquals(false, File(record.path).exists())
+        } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun filesNoDownloadUsesAreDeletedWhileResumableOnesStay() = runBlocking {
+        val directory = Files.createTempDirectory("unused-download-files")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val audio = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val http = HttpClient(MockEngine { request ->
+            val bytes = if (request.url.parameters["id"] == "partial") audio.copyOfRange(0, 4) else audio
+            respond(bytes, headers = headersOf(HttpHeaders.ContentType, "audio/flac"))
+        })
+        try {
+            val library = MusicLibrary(store)
+            val client = NavidromeClient(http, "https://music.example", ServerCredentials("fixture", "test"))
+            val root = directory.resolve("audio")
+            val downloads = AudioDownloads(store, library, client, root.toString())
+            suspend fun download(id: String): DownloadRecord {
+                val song = ServerSong(id, TrackMetadata(id), "flac", audio.size.toLong())
+                val track = library.importTrack(song.metadata, TrackSource("server:$id", SourceKind.SERVER, id))
+                return downloads.download(track.id, song)
+            }
+            val kept = download("kept")
+            val linked = download("linked")
+            assertEquals(DownloadStatus.FAILED, download("partial").status)
+            val resumable = root.toFile().listFiles()!!.single { it.name.endsWith(".part") }
+            val abandoned = root.resolve("abandoned.flac.part").toFile().apply { writeBytes(audio) }
+            // Linking two downloaded songs keeps one download; the other's audio is no longer used.
+            library.linkTracks(kept.trackId, linked.trackId)
+            downloads.removeUnusedFiles()
+            kotlin.test.assertTrue(File(kept.path!!).exists())
+            kotlin.test.assertFalse(File(linked.path!!).exists())
+            kotlin.test.assertTrue(resumable.exists(), "A failed download keeps its partial file to resume")
+            kotlin.test.assertFalse(abandoned.exists())
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 

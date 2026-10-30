@@ -77,21 +77,8 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         val staged = directory.resolve("read-tags-${UUID.randomUUID()}.${name.substringAfterLast('.')}")
         try {
             files.image(location, staged.toFile())
-            val audio = AudioFileIO.read(staged.toFile())
-            val container = audio.tag
-            val tag = if (container is WavTag && container.isExistingId3Tag) container.getID3Tag() else container
-            fun field(key: FieldKey): String = try { tag?.getFirst(key).orEmpty().trimEnd('\u0000') }
-                catch (_: UnsupportedOperationException) { "" }
-            val number = field(FieldKey.TRACK).ifBlank {
-                if (container is WavTag) container.infoTag.unrecognisedFields.firstOrNull { it.id == "IPRT" }?.content.orEmpty().trimEnd('\u0000') else ""
-            }
-            TrackMetadata(field(FieldKey.TITLE).ifBlank { name.substringBeforeLast('.') }, field(FieldKey.ARTIST), field(FieldKey.ALBUM),
-                audio.audioHeader.trackLength.toLong() * 1_000,
-                tag?.getAll(FieldKey.GENRE).orEmpty().map { it.trimEnd('\u0000') }.filter { it.isNotBlank() },
-                field(FieldKey.ALBUM_ARTIST), number.substringBefore('/').toIntOrNull() ?: 0,
-                field(FieldKey.DISC_NO).substringBefore('/').toIntOrNull() ?: 1, files.folder(location),
-                field(FieldKey.YEAR).take(4).toIntOrNull() ?: 0,
-                field(FieldKey.MUSICBRAINZ_TRACK_ID), field(FieldKey.MUSICBRAINZ_RELEASEID))
+            // The editor shows what the file holds, so saving it never writes the artist in as album artist.
+            AudioFileIO.read(staged.toFile()).trackMetadata(name.substringBeforeLast('.'), files.folder(location), albumArtistFallback = false)
         } finally { Files.deleteIfExists(staged) }
     } }
 

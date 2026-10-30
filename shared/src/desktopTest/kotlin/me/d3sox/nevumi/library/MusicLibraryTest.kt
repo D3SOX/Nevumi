@@ -166,8 +166,9 @@ class MusicLibraryTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         try {
             val library = MusicLibrary(store)
-            suspend fun song(kind: SourceKind, title: String, size: Long, durationMs: Long = 180_000, artist: String = "Fixture Artist") =
-                library.importTrack(TrackMetadata(title, artist, durationMs = durationMs),
+            suspend fun song(kind: SourceKind, title: String, size: Long, durationMs: Long = 180_000, artist: String = "Fixture Artist",
+                album: String = "", releaseId: String = "") =
+                library.importTrack(TrackMetadata(title, artist, album, durationMs = durationMs, releaseId = releaseId),
                     TrackSource("${kind.name}:$title:$artist:$size:$durationMs", kind, "$title.mp3", indexedSize = size)).id
             val local = song(SourceKind.LOCAL, "Northern Light", 1_000)
             val server = song(SourceKind.SERVER, " northern light", 1_000, 179_000)
@@ -178,6 +179,10 @@ class MusicLibraryTest {
             song(SourceKind.LOCAL, "Unknown size", 0); song(SourceKind.SERVER, "Unknown size", 0)
             song(SourceKind.LOCAL, "Unknown length", 5_000, 0); song(SourceKind.SERVER, "Unknown length", 5_000, 0)
             song(SourceKind.LOCAL, "Intro", 6_000); song(SourceKind.SERVER, "Intro", 6_000, artist = "Another Artist")
+            song(SourceKind.LOCAL, "Remaster", 8_000, album = "First Edition")
+            song(SourceKind.SERVER, "Remaster", 8_000, album = "Deluxe Edition")
+            song(SourceKind.LOCAL, "Reissue", 9_000, releaseId = "6e1d48f7-717c-416e-af35-5d2454a13af2")
+            song(SourceKind.SERVER, "Reissue", 9_000, releaseId = "189002e7-3285-4e2e-92a3-7f6c30d407a2")
             song(SourceKind.SERVER, "Deleted file", 7_000)
             library.importTrack(TrackMetadata("Deleted file", "Fixture Artist", durationMs = 180_000),
                 TrackSource("local:deleted", SourceKind.LOCAL, "deleted.mp3", available = false, indexedSize = 7_000))

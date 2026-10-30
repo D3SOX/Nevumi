@@ -132,7 +132,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNodeWithText("Shared music").performClick()
                 onNodeWithContentDescription("Playlist options").performClick()
@@ -179,7 +179,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)).performScrollToNode(hasText("Mixed sources"))
                 onNodeWithText("Mixed sources").performClick()
@@ -337,7 +337,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNodeWithText("Temporary playlist").performClick()
                 onNodeWithContentDescription("Playlist options").performClick()
@@ -367,7 +367,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNodeWithText("Repeated").performClick()
                 onNode(hasScrollAction()).performScrollToIndex(3)
@@ -409,7 +409,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNodeWithText("Repeated").performClick()
                 onAllNodesWithContentDescription("Track options: Repeated song")[1].performClick()
@@ -445,7 +445,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNodeWithText("My offline version").performClick()
                 onNodeWithContentDescription("Playlist options").performClick()
@@ -519,7 +519,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNodeWithText("Repeated").performClick()
                 onAllNodesWithText("Northern Light")[1].performClick()
@@ -541,7 +541,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Playlists")
                 onNodeWithText("AC/DC").assertIsDisplayed()
                 onNodeWithText("4 playlists").assertIsDisplayed()

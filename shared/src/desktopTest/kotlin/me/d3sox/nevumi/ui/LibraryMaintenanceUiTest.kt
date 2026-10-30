@@ -58,8 +58,8 @@ class LibraryMaintenanceUiTest {
             var registry by mutableStateOf(SaveableStateRegistry(null) { true })
             lateinit var list: LazyListState
             lateinit var grid: LazyGridState
-            // Startup reloads the settings and would replace positions saved meanwhile.
-            waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+            // Let startup finish reloading the settings before this test saves positions.
+            waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
             setContent {
                 if (mounted) CompositionLocalProvider(LocalSaveableStateRegistry provides registry) {
                     Column {

@@ -120,7 +120,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                 if (owner != null) store.database.records().delete("excluded:$id")
                 else if (store.read<OfflineRequest>("excluded:$id") != null) continue
                 if (owner != null) {
-                    val pins = store.read<OfflinePins>("pins:$id") ?: OfflinePins(id)
+                    val pins = store.read<TrackPins>("pins:$id") ?: TrackPins(id)
                     store.put("pins:$id", "pins", pins.copy(owners = pins.owners + owner))
                 }
                 val record = store.read<DownloadRecord>("download:$id")
@@ -140,14 +140,14 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
 
     suspend fun requestUndoable(trackIds: List<String>): suspend () -> Unit {
         val before = store.transaction { trackIds.distinct().associateWith { id ->
-            ManualDownloadBefore(store.read<OfflinePins>("pins:$id")?.owners?.contains("manual") == true,
+            ManualDownloadBefore(store.read<TrackPins>("pins:$id")?.owners?.contains("manual") == true,
                 store.read("download:$id"), store.read<OfflineRequest>("request:$id") != null)
         } }
         request(trackIds)
         return {
             if (before.values.any { !it.pinned }) withLibraryChanges {
                 for ((id, previous) in before.filterValues { !it.pinned }) {
-                    val pins = store.read<OfflinePins>("pins:$id") ?: OfflinePins(id)
+                    val pins = store.read<TrackPins>("pins:$id") ?: TrackPins(id)
                     val remaining = pins.owners - "manual"
                     if (remaining.isEmpty()) store.database.records().delete("pins:$id")
                     else store.put("pins:$id", "pins", pins.copy(owners = remaining))
@@ -236,6 +236,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         val paused = preferences.load().downloadsPaused || !networkPermitted()
         val connection = if (paused) null else client()
         val downloads = AudioDownloads(store, library, connection, directory, availableSpace)
+        downloads.removeUnusedFiles()
         val excluded = store.list<OfflineRequest>("offline-exclusions").map { it.trackId }.toSet()
         if (paused || connection == null) {
             downloads.replacePlaylistPins(playlists.all(), excluded)
@@ -276,7 +277,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             val track = tracks[record.trackId] ?: continue
             if (!track.onDevice()) continue
             // A manual download returns if the file leaves the device; playlist downloads follow their playlist instead.
-            if (store.read<OfflinePins>("pins:${track.id}")?.owners?.contains("manual") == true)
+            if (store.read<TrackPins>("pins:${track.id}")?.owners?.contains("manual") == true)
                 store.put("request:${track.id}", "offline-requests", OfflineRequest(track.id))
             else store.database.records().delete("request:${track.id}")
             if (record.status != DownloadStatus.COMPLETE || track.id !in playing) downloads.remove(track.id, unpin = false)
@@ -313,6 +314,3 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
 
 // Everything a pass reads from the store to decide what to download, keep or evict.
 private val PASS_INPUTS = listOf("downloads", "offline-exclusions", "offline-requests", "pins", "playlists", "servers", "settings", "tracks")
-
-@Serializable
-private data class OfflinePins(val trackId: String, val owners: Set<String> = emptySet())

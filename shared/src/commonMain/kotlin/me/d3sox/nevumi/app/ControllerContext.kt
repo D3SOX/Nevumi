@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,8 +39,10 @@ internal class ControllerContext {
     /** Runs [block] on the scope, serialized with the other operations unless told otherwise, and reports a failure as the app error. */
     fun action(serialized: Boolean = true, block: suspend () -> Unit) = scope.launch {
         try { if (serialized) operations.withLock { block() } else block() }
-        catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: Exception) { mutableState.update { it.copy(error = error.message ?: "Operation failed", loading = it.serverRefresh?.running == true) } }
+        catch (error: Exception) {
+            rethrowCancellation(error)
+            mutableState.update { it.copy(error = error.message ?: "Operation failed", loading = it.serverRefresh?.running == true) }
+        }
     }
 
     /** Shows [message] as a notice; with [undo] it offers a reversal that in turn offers [redo], alternating until one is used. */
@@ -58,4 +61,9 @@ internal class ControllerContext {
     }
 
     fun dismissError(error: String) { mutableState.update { if (it.error == error) it.copy(error = null) else it } }
+}
+
+/** Rethrows [error] when it cancels the caller; a timeout inside the work is an ordinary failure, not a cancellation. */
+internal fun rethrowCancellation(error: Exception) {
+    if (error is CancellationException && error !is TimeoutCancellationException) throw error
 }

@@ -8,6 +8,7 @@ import com.sun.jna.StringArray
 import com.sun.jna.Structure
 import java.io.File
 import java.net.URI
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -103,19 +104,26 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
     private var audioEffects = AudioEffects()
 
     init {
-        // An unset ao lets mpv choose PipeWire/PulseAudio/ALSA. "auto" is not a driver name.
-        if (audioOutput != "auto") checked(native.mpv_set_option_string(handle, "ao", audioOutput))
-        mapOf("vid" to "no", "terminal" to "no", "config" to "no",
-            "idle" to "yes", "keep-open" to "yes", "hr-seek" to "yes").forEach { (name, value) ->
-            checked(native.mpv_set_option_string(handle, name, value))
+        try {
+            // An unset ao lets mpv choose PipeWire/PulseAudio/ALSA. "auto" is not a driver name.
+            if (audioOutput != "auto") checked(native.mpv_set_option_string(handle, "ao", audioOutput))
+            mapOf("vid" to "no", "terminal" to "no", "config" to "no",
+                "idle" to "yes", "keep-open" to "yes", "hr-seek" to "yes").forEach { (name, value) ->
+                checked(native.mpv_set_option_string(handle, name, value))
+            }
+            if (pcmOutputFile != null) checked(native.mpv_set_option_string(handle, "ao-pcm-file", pcmOutputFile))
+            if (audioDevice != null) checked(native.mpv_set_option_string(handle, "audio-device", audioDevice))
+            checked(native.mpv_initialize(handle))
+        } catch (failure: Exception) {
+            // The constructor never returns this engine, so nothing else can close the handle.
+            native.mpv_terminate_destroy(handle)
+            throw failure
         }
-        if (pcmOutputFile != null) checked(native.mpv_set_option_string(handle, "ao-pcm-file", pcmOutputFile))
-        if (audioDevice != null) checked(native.mpv_set_option_string(handle, "audio-device", audioDevice))
-        checked(native.mpv_initialize(handle))
         scope.launch {
             while (isActive) {
                 var busy = true
-                synchronized(lock) {
+                // One failed event or property read must not stop status updates for the rest of the session.
+                try { synchronized(lock) {
                     if (!closed) {
                         drainEvents()
                         if (pendingLoad != null) return@synchronized
@@ -171,7 +179,9 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                                     longProperty("audio-params/samplerate").toInt().takeIf { rate -> rate > 0 })
                             } else null)
                     }
-                }
+                } }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { }
                 // A paused player's properties only change through commands, which are applied at once; poll it slowly.
                 delay(if (busy) 50 else 250)
             }

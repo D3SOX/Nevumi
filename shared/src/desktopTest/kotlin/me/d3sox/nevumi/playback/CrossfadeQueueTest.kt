@@ -167,4 +167,20 @@ class CrossfadeQueueTest {
             assertTrue(settled.durationMs > 0, "The decoder's real state is reported again after the failed load")
         } finally { engine.close() }
     }
+
+    @Test fun aDecoderThatNeverConfirmsRepeatDoesNotStopThePlayer() = runBlocking {
+        val engine = CrossfadePlaybackEngine {
+            val decoder = MpvPlaybackEngine("null")
+            object : PlaybackEngine by decoder { override fun setRepeat(mode: RepeatMode, playCount: Int?) {} }
+        }
+        try {
+            engine.setRepeat(RepeatMode.ONE)
+            // Completes only once the worker has outlived the repeat confirmation timeout.
+            withTimeout(8_000) { engine.setAudioEffects(AudioEffects()) }
+            engine.setRepeat(RepeatMode.OFF)
+            engine.loadQueue(listOf(PlayableTrack("song", audio)), play = false)
+            withTimeout(3_000) { engine.status.first { it.entryId == "song" && it.durationMs > 0 } }
+            Unit
+        } finally { engine.close() }
+    }
 }

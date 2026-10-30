@@ -61,6 +61,3 @@ internal class LibrarySearchIndex(tracks: List<Track>, playlists: List<Playlist>
         ))
     }
 }
-
-internal fun searchLibrary(tracks: List<Track>, playlists: List<Playlist>, text: String): LibrarySearchResults =
-    LibrarySearchIndex(tracks, playlists).search(text)

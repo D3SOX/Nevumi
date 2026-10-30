@@ -88,7 +88,7 @@ class PlayingOriginUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 for ((page, title) in listOf("Albums" to "Test album", "Playlists" to "Night mix")) {
                     openLibraryPage(page); onNodeWithText(title).performClick()
                     onNode(hasScrollAction()).performScrollToIndex(26)

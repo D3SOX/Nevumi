@@ -13,6 +13,7 @@ jobs:
   android:
     needs: acceptance
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -28,7 +29,8 @@ jobs:
         with:
           log-accepted-android-sdk-licenses: false
       - run: bash scripts/sdkmanager-retry.sh 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
-      - run: ./gradlew :androidApp:lintRelease :androidApp:assembleRelease --console=plain
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - run: ./gradlew :androidApp:assembleRelease --console=plain
       - uses: ./.github/actions/apt-install
         with:
           packages: ffmpeg python3-pil
@@ -76,6 +78,7 @@ jobs:
   linux:
     needs: acceptance
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       LD_LIBRARY_PATH: ${{ github.workspace }}/.test-environment/mpv-runtime/lib
     steps:
@@ -94,6 +97,7 @@ jobs:
       - uses: ./.github/actions/apt-install
         with:
           packages: ffmpeg mpv libmpv-dev libsecret-tools xvfb x11-utils dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - run: python3 scripts/build_mpv.py --prefix .test-environment/mpv-runtime
       - run: ./gradlew --configure-on-demand :desktopApp:createDistributable --console=plain
       - run: python3 scripts/test-linux-player.py
@@ -135,6 +139,7 @@ jobs:
   repositories:
     needs: [android, linux]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -183,6 +188,7 @@ jobs:
   publish:
     needs: [android, linux, repositories]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:

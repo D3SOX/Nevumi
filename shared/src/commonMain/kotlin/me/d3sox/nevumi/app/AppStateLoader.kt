@@ -20,13 +20,17 @@ internal class AppStateLoader(private val context: ControllerContext, private va
     private val artwork: ArtworkLibrary?) {
     /** Keeps a batch of cover changes and a full refresh from interleaving their artwork maps. */
     val artworkUpdates = Mutex()
+    /** Keeps a refresh from publishing settings it loaded before a remembered library tab or position was saved. */
+    val preferenceUpdates = Mutex()
 
     suspend fun refreshLibrary() {
         val tracks = library.tracks()
         val snapshot = queue.snapshot()
-        val settings = preferences?.load() ?: MusicSettings()
-        context.update { it.copy(tracks = tracks, queue = snapshot, preferences = settings,
-            loading = it.serverRefresh?.running == true, libraryReady = true) }
+        preferenceUpdates.withLock {
+            val settings = preferences?.load() ?: MusicSettings()
+            context.update { it.copy(tracks = tracks, queue = snapshot, preferences = settings,
+                loading = it.serverRefresh?.running == true, libraryReady = true) }
+        }
     }
 
     suspend fun refresh(loading: Boolean = false) {

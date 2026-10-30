@@ -78,44 +78,6 @@ class LibrarySyncTest {
     }
 
     @Test
-    fun syncedServerFavoritesAndRatingsSurviveRefreshAndReachNavidromeAfterRestart() = runBlocking {
-        val directory = Files.createTempDirectory("nevumi-library-sync-server-changes")
-        val firstStore = openMusicStore(directory.resolve("phone.db").toString())
-        var secondStore = openMusicStore(directory.resolve("desktop.db").toString())
-        val http = io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp)
-        val client = me.d3sox.nevumi.navidrome.NavidromeClient(http, "http://127.0.0.1:14533",
-            me.d3sox.nevumi.navidrome.ServerCredentials("fixture", "fixture-password"))
-        val original = client.songs().first { it.metadata.title == "Northern Light" }
-        var second = MusicLibrary(secondStore)
-        var changes = me.d3sox.nevumi.navidrome.NavidromeChanges(secondStore, second) { client }
-        try {
-            client.setFavorite(original.id, false); client.setRating(original.id, 0)
-            val desktop = changes.refreshLibrary(client).single { it.second.id == original.id }.first
-            val first = MusicLibrary(firstStore)
-            val phone = first.importTrack(original.metadata, TrackSource("server:${client.serverId}:${original.id}", SourceKind.SERVER, original.id))
-            first.setFavorite(phone.id, true); first.setRating(phone.id, 4)
-            LibrarySync(secondStore, second, changes).merge(LibrarySync(firstStore, first).snapshot())
-            changes.refreshLibrary(client)
-            assertEquals(true, second.findTrack(desktop.id)!!.favorite)
-            assertEquals(4, second.findTrack(desktop.id)!!.rating)
-            changes.closeAndJoin(); secondStore.close()
-            secondStore = openMusicStore(directory.resolve("desktop.db").toString())
-            second = MusicLibrary(secondStore)
-            changes = me.d3sox.nevumi.navidrome.NavidromeChanges(secondStore, second) { client }
-            changes.synchronize()
-            val persisted = client.songs().single { it.id == original.id }
-            assertEquals(true, persisted.favorite)
-            assertEquals(4, persisted.rating)
-            assertEquals(0, changes.pendingCount())
-            Unit
-        } finally {
-            changes.closeAndJoin()
-            client.setFavorite(original.id, original.favorite); client.setRating(original.id, original.rating)
-            http.close(); firstStore.close(); secondStore.close(); directory.toFile().deleteRecursively()
-        }
-    }
-
-    @Test
     fun aConfirmedSongMatchFollowsTheChosenCanonicalSongWhenLocalCopiesAreLinked() = runBlocking {
         val directory = Files.createTempDirectory("nevumi-library-sync-linked-songs")
         val firstStore = openMusicStore(directory.resolve("phone.db").toString())

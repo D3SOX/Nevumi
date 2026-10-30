@@ -4,6 +4,7 @@ import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.TrackSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -18,7 +19,9 @@ import kotlin.uuid.Uuid
 
 class CachedAudioWaveforms(private val directory: String, private val decode: suspend (String, Long) -> List<Float>) : AudioWaveforms {
     private val lock = Mutex()
-    private val sourceLocks = mutableMapOf<String, Mutex>()
+    // Loads of one source share a lock, dropped once no load holds or awaits it so the registry stays bounded.
+    private class SourceLock { val mutex = Mutex(); var users = 0 }
+    private val sourceLocks = mutableMapOf<String, SourceLock>()
     private val memory = linkedMapOf<String, List<Float>>()
     private suspend fun remembered(key: String): List<Float>? = lock.withLock {
         memory.remove(key)?.also { memory[key] = it }
@@ -46,8 +49,8 @@ class CachedAudioWaveforms(private val directory: String, private val decode: su
         if (source.kind == SourceKind.SERVER || !source.available || durationMs <= 0) return emptyList()
         val dispatcher = currentCoroutineContext()[WaveformPreparationContext]?.dispatcher ?: Dispatchers.IO
         val key = key(source)
-        val sourceLock = lock.withLock { sourceLocks.getOrPut(key) { Mutex() } }
-        return sourceLock.withLock { withContext(dispatcher) {
+        val sourceLock = lock.withLock { sourceLocks.getOrPut(key) { SourceLock() }.apply { users++ } }
+        return try { sourceLock.mutex.withLock { withContext(dispatcher) {
             val fs = FileSystem.SYSTEM
             val root = directory.toPath()
             val path = root / "$key.rms.json"
@@ -65,6 +68,8 @@ class CachedAudioWaveforms(private val directory: String, private val decode: su
                 peaks
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { emptyList() }
-        } }
+        } } } finally {
+            withContext(NonCancellable) { lock.withLock { if (--sourceLock.users == 0) sourceLocks.remove(key) } }
+        }
     }
 }

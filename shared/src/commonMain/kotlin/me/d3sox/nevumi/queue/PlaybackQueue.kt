@@ -354,7 +354,11 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
             entries.getOrNull(current.currentIndex.coerceAtMost(entries.lastIndex))?.id
         else current.currentEntryId
         val finishedRepeat = removedCurrent && current.repeatPlays != null
-        write(current.copy(entries = entries,
+        // Play after continues from the requested song before the removed one instead of starting again after the playing song.
+        val insertion = if (entryId != current.lastInsertedEntryId) current.lastInsertedEntryId
+            else current.entries.take(current.indexOf(entryId).coerceAtLeast(0)).drop(current.currentIndex + 1)
+                .lastOrNull { it.section == QueueSection.MANUAL }?.id
+        write(current.copy(entries = entries, lastInsertedEntryId = insertion,
             currentEntryId = selected, positionMs = if (removedCurrent) 0 else current.positionMs,
             repeatMode = if (finishedRepeat) RepeatMode.OFF else current.repeatMode,
             repeatPlays = if (finishedRepeat) null else current.repeatPlays))

@@ -133,6 +133,7 @@
     <string name="sources_user_on_server">%1$s on %2$s</string>
     <string name="sources_server_intro">Connect to Navidrome or a Subsonic-compatible server.</string>
     <string name="sources_server_address">Server address</string>
+    <string name="sources_server_unencrypted_hint">HTTP sends your password unencrypted, so others on the network can read it. Use HTTPS if your server supports it.</string>
     <string name="sources_username">Username</string>
     <string name="sources_refresh_library">Refresh library</string>
     <string name="sources_change_server">Change server</string>
@@ -457,6 +458,9 @@
     <string name="sources_milkdrop_window_hint">The visualizer opens in a separate window. N and P switch presets, F toggles fullscreen, and Esc closes it.</string>
     <string name="sources_preparing_milkdrop">Preparing the MilkDrop library…</string>
     <string name="sources_close_visualizer">Close visualizer</string>
+    <string name="sources_visualizer_start_playback">Start playback to make the visualizer respond to music.</string>
+    <string name="sources_visualizer_monitor_failed">Could not monitor Nevumi\'s audio. The visualizer will retry.</string>
+    <string name="sources_visualizer_needs_pulseaudio">Audio monitoring needs a running PulseAudio service or PipeWire\'s PulseAudio service.</string>
     <string name="sources_allow_camera_hint">Allow camera access to scan, or use a manual invitation code.</string>
     <string name="sources_allow_camera">Allow camera</string>
     <string name="sources_android_camera_open_failed">Could not open the camera. Check camera access or use a manual invitation code.</string>

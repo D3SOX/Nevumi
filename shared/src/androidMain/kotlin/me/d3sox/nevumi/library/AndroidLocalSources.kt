@@ -7,9 +7,7 @@ import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.TagOptionSingleton
-import org.jaudiotagger.tag.wav.WavTag
 import java.io.File
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import android.database.ContentObserver
@@ -112,27 +110,8 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
                             AudioFileIO.read(temporary)
                         }
                     } catch (_: Exception) { continue }
-                    val containerTag = audio.tag
-                    val tag = if (containerTag is WavTag && containerTag.isExistingId3Tag) containerTag.getID3Tag() else containerTag
-                    fun field(key: FieldKey): String {
-                        val value = try { tag?.getFirst(key).orEmpty().trimEnd('\u0000') }
-                            catch (_: UnsupportedOperationException) { "" }
-                        return if (key == FieldKey.TRACK && value.isBlank() && containerTag is WavTag)
-                            containerTag.infoTag.unrecognisedFields.firstOrNull { it.id == "IPRT" }?.content.orEmpty().trimEnd('\u0000')
-                        else value
-                    }
-                    val metadata = TrackMetadata(field(FieldKey.TITLE).ifBlank { name.substringBeforeLast('.') },
-                        field(FieldKey.ARTIST), field(FieldKey.ALBUM),
-                        durationMs = (audio.audioHeader.preciseTrackLength * 1_000).toLong(),
-                        genres = tag?.getAll(FieldKey.GENRE).orEmpty().map { it.trimEnd('\u0000') }.filter { it.isNotBlank() },
-                        albumArtist = field(FieldKey.ALBUM_ARTIST).ifBlank { field(FieldKey.ARTIST) },
-                        trackNumber = field(FieldKey.TRACK).substringBefore('/').toIntOrNull() ?: 0,
-                        discNumber = field(FieldKey.DISC_NO).substringBefore('/').toIntOrNull() ?: 1,
-                        folder = cursor.getString(2).orEmpty().trimEnd('/'),
-                        year = field(FieldKey.YEAR).take(4).toIntOrNull() ?: 0,
-                        recordingId = field(FieldKey.MUSICBRAINZ_TRACK_ID),
-                        releaseId = field(FieldKey.MUSICBRAINZ_RELEASEID))
-                    val cover = tag?.firstArtwork?.binaryData
+                    val metadata = audio.trackMetadata(name.substringBeforeLast('.'), cursor.getString(2).orEmpty().trimEnd('/'))
+                    val cover = audio.fieldTag?.firstArtwork?.binaryData
                     val track = library.importTrack(metadata, TrackSource(sourceId, SourceKind.LOCAL, uri.toString(),
                         filePath = cursor.getString(3), modifiedAt = modifiedAt, indexedSize = size, hasArtwork = cover != null))
                     seen += sourceId
