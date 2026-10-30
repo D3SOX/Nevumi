@@ -299,7 +299,6 @@ class MilkDropTextureView(context: Context, library: MilkDropLibrary, selected: 
     private var playing = false
     private var redraw = true
     private var thread: Thread? = null
-    private var renderFinished: AtomicBoolean? = null
     private var subscription: AutoCloseable? = null
     init { surfaceTextureListener = this }
 
@@ -320,21 +319,15 @@ class MilkDropTextureView(context: Context, library: MilkDropLibrary, selected: 
 
     override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
         update { running = true; surfaceWidth = width; surfaceHeight = height; redraw = true }
-        val finished = AtomicBoolean(false).also { renderFinished = it }
-        thread = Thread({
-            try { render(texture) }
-            // The view stopped waiting for this thread, so it left the texture for the thread to release.
-            finally { if (finished.getAndSet(true)) texture.release() }
-        }, "MilkDrop background").apply { start() }
+        thread = Thread({ render(texture) }, "MilkDrop background").apply { start() }
     }
     override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
         update { surfaceWidth = width; surfaceHeight = height; redraw = true }
     }
     override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
         update { running = false }
-        // A render thread stuck in the GPU driver must not freeze the UI; whichever side finishes last releases the texture.
-        thread?.join(1_000); thread = null
-        return renderFinished?.getAndSet(true) ?: true
+        thread?.join(); thread = null
+        return true
     }
     override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
 

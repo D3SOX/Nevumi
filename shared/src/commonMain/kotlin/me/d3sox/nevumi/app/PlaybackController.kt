@@ -63,8 +63,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
     internal var queueLoaded = false
     /** Sources that failed per queue entry; they are left out until the song is chosen again. */
     internal val failedSources = mutableMapOf<String, MutableSet<String>>()
-    /** The current song as last resolved, kept in queue updates while its source cannot be resolved, such as during a network drop. */
-    private var resolvedCurrent: PlayableTrack? = null
+    /** Queued songs as last resolved, so the playing one stays in queue updates while its source cannot be resolved, such as during a network drop. */
+    private val lastResolved = mutableMapOf<String, PlayableTrack>()
 
     init {
         pairedDevices?.setPlaybackReceiver(object : PlaybackReceiver {
@@ -224,7 +224,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
     }
     fun seekCurrentEntry(entryId: String, positionMs: Long) = context.action {
         val playback = engine.status.value
-        if (entryId == playback.entryId && positionMs in 0..playback.durationMs) {
+        // A stream of unknown length can still be sought forward.
+        if (entryId == playback.entryId && positionMs >= 0 && (playback.durationMs <= 0 || positionMs <= playback.durationMs)) {
             queue.setPosition(positionMs)
             engine.seek(positionMs)
             publishSeek(positionMs)
@@ -406,17 +407,18 @@ class PlaybackController internal constructor(private val context: ControllerCon
     internal suspend fun playableQueue(snapshot: QueueSnapshot, entries: List<QueueEntry> = snapshot.entries,
         checkAllSources: Boolean = false, lookup: SourceLookup? = null): List<PlayableTrack> {
         val sources = lookup ?: SourceLookup(library.tracks().associateBy { it.id })
+        lastResolved.keys.retainAll(snapshot.entries.mapTo(mutableSetOf()) { it.id })
         return entries.mapNotNull { entry -> playable(entry, snapshot, checkAllSources, sources) }
     }
 
     private suspend fun playable(entry: QueueEntry, snapshot: QueueSnapshot, checkAllSources: Boolean, lookup: SourceLookup): PlayableTrack? {
         val track = lookup.catalog[entry.trackId] ?: return null
         val resolved = resolve(track, entry, snapshot, checkAllSources, lookup)
-        if (entry.id != snapshot.currentEntryId) return resolved
-        if (resolved != null) { resolvedCurrent = resolved; return resolved }
+        if (resolved != null) { lastResolved[entry.id] = resolved; return resolved }
+        if (entry.id != snapshot.currentEntryId) return null
         // Leaving out the song the player holds would remove it from the player, so it stays until its source is gone or fails.
         val status = engine.status.value
-        return resolvedCurrent?.takeIf { current -> current.entryId == entry.id && status.entryId == entry.id &&
+        return lastResolved[entry.id]?.takeIf { current -> status.entryId == entry.id &&
             status.sourceId == current.sourceId && status.error == null && track.sources.any { it.id == current.sourceId } }
     }
 
