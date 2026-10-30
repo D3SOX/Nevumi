@@ -135,17 +135,21 @@ class LibraryController internal constructor(private val context: ControllerCont
         }
     }
     fun rememberLibraryTab(tab: LibraryTab) = context.action(serialized = false) {
-        if (context.state.value.preferences.lastLibraryTab != tab) {
-            val settings = preferences?.update { it.copy(lastLibraryTab = tab) }
-                ?: context.state.value.preferences.copy(lastLibraryTab = tab)
-            context.update { it.copy(preferences = settings) }
+        loader.preferenceUpdates.withLock {
+            if (context.state.value.preferences.lastLibraryTab != tab) {
+                val settings = preferences?.update { it.copy(lastLibraryTab = tab) }
+                    ?: context.state.value.preferences.copy(lastLibraryTab = tab)
+                context.update { it.copy(preferences = settings) }
+            }
         }
     }
     fun rememberLibraryPosition(key: String, position: LibraryPosition) = context.action(serialized = false) {
-        if (context.state.value.preferences.rememberScrollPositions && context.state.value.preferences.libraryPositions[key] != position) {
-            val settings = preferences?.update { if (it.rememberScrollPositions) it.copy(libraryPositions = it.libraryPositions + (key to position)) else it }
-            context.update { it.copy(preferences = it.preferences.copy(libraryPositions =
-                if (!it.preferences.rememberScrollPositions) emptyMap() else settings?.libraryPositions ?: (it.preferences.libraryPositions + (key to position)))) }
+        loader.preferenceUpdates.withLock {
+            if (context.state.value.preferences.rememberScrollPositions && context.state.value.preferences.libraryPositions[key] != position) {
+                val settings = preferences?.update { if (it.rememberScrollPositions) it.copy(libraryPositions = it.libraryPositions + (key to position)) else it }
+                context.update { it.copy(preferences = it.preferences.copy(libraryPositions =
+                    if (!it.preferences.rememberScrollPositions) emptyMap() else settings?.libraryPositions ?: (it.preferences.libraryPositions + (key to position)))) }
+            }
         }
     }
     fun setFavorite(trackId: String, favorite: Boolean) = setFavorite(listOf(trackId), favorite)

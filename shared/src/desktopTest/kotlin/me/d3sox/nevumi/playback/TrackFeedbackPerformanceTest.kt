@@ -38,7 +38,7 @@ class TrackFeedbackPerformanceTest {
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
             artwork = ArtworkLibrary(artwork.toString()), playlists = Playlists(store))
         try {
-            withTimeout(15_000) { while (controller.state.value.loading) delay(10) }
+            withTimeout(15_000) { while (!controller.state.value.started) delay(10) }
             val id = tracks.first().id
             val favoriteStart = TimeSource.Monotonic.markNow()
             controller.setFavorite(id, true).join()

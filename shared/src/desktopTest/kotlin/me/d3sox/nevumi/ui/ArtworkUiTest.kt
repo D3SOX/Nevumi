@@ -167,7 +167,7 @@ class ArtworkUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 onNodeWithText("Artwork Fixture").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.togglePlayback().join() }

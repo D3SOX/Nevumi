@@ -43,7 +43,7 @@ class TrackMetadataLayoutUiTest {
             runComposeUiTest {
                 val width = mutableStateOf(640.dp)
                 setContent { Box(Modifier.width(width.value)) { MusicPlayerApp(player) } }
-                waitUntil(timeoutMillis = 3_000) { !player.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { player.state.value.started }
                 val statistics = onNodeWithText("1 play · 1s listened", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
                 val heart = onNodeWithContentDescription("Favorited", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
                 val rating = onNodeWithContentDescription("Rating: 4 stars", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot

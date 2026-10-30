@@ -44,7 +44,7 @@ class ListeningHistoryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Recommendations")
                 onNodeWithText("Unheard local").assertIsDisplayed()
                 onNodeWithText("Unheard server").assertIsDisplayed()
@@ -83,7 +83,7 @@ class ListeningHistoryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started }
                 openLibraryPage("Statistics")
                 onNodeWithText("3 plays").assertIsDisplayed()
                 onNodeWithContentDescription("Statistics period").performClick()
