@@ -86,9 +86,8 @@ class LibraryMaintenanceUiTest {
             assertEquals(15, list.firstVisibleItemIndex)
             assertEquals(20, grid.firstVisibleItemIndex)
             runBlocking { controller.updatePreferences { it.copy(rememberScrollPositions = false) }.join() }
-            waitForIdle()
-            assertEquals(0, list.firstVisibleItemIndex)
-            assertEquals(0, grid.firstVisibleItemIndex)
+            // The lists read the setting through a flow, which can reach them after the next idle frame.
+            waitUntil(timeoutMillis = 3_000) { list.firstVisibleItemIndex == 0 && grid.firstVisibleItemIndex == 0 }
             runBlocking { list.scrollToItem(12); grid.scrollToItem(18) }
             val disabledSaved = runOnIdle { registry.performSave() }
             runOnIdle { mounted = false }

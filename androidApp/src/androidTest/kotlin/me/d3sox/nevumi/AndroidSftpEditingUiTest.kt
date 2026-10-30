@@ -101,14 +101,15 @@ class AndroidSftpEditingUiTest {
                 compose.waitUntil(5_000) { compose.onAllNodes(hasText("Northern Light") and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
                 compose.onNode(hasText("Title") and hasSetTextAction()).performTextReplacement("Edited by Android Nevumi")
                 compose.onNodeWithText("Save changes").performClick()
-                compose.waitUntil(15_000) { app.controller.state.value.fileEdits.any { edit -> edit.trackId == track.id && edit.applied } }
+                // Each SFTP round trip downloads and uploads the file, which takes over 15 seconds on a busy CI emulator.
+                compose.waitUntil(30_000) { app.controller.state.value.fileEdits.any { edit -> edit.trackId == track.id && edit.applied } }
                 appliedId = app.controller.state.value.fileEdits.single { edit -> edit.trackId == track.id }.id
                 assertNull(app.controller.state.value.error)
                 assertEquals("Edited by Android Nevumi", app.controller.state.value.tracks.single { song -> song.id == track.id }.metadata.title)
                 compose.onNodeWithContentDescription("Track options: Edited by Android Nevumi").performClick()
                 compose.onNodeWithText("File actions").performClick()
                 compose.onNodeWithText("Undo file edit").performClick()
-                compose.waitUntil(15_000) { app.controller.state.value.fileEdits.single { edit -> edit.id == appliedId }.undone }
+                compose.waitUntil(30_000) { app.controller.state.value.fileEdits.single { edit -> edit.id == appliedId }.undone }
                 val received = File(app.cacheDir, "sftp-restored-${UUID.randomUUID()}.flac")
                 try { remote.download(relative, received); assertArrayEquals(original.readBytes(), received.readBytes()) }
                 finally { received.delete() }

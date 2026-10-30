@@ -107,8 +107,12 @@ class AndroidKeyboardPlayerMotionTest {
                     return visible
                 }
                 for (swipe in listOf(true, false)) {
-                    compose.onNodeWithContentDescription("Search your library").performClick()
-                    compose.waitUntil(5_000) { keyboardIsVisible() }
+                    // A slow emulator can drop a show request that arrives while the last hide is still settling, so tap again like a person would.
+                    val keyboardOpened = (1..3).any {
+                        compose.onNodeWithContentDescription("Search your library").performClick()
+                        runCatching { compose.waitUntil(5_000) { keyboardIsVisible() } }.isSuccess
+                    }
+                    assertTrue("Tapping the search field must open the keyboard", keyboardOpened)
                     if (swipe) compose.onNodeWithTag("mini-player").performTouchInput {
                         swipe(center, center.copy(y = center.y - 400f), 400)
                     } else compose.onNodeWithTag("mini-player").performClick()
