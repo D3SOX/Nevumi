@@ -19,10 +19,11 @@ class AndroidCredentialVault(context: Context, namespace: String = context.packa
     private val alias = "MusicPlayer.$namespace"
     private fun file(key: String) = File(directory, key.encodeUtf8().sha256().hex())
     private fun keyStore() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-    private fun encryptionKey(): SecretKey {
+    // Concurrent first saves, even from separate vault instances, must not each generate a key and replace the other's.
+    private fun encryptionKey(): SecretKey = synchronized(keyCreation) {
         val keys = keyStore()
-        if (keys.containsAlias(alias)) return keys.getKey(alias, null) as SecretKey
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+        if (keys.containsAlias(alias)) keys.getKey(alias, null) as SecretKey
+        else KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
             init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(256).build())
@@ -47,4 +48,8 @@ class AndroidCredentialVault(context: Context, namespace: String = context.packa
         cipher.doFinal(bytes.copyOfRange(12, bytes.size)).decodeToString()
     }
     override suspend fun delete(key: String) = withContext(Dispatchers.IO) { AtomicFile(file(key)).delete() }
+
+    private companion object {
+        val keyCreation = Any()
+    }
 }

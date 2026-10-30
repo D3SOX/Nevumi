@@ -7,6 +7,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -123,6 +124,30 @@ class PairedDevicesTest {
                 }
             }
             Unit
+        } finally { devices.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun anUnpairedDeviceCannotAnnounceALargeMessageWhileAnInvitationIsOpen() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-pairing-frame")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val devices = JvmPairedDevices(store, LibrarySync(store, MusicLibrary(store)), vault(), "Linux desktop")
+        try {
+            devices.createInvitation("127.0.0.1")
+            val port = assertNotNull(devices.state.value.listeningPort)
+            // Any certificate passes the handshake while the invitation is open, before the secret is checked.
+            val stranger = SyncTls.load(vault(), "22222222-2222-4222-8222-222222222222").context { true }
+            val rejected = withContext(Dispatchers.IO) {
+                (stranger.socketFactory.createSocket("127.0.0.1", port) as javax.net.ssl.SSLSocket).use { socket ->
+                    socket.soTimeout = 5_000
+                    socket.startHandshake()
+                    java.io.DataOutputStream(socket.outputStream).apply { writeInt(32 * 1024 * 1024); flush() }
+                    try { socket.inputStream.read() == -1 }
+                    catch (_: java.net.SocketTimeoutException) { false }
+                    catch (_: java.io.IOException) { true }
+                }
+            }
+            assertTrue(rejected, "The listener must refuse a large message before the device proves it was invited")
         } finally { devices.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
