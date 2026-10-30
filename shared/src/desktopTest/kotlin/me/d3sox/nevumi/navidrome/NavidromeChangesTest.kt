@@ -154,6 +154,47 @@ class NavidromeChangesTest {
     }
 
     @Test
+    fun playlistsDeletedOnTheServerLeaveTheAppAndAnEditedOneIsPublishedAgain() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-deleted-server-playlists")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val names = mutableMapOf("kept" to "Kept", "gone" to "Gone", "edited" to "Edited")
+        val ok = """{"subsonic-response":{"status":"ok"}}"""
+        fun playlist(id: String) = """{"id":"$id","name":"${names.getValue(id)}","owner":"fixture","entry":[{"id":"song"}]}"""
+        val http = HttpClient(MockEngine { request ->
+            val parameters = request.url.parameters
+            when (request.url.encodedPath) {
+                "/rest/getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[${names.keys.joinToString(",") { """{"id":"$it"}""" }}]}}}""")
+                "/rest/getPlaylist.view" -> if (parameters["id"] in names) respond("""{"subsonic-response":{"status":"ok","playlist":${playlist(parameters["id"]!!)}}}""")
+                    else respond("""{"subsonic-response":{"status":"failed","error":{"code":70,"message":"not found"}}}""")
+                "/rest/createPlaylist.view" -> { names["recreated"] = parameters["name"]!!
+                    respond("""{"subsonic-response":{"status":"ok","playlist":${playlist("recreated")}}}""") }
+                "/rest/updatePlaylist.view" -> { names[parameters["playlistId"]!!] = parameters["name"]!!; respond(ok) }
+                else -> error("Unexpected request: ${request.url.encodedPath}")
+            }
+        })
+        try {
+            val library = MusicLibrary(store)
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "test"))
+            val changes = NavidromeChanges(store, library) { client }
+            val song = changes.importSong(client, ServerSong("song", TrackMetadata("Server song")))
+            changes.importPlaylists(client)
+            val playlists = Playlists(store)
+            playlists.create("App playlist", listOf(song.id))
+            val edited = playlists.all().single { it.server?.id == "edited" }
+            playlists.edit(edited.id, "Edited offline", "")
+            names.remove("gone"); names.remove("edited")
+            changes.importPlaylists(client)
+            assertEquals(setOf("Kept", "Edited offline", "App playlist"), playlists.all().map { it.name }.toSet(),
+                "A refresh removes deleted server playlists but keeps app playlists and unsynced edits")
+            changes.synchronize()
+            changes.synchronize()
+            assertEquals("Edited offline", names["recreated"])
+            assertEquals("recreated", playlists.get(edited.id)!!.server!!.id)
+            assertEquals(false, playlists.get(edited.id)!!.pendingSync)
+        } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun refreshingADeletedServerSongKeepsItsLocalCopyAndReferencesAndRestoresItWhenItReturns() = runBlocking {
         val directory = Files.createTempDirectory("nevumi-deleted-server-song")
         val store = openMusicStore(directory.resolve("library.db").toString())
@@ -820,5 +861,43 @@ class NavidromeChangesTest {
             assertEquals(1, offlineRequests, "An unreachable server stops the run after the first request")
             assertEquals(2, offline.pendingCount(), "Nothing is dropped while the server is unreachable")
         } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun syncedServerFavoritesAndRatingsSurviveRefreshAndReachNavidromeAfterRestart() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-library-sync-server-changes")
+        val firstStore = openMusicStore(directory.resolve("phone.db").toString())
+        var secondStore = openMusicStore(directory.resolve("desktop.db").toString())
+        val http = HttpClient(OkHttp)
+        val client = NavidromeClient(http, System.getenv("MUSICPLAYER_TEST_NAVIDROME_URL") ?: "http://127.0.0.1:14533",
+            ServerCredentials("fixture", "fixture-password"))
+        val original = client.songs().first { it.metadata.title == "Northern Light" }
+        var second = MusicLibrary(secondStore)
+        var changes = NavidromeChanges(secondStore, second) { client }
+        try {
+            client.setFavorite(original.id, false); client.setRating(original.id, 0)
+            val desktop = changes.refreshLibrary(client).single { it.second.id == original.id }.first
+            val first = MusicLibrary(firstStore)
+            val phone = first.importTrack(original.metadata, TrackSource("server:${client.serverId}:${original.id}", SourceKind.SERVER, original.id))
+            first.setFavorite(phone.id, true); first.setRating(phone.id, 4)
+            me.d3sox.nevumi.sync.LibrarySync(secondStore, second, changes).merge(me.d3sox.nevumi.sync.LibrarySync(firstStore, first).snapshot())
+            changes.refreshLibrary(client)
+            assertEquals(true, second.findTrack(desktop.id)!!.favorite)
+            assertEquals(4, second.findTrack(desktop.id)!!.rating)
+            changes.closeAndJoin(); secondStore.close()
+            secondStore = openMusicStore(directory.resolve("desktop.db").toString())
+            second = MusicLibrary(secondStore)
+            changes = NavidromeChanges(secondStore, second) { client }
+            changes.synchronize()
+            val persisted = client.songs().single { it.id == original.id }
+            assertEquals(true, persisted.favorite)
+            assertEquals(4, persisted.rating)
+            assertEquals(0, changes.pendingCount())
+            Unit
+        } finally {
+            changes.closeAndJoin()
+            client.setFavorite(original.id, original.favorite); client.setRating(original.id, original.rating)
+            http.close(); firstStore.close(); secondStore.close(); directory.toFile().deleteRecursively()
+        }
     }
 }

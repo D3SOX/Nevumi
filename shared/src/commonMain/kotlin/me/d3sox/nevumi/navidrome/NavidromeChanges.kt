@@ -173,12 +173,22 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         val mapping = tracks.flatMap { track -> track.sources.filter {
             it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
         }.map { it.location to track.id } }.toMap()
-        val remotes = if (!changedOnly) connection.playlists() else {
+        val versions = if (changedOnly) connection.playlistVersions() else null
+        val remotes = if (versions == null) connection.playlists() else {
             val known = playlists.all().mapNotNull { it.server?.takeIf { link -> link.serverId == connection.serverId && link.id != null } }
                 .associate { it.id to it.changed }
             // Servers that omit change times get every playlist downloaded again.
-            connection.playlistVersions().filter { (id, changed) -> changed.isEmpty() || known[id] != changed }.keys.map { connection.playlist(it) }
+            versions.filter { (id, changed) -> changed.isEmpty() || known[id] != changed }.keys.map { connection.playlist(it) }
         }
+        // Playlists deleted on the server leave the app too; one with unsynced edits is settled by synchronize() instead.
+        val present = versions?.keys ?: remotes.mapTo(HashSet()) { it.id }
+        val deleted = store.transaction {
+            store.list<Playlist>("playlists").filter { playlist ->
+                val remoteId = playlist.server?.takeIf { it.serverId == connection.serverId }?.id
+                remoteId != null && remoteId !in present && !playlist.pendingSync
+            }.map { it.id }.onEach { store.database.records().delete("playlist:$it") }
+        }
+        deleted.forEach { artwork?.remove("server-playlist-cover:$it") }
         onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS, total = remotes.size))
         for ((index, remote) in remotes.withIndex()) {
             val imported = store.transaction {
@@ -309,7 +319,17 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 }
                 if (!retained) return@attempt
             }
-            val remote = connection.playlist(requireNotNull(link.id))
+            val remote = try { connection.playlist(requireNotNull(link.id)) }
+            catch (error: NavidromeException) {
+                if (error.code != 70) throw error
+                // Deleted on the server while edited here: publish the edited copy again rather than lose the edits.
+                store.transaction {
+                    val current = playlists.get(playlist.id) ?: return@transaction
+                    store.put("playlist:${playlist.id}", "playlists", current.copy(server = link.copy(id = null,
+                        owner = connection.username, readOnly = false, coverArt = null, changed = "")))
+                }
+                return@attempt
+            }
             if (remote.readOnly && (remote.owner != connection.username || songIds != link.baselineSongIds)) {
                 // Locked tracks cannot be replaced. Metadata-only edits by the owner can still be sent below.
                 // Its change time stays unrecorded so the next pull imports the rest of this version, such as a new cover.

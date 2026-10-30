@@ -262,8 +262,12 @@ class MusicLibrary(private val store: MusicStore) {
 
     // A server song with the byte size, title, artist and length of a separate local song is the same file uploaded to the server.
     // Returns (server track, local track) pairs of available copies; a file with several possible copies on either side stays separate.
+    // Songs tagged with different albums or MusicBrainz ids are distinct editions and stay separate too.
     internal suspend fun sameFileCopies(): List<Pair<String, String>> {
         val tracks = tracks()
+        fun differs(a: String, b: String) = a.isNotBlank() && b.isNotBlank() && !a.trim().equals(b.trim(), ignoreCase = true)
+        fun conflicting(a: TrackMetadata, b: TrackMetadata) = differs(a.album, b.album) ||
+            differs(a.recordingId, b.recordingId) || differs(a.releaseId, b.releaseId)
         fun files(kind: SourceKind, other: SourceKind) = tracks.filter { track -> track.sources.none { it.kind == other } }
             .filter { it.metadata.durationMs > 0 }
             .mapNotNull { track -> track.sources.firstOrNull { it.kind == kind && it.available && it.indexedSize > 0 }?.let {
@@ -273,7 +277,8 @@ class MusicLibrary(private val store: MusicStore) {
         return files(SourceKind.SERVER, SourceKind.LOCAL).mapNotNull { (file, servers) ->
             val server = servers.singleOrNull() ?: return@mapNotNull null
             val copy = local[file]?.singleOrNull() ?: return@mapNotNull null
-            if (abs(server.metadata.durationMs - copy.metadata.durationMs) <= 2_000) server.id to copy.id else null
+            if (abs(server.metadata.durationMs - copy.metadata.durationMs) <= 2_000 && !conflicting(server.metadata, copy.metadata))
+                server.id to copy.id else null
         }
     }
 

@@ -110,9 +110,25 @@ class AudioDownloads(
     }
     suspend fun state(trackId: String): DownloadRecord? = store.read("download:$trackId")
 
+    /**
+     * Deletes files no download record uses, such as abandoned partial downloads or the audio left behind when linking two
+     * downloaded songs kept only one. An unfinished download keeps its files to resume. Run it while no transfer is writing.
+     */
+    internal suspend fun removeUnusedFiles() = withContext(Dispatchers.IO) {
+        val records = store.list<DownloadRecord>("downloads")
+        val used = records.mapNotNullTo(HashSet()) { it.path?.toPath()?.name }
+        val unfinished = records.filter { it.status != DownloadStatus.COMPLETE }.mapTo(HashSet()) { fileName(it.trackId) }
+        for (file in FileSystem.SYSTEM.listOrNull(directory.toPath()).orEmpty()) {
+            if (file.name in used || file.name.substringBefore('.') in unfinished) continue
+            // A file still open elsewhere, such as by playback on Windows, is deleted on a later run.
+            try { if (FileSystem.SYSTEM.metadataOrNull(file)?.isRegularFile == true) FileSystem.SYSTEM.delete(file, mustExist = false) }
+            catch (_: okio.IOException) {}
+        }
+    }
+
     suspend fun remove(trackId: String, unpin: Boolean = true) = withContext(Dispatchers.IO) {
         state(trackId)?.path?.let { FileSystem.SYSTEM.delete(it.toPath(), mustExist = false) }
-        val name = trackId.encodeUtf8().sha256().hex()
+        val name = fileName(trackId)
         FileSystem.SYSTEM.listOrNull(directory.toPath()).orEmpty().filter { it.name.startsWith("$name.") }.forEach {
             FileSystem.SYSTEM.delete(it, mustExist = false)
         }
@@ -127,12 +143,14 @@ class AudioDownloads(
         val fs = FileSystem.SYSTEM
         val root = directory.toPath()
         val extension = song.format.lowercase().filter { it.isLetterOrDigit() }.ifEmpty { "audio" }
-        val name = trackId.encodeUtf8().sha256().hex()
+        val name = fileName(trackId)
         val partial = root / "$name.$extension.part"
         val complete = root / "$name.$extension"
         val sourceId = client?.let { "server:${it.serverId}:${song.id}" }
         val previous = state(trackId)
-        var record = DownloadRecord(trackId, DownloadStatus.DOWNLOADING, sizeBytes = song.sizeBytes, sourceId = sourceId)
+        // The previous validator stays until the server answers, so an attempt that fails before then can still resume later.
+        var record = DownloadRecord(trackId, DownloadStatus.DOWNLOADING, sizeBytes = song.sizeBytes, sourceId = sourceId,
+            validator = previous?.validator)
         store.put("download:$trackId", "downloads", record)
         try {
             fs.createDirectories(root)
@@ -200,5 +218,8 @@ class AudioDownloads(
 
 private class InsufficientDownloadSpace : Exception()
 
+/** The owners keeping a song's download out of cache eviction, such as "manual" or "playlist:<id>". */
 @Serializable
-private data class TrackPins(val trackId: String, val owners: Set<String> = emptySet())
+internal data class TrackPins(val trackId: String, val owners: Set<String> = emptySet())
+
+private fun fileName(trackId: String) = trackId.encodeUtf8().sha256().hex()

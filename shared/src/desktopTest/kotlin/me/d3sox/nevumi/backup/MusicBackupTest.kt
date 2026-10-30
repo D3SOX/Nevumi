@@ -295,7 +295,10 @@ class MusicBackupTest {
     @Test
     fun aSmartPlaylistOnALocalFolderIsKeptAsItsSongsWithoutThePath() = devices { source, target ->
         source.library.importTrack(nightWalk.copy(folder = "/home/someone/Music/Night"), TrackSource("local:3", SourceKind.LOCAL, "/music/03.wav"))
-        source.playlists.createSmart("Night folder", LibraryQuery(folder = "/home/someone/Music/Night"))
+        // A song already in a playlist stays out of a rule that excludes playlisted songs.
+        val playlisted = source.library.importTrack(northern.copy(folder = "/home/someone/Music/Night"), TrackSource("local:1", SourceKind.LOCAL, "/music/01.flac"))
+        source.playlists.create("Elsewhere", listOf(playlisted.id))
+        source.playlists.createSmart("Night folder", LibraryQuery(folder = "/home/someone/Music/Night", notInPlaylist = true))
         // Android stores local folders relative to its storage.
         source.library.importTrack(longWay.copy(folder = "Music/Phone"), TrackSource("local:2", SourceKind.LOCAL, "content://media/external/audio/media/2"))
         source.playlists.createSmart("Phone folder", LibraryQuery(folder = "Music/Phone"))

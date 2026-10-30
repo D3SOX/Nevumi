@@ -9,8 +9,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
 import me.d3sox.nevumi.history.ListeningHistory
-import me.d3sox.nevumi.history.listeningStatistics
-import me.d3sox.nevumi.library.filterTracks
 import me.d3sox.nevumi.history.Scrobbling
 import me.d3sox.nevumi.history.ScrobblingService
 import me.d3sox.nevumi.library.LibraryTab
@@ -80,12 +78,11 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 layout.copy(order = order)
             }) }
             else null
-        val listened = if (BackupSection.LISTENING_HISTORY in sections || BackupSection.PLAYLISTS in sections) history.all() else emptyList()
+        val listened = if (BackupSection.LISTENING_HISTORY in sections) history.all() else emptyList()
         val playlists = if (BackupSection.PLAYLISTS in sections) storedPlaylists.map { playlist ->
             val rule = playlist.rule
             // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
-            if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name,
-                filterTracks(tracks.values.toList(), rule, listeningStatistics(listened)).map { it.id }, null,
+            if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name, playlist.trackIds, null,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
             else BackupPlaylist(playlist.name, if (rule == null) playlist.trackIds else emptyList(), rule,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
