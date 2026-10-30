@@ -137,7 +137,7 @@
     <string name="sources_refresh_library">Refresh library</string>
     <string name="sources_change_server">Change server</string>
     <string name="sources_disconnect_music_server_question">Disconnect music server?</string>
-    <string name="sources_disconnect_music_server_description">Songs from this server stay in your library but can\'t be streamed until you reconnect. Downloaded songs keep playing.</string>
+    <string name="sources_disconnect_music_server_description">Songs from this server stay in your library but can’t be streamed until you reconnect. Downloaded songs keep playing.</string>
     <string name="sources_disconnect_music_server_sftp">Server file editing (SFTP) is disconnected too.</string>
     <string name="sources_sync_play_queue">Sync queue with server</string>
     <string name="sources_sync_play_queue_description">Save your queue to the server and offer to continue a queue from another device or Subsonic app</string>
@@ -173,7 +173,7 @@
     <string name="sources_sc_gate_ready_library">sc-gate-dl is ready and can save to your music server</string>
     <string name="sources_sc_gate_ready">sc-gate-dl is ready</string>
     <string name="sources_soundcloud_intro">Search SoundCloud and download songs through your sc-gate-dl server. It runs the searches, so this device does not contact SoundCloud.</string>
-    <string name="sources_soundcloud_library_destination">Can save songs to your music server\'s library</string>
+    <string name="sources_soundcloud_library_destination">Can save songs to your music server’s library</string>
     <string name="sources_soundcloud_device_destination">Saves songs to this device. Set SC_GATE_DL_LIBRARY_DIR on the server to add them to your music server.</string>
     <string name="sources_test_connection">Test connection</string>
     <string name="sources_sc_gate_address">sc-gate-dl address</string>
@@ -184,11 +184,11 @@
     <string name="sources_save_to_music_server">Save to music server</string>
     <string name="sources_save_to_this_device">Save to this device</string>
     <string name="sources_gate_browser">Gate browser</string>
-    <string name="sources_gate_browser_default">sc-gate-dl\'s default</string>
+    <string name="sources_gate_browser_default">sc-gate-dl’s default</string>
     <string name="sources_check_tags_before_saving">Check tags before saving</string>
-    <string name="sources_check_tags_before_saving_description">Downloads wait for you to edit their tags, like in sc-gate-dl\'s web interface</string>
+    <string name="sources_check_tags_before_saving_description">Downloads wait for you to edit their tags, like in sc-gate-dl’s web interface</string>
     <string name="sources_flac_hint">FLAC keeps lossless sources lossless. A lossy source does not gain quality in a FLAC file.</string>
-    <string name="sources_browser_view_hint">Watch sc-gate-dl\'s browser from a download and take over when a gate needs you.</string>
+    <string name="sources_browser_view_hint">Watch sc-gate-dl’s browser from a download and take over when a gate needs you.</string>
     <string name="sources_browser_view_setup_hint">Set BROWSER_VIEW_URL on sc-gate-dl to watch its browser from Nevumi.</string>
 
     <!-- SoundCloudSearch -->
@@ -217,15 +217,15 @@
     <string name="sources_job_needs_link">sc-gate-dl found no download link. Paste a gate or download link, or save the SoundCloud stream, which has lower quality than a download.</string>
     <string name="sources_job_needs_tags">Downloaded. sc-gate-dl saves it once you check its tags.</string>
     <string name="sources_job_failed">The download failed</string>
-    <string name="sources_job_attention_viewer">The gate needs a manual step, such as a captcha. Finish it in sc-gate-dl\'s browser or cancel.</string>
-    <string name="sources_job_attention">The gate needs a manual step, such as a captcha, in sc-gate-dl\'s browser. Finish it in the sc-gate-dl web interface or cancel.</string>
+    <string name="sources_job_attention_viewer">The gate needs a manual step, such as a captcha. Finish it in sc-gate-dl’s browser or cancel.</string>
+    <string name="sources_job_attention">The gate needs a manual step, such as a captcha, in sc-gate-dl’s browser. Finish it in the sc-gate-dl web interface or cancel.</string>
     <string name="sources_job_excluded_folder">Your local folder rules leave out %1$s.</string>
     <string name="sources_paste_link">Paste link</string>
     <string name="sources_save_soundcloud_stream">Save SoundCloud stream</string>
     <string name="sources_choose_song">Choose song</string>
     <string name="sources_check_tags">Check tags</string>
     <string name="sources_view_browser">View browser</string>
-    <string name="sources_browser_open_failed">sc-gate-dl\'s browser could not be opened</string>
+    <string name="sources_browser_open_failed">sc-gate-dl’s browser could not be opened</string>
     <string name="sources_add_folder_to_library">Add folder to library</string>
     <string name="sources_cancel_download">Cancel download</string>
     <string name="sources_remove_from_list">Remove from list</string>
@@ -248,18 +248,18 @@
     <string name="sources_reset_album_to_original">Reset album to the original</string>
     <string name="sources_reset_genre_to_original">Reset genre to the original</string>
     <string name="sources_write_tags_failed">sc-gate-dl could not write the tags</string>
-    <string name="sources_file_cover_unavailable">The file\'s cover is unavailable</string>
+    <string name="sources_file_cover_unavailable">The file’s cover is unavailable</string>
     <string name="sources_selected_image_unavailable">The selected image is unavailable</string>
     <string name="sources_check_the_tags">Check the tags</string>
     <string name="sources_tags_intro_server">sc-gate-dl downloaded “%1$s”. It saves the song to your music server with these tags.</string>
     <string name="sources_tags_intro_device">sc-gate-dl downloaded “%1$s”. It saves the song for this device with these tags.</string>
     <string name="sources_lossy_flac_hint">The downloaded source is lossy. Saving it as FLAC cannot bring back the lost quality.</string>
     <string name="sources_file_has_tags">The file already has tags</string>
-    <string name="sources_file_has_tags_description">Copy a tag or the cover into the form, or keep the file\'s own tags and finish.</string>
+    <string name="sources_file_has_tags_description">Copy a tag or the cover into the form, or keep the file’s own tags and finish.</string>
     <string name="sources_cover_in_file">Cover in the file</string>
     <string name="sources_cover">Cover</string>
     <string name="sources_copy_cover_into_form">Copy the cover into the form</string>
-    <string name="sources_keep_file_tags">Keep the file\'s tags and finish</string>
+    <string name="sources_keep_file_tags">Keep the file’s tags and finish</string>
     <string name="sources_promo_text_hint">The tags contain promo text like [FREE DL] or a repeated artist name.</string>
     <string name="sources_remove_promo_text">Remove promo text</string>
     <string name="sources_chosen_cover">Chosen cover</string>
@@ -449,7 +449,7 @@
     <string name="sources_pairing_camera_preview">Pairing camera preview</string>
     <string name="sources_opening_camera">Opening camera…</string>
     <string name="sources_desktop_camera_open_failed">Could not open this camera. Check camera access, choose another camera or use a manual invitation code.</string>
-    <string name="sources_milkdrop_load_failed">Could not load MilkDrop. Reinstall Nevumi\'s visualizer libraries.</string>
+    <string name="sources_milkdrop_load_failed">Could not load MilkDrop. Reinstall Nevumi’s visualizer libraries.</string>
     <string name="sources_milkdrop_open_failed">Could not open MilkDrop</string>
     <string name="sources_preset_load_failed">%1$s could not be loaded. Choose another preset.</string>
     <string name="sources_milkdrop_render_failed">Could not render MilkDrop</string>
