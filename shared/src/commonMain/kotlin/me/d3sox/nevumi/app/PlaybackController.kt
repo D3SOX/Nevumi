@@ -407,7 +407,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
     internal suspend fun playableQueue(snapshot: QueueSnapshot, entries: List<QueueEntry> = snapshot.entries,
         checkAllSources: Boolean = false, lookup: SourceLookup? = null): List<PlayableTrack> {
         val sources = lookup ?: SourceLookup(library.tracks().associateBy { it.id })
-        lastResolved.keys.retainAll(snapshot.entries.mapTo(mutableSetOf()) { it.id })
+        // Other snapshots are only checked against, so the song the player holds keeps its fallback.
+        val kept = snapshot.entries.mapTo(mutableSetOf()) { it.id } + listOfNotNull(engine.status.value.entryId)
+        lastResolved.keys.retainAll(kept)
         return entries.mapNotNull { entry -> playable(entry, snapshot, checkAllSources, sources) }
     }
 
