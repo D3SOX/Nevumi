@@ -96,9 +96,15 @@ class AndroidPackageTest(unittest.TestCase):
                         time.sleep(0.2)
                     crashes = adb("logcat", "-d", "-b", "crash")
                     # The launcher has stayed in front without a crash, so record what Android considers resumed and why.
-                    resumed = "\n".join(line.strip() for line in adb("shell", "dumpsys", "activity", "activities").splitlines()
+                    def diagnostics(*arguments):
+                        # A failing diagnostic must not hide the original failure.
+                        try:
+                            return adb(*arguments)
+                        except (AssertionError, subprocess.TimeoutExpired) as error:
+                            return f"unavailable: {error}"
+                    resumed = "\n".join(line.strip() for line in diagnostics("shell", "dumpsys", "activity", "activities").splitlines()
                                         if "ResumedActivity" in line or "mFocusedApp" in line)
-                    recent = adb("logcat", "-d", "-t", "300", "ActivityTaskManager:I", "ActivityManager:I", "AndroidRuntime:E", "*:S")
+                    recent = diagnostics("logcat", "-d", "-t", "300", "ActivityTaskManager:I", "ActivityManager:I", "AndroidRuntime:E", "*:S")
                     self.fail("Could not select " + label + ": " + ET.tostring(root, encoding="unicode") + "\nCrash log:\n" + crashes
                               + "\nResumed activities:\n" + resumed + "\nRecent activity log:\n" + recent)
                 click("Settings")

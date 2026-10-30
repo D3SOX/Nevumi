@@ -7,7 +7,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.sync.*
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -36,7 +35,8 @@ class AndroidSongsToMatchUiTest {
             // The page reads the songs through a database flow, which can update after the next idle frame.
             compose.waitUntil(5_000) { compose.onAllNodesWithText("All songs matched").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("All songs matched").assertIsDisplayed()
-            assertTrue(runBlocking { controller.library.findTrack(local.id) }!!.favorite)
+            // The mapping is saved before the shared favorite is merged, so the favorite can land a moment later.
+            compose.waitUntil(5_000) { runBlocking { controller.library.findTrack(local.id) }?.favorite == true }
         }
     }
 }
