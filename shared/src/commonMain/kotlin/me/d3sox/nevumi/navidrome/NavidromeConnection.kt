@@ -31,7 +31,7 @@ internal fun sendsPasswordInClearText(baseUrl: String): Boolean {
     val input = baseUrl.trim()
     if (!input.startsWith("http://", ignoreCase = true)) return false
     val host = (try { Url(input).host } catch (_: Exception) { return false }).removeSurrounding("[", "]").lowercase()
-    return host.isNotBlank() && host != "localhost" && !host.endsWith(".localhost") && host != "::1" &&
+    return host.isNotBlank() && host != "localhost" && host != "::1" &&
         !host.matches(Regex("127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"))
 }
 

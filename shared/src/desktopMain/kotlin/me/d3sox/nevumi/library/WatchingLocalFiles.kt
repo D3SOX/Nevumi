@@ -56,6 +56,11 @@ class WatchingLocalFiles(private val library: MusicLibrary, artwork: ArtworkLibr
                         if (error !is NoSuchFileException) skip(file, error)
                         return FileVisitResult.CONTINUE
                     }
+                    // A folder that fails while its entries are listed keeps its watch on what was read, instead of ending the walk.
+                    override fun postVisitDirectory(directory: Path, error: IOException?): FileVisitResult {
+                        if (error != null && error !is NoSuchFileException) skip(directory, error)
+                        return FileVisitResult.CONTINUE
+                    }
                 })
                 return added
             }

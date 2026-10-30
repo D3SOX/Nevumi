@@ -89,8 +89,8 @@ class NavidromeClientTest {
 
     @Test
     fun onlyPlainHttpToAnotherMachineIsFlaggedAsSendingThePasswordInClearText() {
-        assertEquals(listOf(true, true, false, false, false, false, false),
-            listOf("http://192.168.1.20:4533", " HTTP://music.lan ", "https://192.168.1.20", "http://localhost:4533",
+        assertEquals(listOf(true, true, true, false, false, false, false, false),
+            listOf("http://192.168.1.20:4533", " HTTP://music.lan ", "http://music.localhost", "https://192.168.1.20", "http://localhost:4533",
                 "http://127.0.0.1:4533", "http://[::1]:4533", "").map(::sendsPasswordInClearText))
     }
 }
