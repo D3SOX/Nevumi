@@ -36,6 +36,31 @@ class LocalFileEditsTest {
     }
 
     @Test
+    fun editedFilesKeepTheirGroupAndPermissions() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-edit-ownership")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val song = Files.copy(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music",
+                "Fixture Artist", "Fixture Album", "01 Northern Light.flac"), directory.resolve("song.flac"))
+            // A new file gets the user's primary group, so the song is moved to another group the user belongs to.
+            val primary = Files.readAttributes(song, java.nio.file.attribute.PosixFileAttributes::class.java).group().name
+            val other = ProcessBuilder("id", "-Gn").start().inputStream.bufferedReader().readText().split(' ', '\n')
+                .firstOrNull { it.isNotBlank() && it != primary }
+            org.junit.Assume.assumeTrue("Requires a user in more than one group", other != null)
+            val group = song.fileSystem.userPrincipalLookupService.lookupPrincipalByGroupName(other)
+            Files.getFileAttributeView(song, java.nio.file.attribute.PosixFileAttributeView::class.java).setGroup(group)
+            val permissions = java.nio.file.attribute.PosixFilePermissions.fromString("rw-r-----")
+            Files.setPosixFilePermissions(song, permissions)
+            val library = MusicLibrary(store)
+            val track = LocalFiles(library).scan(song.toString()).single()
+            LocalFileEdits(store, library, directory.resolve("edits").toString()).editTags(track.id, track.metadata.copy(title = "Edited"))
+            val edited = Files.readAttributes(song, java.nio.file.attribute.PosixFileAttributes::class.java)
+            assertEquals(group, edited.group())
+            assertEquals(permissions, edited.permissions())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun linkingAnEditedLocalCopyToAServerSongKeepsItsFileUndoAfterRestart() = runBlocking {
         val directory = Files.createTempDirectory("linked-file-undo")
         val database = directory.resolve("library.db").toString()
@@ -268,7 +293,7 @@ class LocalFileEditsTest {
                 preferences = me.d3sox.nevumi.settings.MusicPreferences(store),
                 fileEdits = LocalFileEdits(store, restoredLibrary, directory.resolve("edits").toString()))
             player = controller
-            withTimeout(3_000) { controller.state.first { !it.loading } }
+            withTimeout(3_000) { controller.state.first { it.started } }
             withTimeout(3_000) { while (Files.exists(Path.of(edit.backupPath))) delay(10) }
             assertEquals(emptyList(), controller.state.value.fileEdits)
             kotlin.test.assertFalse(Files.exists(Path.of(edit.backupPath)))

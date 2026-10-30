@@ -122,6 +122,27 @@ class LocalFilesTest {
     }
 
     @Test
+    fun scansAndTheTagEditorReadTheSameLength() = runBlocking {
+        val directory = Files.createTempDirectory("local-file-length")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val file = directory.resolve("song.flac")
+            val writer = ProcessBuilder("ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=2.7",
+                "-metadata", "artist=Fixture Artist", "-metadata", "title=Short", file.toString())
+                .redirectError(ProcessBuilder.Redirect.INHERIT).start()
+            check(writer.waitFor() == 0)
+            val library = MusicLibrary(store)
+            val track = LocalFiles(library).scan(file.toString()).single()
+            val tags = LocalFileEdits(store, library, directory.resolve("edits").toString()).readTags(track.id)
+            assertEquals(2_700L, track.metadata.durationMs)
+            assertEquals(track.metadata.durationMs, tags.durationMs)
+            // The library files the song under its artist, while the editor shows that the file has no album artist.
+            assertEquals("Fixture Artist", track.metadata.albumArtist)
+            assertEquals("", tags.albumArtist)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun musicBrainzTagsLinkARealLocalFileToItsIdentifiedServerCopy() = runBlocking {
         val directory = Files.createTempDirectory("identified-local-file")
         val store = openMusicStore(directory.resolve("library.db").toString())

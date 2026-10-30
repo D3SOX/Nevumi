@@ -1,15 +1,51 @@
 package me.d3sox.nevumi.library
 
 import java.io.File
+import kotlin.math.roundToLong
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.Tag
 import org.jaudiotagger.tag.wav.WavTag
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 
 /** The audio formats a local scan indexes. */
 val localMusicExtensions = setOf("mp3", "wav", "flac")
+
+/** The tag a file's fields are read from, which in a WAV file with an ID3 tag is that tag rather than the INFO chunk. */
+val AudioFile.fieldTag: Tag? get() = tag.let { if (it is WavTag && it.isExistingId3Tag) it.getID3Tag() else it }
+
+/**
+ * Maps a parsed file's tags to track metadata; [name] titles a file without a title tag.
+ * The library files a song without an album artist under its artist, while the tag editor shows what the file holds.
+ */
+fun AudioFile.trackMetadata(name: String, folder: String, albumArtistFallback: Boolean = true): TrackMetadata {
+    val container = tag
+    val tag = fieldTag
+    fun field(key: FieldKey): String = try { tag?.getFirst(key).orEmpty().trimEnd('\u0000') }
+        catch (_: UnsupportedOperationException) { "" }
+    val number = field(FieldKey.TRACK).ifBlank {
+        if (container is WavTag) container.infoTag.unrecognisedFields.firstOrNull { it.id == "IPRT" }?.content.orEmpty().trimEnd('\u0000') else ""
+    }
+    val artist = field(FieldKey.ARTIST)
+    return TrackMetadata(
+        title = field(FieldKey.TITLE).ifBlank { name },
+        artist = artist,
+        album = field(FieldKey.ALBUM),
+        // Milliseconds rather than whole seconds, so a length is rounded once, wherever it is shown or compared.
+        durationMs = (audioHeader.preciseTrackLength * 1_000).roundToLong(),
+        genres = tag?.getAll(FieldKey.GENRE).orEmpty().map { it.trimEnd('\u0000') }.filter { it.isNotBlank() },
+        albumArtist = field(FieldKey.ALBUM_ARTIST).ifBlank { if (albumArtistFallback) artist else "" },
+        trackNumber = number.substringBefore('/').toIntOrNull() ?: 0,
+        discNumber = field(FieldKey.DISC_NO).substringBefore('/').toIntOrNull() ?: 1,
+        folder = folder,
+        year = field(FieldKey.YEAR).take(4).toIntOrNull() ?: 0,
+        recordingId = field(FieldKey.MUSICBRAINZ_TRACK_ID),
+        releaseId = field(FieldKey.MUSICBRAINZ_RELEASEID),
+    )
+}
 
 class LocalFiles(private val library: MusicLibrary, private val artwork: ArtworkLibrary? = null) : LocalSources {
     // Earlier versions registered every edited file as a root; ignore those so they stop being rescanned.
@@ -68,30 +104,8 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
                 return@mapIndexedNotNull cached
             }
             val audio = try { AudioFileIO.read(file) } catch (_: Exception) { return@mapIndexedNotNull null }
-            val containerTag = audio.tag
-            val tag = if (containerTag is WavTag && containerTag.isExistingId3Tag) containerTag.getID3Tag() else containerTag
-            fun field(key: FieldKey): String {
-                val value = try { tag?.getFirst(key).orEmpty().trimEnd('\u0000') }
-                    catch (_: UnsupportedOperationException) { "" }
-                return if (key == FieldKey.TRACK && value.isBlank() && containerTag is WavTag)
-                    containerTag.infoTag.unrecognisedFields.firstOrNull { it.id == "IPRT" }?.content.orEmpty().trimEnd('\u0000')
-                else value
-            }
-            val metadata = TrackMetadata(
-                title = tag?.getFirst(FieldKey.TITLE).orEmpty().trimEnd('\u0000').ifBlank { file.nameWithoutExtension },
-                artist = tag?.getFirst(FieldKey.ARTIST).orEmpty().trimEnd('\u0000'),
-                album = tag?.getFirst(FieldKey.ALBUM).orEmpty().trimEnd('\u0000'),
-                durationMs = audio.audioHeader.trackLength.toLong() * 1_000,
-                genres = tag?.getAll(FieldKey.GENRE).orEmpty().map { it.trimEnd('\u0000') }.filter { it.isNotBlank() },
-                albumArtist = field(FieldKey.ALBUM_ARTIST).ifBlank { field(FieldKey.ARTIST) },
-                trackNumber = field(FieldKey.TRACK).substringBefore('/').toIntOrNull() ?: 0,
-                discNumber = field(FieldKey.DISC_NO).substringBefore('/').toIntOrNull() ?: 1,
-                folder = file.canonicalFile.parent.orEmpty(),
-                year = field(FieldKey.YEAR).take(4).toIntOrNull() ?: 0,
-                recordingId = field(FieldKey.MUSICBRAINZ_TRACK_ID),
-                releaseId = field(FieldKey.MUSICBRAINZ_RELEASEID),
-            )
-            val cover = tag?.firstArtwork?.binaryData
+            val metadata = audio.trackMetadata(file.nameWithoutExtension, file.canonicalFile.parent.orEmpty())
+            val cover = audio.fieldTag?.firstArtwork?.binaryData
             val track = library.importTrack(metadata, TrackSource(sourceId,
                 SourceKind.LOCAL, file.canonicalPath, modifiedAt = file.lastModified(), indexedSize = file.length(),
                 hasArtwork = cover != null))

@@ -1,10 +1,14 @@
 package me.d3sox.nevumi.library
 
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.net.URI
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFileAttributeView
+import java.nio.file.attribute.PosixFileAttributes
 import java.security.MessageDigest
 
 interface FileEditAccess {
@@ -67,7 +71,20 @@ object FileSystemEditAccess : FileEditAccess {
     }
     override fun stagingDirectory(location: String) = file(location).parentFile.resolve(".nevumi-edits")
     override suspend fun replace(location: String, staged: File, originalHash: String?) {
-        Files.move(staged.toPath(), file(location).toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        val target = file(location).toPath()
+        keepOwnership(target, staged.toPath())
+        Files.move(staged.toPath(), target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    // The replacement is a new file owned by whoever runs Nevumi, so it takes the replaced file's owner, group and permissions.
+    private fun keepOwnership(original: Path, replacement: Path) {
+        val attributes = try { Files.readAttributes(original, PosixFileAttributes::class.java) }
+            catch (_: UnsupportedOperationException) { return } catch (_: IOException) { return }
+        val view = Files.getFileAttributeView(replacement, PosixFileAttributeView::class.java) ?: return
+        view.setPermissions(attributes.permissions())
+        // Only root may give a file away, and other users only to their own groups; otherwise the replacement stays theirs.
+        try { view.setGroup(attributes.group()) } catch (_: IOException) {}
+        try { view.setOwner(attributes.owner()) } catch (_: IOException) {}
     }
     override fun scanLocation(location: String) = normalize(location)
     override fun renamedLocation(location: String, name: String) = requireNotNull(file(location).parentFile).resolve(name).path
