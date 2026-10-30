@@ -33,6 +33,8 @@ class AndroidSongsToMatchUiTest {
             compose.onNodeWithText("Choose your copy").assertIsDisplayed()
             compose.onNodeWithContentDescription("Choose this copy: My copy").performClick()
             compose.waitUntil(5_000) { runBlocking { devices.library.unmatched().isEmpty() } }
+            // The page reads the songs through a database flow, which can update after the next idle frame.
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("All songs matched").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("All songs matched").assertIsDisplayed()
             assertTrue(runBlocking { controller.library.findTrack(local.id) }!!.favorite)
         }
