@@ -22,6 +22,7 @@ import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeConnection
 import me.d3sox.nevumi.playback.PlayableTrack
 import me.d3sox.nevumi.playback.PlaybackEngine
+import me.d3sox.nevumi.playback.PlaybackStatus
 import me.d3sox.nevumi.playback.RepeatMode
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.queue.QueueSection
@@ -62,6 +63,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
     internal var queueLoaded = false
     /** Sources that failed per queue entry; they are left out until the song is chosen again. */
     internal val failedSources = mutableMapOf<String, MutableSet<String>>()
+    /** The current song as last resolved, kept in queue updates while its source cannot be resolved, such as during a network drop. */
+    private var resolvedCurrent: PlayableTrack? = null
 
     init {
         pairedDevices?.setPlaybackReceiver(object : PlaybackReceiver {
@@ -95,7 +98,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 engine.seek(positionMs)
                 withTimeout(5_000) { engine.status.first { it.entryId == incoming.preparedQueue.currentEntryId && abs(it.positionMs - positionMs) < 250 } }
                 queue.setPosition(positionMs)
-                if (playWhenReady) play().join() else pause().join()
+                // This holds the operation lock, so a reload for an errored or ended player runs here instead of waiting for it.
+                if (applyTransport(playWhenReady) && transportIntent.value.play) resumePlayback()
                 incomingPlayback = incoming.copy(revision = transportIntent.value.revision)
                 context.update { it.copy(queue = it.queue.copy(positionMs = positionMs), playback = engine.status.value) }
             }
@@ -116,7 +120,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
             }
         })
         context.scope.launch { engine.status.collect {
-            context.operations.withLock {
+            // One failed update must not stop the collector, which keeps the player, the history and scrobbling current.
+            try { context.operations.withLock {
                 val playback = engine.status.value
                 var snapshot = queue.snapshot()
                 if (snapshot.indexOf(playback.entryId) >= 0) {
@@ -158,6 +163,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 scrobbling?.onPlayback(playback)
                 context.update { it.copy(playback = playback, queue = snapshot,
                     error = if (playback.error != null && !recovered) playback.error else it.error) }
+            } } catch (error: Exception) {
+                rethrowCancellation(error)
+                context.update { it.copy(playback = engine.status.value, error = error.message ?: "Playback update failed") }
             }
         } }
     }
@@ -166,16 +174,18 @@ class PlaybackController internal constructor(private val context: ControllerCon
     fun pause() = requestPlayback(false)
     fun togglePlayback() = requestPlayback(null)
     private fun requestPlayback(play: Boolean?) = context.action(serialized = false) {
-        val load = transport.withLock {
-            val playback = engine.status.value
-            val requested = play ?: !(playback.playWhenReady && !playback.ended && playback.error == null)
-            transportIntent.update { TransportIntent(it.revision + 1, requested) }
-            val needsLoad = requested && (!queueLoaded || playback.error != null || playback.ended)
-            if (!requested) engine.pause() else if (!needsLoad) engine.play()
-            context.update { it.copy(playback = engine.status.value.copy(playWhenReady = requested)) }
-            needsLoad
-        }
-        if (load) context.operations.withLock { if (transportIntent.value.play) resumePlayback() }
+        if (applyTransport(play)) context.operations.withLock { if (transportIntent.value.play) resumePlayback() }
+    }
+
+    /** Records a transport request and applies it to the loaded player; returns whether the queue must be loaded first. */
+    private suspend fun applyTransport(play: Boolean?): Boolean = transport.withLock {
+        val playback = engine.status.value
+        val requested = play ?: !playback.playRequested
+        transportIntent.update { TransportIntent(it.revision + 1, requested) }
+        val needsLoad = requested && (!queueLoaded || playback.error != null || playback.ended)
+        if (!requested) engine.pause() else if (!needsLoad) engine.play()
+        context.update { it.copy(playback = engine.status.value.copy(playWhenReady = requested)) }
+        needsLoad
     }
 
     private suspend fun resumePlayback() {
@@ -227,8 +237,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
     }
     fun skip(direction: Int, restartPrevious: Boolean = true) = context.action {
         val snapshot = queue.snapshot()
-        val playback = engine.status.value
-        val playing = playback.playWhenReady && !playback.ended && playback.error == null
+        val playing = engine.status.value.playRequested
         if (restartPrevious && direction < 0 && engine.status.value.positionMs > 3_000) {
             queue.setPosition(0); engine.seek(0)
             publishSeek(0)
@@ -402,6 +411,16 @@ class PlaybackController internal constructor(private val context: ControllerCon
 
     private suspend fun playable(entry: QueueEntry, snapshot: QueueSnapshot, checkAllSources: Boolean, lookup: SourceLookup): PlayableTrack? {
         val track = lookup.catalog[entry.trackId] ?: return null
+        val resolved = resolve(track, entry, snapshot, checkAllSources, lookup)
+        if (entry.id != snapshot.currentEntryId) return resolved
+        if (resolved != null) { resolvedCurrent = resolved; return resolved }
+        // Leaving out the song the player holds would remove it from the player, so it stays until its source is gone or fails.
+        val status = engine.status.value
+        return resolvedCurrent?.takeIf { current -> current.entryId == entry.id && status.entryId == entry.id &&
+            status.sourceId == current.sourceId && status.error == null && track.sources.any { it.id == current.sourceId } }
+    }
+
+    private suspend fun resolve(track: Track, entry: QueueEntry, snapshot: QueueSnapshot, checkAllSources: Boolean, lookup: SourceLookup): PlayableTrack? {
         val sources = track.sources.filterNot { it.id in failedSources[entry.id].orEmpty() }.map { source ->
             if (source.kind == SourceKind.SERVER) source
             else source.copy(available = source.available && ((!checkAllSources && entry.id != snapshot.currentEntryId) || withContext(Dispatchers.IO) { sourceAccessible(source.location) }))
@@ -426,3 +445,6 @@ class PlaybackController internal constructor(private val context: ControllerCon
         const val POSITION_CHECKPOINT_MS = 30_000L
     }
 }
+
+/** Whether the player is meant to play: asked to, and neither finished nor failed. Unlike [PlaybackStatus.playing] it holds while buffering. */
+internal val PlaybackStatus.playRequested: Boolean get() = playWhenReady && !ended && error == null

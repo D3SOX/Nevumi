@@ -21,6 +21,7 @@ import me.d3sox.nevumi.resources.sources_milkdrop_render_failed
 import me.d3sox.nevumi.resources.sources_milkdrop_window_hint
 import me.d3sox.nevumi.resources.sources_preparing_milkdrop
 import me.d3sox.nevumi.resources.sources_preset_load_failed
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
@@ -44,7 +45,7 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
     val pool = remember { AtomicReference(eligible) }
     val playing = remember { AtomicBoolean(state.playback.playing) }
     var audio by remember { mutableStateOf<DesktopVisualizerAudio?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<StringResource?>(null) }
     LaunchedEffect(library, selected, eligible, settings.automatic) {
         wanted.set(selected); pool.set(eligible); advance.set(settings.automatic)
     }
@@ -121,7 +122,7 @@ internal actual fun MilkDropVisualizer(state: AppState, controller: MusicControl
                 Text(stringResource(Res.string.sources_preparing_milkdrop))
                 CircularProgressIndicator()
             }
-            notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            notice?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
             MilkDropControls(choices, selected, { index -> wanted.set(index); change { it.copy(selectedPresetId = choices[index].id) } }, settings, ::change)
         }
     }, confirmButton = { TextButton(onClick = close) { Text(stringResource(Res.string.sources_close_visualizer)) } })

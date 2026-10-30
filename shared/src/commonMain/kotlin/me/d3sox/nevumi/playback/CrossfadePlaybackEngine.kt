@@ -220,7 +220,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             if (tracks.size > 1) RepeatMode.OFF else RepeatMode.ONE
         } else repeatMode
         active.setRepeat(nativeMode, repeatPlays)
-        withTimeout(5_000) { active.status.first { it.repeatMode == nativeMode && it.repeatPlays == repeatPlays } }
+        // A timeout is a CancellationException, which would stop the worker; a slow decoder only delays the repeat state.
+        withTimeoutOrNull(5_000) { active.status.first { it.repeatMode == nativeMode && it.repeatPlays == repeatPlays } }
     }
 
     private fun currentIndex(): Int = tracks.indexOfFirst { it.entryId == (active.status.value.entryId ?: selectedEntry) }

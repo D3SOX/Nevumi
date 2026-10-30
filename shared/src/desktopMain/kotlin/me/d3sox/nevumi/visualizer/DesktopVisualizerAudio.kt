@@ -4,6 +4,11 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.*
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.sources_visualizer_monitor_failed
+import me.d3sox.nevumi.resources.sources_visualizer_needs_pulseaudio
+import me.d3sox.nevumi.resources.sources_visualizer_start_playback
+import org.jetbrains.compose.resources.StringResource
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicReference
@@ -37,7 +42,7 @@ internal class DesktopVisualizerAudio : AutoCloseable {
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.IO)
     private val capture = AtomicReference<Process?>()
-    private val mutableNotice = MutableStateFlow<String?>(null)
+    private val mutableNotice = MutableStateFlow<StringResource?>(null)
     val notice = mutableNotice.asStateFlow()
     private var reader: Job? = null
     init {
@@ -46,7 +51,7 @@ internal class DesktopVisualizerAudio : AutoCloseable {
             while (isActive) {
                 try {
                     val stream = ownedAudioStream(command("sink-inputs"), command("sinks"), command("clients"), ProcessHandle.current().pid())
-                    mutableNotice.value = if (stream == null) "Start playback to make the visualizer respond to music." else null
+                    mutableNotice.value = if (stream == null) Res.string.sources_visualizer_start_playback else null
                     if (stream != selected || reader?.isActive == false) {
                         capture.getAndSet(null)?.destroyForcibly()
                         reader?.cancelAndJoin()
@@ -71,13 +76,13 @@ internal class DesktopVisualizerAudio : AutoCloseable {
                                     }
                                 }
                             } catch (cancelled: CancellationException) { throw cancelled }
-                            catch (_: Exception) { if (isActive) mutableNotice.value = "Could not monitor Nevumi's audio. The visualizer will retry." }
+                            catch (_: Exception) { if (isActive) mutableNotice.value = Res.string.sources_visualizer_monitor_failed }
                             finally { capture.compareAndSet(process, null); process?.destroyForcibly() }
                         } }
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) {
-                    mutableNotice.value = "Audio monitoring needs a running PulseAudio service or PipeWire's PulseAudio service."
+                    mutableNotice.value = Res.string.sources_visualizer_needs_pulseaudio
                 }
                 delay(1_000)
             }

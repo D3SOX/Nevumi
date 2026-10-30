@@ -54,9 +54,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,6 +78,15 @@ fun AppState.nowPlaying(): NowPlaying {
         playback.playWhenReady && !playback.ended && playback.error == null, queue.entries.isNotEmpty())
 }
 
+/** Follows [AppState.nowPlaying] once the library is ready, searching the library off the main thread. */
+fun Flow<AppState>.nowPlaying(): Flow<NowPlaying> = filter { it.libraryReady }
+    // Position ticks arrive many times per second and change none of these, so they skip the library search.
+    .distinctUntilChanged { old, new -> old.tracks === new.tracks && old.artwork === new.artwork &&
+        old.queue.entries === new.queue.entries && old.queue.currentIndex == new.queue.currentIndex &&
+        old.playback.trackId == new.playback.trackId && old.playback.playWhenReady == new.playback.playWhenReady &&
+        old.playback.ended == new.playback.ended && old.playback.error == new.playback.error }
+    .map { it.nowPlaying() }.distinctUntilChanged().flowOn(Dispatchers.Default)
+
 private const val ARTWORK_PIXELS = 384
 /** The previous, play and next buttons of the tall layout. */
 private val TALL_CONTROLS = 140.dp
@@ -86,13 +97,12 @@ class NowPlayingWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val controller = (context.applicationContext as MusicApplication).controller
-        val ready = controller.state.filter { it.libraryReady }
         // A cold process is still restoring its queue; wait for it so the widget does not flash "Nothing playing".
-        val initial = (withTimeoutOrNull(5_000) { ready.first() } ?: controller.state.value).nowPlaying()
+        val initial = withTimeoutOrNull(5_000) { controller.state.nowPlaying().first() } ?: controller.state.value.nowPlaying()
         val initialArtwork = initial.artwork?.let { loadArtwork(it) }
         provideContent {
             // Covers load after the library is ready, so the running session follows the state instead of keeping its first snapshot.
-            val playing by remember { ready.map { it.nowPlaying() }.distinctUntilChanged() }.collectAsState(initial)
+            val playing by remember { controller.state.nowPlaying() }.collectAsState(initial)
             val artwork by produceState(initialArtwork, playing.artwork) { value = playing.artwork?.let { loadArtwork(it) } }
             GlanceTheme { Content(playing, artwork) }
         }
@@ -218,7 +228,7 @@ class NowPlayingWidgetUpdates(private val context: Context, private val controll
     fun start() {
         if (job?.isActive == true) return
         job = scope.launch {
-            controller.state.filter { it.libraryReady }.map { it.nowPlaying() }.distinctUntilChanged().collect { NowPlayingWidget().updateAll(context) }
+            controller.state.nowPlaying().collect { NowPlayingWidget().updateAll(context) }
         }
     }
 

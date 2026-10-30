@@ -179,7 +179,7 @@ class QueueController internal constructor(private val context: ControllerContex
         if (requestPlaybackConfirmation(context.state.value.savedQueues.firstOrNull { it.id == id }?.name ?: "this saved queue", confirmed) {
                 loadSavedQueue(id, confirmed = true)
             }) return@action
-        val playing = engine.status.value.let { it.playWhenReady && !it.ended && it.error == null }
+        val playing = engine.status.value.playRequested
         persistPlaybackPosition()
         playback.failedSources.clear()
         val saved = requireNotNull(queue.saved().firstOrNull { it.id == id }) { "Saved queue is missing" }
@@ -210,7 +210,7 @@ class QueueController internal constructor(private val context: ControllerContex
     }
     fun removeQueueEntry(entryId: String) = context.action {
         val before = queue.snapshot()
-        val playing = engine.status.value.playing
+        val playing = engine.status.value.playRequested
         queue.remove(entryId)
         val after = queue.snapshot()
         context.update { it.copy(queue = after) }

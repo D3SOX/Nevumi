@@ -466,6 +466,32 @@ class QueuePlaybackTest {
     }
 
     @Test
+    fun addingASongKeepsThePlayingSongInTheDecoderWhileItsFileIsBrieflyUnreachable() = runBlocking {
+        val directory = Files.createTempDirectory("unreachable-current-song")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val path = Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music", "Fixture Artist", "Fixture Album", "01 Northern Light.flac").toString()
+        val songs = listOf("Playing", "Added").map { library.importTrack(TrackMetadata(it), TrackSource("local:$it", SourceKind.LOCAL, path)) }
+        val reachable = AtomicBoolean(true)
+        val decoder = MpvPlaybackEngine("null")
+        val handed = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+        val engine = object : PlaybackEngine by decoder {
+            override fun updateQueue(tracks: List<PlayableTrack>) { handed += tracks.map { it.id }; decoder.updateQueue(tracks) }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), engine, sourceAccessible = { reachable.get() && FileAudioAccess.available(it) })
+        try {
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.playTrack(songs[0].id, listOf(songs[0].id)).join()
+            withTimeout(3_000) { controller.state.first { it.playback.trackId == songs[0].id && it.playback.durationMs > 0 } }
+            // A network share that stops answering for a moment must not take the playing song out of the decoder.
+            reachable.set(false)
+            controller.enqueue(songs[1].id, QueueAction.APPEND).join()
+            assertEquals(listOf(songs[0].id, songs[1].id), handed.last())
+            assertEquals(songs[0].id, controller.state.value.playback.trackId)
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun repeatAllKeepsCyclingALongQueueWhoseFewPlayableSongsFitTheDecoder() = runBlocking {
         val directory = Files.createTempDirectory("repeat-sparse-long-queue")
         val store = openMusicStore(directory.resolve("library.db").toString())

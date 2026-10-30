@@ -135,7 +135,7 @@ class LinuxMediaSession(private val controller: MusicController, address: String
         val playback = controller.state.value.playback
         playback.entryId?.let { entryId ->
             val destination = (playback.positionMs + offset / 1_000).coerceAtLeast(0)
-            if (destination > playback.durationMs) Next()
+            if (playback.durationMs > 0 && destination > playback.durationMs) Next()
             else controller.seekCurrentEntry(entryId, destination)
         }
     }
