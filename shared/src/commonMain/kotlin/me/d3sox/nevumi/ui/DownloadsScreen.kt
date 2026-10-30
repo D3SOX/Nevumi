@@ -94,7 +94,7 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
         state.downloads.values.sortedWith(compareBy({ it.status == DownloadStatus.COMPLETE }, { metadata[it.trackId]?.title }))
     }
     var query by rememberSaveable { mutableStateOf("") }
-    val shownSongs = remember(downloads, query) {
+    val shownSongs = remember(downloads, metadata, query) {
         if (query.isBlank()) downloads else downloads.filter { record ->
             metadata[record.trackId]?.let { it.title.contains(query, true) || it.artist.contains(query, true) } == true
         }

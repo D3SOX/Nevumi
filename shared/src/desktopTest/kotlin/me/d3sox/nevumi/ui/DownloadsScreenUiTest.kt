@@ -60,6 +60,12 @@ class DownloadsScreenUiTest {
                 onNodeWithText("Search songs").assertExists()
                 onNodeWithText("Song 10").assertExists()
                 onNodeWithText("Song 2").assertDoesNotExist()
+                // A library refresh that renames an artist updates the results without changing the order of songs.
+                onNodeWithText("Search songs").performTextReplacement("fan")
+                waitForIdle()
+                state = state.copy(tracks = tracks.map { if (it.id == "t0") it.copy(metadata = it.metadata.copy(artist = "Big fan")) else it })
+                waitForIdle()
+                onNodeWithText("Song 0").assertExists()
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
