@@ -89,7 +89,7 @@ class DownloadUiTest {
                 available.set(1_073_741_824L)
                 onNodeWithText("Retry failed downloads").performClick()
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.downloads[track.id]?.status == DownloadStatus.COMPLETE }
-                onNode(hasText("Downloaded") and !hasClickAction()).assertIsDisplayed()
+                onNodeWithContentDescription("Remove download: Northern Light").assertIsDisplayed()
                 onNodeWithText("Not enough storage — free space and retry").assertDoesNotExist()
             }
         } finally { runBlocking { controller.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively() }
@@ -120,6 +120,9 @@ class DownloadUiTest {
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Downloads & cache").performScrollTo().performClick()
                 onNodeWithText("Manage downloads").performScrollTo().performClick()
+                // The page opens on the playlist, so the song is one chip away.
+                onNodeWithText("Automatic").assertIsDisplayed()
+                onNodeWithText("Songs · 1").performClick()
                 onNodeWithContentDescription("Remove download: Northern Light").performClick()
                 waitUntil(timeoutMillis = 3_000) { track.id !in controller.state.value.downloads }
                 assertEquals(null, runBlocking { SourceResolver.resolve(library.findTrack(track.id)!!.sources, online = false) })
@@ -193,7 +196,7 @@ class DownloadUiTest {
                 onNodeWithText("Resume downloads").performClick()
                 waitUntil(timeoutMillis = 5_000) { reopened.state.value.downloads[track.id]?.status == DownloadStatus.COMPLETE }
                 onNode(hasText("Northern Light") and !hasClickAction()).assertIsDisplayed()
-                onNode(hasText("Downloaded") and !hasClickAction()).assertIsDisplayed()
+                onNodeWithContentDescription("Remove download: Northern Light").assertIsDisplayed()
             }
         } finally {
             runBlocking { controller?.closeAndJoin(); offline?.closeAndJoin() }

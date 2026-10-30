@@ -312,7 +312,6 @@
     <string name="sources_download_status_paused">Paused</string>
     <string name="sources_download_status_insufficient_space">Not enough storage — free space and retry</string>
     <string name="sources_download_status_failed">Failed — retry to continue</string>
-    <string name="sources_download_bytes">%1$d / %2$d bytes</string>
     <string name="sources_remove_download">Remove download</string>
     <string name="sources_downloads_empty">Download songs or enable automatic downloads on a playlist.</string>
 
