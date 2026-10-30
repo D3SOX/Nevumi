@@ -14,6 +14,7 @@ concurrency:
 jobs:
   changes:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.scope.outputs.matrix }}
       analyze: ${{ steps.scope.outputs.analyze }}
@@ -80,6 +81,7 @@ jobs:
     if: needs.changes.outputs.analyze == 'true'
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: read
       security-events: write

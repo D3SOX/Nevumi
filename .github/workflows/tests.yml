@@ -84,7 +84,7 @@ jobs:
         with:
           go-version-file: native/tailscale/go.mod
           cache-dependency-path: native/tailscale/go.sum
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - uses: ./.github/actions/apt-install
         with:
           packages: ffmpeg mpv libmpv-dev libsecret-tools gnome-keyring openssh-server xvfb xauth dbus cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio pulseaudio-utils meson pkg-config libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libplacebo-dev libass-dev libpulse-dev libasound2-dev
@@ -127,7 +127,7 @@ jobs:
         with:
           log-accepted-android-sdk-licenses: false
       - run: bash scripts/sdkmanager-retry.sh 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - uses: ./.github/actions/apt-install
         with:
           packages: ffmpeg mpv libsecret-tools openssh-server cmake ninja-build libsdl2-dev libgl1-mesa-dev pulseaudio-utils
@@ -167,9 +167,31 @@ jobs:
             .test-environment/android-class-results
             .test-environment/pairing.log
             .test-environment/sftp.log
+  android-lint:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: native/tailscale/go.mod
+          cache-dependency-path: native/tailscale/go.sum
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          log-accepted-android-sdk-licenses: false
+      - run: bash scripts/sdkmanager-retry.sh 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      # Development and release builds run these through this workflow before they build.
+      - run: ./gradlew :androidApp:lintDevelopment :androidApp:lintRelease --console=plain
   tests:
     name: Tests
-    needs: [changes, android-shards, desktop, android]
+    needs: [changes, android-shards, desktop, android, android-lint]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
