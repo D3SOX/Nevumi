@@ -135,7 +135,7 @@ class ServerRefreshTest {
         connection.connect("https://music.example.test", ServerCredentials("fixture", "test"))
         val library = MusicLibrary(store)
         val artwork = ArtworkLibrary(directory.resolve("artwork").toString())
-        val changes = NavidromeChanges(store, library, artwork, connection::client)
+        val changes = NavidromeChanges(store, library, artwork, savedConnection = true, client = connection::client)
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
             connection, artwork = artwork, serverChanges = changes)
         try {

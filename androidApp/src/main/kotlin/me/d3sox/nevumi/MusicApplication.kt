@@ -68,7 +68,7 @@ class MusicApplication : Application() {
         val artwork = ArtworkLibrary(File(filesDir, "artwork").path)
         val tunnel = TailscaleTunnel(store, Tailscale(File(noBackupFilesDir, "tailscale"), "nevumi-android"))
         connection = NavidromeConnection(store, http, credentials, tunnel::musicServerUrl)
-        serverChanges = NavidromeChanges(store, library, artwork, connection::client)
+        serverChanges = NavidromeChanges(store, library, artwork, savedConnection = true, client = connection::client)
         serverFiles = SftpConnection(store, library, connection::client, credentials, File(filesDir, "server-edits").path,
             readLocal = { location ->
                 if (location.startsWith("content:")) requireNotNull(contentResolver.openInputStream(Uri.parse(location))) { "The local music file is unavailable" }
@@ -86,7 +86,8 @@ class MusicApplication : Application() {
         val scrobbling = Scrobbling(store, library, http, credentials, downloadNetwork.state, connection::client)
         val equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http)
         val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-        val engine = AndroidPlaybackEngine(this, PlaybackService::class.java)
+        // A media button or another controller can start the process without any activity.
+        val engine = AndroidPlaybackEngine(this, PlaybackService::class.java).apply { setUiVisible(false) }
         // The controller outlives the activities, so tell the engine when nothing is on screen and it can poll less often.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             private var started = 0

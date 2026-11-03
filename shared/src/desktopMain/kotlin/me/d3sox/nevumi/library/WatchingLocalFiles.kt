@@ -74,8 +74,15 @@ class WatchingLocalFiles(private val library: MusicLibrary, artwork: ArtworkLibr
             val pending = LinkedHashSet<Path>()
             var pendingSince = 0L
             suspend fun flush() {
+                // A folder deleted since its change is scanned through its nearest remaining parent inside the library, which notices
+                // its songs left; a vanished library folder itself is scanned as it was, which marks its songs unavailable.
+                fun remaining(path: Path): Path {
+                    val root = watched.filter { path.startsWith(it) }.minByOrNull { it.nameCount } ?: return path
+                    return generateSequence(path) { it.parent }.takeWhile { it.startsWith(root) }.firstOrNull { Files.isDirectory(it) } ?: path
+                }
                 // A folder inside another pending one is covered by that folder's scan.
-                val folders = pending.sortedBy { it.nameCount }.fold(mutableListOf<Path>()) { kept, path ->
+                val folders = pending.map(::remaining)
+                    .distinct().sortedBy { it.nameCount }.fold(mutableListOf<Path>()) { kept, path ->
                     kept.apply { if (none { path.startsWith(it) }) add(path) }
                 }
                 pending.clear()
@@ -112,9 +119,19 @@ class WatchingLocalFiles(private val library: MusicLibrary, artwork: ArtworkLibr
                     val name = event.context() as? Path ?: continue
                     val path = directory.resolve(name)
                     val folder = Files.isDirectory(path)
+                    val removedFolder = event.kind() == ENTRY_DELETE && path in directories
+                    // A renamed folder keeps its watches, which still report the old path; dropping them lets the new name register afresh.
+                    // A move seen at its destination first already mapped the new path to the old watch, so that alias registers again too.
+                    if (removedFolder) {
+                        val dropped = directories.filterKeys { it.startsWith(path) }.values.toSet()
+                        dropped.forEach { it.cancel() }
+                        val aliases = directories.filterValues { it in dropped }.keys.filterNot { it.startsWith(path) }
+                        directories.values.removeAll(dropped)
+                        aliases.forEach { registerTree(it) }
+                    }
                     if (event.kind() == ENTRY_CREATE && folder) registerTree(path)
                     val music = name.toString().substringAfterLast('.', "").lowercase() in localMusicExtensions
-                    if (music || folder || event.kind() == ENTRY_DELETE && path in directories) pending.add(directory)
+                    if (music || folder || removedFolder) pending.add(directory)
                 }
                 // A deleted folder takes its subfolders' watches with it.
                 if (!key.reset()) directories.entries.removeAll { (path, watch) ->

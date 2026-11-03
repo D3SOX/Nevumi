@@ -230,7 +230,7 @@ class ArtworkLibraryTest {
         val connection = NavidromeConnection(store, http, vault)
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), connection, artwork = artwork,
             playlists = me.d3sox.nevumi.playlists.Playlists(store),
-            serverChanges = me.d3sox.nevumi.navidrome.NavidromeChanges(store, library, artwork, connection::client))
+            serverChanges = me.d3sox.nevumi.navidrome.NavidromeChanges(store, library, artwork, savedConnection = true, client = connection::client))
         try {
             withTimeout(3_000) { controller.state.first { !it.loading } }
             controller.connectServer("https://music.example.test", "fixture", "fixture-password").join()

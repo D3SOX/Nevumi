@@ -34,7 +34,10 @@ private data class RatingChange(val sourceId: String, val songId: String, val ra
     val revision: String = Uuid.random().toString())
 
 class NavidromeChanges(private val store: MusicStore, private val library: MusicLibrary,
-    private val artwork: ArtworkLibrary? = null, private val client: suspend () -> NavidromeClient?) : AutoCloseable {
+    private val artwork: ArtworkLibrary? = null,
+    /** Whether imports follow the saved connection and stop once it is gone; the app's connection saves one, tests may not. */
+    private val savedConnection: Boolean = false,
+    private val client: suspend () -> NavidromeClient?) : AutoCloseable {
     private val synchronization = Mutex()
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.IO)
@@ -119,8 +122,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
             // Short transactions let playback checkpoints and user actions write between batches of a large import.
             var processed = 0
             val imported = catalogue.chunked(200).flatMap { batch ->
-                ensureConnected(connection)
-                store.transaction { batch.map { song -> importSong(connection, song) to song } }.also {
+                store.transaction { ensureConnected(connection); batch.map { song -> importSong(connection, song) to song } }.also {
                     processed += batch.size
                     onProgress(ServerRefreshProgress(ServerRefreshStage.IMPORTING, processed, catalogue.size))
                 }
@@ -139,11 +141,12 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         }
     }
 
-    /** Stops an import whose server was disconnected meanwhile; it would otherwise mark that server's songs available again. */
+    /**
+     * Stops an import whose server was disconnected meanwhile; it would otherwise mark that server's songs available again.
+     * Run inside each import transaction, it reads the saved connection that disconnecting deletes first, so the two cannot interleave.
+     */
     private suspend fun ensureConnected(connection: NavidromeClient) {
-        // A locked credential store cannot tell; the import continues as it would have before.
-        val current = try { client()?.serverId } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { connection.serverId }
-        check(current == connection.serverId) { "The music server was disconnected" }
+        if (savedConnection) check(store.read<ServerProfile>("server:navidrome")?.serverId == connection.serverId) { "The music server was disconnected" }
     }
 
     /** Imports one changed song after any running catalogue refresh, so the refresh cannot overwrite it with older metadata. */

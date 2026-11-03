@@ -128,7 +128,8 @@ class LibraryController internal constructor(private val context: ControllerCont
             if (offline != null) offline.withLibraryChanges { link() } else link()
         }
         context.operations.withLock { loader.refresh() }
-        linkedRevision = library.revision()
+        // The revision examined above: linking changes it, so the next call looks once more, which also covers songs imported meanwhile.
+        linkedRevision = revision
     }
     @kotlin.concurrent.Volatile private var linkedRevision: Long? = null
     fun updatePreferences(change: (MusicSettings) -> MusicSettings) = context.action {

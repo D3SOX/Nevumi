@@ -143,10 +143,12 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 // another controller (a headset or watch). An unchanged one may only lag behind a request, so it is left alone.
                 val repeatChanged = previous != null && (previous.repeatMode != playback.repeatMode || previous.repeatPlays != playback.repeatPlays)
                 if (snapshot.indexOf(playback.entryId) >= 0) {
-                    if (repeatChanged && snapshot.currentEntryId == playback.entryId &&
-                        (snapshot.repeatMode != playback.repeatMode || snapshot.repeatPlays != playback.repeatPlays))
-                        queue.setRepeat(playback.repeatMode, playback.repeatPlays)
                     if (snapshot.currentEntryId != playback.entryId) queue.select(requireNotNull(playback.entryId))
+                    // Also when the song changed with it, as when a finite repeat ends or a controller skips right after; selecting
+                    // first keeps the selection from resetting what was adopted.
+                    val selected = queue.snapshot()
+                    if (repeatChanged && (selected.repeatMode != playback.repeatMode || selected.repeatPlays != playback.repeatPlays))
+                        queue.setRepeat(playback.repeatMode, playback.repeatPlays)
                     // Every write wakes every database observer, so a playing song checkpoints its position only every
                     // half minute; a pause or a song change saves it at once, and so does closing the app.
                     val now = clock.elapsedNow().inWholeMilliseconds

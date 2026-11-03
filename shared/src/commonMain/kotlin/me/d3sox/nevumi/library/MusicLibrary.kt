@@ -153,7 +153,10 @@ class MusicLibrary(private val store: MusicStore) {
         val deletions = store.revision("deleted:tracks")
         val since = cachedRevision
         val records = store.database.records()
-        if (loaded && since != null) {
+        val incremental = loaded && since != null
+        // A read canceled halfway leaves the cache partly updated, so it counts as unloaded until the read completes.
+        loaded = false
+        if (incremental && since != null) {
             for (record in records.changedSince("tracks", since)) cachedByKey[record.key] = store.json.decodeFromString<Track>(record.value)
             if (deletions != cachedDeletions) cachedByKey.keys.retainAll(records.keys("tracks").toHashSet())
         } else {
