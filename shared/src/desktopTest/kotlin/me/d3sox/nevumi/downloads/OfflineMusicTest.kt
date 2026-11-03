@@ -39,7 +39,7 @@ class OfflineMusicTest {
         val library = MusicLibrary(store)
         val client = NavidromeClient(http, "http://localhost", ServerCredentials("fixture", "fixture-password"))
         val track = library.importTrack(TrackMetadata("Unavailable song"), TrackSource("server:${client.serverId}:song", SourceKind.SERVER, "song"))
-        val offline = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = {})
+        val offline = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = { _, _ -> })
         try {
             offline.request(listOf(track.id))
             offline.runPending()
@@ -95,7 +95,7 @@ class OfflineMusicTest {
             val song = client.songs().single { it.metadata.title == "Northern Light" }
             val track = library.importTrack(song.metadata,
                 TrackSource("server:${client.serverId}:${song.id}", SourceKind.SERVER, song.id))
-            val before = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = {})
+            val before = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = { _, _ -> })
             offline = before
             before.request(listOf(track.id))
             before.runPending()
@@ -105,7 +105,7 @@ class OfflineMusicTest {
             Files.delete(Path.of(downloaded.path!!))
             store = openMusicStore(database)
             val restoredLibrary = MusicLibrary(store)
-            val restored = OfflineMusic(store, restoredLibrary, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = {})
+            val restored = OfflineMusic(store, restoredLibrary, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = { _, _ -> })
             offline = restored
             restored.request(listOf(track.id))
             restored.runPending()
@@ -136,7 +136,7 @@ class OfflineMusicTest {
                 TrackSource("server:${previous.serverId}:${colliding.id}", SourceKind.SERVER, colliding.id))
             library.importTrack(current.metadata,
                 TrackSource("server:${client.serverId}:${current.id}", SourceKind.SERVER, current.id), linkTo = track.id)
-            val worker = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = {})
+            val worker = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = { _, _ -> })
             offline = worker
             worker.request(listOf(track.id))
             worker.runPending()
@@ -163,7 +163,7 @@ class OfflineMusicTest {
             val track = library.importTrack(song.metadata,
                 TrackSource("server:${client.serverId}:${song.id}", SourceKind.SERVER, song.id))
             val before = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store),
-                scheduleWork = { scheduled.trySend(Unit) })
+                scheduleWork = { _, _ -> scheduled.trySend(Unit) })
             offline = before
             before.request(listOf(track.id))
             withTimeout(3_000) { scheduled.receive() }
@@ -174,7 +174,7 @@ class OfflineMusicTest {
             store = openMusicStore(database)
             val restoredLibrary = MusicLibrary(store)
             val restored = OfflineMusic(store, restoredLibrary, { client }, directory.resolve("audio").toString(), Playlists(store),
-                scheduleWork = { scheduled.trySend(Unit) })
+                scheduleWork = { _, _ -> scheduled.trySend(Unit) })
             offline = restored
             restored.runPending()
             val complete = restored.state.value.getValue(track.id)
@@ -183,6 +183,35 @@ class OfflineMusicTest {
             restored.enforceCacheBudget(0)
             assertEquals(SourceKind.DOWNLOAD, SourceResolver.resolve(restoredLibrary.findTrack(track.id)!!.sources, online = false)?.kind)
         } finally { offline?.closeAndJoin(); http.close(); store.close(); scheduled.close(); directory.toFile().deleteRecursively() }
+    }
+
+    // Android lets new work replace a download job that waits in backoff, so requesting an already downloaded song must not count as new work.
+    @Test
+    fun onlyARequestThatAddsADownloadAsksThePlatformForNewWork() = runBlocking {
+        val directory = Files.createTempDirectory("new-download-work")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val audio = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val http = HttpClient(MockEngine { request ->
+            if (request.url.encodedPath.endsWith("getSong.view"))
+                respond("""{"subsonic-response":{"status":"ok","song":{"id":"song","title":"Song","suffix":"flac","size":8}}}""",
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"))
+            else respond(audio, headers = headersOf(HttpHeaders.ContentType, "audio/flac"))
+        })
+        val client = NavidromeClient(http, "https://music.example", ServerCredentials("test", "test"))
+        val library = MusicLibrary(store)
+        val track = library.importTrack(TrackMetadata("Song"), TrackSource("server:${client.serverId}:song", SourceKind.SERVER, "song"))
+        val scheduled = mutableListOf<Pair<Boolean, Boolean>>()
+        val worker = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store),
+            scheduleWork = { userInitiated, newWork -> synchronized(scheduled) { scheduled += userInitiated to newWork } })
+        try {
+            worker.request(listOf(track.id), owner = null)
+            assertEquals(true, synchronized(scheduled) { (false to true) in scheduled })
+            worker.runPending()
+            assertEquals(DownloadStatus.COMPLETE, worker.state.value[track.id]?.status)
+            synchronized(scheduled) { scheduled.clear() }
+            worker.request(listOf(track.id), owner = null)
+            assertEquals(emptyList(), synchronized(scheduled) { scheduled.filter { (_, newWork) -> newWork } })
+        } finally { worker.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
@@ -554,7 +583,7 @@ class OfflineMusicTest {
         val library = MusicLibrary(store)
         val checks = AtomicInteger()
         val offline = OfflineMusic(store, library, { NavidromeClient(http, "https://music.example", ServerCredentials("test", "test")) },
-            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = {})
+            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = { _, _ -> })
         try {
             val file = Files.write(directory.resolve("song.flac"), byteArrayOf(1)).toString()
             val track = library.importTrack(TrackMetadata("Song"), TrackSource("local:$file", SourceKind.LOCAL, file))
@@ -590,7 +619,7 @@ class OfflineMusicTest {
         val library = MusicLibrary(store)
         val checks = AtomicInteger()
         val offline = OfflineMusic(store, library, { NavidromeClient(http, "https://music.example", ServerCredentials("test", "test")) },
-            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = {})
+            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = { _, _ -> })
         try {
             val file = Files.write(directory.resolve("song.flac"), byteArrayOf(1)).toString()
             library.importTrack(TrackMetadata("Song"), TrackSource("local:$file", SourceKind.LOCAL, file))
@@ -610,7 +639,7 @@ class OfflineMusicTest {
         val audio = Files.createDirectories(directory.resolve("audio"))
         val library = MusicLibrary(store)
         val offline = OfflineMusic(store, library, { error("Unlock your credential store") }, audio.toString(), Playlists(store),
-            sourceAccessible = { Files.exists(Path.of(it)) }, scheduleWork = {})
+            sourceAccessible = { Files.exists(Path.of(it)) }, scheduleWork = { _, _ -> })
         try {
             suspend fun server(title: String) = library.importTrack(TrackMetadata(title),
                 TrackSource("server:fixture:$title", SourceKind.SERVER, title, indexedSize = 3))

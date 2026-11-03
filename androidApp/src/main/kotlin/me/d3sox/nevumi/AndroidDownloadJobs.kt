@@ -25,9 +25,18 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
     private val soundCloudService = ComponentName(context, SoundCloudDownloadService::class.java)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val scheduling = Mutex()
+    // JobScheduler keeps listing a job for a moment after it finishes, so only this process knows whether a download job runs.
+    private val jobs = Any()
+    private var running = 0
+    // Whether new work, and any of it user initiated, found a job running; that job starts another when it finishes.
+    private var missed: Boolean? = null
 
-    fun schedule(userInitiated: Boolean = false) {
+    fun schedule(userInitiated: Boolean = false, newWork: Boolean = false) {
         if (userInitiated) onUserDownload()
+        enqueue(userInitiated, newWork)
+    }
+
+    private fun enqueue(userInitiated: Boolean, newWork: Boolean) {
         scope.launch { scheduling.withLock {
             val settings = preferences.load()
             if (settings.downloadsPaused) {
@@ -63,10 +72,25 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
             val job = builder.build()
             val pending = scheduler.getPendingJob(DOWNLOAD_JOB)
             val upgrade = foregroundTransfer && pending?.isUserInitiated != true
-            if (pending?.requiredNetwork == job.requiredNetwork && !upgrade) return@withLock
+            // Without new work, keep a waiting job and its backoff. New work replaces a job that waits or has just finished.
+            if (pending?.requiredNetwork == job.requiredNetwork && !upgrade && (!newWork || handedToRunningJob(userInitiated))) return@withLock
             if (scheduler.schedule(job) == JobScheduler.RESULT_FAILURE && foregroundTransfer)
                 scheduler.schedule(builder.setUserInitiated(false).build())
         } }
+    }
+
+    // Replacing a running job would stop its transfer, so it schedules a job for this work when it finishes.
+    private fun handedToRunningJob(userInitiated: Boolean) = synchronized(jobs) {
+        if (running > 0) missed = missed == true || userInitiated
+        running > 0
+    }
+
+    fun started() { synchronized(jobs) { running++ } }
+
+    /** Called when a download job ends, after it reports its result. The last running job schedules a job for any work it missed. */
+    fun finished() {
+        val work = synchronized(jobs) { if (--running > 0) null else missed.also { missed = null } }
+        if (work != null) enqueue(work, newWork = true)
     }
 
     /** Follows SoundCloud downloads; they ignore the offline download pause and network settings, because each one was requested directly. */

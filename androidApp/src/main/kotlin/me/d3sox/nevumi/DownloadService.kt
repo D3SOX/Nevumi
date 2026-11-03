@@ -56,6 +56,7 @@ class DownloadService : JobService() {
         owners.update { it + 1 }
         val app = application as MusicApplication
         val offline = app.offline
+        app.downloadJobs.started()
         val task = scope.launch(start = CoroutineStart.LAZY) {
             var retry = false
             val progress = if (visibleTransfer) launch {
@@ -83,6 +84,7 @@ class DownloadService : JobService() {
                     running.remove(key)
                     jobFinished(params, retry)
                 }
+                app.downloadJobs.finished()
             }
         }
         running[key] = task

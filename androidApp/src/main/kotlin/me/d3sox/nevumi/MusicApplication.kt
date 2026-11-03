@@ -47,7 +47,8 @@ class MusicApplication : Application() {
     private lateinit var downloadNetwork: AndroidDownloadNetwork
     private lateinit var connection: NavidromeConnection
     private lateinit var serverChanges: NavidromeChanges
-    private lateinit var downloadJobs: AndroidDownloadJobs
+    lateinit var downloadJobs: AndroidDownloadJobs
+        private set
     private lateinit var serverFiles: SftpConnection
     lateinit var mediaWriteRequests: MediaWriteRequests
         private set

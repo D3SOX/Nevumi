@@ -36,7 +36,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     val network: StateFlow<DownloadNetwork> = MutableStateFlow(DownloadNetwork()),
     private val availableSpace: (String) -> Long = ::downloadUsableSpace,
     private val sourceAccessible: (String) -> Boolean = FileAudioAccess::available,
-    private val scheduleWork: ((userInitiated: Boolean) -> Unit)? = null) : AutoCloseable {
+    // Runs [runPending] on the platform's schedule. New work needs a pass soon; other calls only check that one is due.
+    private val scheduleWork: ((userInitiated: Boolean, newWork: Boolean) -> Unit)? = null) : AutoCloseable {
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.IO)
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -84,7 +85,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                 withTimeoutOrNull(30_000) { wake.receive() }
                 try {
                     // A settled pass has nothing to do until a pass input changes, so no platform job is scheduled for it.
-                    if (scheduleWork == null) runPending() else if (!settledNow()) scheduleWork.invoke(false)
+                    if (scheduleWork == null) runPending() else if (!settledNow()) scheduleWork.invoke(false, false)
                 }
                 catch (cancelled: CancellationException) { currentCoroutineContext().ensureActive() }
             }
@@ -117,7 +118,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
 
     suspend fun request(trackIds: List<String>, owner: String? = "manual") {
         if (owner == null && preferences.load().cacheBytes == 0L) return
-        store.transaction {
+        val requested = store.transaction {
+            var requested = false
             for (id in trackIds.distinct()) {
                 requireNotNull(library.findTrack(id)) { "Track is missing" }
                 if (owner != null) store.database.records().delete("excluded:$id")
@@ -128,6 +130,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                 }
                 val record = store.read<DownloadRecord>("download:$id")
                 if (record?.status != DownloadStatus.COMPLETE || record.path?.let(sourceAccessible) != true) {
+                    requested = true
                     store.put("request:$id", "offline-requests", OfflineRequest(id))
                     if (record == null || record.status == DownloadStatus.COMPLETE) {
                         library.removeSource(id, "download:$id")
@@ -135,9 +138,10 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                     }
                 }
             }
+            requested
         }
         refresh()
-        scheduleWork?.invoke(owner != null)
+        scheduleWork?.invoke(owner != null, requested)
         wake.trySend(Unit)
     }
 
@@ -172,7 +176,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
 
     // The user asked for these downloads, so the platform may show the transfer and its progress.
     fun downloadPlaylists() {
-        scheduleWork?.invoke(true)
+        scheduleWork?.invoke(true, true)
         wake.trySend(Unit)
     }
 
@@ -207,7 +211,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
 
     suspend fun resume() {
         preferences.update { it.copy(downloadsPaused = false) }
-        scheduleWork?.invoke(true)
+        scheduleWork?.invoke(true, true)
         wake.trySend(Unit)
     }
 
