@@ -81,7 +81,7 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
         val tunnel = me.d3sox.nevumi.tunnel.TailscaleTunnel(store, me.d3sox.nevumi.tunnel.Tailscale(File(directory, "tailscale"), "nevumi-linux"))
         val connection = NavidromeConnection(store, http, credentials, tunnel::musicServerUrl)
         val artwork = ArtworkLibrary(File(directory, "artwork").path)
-        val serverChanges = NavidromeChanges(store, library, artwork, connection::client)
+        val serverChanges = NavidromeChanges(store, library, artwork, savedConnection = true, client = connection::client)
         val history = ListeningHistory(store, library)
         val playlists = Playlists(store, library = library, history = history)
         val downloadNetwork = try { runInterruptible { LinuxDownloadNetwork().also { resources += { it.close() } } } }

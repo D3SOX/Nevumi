@@ -28,7 +28,12 @@ class WatchingLocalFiles(private val library: MusicLibrary, artwork: ArtworkLibr
     override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> = scanner.scan(location, force, onProgress)
     override suspend fun scanSong(location: String): List<Track> = scanner.scanSong(location)
 
-    override val changes: Flow<Unit> = flow {
+    /**
+     * The folders to scan again: each one that had a music file or a subfolder change, emitted once its changes pause for
+     * 300 ms (or after a second of steady writes). A cover, a sidecar or a partial download changes nothing in the library, so it
+     * is ignored, and an unrelated change no longer rescans every library folder.
+     */
+    override val changes: Flow<List<String>> = flow {
         FileSystems.getDefault().newWatchService().use { watcher ->
             val directories = mutableMapOf<Path, WatchKey>()
             // Folders that cannot be watched, such as an unreadable lost+found or any past the inotify watch limit, are skipped
@@ -64,21 +69,74 @@ class WatchingLocalFiles(private val library: MusicLibrary, artwork: ArtworkLibr
                 })
                 return added
             }
+            var watched = emptyList<Path>()
+            var started = false
+            val pending = LinkedHashSet<Path>()
+            var pendingSince = 0L
+            suspend fun flush() {
+                // A folder deleted since its change is scanned through its nearest remaining parent inside the library, which notices
+                // its songs left; a vanished library folder itself is scanned as it was, which marks its songs unavailable.
+                fun remaining(path: Path): Path {
+                    val root = watched.filter { path.startsWith(it) }.minByOrNull { it.nameCount } ?: return path
+                    return generateSequence(path) { it.parent }.takeWhile { it.startsWith(root) }.firstOrNull { Files.isDirectory(it) } ?: path
+                }
+                // A folder inside another pending one is covered by that folder's scan.
+                val folders = pending.map(::remaining)
+                    .distinct().sortedBy { it.nameCount }.fold(mutableListOf<Path>()) { kept, path ->
+                    kept.apply { if (none { path.startsWith(it) }) add(path) }
+                }
+                pending.clear()
+                if (folders.isNotEmpty()) emit(folders.map { it.toString() })
+            }
             while (currentCoroutineContext().isActive) {
-                var registered = false
-                roots().forEach { root ->
-                    val path = Path.of(root)
-                    if (path !in directories && path !in unwatchable && registerTree(path)) registered = true
+                val roots = roots().map { Path.of(it) }
+                if (roots != watched) {
+                    // A folder removed from the library stops being watched instead of rescanning on every change.
+                    directories.entries.removeAll { (directory, key) -> roots.none { directory.startsWith(it) }.also { if (it) key.cancel() } }
+                    unwatchable.removeAll { path -> roots.none { path.startsWith(it) } }
+                    watched = roots
                 }
-                if (registered && scanner.pendingRefreshLocations().isNotEmpty()) emit(Unit)
-                val key = watcher.poll(1, TimeUnit.SECONDS) ?: continue
-                val directory = directories.entries.firstOrNull { it.value == key }?.key
-                val events = key.pollEvents()
-                if (directory != null) events.filter { it.kind() == ENTRY_CREATE }.forEach { event ->
-                    (event.context() as? Path)?.let { registerTree(directory.resolve(it)) }
+                val added = roots.filter { it !in directories && it !in unwatchable && registerTree(it) }
+                // At startup the controller scans what changed while the app was closed; a folder added later may have changed
+                // before its watch existed.
+                if (started && added.isNotEmpty()) {
+                    val changed = scanner.pendingRefreshLocations().toSet()
+                    pending.addAll(added.filter { it.toString() in changed })
                 }
-                if (!key.reset()) directories.entries.removeAll { it.value == key }
-                if (events.isNotEmpty()) emit(Unit)
+                started = true
+                val now = System.currentTimeMillis()
+                if (pending.isNotEmpty() && pendingSince == 0L) pendingSince = now
+                val key = watcher.poll(if (pending.isEmpty()) 1_000 else 300, TimeUnit.MILLISECONDS)
+                if (key == null || pending.isNotEmpty() && now - pendingSince >= 1_000) {
+                    flush(); pendingSince = 0L
+                    if (key == null) continue
+                }
+                val directory = key.watchable() as? Path
+                for (event in key.pollEvents()) {
+                    if (directory == null) continue
+                    // Lost events can hide anything, including new subfolders, so every library folder is walked and scanned.
+                    if (event.kind() == OVERFLOW) { roots.forEach { registerTree(it) }; pending.addAll(roots); continue }
+                    val name = event.context() as? Path ?: continue
+                    val path = directory.resolve(name)
+                    val folder = Files.isDirectory(path)
+                    val removedFolder = event.kind() == ENTRY_DELETE && path in directories
+                    // A renamed folder keeps its watches, which still report the old path; dropping them lets the new name register afresh.
+                    // A move seen at its destination first already mapped the new path to the old watch, so that alias registers again too.
+                    if (removedFolder) {
+                        val dropped = directories.filterKeys { it.startsWith(path) }.values.toSet()
+                        dropped.forEach { it.cancel() }
+                        val aliases = directories.filterValues { it in dropped }.keys.filterNot { it.startsWith(path) }
+                        directories.values.removeAll(dropped)
+                        aliases.forEach { registerTree(it) }
+                    }
+                    if (event.kind() == ENTRY_CREATE && folder) registerTree(path)
+                    val music = name.toString().substringAfterLast('.', "").lowercase() in localMusicExtensions
+                    if (music || folder || removedFolder) pending.add(directory)
+                }
+                // A deleted folder takes its subfolders' watches with it.
+                if (!key.reset()) directories.entries.removeAll { (path, watch) ->
+                    watch == key || directory != null && path.startsWith(directory) && !Files.isDirectory(path)
+                }
             }
         }
     }.flowOn(Dispatchers.IO)

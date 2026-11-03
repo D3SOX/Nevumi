@@ -410,7 +410,7 @@ class PlaybackQueueTest {
             assertEquals(listOf("a", "b"), other.snapshot().entries.map { it.trackId })
             other.append("c")
             assertEquals(listOf("a", "c", "b"), queue.snapshot().entries.map { it.trackId })
-            remapQueueTracks(store, "b", "linked")
+            remapQueueTracks(store, mapOf("b" to "linked"))
             assertEquals(listOf("a", "c", "linked"), queue.snapshot().entries.map { it.trackId })
             val first = queue.snapshot()
             assertSame(first, queue.snapshot(), "An unchanged queue is decoded once")

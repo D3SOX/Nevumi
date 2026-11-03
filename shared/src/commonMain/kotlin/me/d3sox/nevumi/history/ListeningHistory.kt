@@ -31,9 +31,11 @@ fun listeningStatistics(listens: List<Listen>): Map<String, ListeningStatistics>
     ListeningStatistics(events.count { it.qualified }, events.sumOf { it.listenedMs }, events.maxOf { it.startedAt })
 }
 
-internal suspend fun remapListeningHistory(store: MusicStore, from: String, to: String) {
-    for (event in store.list<Listen>("listens").filter { it.trackId == from })
+internal suspend fun remapListeningHistory(store: MusicStore, mapping: Map<String, String>) {
+    if (mapping.isEmpty()) return
+    for (event in store.list<Listen>("listens")) mapping[event.trackId]?.let { to ->
         store.put("listen:${event.id}", "listens", event.copy(trackId = to))
+    }
 }
 
 private fun createElapsedClock(): () -> Long {
@@ -79,8 +81,10 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
             val updated = event.copy(listenedMs = event.listenedMs + heard, playedMs = event.playedMs + (heard * speed).toLong(),
                 durationMs = current.durationMs.takeIf { it > 0 } ?: event.durationMs, ended = current.ended)
             session.listen = updated
-            // Every write wakes every database observer, so checkpoint a running listen only every few seconds.
-            if (current.ended || session.previous.playing != current.playing || updated.qualified != event.qualified || now - session.writtenAt >= 5_000) {
+            // Every write wakes every history reader (statistics, smart playlists, Home, scrobbling), so a running listen is only
+            // checkpointed once a minute; starting, pausing, qualifying and ending still save it at once.
+            if (current.ended || session.previous.playing != current.playing || updated.qualified != event.qualified ||
+                now - session.writtenAt >= RUNNING_CHECKPOINT_MS) {
                 session.listen = persist(updated)
                 session.writtenAt = now
             }
@@ -131,4 +135,8 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
         listeningReport(all(), tracks, period, wallClock())
     suspend fun recommendations(tracks: List<Track>, limit: Int = 20): List<ListeningRecommendation> =
         listeningRecommendations(all(), tracks, limit, wallClock())
+
+    private companion object {
+        const val RUNNING_CHECKPOINT_MS = 60_000L
+    }
 }

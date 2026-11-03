@@ -65,11 +65,12 @@ func goString(env *C.JNIEnv, value C.jstring) string {
 // throw raises an IOException, or a SocketTimeoutException for an expired deadline, which sshj's reader waits through on an
 // idle connection just as it does with a socket's timeout.
 func throw(env *C.JNIEnv, err error) {
-	name := C.CString("java/io/IOException")
+	class := "java/io/IOException"
 	var timeout net.Error
 	if errors.As(err, &timeout) && timeout.Timeout() {
-		name = C.CString("java/net/SocketTimeoutException")
+		class = "java/net/SocketTimeoutException"
 	}
+	name := C.CString(class)
 	defer C.free(unsafe.Pointer(name))
 	message := C.CString(err.Error())
 	defer C.free(unsafe.Pointer(message))

@@ -38,6 +38,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
     private val LocalFileEdit.partial get() = operation != FileEditOperation.DELETE && files.holdsOnlyTags(originalHash)
 
     override suspend fun linkTracks(keepId: String, otherId: String): Track = edits.withLock { library.linkTracks(keepId, otherId) }
+    override suspend fun linkTracks(pairs: List<Pair<String, String>>): List<Track> = edits.withLock { library.linkTracks(pairs) }
 
     override suspend fun delete(trackId: String): LocalFileEdit = edits.withLock { withContext(Dispatchers.IO) {
         val track = requireNotNull(library.findTrack(trackId)) { "Track is missing" }
@@ -107,7 +108,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
         for (file in backups.listFiles().orEmpty()) {
             val ownedName = try { UUID.fromString(file.nameWithoutExtension).toString() == file.nameWithoutExtension }
                 catch (_: IllegalArgumentException) { false }
-            if (file.isFile && ownedName && file.extension.lowercase() in setOf("mp3", "wav", "flac") && file.canonicalPath !in referenced)
+            if (file.isFile && ownedName && file.canonicalPath !in referenced)
                 Files.deleteIfExists(file.toPath())
         }
     } }

@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.storage
 
+import androidx.room.ColumnInfo
 import androidx.room.ConstructedBy
 import androidx.room.Dao
 import androidx.room.Database
@@ -24,8 +25,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 
-@Entity(tableName = "records", indices = [Index("kind")])
-data class StoredRecord(@PrimaryKey val key: String, val kind: String, val value: String)
+// (kind, key) serves the lists of one kind in key order without a sort; (kind, changed) finds what changed since a revision.
+@Entity(tableName = "records", indices = [Index("kind", "key"), Index("kind", "changed")])
+data class StoredRecord(@PrimaryKey val key: String, val kind: String, val value: String,
+    /** The revision of its kind when this record last changed. Triggers set it, so a cache can read only newer records. */
+    @ColumnInfo(defaultValue = "0") val changed: Long = 0)
 
 @Entity(tableName = "record_revisions")
 data class RecordRevision(@PrimaryKey val kind: String, val revision: Long)
@@ -40,6 +44,9 @@ interface RecordDao {
     @Query("SELECT * FROM records WHERE kind = :kind ORDER BY `key`")
     suspend fun list(kind: String): List<StoredRecord>
     @Query("SELECT `key` FROM records WHERE kind = :kind") suspend fun keys(kind: String): List<String>
+    /** Records of [kind] written after its revision was [revision]; deletions show in the revision of `deleted:` + kind. */
+    @Query("SELECT * FROM records WHERE kind = :kind AND changed > :revision")
+    suspend fun changedSince(kind: String, revision: Long): List<StoredRecord>
     @Query("SELECT COALESCE((SELECT revision FROM record_revisions WHERE kind = :kind), 0)")
     suspend fun revision(kind: String): Long
     @Query("SELECT COALESCE((SELECT revision FROM record_revisions WHERE kind = :kind), 0)")
@@ -52,15 +59,25 @@ interface RecordDao {
     @Query("DELETE FROM records WHERE kind = :kind") suspend fun deleteKind(kind: String)
 }
 
-@Database(entities = [StoredRecord::class, RecordRevision::class], version = 2, exportSchema = true)
+@Database(entities = [StoredRecord::class, RecordRevision::class], version = 3, exportSchema = true)
 @ConstructedBy(MusicDatabaseConstructor::class)
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun records(): RecordDao
 }
 
 internal object RecordRevisionMigration : Migration(1, 2) {
+    // The triggers need the column version 3 adds, so the next migration installs them.
     override fun migrate(connection: SQLiteConnection) {
         connection.execSQL("CREATE TABLE IF NOT EXISTS record_revisions (kind TEXT NOT NULL PRIMARY KEY, revision INTEGER NOT NULL)")
+    }
+}
+
+internal object RecordChangeMigration : Migration(2, 3) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE records ADD COLUMN changed INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("DROP INDEX IF EXISTS index_records_kind")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_records_kind_key` ON `records` (`kind`, `key`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_records_kind_changed` ON `records` (`kind`, `changed`)")
         installRecordRevisionTriggers(connection)
     }
 }
@@ -69,15 +86,23 @@ internal object RecordRevisionCallback : RoomDatabase.Callback() {
     override fun onCreate(connection: SQLiteConnection) = installRecordRevisionTriggers(connection)
 }
 
+/**
+ * Every write counts in its kind's revision and stamps the record with it; a deletion also counts in `deleted:` + kind.
+ * One trigger per operation runs its statements in order, so a record's stamp always includes its own change.
+ */
 private fun installRecordRevisionTriggers(connection: SQLiteConnection) {
-    fun increment(kind: String) = "INSERT INTO record_revisions (kind, revision) VALUES ($kind, 1) " +
-        "ON CONFLICT(kind) DO UPDATE SET revision = revision + 1;"
-    connection.execSQL("CREATE TRIGGER IF NOT EXISTS records_insert_revision AFTER INSERT ON records BEGIN ${increment("NEW.kind")} END")
-    connection.execSQL("CREATE TRIGGER IF NOT EXISTS records_delete_revision AFTER DELETE ON records BEGIN ${increment("OLD.kind")} END")
-    connection.execSQL("CREATE TRIGGER IF NOT EXISTS records_update_revision AFTER UPDATE ON records " +
-        "WHEN OLD.kind != NEW.kind OR OLD.value != NEW.value BEGIN ${increment("OLD.kind")} END")
-    connection.execSQL("CREATE TRIGGER IF NOT EXISTS records_move_revision AFTER UPDATE ON records " +
-        "WHEN OLD.kind != NEW.kind BEGIN ${increment("NEW.kind")} END")
+    fun increment(kind: String, condition: String = "1") = "INSERT INTO record_revisions (kind, revision) SELECT $kind, 1 " +
+        "WHERE $condition ON CONFLICT(kind) DO UPDATE SET revision = revision + 1;"
+    fun stamp() = "UPDATE records SET changed = (SELECT revision FROM record_revisions WHERE kind = NEW.kind) WHERE `key` = NEW.`key`;"
+    for (name in listOf("records_insert_revision", "records_delete_revision", "records_update_revision", "records_move_revision"))
+        connection.execSQL("DROP TRIGGER IF EXISTS $name")
+    connection.execSQL("CREATE TRIGGER records_insert_revision AFTER INSERT ON records BEGIN ${increment("NEW.kind")} ${stamp()} END")
+    connection.execSQL("CREATE TRIGGER records_delete_revision AFTER DELETE ON records " +
+        "BEGIN ${increment("OLD.kind")} ${increment("'deleted:' || OLD.kind")} END")
+    // Stamping only changes the stamp, which this condition ignores, so it does not count as another change.
+    connection.execSQL("CREATE TRIGGER records_update_revision AFTER UPDATE ON records " +
+        "WHEN OLD.kind != NEW.kind OR OLD.value != NEW.value " +
+        "BEGIN ${increment("OLD.kind")} ${increment("NEW.kind", "OLD.kind != NEW.kind")} ${increment("'deleted:' || OLD.kind", "OLD.kind != NEW.kind")} ${stamp()} END")
 }
 
 @Suppress("KotlinNoActualForExpect")

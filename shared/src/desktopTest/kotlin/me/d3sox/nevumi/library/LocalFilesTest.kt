@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.library
 
 import me.d3sox.nevumi.storage.openMusicStore
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -8,6 +9,44 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class LocalFilesTest {
+    @Test
+    fun theWatcherScansOnlyTheChangedFolderAndFollowsARenamedOne() = runBlocking {
+        val directory = Files.createTempDirectory("watched-music-folder")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val fixture = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac")
+        val emitted = kotlinx.coroutines.channels.Channel<List<String>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+        var watcher: kotlinx.coroutines.Job? = null
+        try {
+            val music = Files.createDirectory(directory.resolve("music"))
+            val album = Files.createDirectories(music.resolve("Album"))
+            val other = Files.createDirectories(music.resolve("Other"))
+            Files.copy(fixture, album.resolve("first.flac"))
+            val library = MusicLibrary(store)
+            val scanner = WatchingLocalFiles(library)
+            scanner.scan(music.toString())
+            watcher = launch(kotlinx.coroutines.Dispatchers.IO) { scanner.changes.collect { emitted.send(it) } }
+            suspend fun next() = kotlinx.coroutines.withTimeout(10_000) { emitted.receive() }
+            // The watch exists once a change in a subfolder reaches the flow; a non-music file there is ignored.
+            Files.writeString(other.resolve("cover.txt"), "ignored")
+            kotlinx.coroutines.withTimeout(10_000) {
+                while (true) {
+                    Files.copy(fixture, other.resolve("probe.flac"), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    val folders = kotlinx.coroutines.withTimeoutOrNull(1_500) { emitted.receive() } ?: continue
+                    assertEquals(listOf(other.toString()), folders)
+                    break
+                }
+            }
+            val renamed = Files.move(album, music.resolve("Renamed"))
+            next().forEach { scanner.scan(it) }
+            Files.copy(fixture, renamed.resolve("second.flac"))
+            val folders = next()
+            assertEquals(listOf(renamed.toString()), folders)
+            folders.forEach { scanner.scan(it) }
+            assertEquals(setOf(renamed.resolve("first.flac").toString(), renamed.resolve("second.flac").toString()),
+                library.tracks().flatMap { it.sources }.filter { it.available && it.location.contains("Renamed") }.map { it.location }.toSet())
+        } finally { watcher?.cancel(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test
     fun configuredFoldersCanBeScannedWithoutASeparateImportPicker() = runBlocking {
         val directory = Files.createTempDirectory("configured-music-folder")

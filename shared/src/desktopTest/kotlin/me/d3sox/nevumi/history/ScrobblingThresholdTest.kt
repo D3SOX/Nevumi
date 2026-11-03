@@ -65,7 +65,8 @@ class ScrobblingThresholdTest {
             val playing = PlaybackStatus(track.id, playing = true, durationMs = 180_000, playbackId = "play")
             history.record(playing)
             elapsed = 45_000
-            history.record(playing)
+            // Pausing saves the running listen; while it plays, it is only saved once a minute.
+            history.record(playing.copy(playing = false))
             assertFalse(history.all().single().qualified)
             scrobbling.enqueueEligible()
             assertEquals(2, scrobbling.submissions().size)

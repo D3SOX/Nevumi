@@ -179,7 +179,8 @@ class AudioDownloads(
                         throw InsufficientDownloadSpace()
                     requireNotNull(output).write(chunk)
                     receivedBytes += chunk.size
-                    if (firstProgress || receivedBytes - record.bytesDownloaded >= 262_144 || lastProgress.elapsedNow().inWholeMilliseconds >= 500) {
+                    // Each write makes every download observer reread its records, so a fast connection saves progress twice a second, not per 256 KiB.
+                    if (firstProgress || lastProgress.elapsedNow().inWholeMilliseconds >= 500) {
                         firstProgress = false
                         lastProgress = TimeSource.Monotonic.markNow()
                         record = record.copy(bytesDownloaded = receivedBytes)

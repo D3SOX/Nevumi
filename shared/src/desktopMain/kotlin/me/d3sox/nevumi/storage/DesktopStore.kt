@@ -12,7 +12,7 @@ fun openMusicStore(path: String): MusicStore {
         .setDriver(BundledSQLiteDriver().withRelaxedDurability())
         // Relaxed durability is only crash-safe with write-ahead logging, so it is never left to Room's automatic choice.
         .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-        .addMigrations(RecordRevisionMigration)
+        .addMigrations(RecordRevisionMigration, RecordChangeMigration)
         .addCallback(RecordRevisionCallback)
         .setQueryCoroutineContext(Dispatchers.IO)
         .build())

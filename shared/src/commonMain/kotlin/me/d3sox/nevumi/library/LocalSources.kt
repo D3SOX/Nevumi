@@ -9,7 +9,8 @@ interface LocalSources {
     suspend fun scanSong(location: String): List<Track> = scan(location)
     suspend fun roots(): List<String> = emptyList()
     suspend fun pendingRefreshLocations(): List<String> = emptyList()
-    val changes: Flow<Unit> get() = emptyFlow()
+    /** Locations to scan again after a change on disk; each emission names every location to rescan. */
+    val changes: Flow<List<String>> get() = emptyFlow()
 }
 
 data class LocalScanProgress(val processed: Int, val total: Int)

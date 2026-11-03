@@ -296,6 +296,7 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
         if (items.isEmpty()) { pausePlayback(); prepared = false }
     }
     override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> = future {
+        if (items.isEmpty()) return@future
         val index = mediaItemIndex.coerceIn(items.indices)
         val position = positionMs.takeUnless { it == C.TIME_UNSET } ?: 0
         if (items[index].mediaId == engine.status.value.entryId) engine.seek(position)

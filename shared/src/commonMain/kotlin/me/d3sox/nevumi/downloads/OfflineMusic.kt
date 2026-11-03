@@ -3,6 +3,7 @@ package me.d3sox.nevumi.downloads
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.navidrome.NavidromeException
+import me.d3sox.nevumi.navidrome.ServerSong
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.FileAudioAccess
 import me.d3sox.nevumi.navidrome.NavidromeClient
@@ -62,19 +63,19 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             }
         }
         scope.launch {
-            store.database.records().observe("settings").distinctUntilChanged().collect {
+            store.database.records().observeRevision("settings").distinctUntilChanged().collect {
                 if (preferences.load().downloadsPaused || !networkPermitted()) processing?.cancel()
                 wake.trySend(Unit)
             }
         }
         scope.launch {
-            store.database.records().observe("servers").distinctUntilChanged().collect { wake.trySend(Unit) }
+            store.database.records().observeRevision("servers").distinctUntilChanged().collect { wake.trySend(Unit) }
         }
         scope.launch {
             playlists.observe().collect { wake.trySend(Unit) }
         }
         scope.launch {
-            store.database.records().observe("downloads").distinctUntilChanged().collect { refresh() }
+            store.database.records().observeRevision("downloads").distinctUntilChanged().collect { refresh() }
         }
         scope.launch {
             refresh()
@@ -82,7 +83,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             while (isActive) {
                 withTimeoutOrNull(30_000) { wake.receive() }
                 try {
-                    if (scheduleWork == null) runPending() else scheduleWork.invoke(false)
+                    // A settled pass has nothing to do until a pass input changes, so no platform job is scheduled for it.
+                    if (scheduleWork == null) runPending() else if (!settledNow()) scheduleWork.invoke(false)
                 }
                 catch (cancelled: CancellationException) { currentCoroutineContext().ensureActive() }
             }
@@ -100,9 +102,10 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                 store.list<OfflineRequest>("offline-requests").forEach { request ->
                     if (library.findTrack(request.trackId)?.onDevice() == true) return@forEach
                     val previous = store.read<DownloadRecord>("download:${request.trackId}")
+                    // Keeping the source, size and validator lets the next attempt resume the partial file.
                     if (previous?.status != DownloadStatus.COMPLETE)
-                        store.put("download:${request.trackId}", "downloads", DownloadRecord(request.trackId,
-                            DownloadStatus.FAILED, bytesDownloaded = previous?.bytesDownloaded ?: 0))
+                        store.put("download:${request.trackId}", "downloads", previous?.copy(status = DownloadStatus.FAILED, problem = null)
+                            ?: DownloadRecord(request.trackId, DownloadStatus.FAILED))
                 }
             }
             finally {
@@ -219,6 +222,10 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         wake.trySend(Unit)
     }
 
+    /** Whether the last pass settled and nothing it reads has changed since. */
+    internal suspend fun settledNow(): Boolean =
+        settled != null && (store.database.records().revisions(PASS_INPUTS) to inUseTracks()) == settled
+
     private suspend fun process() {
         // The playing and current queue songs are kept out of cache eviction, so a change to them needs a pass too.
         val inputs = store.database.records().revisions(PASS_INPUTS) to inUseTracks()
@@ -245,8 +252,12 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         }
         val requests = store.list<OfflineRequest>("offline-requests")
             .filterNot { it.trackId in excluded || library.findTrack(it.trackId)?.onDevice() == true }
-        // A few songs are cheaper to look up one by one; a large batch is cheaper as one catalogue download.
-        val catalogue = if (requests.size > PlaylistDownloads.SINGLE_LOOKUPS) connection.songs().associateBy { it.id } else null
+        // A few songs are cheaper to look up one by one; a large share of the library is cheaper as one catalogue download,
+        // which the playlist downloads below reuse instead of downloading it again.
+        var fetched: Map<String, ServerSong>? = null
+        suspend fun catalogue() = fetched ?: connection.songs().associateBy { it.id }.also { fetched = it }
+        val serverSongs = library.tracks().count { track -> track.sources.any { it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:") } }
+        val catalogue = if (PlaylistDownloads.catalogueCheaper(requests.size, serverSongs)) catalogue() else null
         val releases = mutableMapOf<String, String>()
         var completed = true
         for (request in requests) {
@@ -263,7 +274,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}") else completed = false
             refresh()
         }
-        if (!PlaylistDownloads(playlists, library, downloads, connection, sourceAccessible).synchronize(excluded)) completed = false
+        if (!PlaylistDownloads(playlists, library, downloads, connection, sourceAccessible, ::catalogue).synchronize(excluded)) completed = false
         downloads.enforceCacheBudget(preferences.load().cacheBytes, inUseTracks())
         return completed
     }

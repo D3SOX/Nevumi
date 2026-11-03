@@ -124,8 +124,8 @@ class LinuxMediaSession(private val controller: MusicController, address: String
     override fun getObjectPath() = "/org/mpris/MediaPlayer2"
     override fun Next() { controller.skip(1) }
     override fun Previous() {
-        val queue = controller.state.value.queue
-        if (queue.currentIndex > 0 || (queue.currentIndex >= 0 && queue.repeatMode == RepeatMode.ALL)) controller.skip(-1)
+        // On the first song this still restarts it after three seconds, like the in-app button.
+        if (controller.state.value.queue.currentIndex >= 0) controller.skip(-1)
     }
     override fun Pause() { controller.pause() }
     override fun Play() { stopped.value = false; controller.play() }
@@ -186,8 +186,8 @@ class LinuxMediaSession(private val controller: MusicController, address: String
             "MaximumRate" to Variant(2.0),
             "CanGoNext" to Variant(state.queue.currentIndex >= 0 &&
                 (state.queue.currentIndex < state.queue.entries.lastIndex || state.queue.repeatMode == RepeatMode.ALL)),
-            "CanGoPrevious" to Variant(state.queue.currentIndex > 0 ||
-                (state.queue.currentIndex >= 0 && state.queue.repeatMode == RepeatMode.ALL)),
+            // Previous restarts the first song after three seconds, so it always has an effect while a song is current.
+            "CanGoPrevious" to Variant(state.queue.currentIndex >= 0),
             "CanPlay" to Variant(track != null),
             "CanPause" to Variant(track != null),
             "CanSeek" to Variant(track != null && state.playback.durationMs > 0),

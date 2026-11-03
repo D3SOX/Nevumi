@@ -75,12 +75,12 @@ class LibraryMaintenanceUiTest {
                 }
             }
             runBlocking { list.scrollToItem(15); grid.scrollToItem(20) }
-            waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.libraryPositions.values.map { it.index }.containsAll(listOf(15, 20)) }
+            waitUntil(timeoutMillis = 3_000) { controller.libraryPositions.values.map { it.index }.containsAll(listOf(15, 20)) }
             val saved = runOnIdle { registry.performSave() }
             runOnIdle { mounted = false }
             waitForIdle()
             // Recreation must restore the latest UI state even when persistence is behind.
-            runBlocking { controller.updatePreferences { it.copy(libraryPositions = emptyMap()) }.join() }
+            runBlocking { controller.forgetLibraryPositions() }
             runOnIdle { registry = SaveableStateRegistry(saved) { true }; mounted = true }
             waitForIdle()
             assertEquals(15, list.firstVisibleItemIndex)
@@ -96,7 +96,7 @@ class LibraryMaintenanceUiTest {
             waitForIdle()
             assertEquals(0, list.firstVisibleItemIndex)
             assertEquals(0, grid.firstVisibleItemIndex)
-            assertTrue(controller.state.value.preferences.libraryPositions.isEmpty())
+            assertTrue(controller.libraryPositions.isEmpty())
             runBlocking { controller.updatePreferences { it.copy(rememberScrollPositions = true) }.join() }
             waitForIdle()
             assertEquals(0, list.firstVisibleItemIndex)

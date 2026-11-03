@@ -34,7 +34,10 @@ private data class RatingChange(val sourceId: String, val songId: String, val ra
     val revision: String = Uuid.random().toString())
 
 class NavidromeChanges(private val store: MusicStore, private val library: MusicLibrary,
-    private val artwork: ArtworkLibrary? = null, private val client: suspend () -> NavidromeClient?) : AutoCloseable {
+    private val artwork: ArtworkLibrary? = null,
+    /** Whether imports follow the saved connection and stop once it is gone; the app's connection saves one, tests may not. */
+    private val savedConnection: Boolean = false,
+    private val client: suspend () -> NavidromeClient?) : AutoCloseable {
     private val synchronization = Mutex()
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.IO)
@@ -119,7 +122,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
             // Short transactions let playback checkpoints and user actions write between batches of a large import.
             var processed = 0
             val imported = catalogue.chunked(200).flatMap { batch ->
-                store.transaction { batch.map { song -> importSong(connection, song) to song } }.also {
+                store.transaction { ensureConnected(connection); batch.map { song -> importSong(connection, song) to song } }.also {
                     processed += batch.size
                     onProgress(ServerRefreshProgress(ServerRefreshStage.IMPORTING, processed, catalogue.size))
                 }
@@ -132,9 +135,18 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 library.setSourceAvailability(absent, false)
                 imported
             }
+            ensureConnected(connection)
             importPlaylists(connection, onProgress = onProgress)
             songs
         }
+    }
+
+    /**
+     * Stops an import whose server was disconnected meanwhile; it would otherwise mark that server's songs available again.
+     * Run inside each import transaction, it reads the saved connection that disconnecting deletes first, so the two cannot interleave.
+     */
+    private suspend fun ensureConnected(connection: NavidromeClient) {
+        if (savedConnection) check(store.read<ServerProfile>("server:navidrome")?.serverId == connection.serverId) { "The music server was disconnected" }
     }
 
     /** Imports one changed song after any running catalogue refresh, so the refresh cannot overwrite it with older metadata. */
@@ -167,7 +179,12 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
      * and those containing songs missing from the library wait for the next library refresh.
      */
     suspend fun importPlaylists(connection: NavidromeClient, changedOnly: Boolean = false,
-        onProgress: (ServerRefreshProgress) -> Unit = {}) {
+        onProgress: (ServerRefreshProgress) -> Unit = {}) { importPlaylistsWaiting(connection, changedOnly, onProgress) }
+
+    /** Imports like [importPlaylists]; returns whether a changed playlist waits for songs the library does not know yet. */
+    private suspend fun importPlaylistsWaiting(connection: NavidromeClient, changedOnly: Boolean,
+        onProgress: (ServerRefreshProgress) -> Unit = {}): Boolean {
+        var waiting = false
         onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS))
         val tracks = library.tracks()
         val mapping = tracks.flatMap { track -> track.sources.filter {
@@ -175,7 +192,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         }.map { it.location to track.id } }.toMap()
         val versions = if (changedOnly) connection.playlistVersions() else null
         val remotes = if (versions == null) connection.playlists() else {
-            val known = playlists.all().mapNotNull { it.server?.takeIf { link -> link.serverId == connection.serverId && link.id != null } }
+            val known = store.list<Playlist>("playlists").mapNotNull { it.server?.takeIf { link -> link.serverId == connection.serverId && link.id != null } }
                 .associate { it.id to it.changed }
             // Servers that omit change times get every playlist downloaded again.
             versions.filter { (id, changed) -> changed.isEmpty() || known[id] != changed }.keys.map { connection.playlist(it) }
@@ -190,16 +207,18 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         }
         deleted.forEach { artwork?.remove("server-playlist-cover:$it") }
         onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS, total = remotes.size))
+        // Indexed once: reading every playlist again for each remote one made large imports quadratic.
+        val linked = store.list<Playlist>("playlists").filter { it.server?.serverId == connection.serverId }
+        val byRemoteId = linked.filter { it.server?.id != null }.associateBy { requireNotNull(it.server?.id) }
+        val provisional = linked.filter { it.server?.id == null && it.pendingSync }.associateBy { "Nevumi pending ${it.id}" }
         for ((index, remote) in remotes.withIndex()) {
             val imported = store.transaction {
-                val id = store.list<Playlist>("playlists").firstOrNull {
-                    it.server?.serverId == connection.serverId && (it.server.id == remote.id ||
-                        (it.server.id == null && it.pendingSync && remote.owner == connection.username && remote.name == "Nevumi pending ${it.id}"))
-                }?.id ?: "server-playlist:${connection.serverId}:${remote.id}"
+                val id = (byRemoteId[remote.id] ?: provisional[remote.name]?.takeIf { remote.owner == connection.username })?.id
+                    ?: "server-playlist:${connection.serverId}:${remote.id}"
                 if (store.read<PlaylistRemoval>("playlist-removal:$id") != null) return@transaction null
                 val previous = playlists.get(id)
                 if (previous?.pendingSync == true) return@transaction null
-                val ids = remote.songIds.map { mapping[it] ?: if (changedOnly) return@transaction null
+                val ids = remote.songIds.map { mapping[it] ?: if (changedOnly) { waiting = true; return@transaction null }
                     else throw IllegalArgumentException("Refresh the server library before importing its playlists") }
                 val link = PlaylistServer(connection.serverId, remote.id, remote.name, remote.songIds, remote.owner,
                     readOnly = remote.readOnly || remote.owner != connection.username, baselineDescription = remote.description, coverArt = remote.coverArt,
@@ -231,6 +250,17 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
             }
             onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS, index + 1, remotes.size))
         }
+        return waiting
+    }
+
+    /**
+     * Brings the server's playlists up to date for automatic downloads. Only changed playlists are fetched; the whole catalogue is
+     * refreshed only when one of them holds songs the library does not know yet. Returns whether the library was refreshed.
+     */
+    suspend fun refreshPlaylists(connection: NavidromeClient, includeFilePaths: Boolean = false): Boolean {
+        if (!synchronization.withLock { importPlaylistsWaiting(connection, changedOnly = true) }) return false
+        refreshLibrary(connection, includeFilePaths)
+        return true
     }
 
     suspend fun synchronize() = synchronization.withLock {
@@ -296,7 +326,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 if (store.read<PlaylistRemoval>(key) == removal) store.database.records().delete(key)
             }
         }
-        for (playlist in playlists.all().filter { it.pendingSync && it.conflict == null && it.server?.serverId == connection.serverId }) attempt {
+        for (playlist in playlists.pendingSync().filter { it.conflict == null && it.server?.serverId == connection.serverId }) attempt {
             val songIds = serverSongIds(playlist, connection)
             var link = requireNotNull(playlist.server)
             if (link.id == null) {
@@ -384,9 +414,10 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
     }
 
     private suspend fun localTracks(remote: ServerPlaylist, connection: NavidromeClient): List<String> {
-        val tracks = library.tracks()
-        return remote.songIds.map { songId -> requireNotNull(tracks.firstOrNull { track ->
-            track.sources.any { it.kind == SourceKind.SERVER && it.location == songId && it.id.startsWith("server:${connection.serverId}:") }
-        }) { "Refresh the server library before resolving this playlist" }.id }
+        val prefix = "server:${connection.serverId}:"
+        val owners = HashMap<String, String>()
+        for (track in library.tracks()) for (source in track.sources)
+            if (source.kind == SourceKind.SERVER && source.id.startsWith(prefix)) owners.putIfAbsent(source.location, track.id)
+        return remote.songIds.map { songId -> requireNotNull(owners[songId]) { "Refresh the server library before resolving this playlist" } }
     }
 }

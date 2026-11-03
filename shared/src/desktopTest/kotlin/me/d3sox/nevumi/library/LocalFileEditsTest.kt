@@ -589,11 +589,12 @@ class LocalFileEditsTest {
                 }
             }
             // A clean folder emits changes only after an actual filesystem event.
-            val probe = music.resolve("watcher-ready.txt")
+            // Only music files and folders count as changes, so a folder is the probe.
+            val probe = music.resolve("watcher-ready")
             withTimeout(3_000) {
                 while (!ready.isCompleted) {
                     Files.deleteIfExists(probe)
-                    Files.writeString(probe, "ready")
+                    Files.createDirectory(probe)
                     delay(50)
                 }
             }

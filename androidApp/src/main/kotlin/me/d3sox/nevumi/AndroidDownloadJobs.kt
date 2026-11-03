@@ -36,7 +36,7 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
                 return@withLock
             }
             val networkType = if (settings.downloadOnMetered) JobInfo.NETWORK_TYPE_ANY else JobInfo.NETWORK_TYPE_UNMETERED
-            if (playlists.all().any { it.autoDownload }) {
+            if (playlists.anyAutoDownload()) {
                 val periodic = JobInfo.Builder(PLAYLIST_JOB, service)
                     .setRequiredNetworkType(networkType)
                     .setRequiresStorageNotLow(true)

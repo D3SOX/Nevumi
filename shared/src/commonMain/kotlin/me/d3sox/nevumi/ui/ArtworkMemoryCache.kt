@@ -8,7 +8,7 @@ import kotlinx.coroutines.sync.withLock
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
-/** Artwork paths include a content hash, so replacing a cover creates a new cache key. */
+/** Artwork paths include a content hash, so replacing a cover creates a new cache key and identical covers share one. */
 internal object ArtworkMemoryCache {
     private data class Key(val path: String, val size: Int)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2))
@@ -17,7 +17,9 @@ internal object ArtworkMemoryCache {
     private val pending = mutableMapOf<Key, Deferred<ImageBitmap?>>()
     private const val MAX_BYTES = 32L * 1024 * 1024
 
-    private fun key(path: String, size: Int) = Key(path, when {
+    // Stored covers end in their content hash, so songs sharing an album cover share one decoded image.
+    private val contentHash = Regex("([0-9a-f]{64})\\.image$")
+    private fun key(path: String, size: Int) = Key(contentHash.find(path)?.groupValues?.get(1) ?: path, when {
         size <= 128 -> 128
         size <= 256 -> 256
         size <= 512 -> 512

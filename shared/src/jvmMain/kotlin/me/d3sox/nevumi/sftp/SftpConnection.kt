@@ -178,6 +178,7 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
     override suspend fun fileName(trackId: String) = work.withLock { currentEditor().fileName(trackId) }
     override suspend fun readTags(trackId: String) = current { readTags(trackId) }
     override suspend fun linkTracks(keepId: String, otherId: String) = work.withLock { library.linkTracks(keepId, otherId) }
+    override suspend fun linkTracks(pairs: List<Pair<String, String>>) = work.withLock { library.linkTracks(pairs) }
     override suspend fun history() = store.list<LocalFileEdit>("file-edits").filter { it.providerId.startsWith("sftp:") }.sortedBy { it.createdAt }
     override suspend fun trimHistory(maxAgeMs: Long, maxBytes: Long) = work.withLock {
         val server = client() ?: return@withLock

@@ -28,7 +28,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var standby: PlaybackEngine? = null
     private var outgoing: PlaybackEngine? = null
     private var tracks = emptyList<PlayableTrack>()
-    private var preparedEntry: String? = null
+    private var prepared: PlayableTrack? = null
     private var selectedEntry: String? = null
     private data class PendingLoad(val track: PlayableTrack, val positionMs: Long)
     // Set by callers and cleared by the worker once the decoder reports the requested entry.
@@ -132,7 +132,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             cancelFade()
             this.tracks = tracks.toList()
             selectedEntry = tracks[startIndex].entryId
-            preparedEntry = null
+            prepared = null
             standby?.pause()
             applyRepeat()
             try {
@@ -152,7 +152,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         val index = currentIndex()
         if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
         else active.updateQueue(emptyList())
-        if (preparedEntry != nextTrack()?.entryId) { standby?.pause(); preparedEntry = null }
+        // A finished download or a new server route changes the next song's source, so the standby player loads it again.
+        if (prepared != nextTrack()) { standby?.pause(); prepared = null }
         applyRepeat()
     }
 
@@ -173,7 +174,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     override fun seek(positionMs: Long) = command {
         cancelFade()
         standby?.pause()
-        preparedEntry = null
+        prepared = null
         active.seek(positionMs)
     }
 
@@ -251,7 +252,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                 if (fadeElapsedMs >= fadeDurationMs || outgoing?.status?.value?.ended == true) cancelFade()
             } else {
                 val next = nextTrack()
-                if (next != null && current.durationMs > 0 && preparedEntry != next.entryId) {
+                if (next != null && current.durationMs > 0 && prepared != next) {
                     val waiting = standby ?: factory().also { standby = it }
                     waiting.setAudioLevelEnabled(audioLevelEnabled)
                     waiting.setVolume(0.0)
@@ -261,13 +262,13 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                     waiting.setReplayGain(replayGain)
                     waiting.setRepeat(RepeatMode.OFF)
                     waiting.load(next, play = false)
-                    preparedEntry = next.entryId
+                    prepared = next
                 }
                 val remaining = (current.durationMs - current.positionMs).coerceAtLeast(0) / speed
                 val waiting = standby
                 val fadeLimit = minOf(crossfadeMs.toDouble(), current.durationMs / speed / 2,
                     (waiting?.status?.value?.durationMs ?: 0) / speed / 2)
-                if (next != null && waiting != null && preparedEntry == next.entryId && requestedPlaying.value &&
+                if (next != null && waiting != null && prepared == next && requestedPlaying.value &&
                     waiting.status.value.entryId == next.entryId && waiting.status.value.durationMs > 0 &&
                     waiting.status.value.error == null && remaining <= fadeLimit &&
                     (current.playing || current.ended)) {
@@ -275,7 +276,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                     active = waiting
                     standby = null
                     selectedEntry = next.entryId
-                    preparedEntry = null
+                    prepared = null
                     fadeElapsedMs = 0.0
                     fadeDurationMs = remaining.coerceAtLeast(25.0)
                     active.play()
@@ -283,7 +284,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                 } else if (current.ended && next != null && requestedPlaying.value) {
                     active.load(next)
                     selectedEntry = next.entryId
-                    preparedEntry = null
+                    prepared = null
                 }
             }
         }
@@ -321,7 +322,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private fun cancelFade() {
         outgoing?.let { old -> old.pause(); old.setVolume(0.0); standby?.close(); standby = old }
         outgoing = null
-        preparedEntry = null
+        prepared = null
         fadeElapsedMs = 0.0
         active.setVolume(masterVolume)
     }

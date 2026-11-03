@@ -87,6 +87,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
     private val listens = me.d3sox.nevumi.storage.decodedRecords<Listen>(store.json)
     private val journal = me.d3sox.nevumi.storage.decodedRecords<ScrobbleSubmission>(store.json)
     private var eligibilityRules: Any? = null
+    private var examined: List<Any?>? = null
     /** Listens whose song had no source on a Navidrome profile's server yet; a later library refresh can link them. */
     private var unlinked = emptyList<Listen>()
     fun onPlayback(status: PlaybackStatus) { playback.value = status }
@@ -94,10 +95,10 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
     fun start() {
         if (worker != null || !supervisor.isActive) return
         scope.launch {
-            combine(store.database.records().observe("listens").distinctUntilChanged(),
-                store.database.records().observe("scrobbling-profiles").distinctUntilChanged(),
-                store.database.records().observe("servers").distinctUntilChanged(), network,
-                store.database.records().observe("settings").distinctUntilChanged()) { _, _, _, _, _ -> Unit }
+            // Only the revisions matter here; the worker reads what it needs, so the rows are not loaded just to wake it.
+            fun changes(kind: String) = store.database.records().observeRevision(kind).distinctUntilChanged()
+            combine(changes("listens"), changes("scrobbling-profiles"), changes("servers"), network,
+                changes("settings")) { _, _, _, _, _ -> Unit }
                 .collect { wake.trySend(Unit) }
         }
         scope.launch {
@@ -248,6 +249,13 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         // Thresholds and accounts decide eligibility, so a change to them re-examines the whole history; otherwise only listens
         // written since the previous pass can have become eligible.
         val rules = listOf(settings.scrobblePercent, settings.scrobbleMaxSeconds, profiles.map { it.id to it.enabledSince })
+        if (profiles.isEmpty()) { eligibilityRules = null; examined = null; return@withLock }
+        // The worker wakes every 30 seconds; without new listens, rules or (for deferred listens) library changes
+        // the previous pass already found everything, so the history is not read again.
+        val pass = listOf(rules, store.database.records().revision("listens"),
+            if (unlinked.isEmpty()) null else store.database.records().revision("tracks"))
+        if (pass == examined && rules == eligibilityRules) return@withLock
+        examined = null
         val update = decoding.withLock { listens.update(store.database.records().list("listens")) }
         // Deferred listens are taken from the current records, so a cleared or edited listen is not scrobbled as it was.
         val stored = if (unlinked.isEmpty()) emptyMap() else update.all.associateBy { it.id }
@@ -274,6 +282,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         }
         eligibilityRules = rules
         unlinked = skipped.values.toList()
+        examined = if (unlinked.isEmpty()) pass.take(2) + listOf(null) else pass
     }
 
     private suspend fun reportNowPlaying(): String? = sending.withLock {

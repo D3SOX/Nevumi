@@ -27,9 +27,11 @@ data class ServerMusicDirectory(val id: Long, val name: String)
 data class PendingServerUpload(val id: String, val configurationId: String, val trackId: String,
     val relativePath: String, val stagedPath: String, val sha256: String)
 
-internal suspend fun remapServerUploads(store: me.d3sox.nevumi.storage.MusicStore, from: String, to: String) {
-    for (upload in store.list<PendingServerUpload>("server-uploads").filter { it.trackId == from })
+internal suspend fun remapServerUploads(store: me.d3sox.nevumi.storage.MusicStore, mapping: Map<String, String>) {
+    if (mapping.isEmpty()) return
+    for (upload in store.list<PendingServerUpload>("server-uploads")) mapping[upload.trackId]?.let { to ->
         store.put("server-upload:${upload.id}", "server-uploads", upload.copy(trackId = to))
+    }
 }
 
 interface ServerFiles : MusicFileEdits {

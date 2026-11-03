@@ -17,6 +17,8 @@ import io.ktor.client.request.header
 import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitForm
+import io.ktor.http.Parameters
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.http.encodeURLPathPart
@@ -103,6 +105,8 @@ internal fun Throwable.isConnectionFailure(): Boolean = isUnreachableHost() || t
     "HttpRequestTimeoutException", "SocketException", "SSLException", "SSLHandshakeException", "SSLPeerUnverifiedException",
     "EOFException", "IOException", "StreamResetException", "ConnectionShutdownException")
 
+/** Requests with more parameters than this are sent as a form body instead of a URL; see NavidromeClient.request. */
+private const val LONG_REQUEST_PARAMETERS = 50
 private const val SLOW_SERVER = "The music server took too long to respond. Try again later."
 
 private fun Throwable.isTimeout(): Boolean = this::class.simpleName in setOf("SocketTimeoutException", "HttpRequestTimeoutException")
@@ -270,17 +274,32 @@ class NavidromeClient(
         playlist["coverArt"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }, playlist["created"]?.jsonPrimitive?.content.orEmpty(),
         playlist["readonly"]?.jsonPrimitive?.booleanOrNull == true)
 
-    private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject = serverRequest { timedRequest {
+    /**
+     * Requests with many song IDs, such as saving a large playlist, would exceed the URL limits of common reverse proxies,
+     * so they go as a form body (OpenSubsonic's formPost). A server that rejects the body gets the long URL instead.
+     */
+    private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject {
+        if (parameters.size <= LONG_REQUEST_PARAMETERS) return request(endpoint, parameters, form = false)
+        return try { request(endpoint, parameters, form = true) }
+        // A redirect is not followed for a form, and a server without formPost may reject it; the URL is followed and accepted.
+        catch (unsupported: NavidromeRequestException) {
+            if (unsupported.httpStatus in 300..499) request(endpoint, parameters, form = false) else throw unsupported
+        }
+        catch (missing: NavidromeException) { if (missing.code == 10) request(endpoint, parameters, form = false) else throw missing }
+    }
+
+    private suspend fun request(endpoint: String, parameters: List<Pair<String, String>>, form: Boolean): JsonObject = serverRequest { timedRequest {
         val salt = Uuid.random().toString()
-        val response = client().use { it.get("${baseUrl.trimEnd('/')}/rest/$endpoint.view") {
-            parameter("u", credentials.username)
-            parameter("t", passwordToken(credentials.password, salt))
-            parameter("s", salt)
-            parameter("v", "1.13.0")
-            parameter("c", "Nevumi")
-            parameter("f", "json")
-            parameters.forEach { (key, value) -> url.parameters.append(key, value) }
-        } }
+        val address = "${baseUrl.trimEnd('/')}/rest/$endpoint.view"
+        val access = listOf("u" to credentials.username, "t" to passwordToken(credentials.password, salt), "s" to salt,
+            "v" to "1.13.0", "c" to "Nevumi", "f" to "json")
+        // Access stays in the URL, so a server that ignores the form still answers in JSON, with error 10 for the missing fields.
+        val response = client().use { http ->
+            if (form) http.submitForm(address, Parameters.build { parameters.forEach { (key, value) -> append(key, value) } }) {
+                access.forEach { (key, value) -> url.parameters.append(key, value) }
+            }
+            else http.get(address) { (access + parameters).forEach { (key, value) -> url.parameters.append(key, value) } }
+        }
         checkResponse(response)
         val envelope = Json.parseToJsonElement(response.bodyAsText()).jsonObject.getValue("subsonic-response").jsonObject
         if (envelope["status"]?.jsonPrimitive?.content != "ok") {
@@ -334,8 +353,10 @@ class NavidromeClient(
         } }
     } }
 
+    // One salt per client keeps a song's URL stable, so queue updates can tell an unchanged stream from a new route.
+    private val streamSalt = Uuid.random().toString()
     fun streamUrl(songId: String): String {
-        val salt = Uuid.random().toString()
+        val salt = streamSalt
         return URLBuilder("${baseUrl.trimEnd('/')}/rest/stream.view").apply {
             parameters.append("u", credentials.username)
             parameters.append("t", passwordToken(credentials.password, salt))

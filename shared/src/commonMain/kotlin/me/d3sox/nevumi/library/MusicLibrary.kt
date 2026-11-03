@@ -137,29 +137,37 @@ class MusicLibrary(private val store: MusicStore) {
     private val decoded = kotlinx.coroutines.sync.Mutex()
     private var loaded = false
     private var cachedRevision: Long? = null
-    private var cachedRecords = emptyList<me.d3sox.nevumi.storage.StoredRecord>()
+    private var cachedDeletions: Long? = null
+    private val cachedByKey = HashMap<String, Track>()
     private var cachedTracks = emptyList<Track>()
     /** Every track, re-read only after a write to a track record; the revision check costs one indexed row. */
     private suspend fun loadTracks(): List<Track> = decoded.withLock { loadTracksLocked() }
+
+    /**
+     * After the first read only the records written since the cached revision are read and decoded, and the keys only when
+     * something was deleted. One favorite or rating used to reread and compare every track record of a large library.
+     */
     private suspend fun loadTracksLocked(): List<Track> {
         val revision = store.revision("tracks")
         if (loaded && revision == cachedRevision) return cachedTracks
-        val tracks = decodeTracksLocked(store.database.records().list("tracks"))
+        val deletions = store.revision("deleted:tracks")
+        val since = cachedRevision
+        val records = store.database.records()
+        val incremental = loaded && since != null
+        // A read canceled halfway leaves the cache partly updated, so it counts as unloaded until the read completes.
+        loaded = false
+        if (incremental && since != null) {
+            for (record in records.changedSince("tracks", since)) cachedByKey[record.key] = store.json.decodeFromString<Track>(record.value)
+            if (deletions != cachedDeletions) cachedByKey.keys.retainAll(records.keys("tracks").toHashSet())
+        } else {
+            cachedByKey.clear()
+            for (record in records.list("tracks")) cachedByKey[record.key] = store.json.decodeFromString<Track>(record.value)
+        }
+        cachedTracks = filterTracks(cachedByKey.values.toList(), LibraryQuery())
         cachedRevision = revision
+        cachedDeletions = deletions
         // A transaction may roll back after this read, so its result is checked against the store again outside it.
         loaded = !store.inTransaction()
-        return tracks
-    }
-    private fun decodeTracksLocked(records: List<me.d3sox.nevumi.storage.StoredRecord>): List<Track> {
-        if (records != cachedRecords) {
-            val previous = cachedRecords.associateBy { it.key }
-            val tracks = cachedTracks.associateBy { "track:${it.id}" }
-            cachedTracks = filterTracks(records.map { record ->
-                if (previous[record.key] == record) requireNotNull(tracks[record.key])
-                else store.json.decodeFromString<Track>(record.value)
-            }, LibraryQuery())
-            cachedRecords = records
-        }
         return cachedTracks
     }
     internal suspend fun localFolderRules(): LocalFolderRules {
@@ -301,14 +309,51 @@ class MusicLibrary(private val store: MusicStore) {
     }
 
     suspend fun findTrack(id: String): Track? = store.read("track:$id")
+    /** Changes with every song write, so callers can skip work over an unchanged library. */
+    internal suspend fun revision(): Long = store.revision("tracks")
     internal suspend fun trackForSource(sourceId: String): Track? =
         store.read<SourceOwner>("source-owner:$sourceId")?.let { findTrack(it.trackId) }
 
     suspend fun linkTracks(keepId: String, otherId: String): Track = store.transaction {
         require(keepId != otherId) { "Choose another song to link" }
+        merge(keepId, otherId, store.list("file-edits")).also { remapReferences(mapOf(otherId to keepId)) }
+    }
+
+    /**
+     * Links (keep, other) pairs, such as local files and their uploaded server copies. Queues, playlists, the listening history
+     * and the other collections are rewritten once per batch instead of once per pair. Pairs whose songs are gone, or busy
+     * with a download or a file edit, are skipped for a later pass.
+     */
+    internal suspend fun linkTracks(pairs: List<Pair<String, String>>): List<Track> {
+        val linked = mutableListOf<Track>()
+        for (batch in pairs.chunked(200)) store.transaction {
+            val edits = store.list<LocalFileEdit>("file-edits")
+            val mapping = LinkedHashMap<String, String>()
+            for ((keepId, otherId) in batch) {
+                // A song merged away, or kept, earlier in the batch would leave references pointing at a removed song.
+                if (keepId == otherId || keepId in mapping || otherId in mapping || otherId in mapping.values ||
+                    findTrack(keepId) == null || findTrack(otherId) == null) continue
+                linked += try { merge(keepId, otherId, edits) } catch (_: IllegalStateException) { continue }
+                mapping[otherId] = keepId
+            }
+            remapReferences(mapping)
+        }
+        return linked
+    }
+
+    private suspend fun remapReferences(mapping: Map<String, String>) {
+        remapQueueTracks(store, mapping)
+        remapPlaylistTracks(store, mapping)
+        remapListeningHistory(store, mapping)
+        remapServerUploads(store, mapping)
+        me.d3sox.nevumi.sync.remapPairedTracks(store, mapping)
+    }
+
+    /** Merges [otherId] into [keepId]; the caller remaps the references to [otherId] in the same transaction. */
+    private suspend fun merge(keepId: String, otherId: String, edits: List<LocalFileEdit>): Track {
         val keep = requireNotNull(findTrack(keepId)) { "Track is missing" }
         val other = requireNotNull(findTrack(otherId)) { "Track is missing" }
-        val fileEdits = store.list<LocalFileEdit>("file-edits").filter { it.trackId == keepId || it.trackId == otherId }
+        val fileEdits = edits.filter { it.trackId == keepId || it.trackId == otherId }
         check(fileEdits.none { it.writing }) { "Finish or recover the file edit before linking these songs" }
         val downloaded = remapDownloadedTrack(store, otherId, keepId)
         val sources = (keep.sources + other.sources).distinctBy { it.id }
@@ -321,16 +366,11 @@ class MusicLibrary(private val store: MusicStore) {
         sources.filter { it.kind == SourceKind.DOWNLOAD && it.id != "download:$keepId" }.forEach {
             store.database.records().delete("source-owner:${it.id}")
         }
-        remapQueueTracks(store, otherId, keepId)
-        remapPlaylistTracks(store, otherId, keepId)
-        remapListeningHistory(store, otherId, keepId)
-        remapServerUploads(store, otherId, keepId)
-        me.d3sox.nevumi.sync.remapPairedTracks(store, otherId, keepId)
         fileEdits.filter { it.trackId == otherId }.forEach { edit ->
             store.put("file-edit:${edit.id}", "file-edits", edit.copy(trackId = keepId))
         }
         store.database.records().delete("track:$otherId")
-        linked
+        return linked
     }
 
     internal suspend fun reserveLocalMove(trackId: String, location: String) = store.transaction {

@@ -53,9 +53,10 @@ class PlaybackController internal constructor(private val context: ControllerCon
     private data class TransportIntent(val revision: Long = 0, val play: Boolean = false)
     private val transportIntent = MutableStateFlow(TransportIntent())
     private data class IncomingPlayback(val peerId: String, val id: String, val previous: PlaybackTransfer,
-        val preparedQueue: QueueSnapshot, val revision: Long)
+        val preparedQueue: QueueSnapshot, val revision: Long, val activated: Boolean = false)
     private var incomingPlayback: IncomingPlayback? = null
     private var cachedEntryId: String? = null
+    private var observedStatus: PlaybackStatus? = null
     private val clock = kotlin.time.TimeSource.Monotonic.markNow()
     // Starts one interval in the past so the first checkpoint is not delayed; Long.MIN_VALUE would overflow the subtraction.
     private var positionCheckpointAt = -POSITION_CHECKPOINT_MS
@@ -71,7 +72,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
             override suspend fun receive(peerId: String, playback: PlaybackTransfer) = context.operations.withLock {
                 require(playback.id.isNotBlank() && playback.queue.entries.isNotEmpty() && playback.queue.currentIndex >= 0 &&
                     playback.queue.entries.map { it.id }.distinct().size == playback.queue.entries.size && playback.queue.positionMs >= 0 &&
-                    playback.speed.isFinite() && playback.speed in .25..4.0 && playback.pitch.isFinite() && playback.pitch in .25..4.0) { "Invalid playback transfer" }
+                    playback.speed.isFinite() && playback.speed in 0.5..2.0 && playback.pitch.isFinite() && playback.pitch in 0.5..2.0) { "Invalid playback transfer" }
                 val playableIds = playableQueue(playback.queue, checkAllSources = true).map { it.entryId }.toSet()
                 require(playback.queue.entries.withIndex().all { (index, entry) -> entry.id in playableIds ||
                     (entry.id != playback.queue.currentEntryId && (index < playback.queue.currentIndex ||
@@ -88,6 +89,17 @@ class PlaybackController internal constructor(private val context: ControllerCon
                     restoreTransferredPlayback(previous)
                     throw error
                 }
+                // A sender that crashes or loses the network before activating cannot cancel, so the prepared queue expires.
+                context.scope.launch {
+                    delay(TRANSFER_ACTIVATION_TIMEOUT_MS)
+                    context.operations.withLock {
+                        val incoming = incomingPlayback
+                        if (incoming != null && incoming.peerId == peerId && incoming.id == playback.id && !incoming.activated) try {
+                            if (queue.snapshot().copy(positionMs = incoming.preparedQueue.positionMs) == incoming.preparedQueue &&
+                                transportIntent.value.revision == incoming.revision) restoreTransferredPlayback(incoming.previous)
+                        } finally { incomingPlayback = null }
+                    }
+                }
                 prepared.skippedSongs
             }
             override suspend fun activate(peerId: String, transferId: String, positionMs: Long, playWhenReady: Boolean) = context.operations.withLock {
@@ -100,7 +112,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 queue.setPosition(positionMs)
                 // This holds the operation lock, so a reload for an errored or ended player runs here instead of waiting for it.
                 if (applyTransport(playWhenReady) && transportIntent.value.play) resumePlayback()
-                incomingPlayback = incoming.copy(revision = transportIntent.value.revision)
+                incomingPlayback = incoming.copy(revision = transportIntent.value.revision, activated = true)
                 context.update { it.copy(queue = it.queue.copy(positionMs = positionMs), playback = engine.status.value) }
             }
             override suspend fun release(peerId: String, transferId: String): PlaybackTransfer = context.operations.withLock {
@@ -123,12 +135,19 @@ class PlaybackController internal constructor(private val context: ControllerCon
             // One failed update must not stop the collector, which keeps the player, the history and scrobbling current.
             try { context.operations.withLock {
                 val playback = engine.status.value
+                val previous = observedStatus
+                observedStatus = playback
                 var snapshot = queue.snapshot()
+                // A changed engine value that the queue does not hold came from the engine itself (a finished repeat play) or
+                // another controller (a headset or watch). An unchanged one may only lag behind a request, so it is left alone.
+                val repeatChanged = previous != null && (previous.repeatMode != playback.repeatMode || previous.repeatPlays != playback.repeatPlays)
                 if (snapshot.indexOf(playback.entryId) >= 0) {
-                    if (snapshot.repeatPlays != null && snapshot.currentEntryId == playback.entryId &&
-                        (snapshot.repeatMode != playback.repeatMode || snapshot.repeatPlays != playback.repeatPlays))
-                        queue.setRepeat(playback.repeatMode, playback.repeatPlays)
                     if (snapshot.currentEntryId != playback.entryId) queue.select(requireNotNull(playback.entryId))
+                    // Also when the song changed with it, as when a finite repeat ends or a controller skips right after; selecting
+                    // first keeps the selection from resetting what was adopted.
+                    val selected = queue.snapshot()
+                    if (repeatChanged && (selected.repeatMode != playback.repeatMode || selected.repeatPlays != playback.repeatPlays))
+                        queue.setRepeat(playback.repeatMode, playback.repeatPlays)
                     // Every write wakes every database observer, so a playing song checkpoints its position only every
                     // half minute; a pause or a song change saves it at once, and so does closing the app.
                     val now = clock.elapsedNow().inWholeMilliseconds
@@ -138,6 +157,15 @@ class PlaybackController internal constructor(private val context: ControllerCon
                         positionCheckpointAt = now
                     }
                     snapshot = queue.snapshot()
+                }
+                // The same applies to speed and pitch, which a headset or watch can change; Android reports them as floats.
+                if (preferences != null && previous != null && (previous.speed != playback.speed || previous.pitch != playback.pitch)) {
+                    fun rounded(value: Double) = kotlin.math.round(value * 100) / 100
+                    val settings = context.state.value.preferences
+                    val speed = rounded(playback.speed)
+                    val pitch = rounded(playback.pitch)
+                    if (speed in 0.5..2.0 && pitch in 0.5..2.0 && (abs(settings.speed - speed) > 0.001 || abs(settings.pitch - pitch) > 0.001))
+                        preferences.update { it.copy(speed = speed, pitch = pitch) }.let { saved -> context.update { it.copy(preferences = saved) } }
                 }
                 var recovered = false
                 val failedEntry = playback.entryId
@@ -249,7 +277,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
             // Without a current entry no file access is checked here; loading the chosen song still verifies its file.
             val unchecked = snapshot.copy(currentEntryId = null)
             val lookup = SourceLookup(library.tracks().associateBy { it.id })
-            suspend fun playable(index: Int) = playableQueue(unchecked, listOf(snapshot.entries[index]), lookup = lookup).isNotEmpty()
+            // Pruned once here; going through playableQueue() per candidate rebuilt the whole queue's ID set each time.
+            lastResolved.keys.retainAll(snapshot.entries.mapTo(mutableSetOf()) { it.id } + listOfNotNull(engine.status.value.entryId))
+            suspend fun playable(index: Int) = playable(snapshot.entries[index], unchecked, false, lookup) != null
             var destination = step(snapshot.currentIndex)
             var passed = 0
             while (destination in snapshot.entries.indices && !playable(destination) && passed < snapshot.entries.size) {
@@ -291,8 +321,10 @@ class PlaybackController internal constructor(private val context: ControllerCon
         val transfer = context.operations.withLock { capturePlayback(Uuid.random().toString()).also {
             require(it.queue.currentIndex >= 0) { "Choose a song first" }
         } }
-        val skippedSongs = devices.preparePlayback(deviceId, transfer)
+        val skippedSongs: Int
         try {
+            // Inside the cleanup: a lost reply still leaves the other device holding the prepared queue.
+            skippedSongs = devices.preparePlayback(deviceId, transfer)
             val position = context.operations.withLock {
                 require(queue.snapshot().copy(positionMs = transfer.queue.positionMs, selectedSavedQueueId = null) == transfer.queue && transportIntent.value.revision == revision) {
                     "Playback changed while connecting. The transfer was canceled."
@@ -373,6 +405,18 @@ class PlaybackController internal constructor(private val context: ControllerCon
         }
     }
 
+    /**
+     * Fails like [loadSnapshot] would when [trackId] cannot play, before the caller replaces or moves the stored queue,
+     * so a missing file or an unreachable server leaves the queue and the playing song as they were.
+     */
+    internal suspend fun requirePlayable(trackId: String) {
+        val track = requireNotNull(library.findTrack(trackId)) { "Track is missing" }
+        val probe = QueueEntry(Uuid.random().toString(), trackId)
+        requireNotNull(resolve(track, probe, QueueSnapshot(listOf(probe), probe.id), false, SourceLookup(mapOf(trackId to track)))) {
+            "This track has no available audio source"
+        }
+    }
+
     internal suspend fun loadSnapshot(snapshot: QueueSnapshot, play: Boolean = true) {
         val intention = transportIntent.value
         val playable = playableQueue(snapshot)
@@ -447,6 +491,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
 
     private companion object {
         const val POSITION_CHECKPOINT_MS = 30_000L
+        const val TRANSFER_ACTIVATION_TIMEOUT_MS = 60_000L
     }
 }
 

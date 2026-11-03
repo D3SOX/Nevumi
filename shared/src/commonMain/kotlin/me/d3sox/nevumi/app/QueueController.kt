@@ -67,7 +67,13 @@ class QueueController internal constructor(private val context: ControllerContex
                     if (playback.queueLoaded) {
                         if (snapshot.currentIndex >= 0 && snapshot.currentEntryId != engine.status.value.entryId)
                             playback.loadSnapshot(snapshot, engine.status.value.playWhenReady)
-                        else engine.updateQueue(playback.playableQueue(snapshot))
+                        else {
+                            engine.updateQueue(playback.playableQueue(snapshot))
+                            // Another device may have changed repeat for this queue without changing the song.
+                            val status = engine.status.value
+                            if (status.repeatMode != snapshot.repeatMode || status.repeatPlays != snapshot.repeatPlays)
+                                engine.setRepeat(snapshot.repeatMode, snapshot.repeatPlays)
+                        }
                     }
                     context.update { it.copy(savedQueues = saved, queue = snapshot) }
                 }
@@ -82,13 +88,14 @@ class QueueController internal constructor(private val context: ControllerContex
                 playTrack(trackId, contextTrackIds, contextIndex, contextName, shuffleContext, origin, preserveManualQueue, confirmed = true)
             }) return@action
         context.update { it.copy(playbackConfirmation = null) }
-        playback.discardIncomingPlayback()
         playback.failedSources.clear()
         context.update { it.copy(error = null) }
         val available = context.state.value.tracks.associateBy { it.id }
         val tracks = contextTrackIds?.mapNotNull { available[it] } ?: context.state.value.tracks
         val index = contextIndex ?: tracks.indexOfFirst { it.id == trackId }
         require(tracks.getOrNull(index)?.id == trackId) { "Track is missing" }
+        playback.requirePlayable(trackId)
+        playback.discardIncomingPlayback()
         val currentQueue = queue.snapshot()
         persistPlaybackPosition()
         val manualQueue = currentQueue.upNext.isNotEmpty() || currentQueue.entries.getOrNull(currentQueue.currentIndex)?.section == QueueSection.MANUAL
@@ -101,6 +108,7 @@ class QueueController internal constructor(private val context: ControllerContex
     }
 
     fun selectQueueEntry(entryId: String) = context.action {
+        queue.snapshot().entries.firstOrNull { it.id == entryId }?.let { playback.requirePlayable(it.trackId) }
         queue.select(entryId)
         val snapshot = queue.snapshot()
         playback.loadSnapshot(snapshot)
@@ -131,6 +139,7 @@ class QueueController internal constructor(private val context: ControllerContex
         context.update { it.copy(queue = it.queue.copy(selectedSavedQueueId = null)) }
     }
     fun startEmptyQueue() = context.action {
+        playback.discardIncomingPlayback()
         persistPlaybackPosition()
         queue.startEmpty()
         val snapshot = queue.snapshot()
@@ -186,6 +195,8 @@ class QueueController internal constructor(private val context: ControllerContex
         if (saved.snapshot.currentIndex >= 0) require(playback.playableQueue(saved.snapshot, listOf(saved.snapshot.entries[saved.snapshot.currentIndex])).isNotEmpty()) {
             "This saved queue's current track has no available audio source"
         }
+        // Another queue now plays here, so the sending device can no longer take back what it transferred.
+        playback.discardIncomingPlayback()
         queue.restoreSaved(id)
         val snapshot = queue.snapshot()
         context.update { it.copy(queue = snapshot) }

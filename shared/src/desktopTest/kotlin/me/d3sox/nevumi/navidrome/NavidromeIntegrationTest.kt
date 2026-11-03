@@ -82,6 +82,33 @@ class NavidromeIntegrationTest {
     }
 
     @Test
+    fun aPlaylistTooLongForAUrlIsSavedAsAFormOnTheRealServer() = runBlocking {
+        val methods = java.util.Collections.synchronizedList(mutableListOf<String>())
+        // Recorded in the engine, which the client's per-request copies of this HttpClient share.
+        val http = HttpClient(OkHttp) { engine { addInterceptor { chain ->
+            methods += "${chain.request().method} ${chain.request().url.encodedPath.substringAfterLast('/')}"
+            chain.proceed(chain.request())
+        } } }
+        val client = NavidromeClient(http,
+            System.getenv("MUSICPLAYER_TEST_NAVIDROME_URL") ?: "http://127.0.0.1:14533",
+            ServerCredentials("fixture", "fixture-password"))
+        var playlistId: String? = null
+        try {
+            val ids = client.songs().map { it.id }
+            // Sixty entries pass the form threshold; behind a reverse proxy a thousand would no longer fit in a URL.
+            val long = List(60) { ids[it % ids.size] }
+            val created = client.savePlaylist("Long ${Uuid.random()}", long)
+            playlistId = created.id
+            assertEquals(long, client.playlists().single { it.id == created.id }.songIds)
+            assertEquals(true, "POST createPlaylist.view" in methods, methods.toString())
+            assertEquals(false, "GET createPlaylist.view" in methods, "The server must accept the form without the URL fallback: $methods")
+        } finally {
+            playlistId?.let { client.deletePlaylist(it) }
+            http.close()
+        }
+    }
+
+    @Test
     fun aServerPlaylistCanBeCreatedEditedAndDeletedWithoutLosingRepeatedSongs() = runBlocking {
         val http = HttpClient(OkHttp)
         val client = NavidromeClient(http,
