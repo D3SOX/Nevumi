@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -172,11 +173,14 @@ class ServerController internal constructor(private val context: ControllerConte
         context.update { it.copy(loading = true, error = null, serverRefresh = null) }
         val connection = requireNotNull(navidrome) { "Server setup is unavailable" }
         val profile = connection.profile() ?: return@action context.operations.withLock { loader.refresh() }
+        // A running refresh holds a client of this connection and would mark its songs available again after this.
+        serverRefreshJob.value?.cancelAndJoin()
         if (serverFiles?.configuration()?.serverId == profile.serverId) serverFiles.disconnect()
+        // Disconnecting first lets background imports see that the connection is gone before their next batch.
+        connection.disconnect()
         library.setSourceAvailability(library.tracks().flatMap { track -> track.sources.filter {
             it.kind == SourceKind.SERVER && it.id.startsWith("server:${profile.serverId}:")
         }.map { it.id } }.toSet(), false)
-        connection.disconnect()
         context.operations.withLock {
             if (playback.queueLoaded) engine.updateQueue(playback.playableQueue(queue.snapshot()))
             loader.refresh()

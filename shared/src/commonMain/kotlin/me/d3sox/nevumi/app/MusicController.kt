@@ -168,7 +168,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
             recover { historyController.loadPendingLastFmAuthorization() }
             context.operations.withLock {
                 recover { playbackController.applyPreferences() }
-                playbackController.loadPersistedQueue()
+                // An unavailable last song must not stop the rest of startup; the next play retries the load.
+                recover { playbackController.loadPersistedQueue() }
                 loader.refreshLibrary()
             }
             loader.refreshDetails(loading = false)
@@ -186,6 +187,9 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun updatePreferences(change: (MusicSettings) -> MusicSettings) = libraryController.updatePreferences(change)
     fun rememberLibraryTab(tab: me.d3sox.nevumi.library.LibraryTab) = libraryController.rememberLibraryTab(tab)
     fun rememberLibraryPosition(key: String, position: me.d3sox.nevumi.settings.LibraryPosition) = libraryController.rememberLibraryPosition(key, position)
+    fun libraryPosition(key: String): me.d3sox.nevumi.settings.LibraryPosition? = libraryController.libraryPosition(key)
+    val libraryPositions: Map<String, me.d3sox.nevumi.settings.LibraryPosition> get() = libraryController.libraryPositions
+    internal suspend fun forgetLibraryPositions() = libraryController.forgetLibraryPositions()
     fun setFavorite(trackId: String, favorite: Boolean) = libraryController.setFavorite(trackId, favorite)
     fun setFavorite(trackIds: List<String>, favorite: Boolean) = libraryController.setFavorite(trackIds, favorite)
     fun setRating(trackId: String, rating: Int) = libraryController.setRating(trackId, rating)

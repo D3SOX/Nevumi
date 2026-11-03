@@ -49,10 +49,12 @@ internal class ControllerContext {
     fun confirm(message: StringResource, destination: ActionDestination? = null, serializedUndo: Boolean = true,
         undo: (suspend () -> Unit)? = null, redo: (suspend () -> Unit)? = null, isRedo: Boolean = false,
         redoCreatesNotice: Boolean = false, arguments: List<Any> = emptyList()) {
-        var used = false
+        // Claimed before the change runs, so a second tap during an unserialized undo cannot start it again.
+        // A successful change keeps the claim held for good.
+        val used = Mutex()
         val reverse: (() -> Job)? = undo?.let { change -> { action(serialized = serializedUndo) {
-            if (!used) {
-                change(); used = true
+            if (used.tryLock()) {
+                try { change() } catch (error: Exception) { used.unlock(); throw error }
                 if (!(isRedo && redoCreatesNotice)) confirm(if (isRedo) Res.string.notice_redone else Res.string.notice_undone, destination,
                     serializedUndo, undo = redo, redo = undo, isRedo = !isRedo, redoCreatesNotice = redoCreatesNotice)
             }

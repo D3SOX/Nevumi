@@ -124,8 +124,8 @@ class LinuxMediaSession(private val controller: MusicController, address: String
     override fun getObjectPath() = "/org/mpris/MediaPlayer2"
     override fun Next() { controller.skip(1) }
     override fun Previous() {
-        val queue = controller.state.value.queue
-        if (queue.currentIndex > 0 || (queue.currentIndex >= 0 && queue.repeatMode == RepeatMode.ALL)) controller.skip(-1)
+        // On the first song this still restarts it after three seconds, like the in-app button.
+        if (controller.state.value.queue.currentIndex >= 0) controller.skip(-1)
     }
     override fun Pause() { controller.pause() }
     override fun Play() { stopped.value = false; controller.play() }

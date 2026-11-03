@@ -119,13 +119,15 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         val identity = SyncTls.load(vault, id).also { tls = it }
         val context = identity.context { pin -> state.value.peers.any { it.certificateSha256 == pin } ||
             offer.get()?.let { it.expiresAt > clock() } == true }
-        val listener = (context.serverSocketFactory.createServerSocket() as SSLServerSocket).apply {
+        fun bound(port: Int) = (context.serverSocketFactory.createServerSocket() as SSLServerSocket).apply {
             reuseAddress = true
             enabledProtocols = supportedProtocols.filter { it == "TLSv1.3" || it == "TLSv1.2" }.toTypedArray()
             needClientAuth = true
+            try { bind(InetSocketAddress(port)) } catch (error: Exception) { close(); throw error }
         }
-        try { listener.bind(InetSocketAddress(store.read<Int>("sync:listening-port") ?: 0)) }
-        catch (error: Exception) { listener.close(); throw error }
+        val saved = store.read<Int>("sync:listening-port") ?: 0
+        // Another program may hold the saved port after a restart; peers learn the new one on the next exchange.
+        val listener = try { bound(saved) } catch (error: java.net.BindException) { if (saved == 0) throw error; bound(0) }
         server = listener
         store.put("sync:listening-port", "sync-settings", listener.localPort)
         mutableState.update { it.copy(listeningPort = listener.localPort) }
