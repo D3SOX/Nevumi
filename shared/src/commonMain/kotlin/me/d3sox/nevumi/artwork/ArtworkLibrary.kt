@@ -84,20 +84,24 @@ class ArtworkLibrary(private val directory: String) {
         val images = names.filterTo(HashSet()) { it.endsWith(".image") }
         val paths = HashMap<String, String>()
         val used = HashSet<String>()
+        // Some covers, such as custom playlist covers, cannot be downloaded again, so nothing is swept after a failed read.
+        var complete = true
         for (name in names) {
             if (!name.endsWith(".current")) continue
             val key = name.removeSuffix(".current")
-            val hash = runCatching { fs.read(root / name) { readUtf8() } }.getOrNull() ?: continue
+            val hash = runCatching { fs.read(root / name) { readUtf8() } }.getOrNull()
+            if (hash == null) { complete = false; continue }
             if (!hash.matches(hashPattern)) continue
             val shared = "$hash.image"
             val legacy = "$key-$hash.image"
-            if (legacy in images) {
-                runCatching { if (shared in images) fs.delete(root / legacy) else fs.atomicMove(root / legacy, root / shared) }
-                    .onSuccess { images -= legacy; images += shared }
-            }
-            if (shared in images) { paths[key] = (root / shared).toString(); used += shared }
+            val moved = legacy !in images ||
+                runCatching { if (shared in images) fs.delete(root / legacy) else fs.atomicMove(root / legacy, root / shared) }.isSuccess
+                    .also { if (it) { images -= legacy; images += shared } }
+            // A copy that could not move keeps serving its song under the old name.
+            val current = if (moved) shared else legacy
+            if (current in images) { paths[key] = (root / current).toString(); used += current }
         }
-        for (name in images) if (name !in used) runCatching { fs.delete(root / name) }
+        if (complete) for (name in images) if (name !in used) runCatching { fs.delete(root / name) }
         return paths
     }
 

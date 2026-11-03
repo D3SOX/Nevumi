@@ -186,8 +186,8 @@ class LinuxMediaSession(private val controller: MusicController, address: String
             "MaximumRate" to Variant(2.0),
             "CanGoNext" to Variant(state.queue.currentIndex >= 0 &&
                 (state.queue.currentIndex < state.queue.entries.lastIndex || state.queue.repeatMode == RepeatMode.ALL)),
-            "CanGoPrevious" to Variant(state.queue.currentIndex > 0 ||
-                (state.queue.currentIndex >= 0 && state.queue.repeatMode == RepeatMode.ALL)),
+            // Previous restarts the first song after three seconds, so it always has an effect while a song is current.
+            "CanGoPrevious" to Variant(state.queue.currentIndex >= 0),
             "CanPlay" to Variant(track != null),
             "CanPause" to Variant(track != null),
             "CanSeek" to Variant(track != null && state.playback.durationMs > 0),

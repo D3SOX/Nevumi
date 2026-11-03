@@ -88,7 +88,6 @@ class QueueController internal constructor(private val context: ControllerContex
                 playTrack(trackId, contextTrackIds, contextIndex, contextName, shuffleContext, origin, preserveManualQueue, confirmed = true)
             }) return@action
         context.update { it.copy(playbackConfirmation = null) }
-        playback.discardIncomingPlayback()
         playback.failedSources.clear()
         context.update { it.copy(error = null) }
         val available = context.state.value.tracks.associateBy { it.id }
@@ -96,6 +95,7 @@ class QueueController internal constructor(private val context: ControllerContex
         val index = contextIndex ?: tracks.indexOfFirst { it.id == trackId }
         require(tracks.getOrNull(index)?.id == trackId) { "Track is missing" }
         playback.requirePlayable(trackId)
+        playback.discardIncomingPlayback()
         val currentQueue = queue.snapshot()
         persistPlaybackPosition()
         val manualQueue = currentQueue.upNext.isNotEmpty() || currentQueue.entries.getOrNull(currentQueue.currentIndex)?.section == QueueSection.MANUAL

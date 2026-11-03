@@ -281,8 +281,9 @@ class NavidromeClient(
     private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject {
         if (parameters.size <= LONG_REQUEST_PARAMETERS) return request(endpoint, parameters, form = false)
         return try { request(endpoint, parameters, form = true) }
+        // A redirect is not followed for a form, and a server without formPost may reject it; the URL is followed and accepted.
         catch (unsupported: NavidromeRequestException) {
-            if (unsupported.httpStatus in 400..499) request(endpoint, parameters, form = false) else throw unsupported
+            if (unsupported.httpStatus in 300..499) request(endpoint, parameters, form = false) else throw unsupported
         }
         catch (missing: NavidromeException) { if (missing.code == 10) request(endpoint, parameters, form = false) else throw missing }
     }
@@ -290,11 +291,14 @@ class NavidromeClient(
     private suspend fun request(endpoint: String, parameters: List<Pair<String, String>>, form: Boolean): JsonObject = serverRequest { timedRequest {
         val salt = Uuid.random().toString()
         val address = "${baseUrl.trimEnd('/')}/rest/$endpoint.view"
-        val all = listOf("u" to credentials.username, "t" to passwordToken(credentials.password, salt), "s" to salt,
-            "v" to "1.13.0", "c" to "Nevumi", "f" to "json") + parameters
+        val access = listOf("u" to credentials.username, "t" to passwordToken(credentials.password, salt), "s" to salt,
+            "v" to "1.13.0", "c" to "Nevumi", "f" to "json")
+        // Access stays in the URL, so a server that ignores the form still answers in JSON, with error 10 for the missing fields.
         val response = client().use { http ->
-            if (form) http.submitForm(address, Parameters.build { all.forEach { (key, value) -> append(key, value) } })
-            else http.get(address) { all.forEach { (key, value) -> url.parameters.append(key, value) } }
+            if (form) http.submitForm(address, Parameters.build { parameters.forEach { (key, value) -> append(key, value) } }) {
+                access.forEach { (key, value) -> url.parameters.append(key, value) }
+            }
+            else http.get(address) { (access + parameters).forEach { (key, value) -> url.parameters.append(key, value) } }
         }
         checkResponse(response)
         val envelope = Json.parseToJsonElement(response.bodyAsText()).jsonObject.getValue("subsonic-response").jsonObject

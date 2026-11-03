@@ -94,11 +94,10 @@ class PlaybackController internal constructor(private val context: ControllerCon
                     delay(TRANSFER_ACTIVATION_TIMEOUT_MS)
                     context.operations.withLock {
                         val incoming = incomingPlayback
-                        if (incoming != null && incoming.peerId == peerId && incoming.id == playback.id && !incoming.activated) {
+                        if (incoming != null && incoming.peerId == peerId && incoming.id == playback.id && !incoming.activated) try {
                             if (queue.snapshot().copy(positionMs = incoming.preparedQueue.positionMs) == incoming.preparedQueue &&
                                 transportIntent.value.revision == incoming.revision) restoreTransferredPlayback(incoming.previous)
-                            incomingPlayback = null
-                        }
+                        } finally { incomingPlayback = null }
                     }
                 }
                 prepared.skippedSongs

@@ -344,7 +344,7 @@ class LinuxMediaSessionTest {
             assertEquals(false, Files.readString(output).contains("'Position':"))
             val player = call("org.freedesktop.DBus.Properties.GetAll", "org.mpris.MediaPlayer2.Player")
             assertTrue(player.contains("'CanGoNext': <false>"), player)
-            assertTrue(player.contains("'CanGoPrevious': <false>"), player)
+            assertTrue(player.contains("'CanGoPrevious': <true>"), player)
             assertTrue(player.contains("'CanSeek': <true>"), player)
             assertTrue(player.contains("'xesam:artist': <['Fixture Artist']>"), player)
             assertTrue(player.contains("'xesam:album': <'Fixture Album'>"), player)
