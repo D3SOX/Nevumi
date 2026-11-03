@@ -63,20 +63,42 @@ class ArtworkLibrary(private val directory: String) {
      */
     private suspend fun <T> withIndex(lookup: (Map<String, String>) -> T): T {
         val index = storedPaths()
-        return index.lock.withLock { lookup(index.paths ?: withContext(Dispatchers.IO) {
-            val fs = FileSystem.SYSTEM
-            val root = directory.toPath()
-            val names = fs.listOrNull(root)?.map { it.name }.orEmpty()
-            val images = names.filterTo(HashSet()) { it.endsWith(".image") }
-            val paths = HashMap<String, String>()
-            for (name in names) {
-                if (!name.endsWith(".current")) continue
-                val key = name.removeSuffix(".current")
-                val hash = runCatching { fs.read(root / name) { readUtf8() } }.getOrNull() ?: continue
-                if (hash.matches(hashPattern) && "$key-$hash.image" in images) paths[key] = (root / "$key-$hash.image").toString()
+        // Loading moves and removes image files, so it holds the write lock like any other writer, which always takes it first.
+        if (index.lock.withLock { index.paths == null }) index.writes.withLock {
+            if (index.lock.withLock { index.paths == null }) {
+                val paths = withContext(Dispatchers.IO) { loadIndex() }
+                index.lock.withLock { index.paths = paths }
             }
-            paths
-        }.also { index.paths = it }) }
+        }
+        return index.lock.withLock { lookup(requireNotNull(index.paths)) }
+    }
+
+    /**
+     * Reads every song's current image. Songs that share a cover share one `<hash>.image` file. Copies stored per song by
+     * earlier versions (`<song>-<hash>.image`) move to the shared name, and images no song uses any more are deleted.
+     */
+    private fun loadIndex(): HashMap<String, String> {
+        val fs = FileSystem.SYSTEM
+        val root = directory.toPath()
+        val names = fs.listOrNull(root)?.map { it.name }.orEmpty()
+        val images = names.filterTo(HashSet()) { it.endsWith(".image") }
+        val paths = HashMap<String, String>()
+        val used = HashSet<String>()
+        for (name in names) {
+            if (!name.endsWith(".current")) continue
+            val key = name.removeSuffix(".current")
+            val hash = runCatching { fs.read(root / name) { readUtf8() } }.getOrNull() ?: continue
+            if (!hash.matches(hashPattern)) continue
+            val shared = "$hash.image"
+            val legacy = "$key-$hash.image"
+            if (legacy in images) {
+                runCatching { if (shared in images) fs.delete(root / legacy) else fs.atomicMove(root / legacy, root / shared) }
+                    .onSuccess { images -= legacy; images += shared }
+            }
+            if (shared in images) { paths[key] = (root / shared).toString(); used += shared }
+        }
+        for (name in images) if (name !in used) runCatching { fs.delete(root / name) }
+        return paths
     }
 
     private suspend fun indexed(key: String, path: String?) = storedPaths().let { index -> index.lock.withLock {
@@ -96,16 +118,20 @@ class ArtworkLibrary(private val directory: String) {
         fs.delete(coverIdFile(trackId), mustExist = false)
         val key = key(trackId)
         val hash = bytes.toByteString().sha256().hex()
-        val destination = root / "$key-$hash.image"
+        // Named by content alone, so every song of an album points at one file and the memory cache decodes it once.
+        val destination = root / "$hash.image"
         val index = root / "$key.current"
         val previous = storedPath(trackId)
         val temporary = root / "${Uuid.random()}.part"
         try {
-            fs.write(temporary) { write(bytes) }
-            fs.atomicMove(temporary, destination)
+            if (fs.metadataOrNull(destination)?.isRegularFile != true) {
+                fs.write(temporary) { write(bytes) }
+                fs.atomicMove(temporary, destination)
+            }
             fs.write(temporary) { writeUtf8(hash) }
             fs.atomicMove(temporary, index)
-            if (previous != null && previous != destination) fs.delete(previous, mustExist = false)
+            // Another song may still use a shared image, so only a per-song copy goes now; the next index load sweeps the rest.
+            if (previous != null && previous != destination && previous.isLegacy()) fs.delete(previous, mustExist = false)
             indexed(key, destination.toString())
             mutableChanges.tryEmit(trackId to destination.toString())
         } finally { fs.delete(temporary, mustExist = false) }
@@ -125,9 +151,10 @@ class ArtworkLibrary(private val directory: String) {
         if (fs.metadataOrNull(index)?.size != 64L) return null
         val hash = fs.read(index) { readUtf8() }
         if (!hash.matches(hashPattern)) return null
-        val path = root / "$key-$hash.image"
-        return path.takeIf { fs.metadataOrNull(path)?.isRegularFile == true }
+        return listOf(root / "$hash.image", root / "$key-$hash.image").firstOrNull { fs.metadataOrNull(it)?.isRegularFile == true }
     }
+
+    private fun Path.isLegacy() = name.removeSuffix(".image").contains('-')
 
     suspend fun read(trackId: String): ByteArray? = withContext(Dispatchers.IO) {
         path(trackId)?.let { file -> FileSystem.SYSTEM.read(file.toPath()) { readByteArray() } }
@@ -137,7 +164,7 @@ class ArtworkLibrary(private val directory: String) {
         val previous = storedPath(trackId)
         FileSystem.SYSTEM.delete(coverIdFile(trackId), mustExist = false)
         FileSystem.SYSTEM.delete(directory.toPath() / "${key(trackId)}.current", mustExist = false)
-        if (previous != null) FileSystem.SYSTEM.delete(previous, mustExist = false)
+        if (previous != null && previous.isLegacy()) FileSystem.SYSTEM.delete(previous, mustExist = false)
         indexed(key(trackId), null)
         mutableChanges.tryEmit(trackId to null)
     } }

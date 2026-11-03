@@ -6,6 +6,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 
 class MusicLibraryTest {
     @Test
@@ -25,6 +26,56 @@ class MusicLibraryTest {
             assertFailsWith<IllegalArgumentException> { LibraryQuery(ratingFrom = 6) }
             assertFailsWith<IllegalArgumentException> { LibraryQuery(ratingFrom = 5, ratingTo = 4) }
             Unit
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun theCachedLibraryFollowsEditsAdditionsAndRemovalsWithoutRereadingIt() = runBlocking {
+        val directory = Files.createTempDirectory("incremental-library")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val writer = MusicLibrary(store)
+            val bravo = writer.importTrack(TrackMetadata("Bravo"), TrackSource("local:b", SourceKind.LOCAL, "/music/b.flac"))
+            val charlie = writer.importTrack(TrackMetadata("Charlie"), TrackSource("server:test:c", SourceKind.SERVER, "c"))
+            val first = library.tracks()
+            assertEquals(listOf("Bravo", "Charlie"), first.map { it.metadata.title })
+            // Another instance writes, so this cache has to find the changes in the store rather than in its own writes.
+            writer.setFavorite(bravo.id, true)
+            val alpha = writer.importTrack(TrackMetadata("Alpha"), TrackSource("local:a", SourceKind.LOCAL, "/music/a.flac"))
+            val edited = library.tracks()
+            assertEquals(listOf(alpha.id, bravo.id, charlie.id), edited.map { it.id })
+            assertEquals(true, edited.single { it.id == bravo.id }.favorite)
+            // An unchanged song keeps its decoded instance.
+            assertSame(first.single { it.id == charlie.id }, edited.single { it.id == charlie.id })
+            writer.linkTracks(bravo.id, charlie.id)
+            assertEquals(listOf(alpha.id, bravo.id), library.tracks().map { it.id })
+            assertEquals(2, library.tracks().single { it.id == bravo.id }.sources.size)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun linkingManyCopiesAtOnceRemapsQueuesPlaylistsAndHistoryAndSkipsBusySongs() = runBlocking {
+        val directory = Files.createTempDirectory("batch-linking")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val pairs = (1..3).map { number ->
+                library.importTrack(TrackMetadata("Song $number"), TrackSource("local:$number", SourceKind.LOCAL, "/music/$number.flac")) to
+                    library.importTrack(TrackMetadata("Song $number"), TrackSource("server:test:$number", SourceKind.SERVER, "$number"))
+            }
+            val queue = me.d3sox.nevumi.queue.PlaybackQueue(store)
+            queue.replace(pairs.map { it.second.id })
+            val playlist = me.d3sox.nevumi.playlists.Playlists(store, library = library).create("Mix", pairs.map { it.second.id })
+            // A running download keeps its song from being linked until a later pass.
+            store.put("download:${pairs[2].second.id}", "downloads",
+                me.d3sox.nevumi.downloads.DownloadRecord(pairs[2].second.id, me.d3sox.nevumi.downloads.DownloadStatus.DOWNLOADING))
+            val linked = library.linkTracks(pairs.map { (local, server) -> local.id to server.id })
+            assertEquals(listOf(pairs[0].first.id, pairs[1].first.id), linked.map { it.id })
+            val expected = listOf(pairs[0].first.id, pairs[1].first.id, pairs[2].second.id)
+            assertEquals(expected, queue.snapshot().entries.map { it.trackId })
+            assertEquals(expected, me.d3sox.nevumi.playlists.Playlists(store, library = library).get(playlist.id)?.trackIds)
+            assertEquals(4, library.tracks().size)
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
 

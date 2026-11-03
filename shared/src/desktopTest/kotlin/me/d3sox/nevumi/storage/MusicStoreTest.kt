@@ -70,6 +70,41 @@ class MusicStoreTest {
     }
 
     @Test
+    fun versionTwoMigratesAndStampsRecordsSoOnlyChangesAreRead() = runBlocking {
+        val directory = Files.createTempDirectory("record-change-migration")
+        val path = directory.resolve("library.db").toString()
+        BundledSQLiteDriver().open(path).use { connection ->
+            connection.execSQL("CREATE TABLE records (`key` TEXT NOT NULL PRIMARY KEY, kind TEXT NOT NULL, value TEXT NOT NULL)")
+            connection.execSQL("CREATE INDEX index_records_kind ON records (kind)")
+            connection.execSQL("CREATE TABLE record_revisions (kind TEXT NOT NULL PRIMARY KEY, revision INTEGER NOT NULL)")
+            connection.execSQL("CREATE TRIGGER records_insert_revision AFTER INSERT ON records BEGIN INSERT INTO record_revisions " +
+                "(kind, revision) VALUES (NEW.kind, 1) ON CONFLICT(kind) DO UPDATE SET revision = revision + 1; END")
+            connection.execSQL("INSERT INTO records VALUES ('kept', 'tracks', 'preserved')")
+            connection.execSQL("INSERT INTO records VALUES ('gone', 'tracks', 'removed later')")
+            connection.execSQL("PRAGMA user_version = 2")
+        }
+        val store = openMusicStore(path)
+        try {
+            val dao = store.database.records()
+            assertEquals("preserved", dao.read("kept"))
+            val migrated = dao.revision("tracks")
+            assertEquals(2L, migrated)
+            assertEquals(emptyList(), dao.changedSince("tracks", migrated))
+            dao.put("new", "tracks", "added")
+            dao.put("kept", "tracks", "edited")
+            dao.put("kept", "tracks", "edited")
+            assertEquals(listOf("kept" to "edited", "new" to "added"),
+                dao.changedSince("tracks", migrated).map { it.key to it.value }.sortedBy { it.first })
+            assertEquals(4L, dao.revision("tracks"))
+            assertEquals(emptyList(), dao.changedSince("tracks", 4))
+            assertEquals(0L, dao.revision("deleted:tracks"))
+            dao.delete("gone")
+            assertEquals(1L, dao.revision("deleted:tracks"))
+            assertEquals(listOf("kept", "new"), dao.list("tracks").map { it.key })
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun syncingFavoritesDoesNotReloadUnchangedLibraryRecords() = runBlocking {
         val directory = Files.createTempDirectory("favorite-invalidation")
         val store = openMusicStore(directory.resolve("library.db").toString())

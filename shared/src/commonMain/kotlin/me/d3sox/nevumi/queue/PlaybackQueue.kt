@@ -5,6 +5,7 @@ import kotlin.concurrent.Volatile
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
 import kotlin.random.Random
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import me.d3sox.nevumi.playback.RepeatMode
 import me.d3sox.nevumi.library.LibraryTab
@@ -32,16 +33,18 @@ enum class SavedQueueKind { LIVE, SNAPSHOT, RECOVERY }
 data class SavedQueue(val id: String, val name: String, val snapshot: QueueSnapshot,
     val kind: SavedQueueKind = SavedQueueKind.LIVE, val capturedAt: Long = 0)
 
-internal suspend fun remapQueueTracks(store: MusicStore, from: String, to: String) {
+/** Points queue entries of each key of [mapping] at its value; one pass serves a whole batch of linked songs. */
+internal suspend fun remapQueueTracks(store: MusicStore, mapping: Map<String, String>) {
+    if (mapping.isEmpty()) return
     fun remap(snapshot: QueueSnapshot) = snapshot.copy(entries = snapshot.entries.map { entry ->
-        if (entry.trackId == from) entry.copy(trackId = to) else entry
+        mapping[entry.trackId]?.let { entry.copy(trackId = it) } ?: entry
     })
     for (record in store.database.records().list("queues")) {
         val snapshot = store.json.decodeFromString<QueueSnapshot>(record.value)
-        if (snapshot.entries.any { it.trackId == from }) store.put(record.key, "queues", remap(snapshot))
+        if (snapshot.entries.any { it.trackId in mapping }) store.put(record.key, "queues", remap(snapshot))
     }
     for (saved in store.list<SavedQueue>("saved-queues")) {
-        if (saved.snapshot.entries.any { it.trackId == from })
+        if (saved.snapshot.entries.any { it.trackId in mapping })
             store.put("saved-queue:${saved.id}", "saved-queues", saved.copy(snapshot = remap(saved.snapshot)))
     }
 }
@@ -186,7 +189,7 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         store.put("saved-queue:${saved.id}", "saved-queues", saved)
         return saved
     }
-    fun observeSaved() = store.database.records().observe("saved-queues").map { Unit }
+    fun observeSaved() = store.database.records().observeRevision("saved-queues").distinctUntilChanged().map { Unit }
 
     suspend fun renameSaved(id: String, name: String) = store.transaction {
         require(name.isNotBlank()) { "Enter a queue name" }

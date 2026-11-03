@@ -17,7 +17,9 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 
 class AndroidLocalSources(private val context: Context, private val library: MusicLibrary,
     private val artwork: ArtworkLibrary? = null) : LocalSources {
@@ -49,8 +51,9 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
         else changedFiles
     }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    override val changes: Flow<Unit> = library.observeLocalRoots().flatMapLatest { roots ->
+    // The media store reports a burst of changes for one edit, and names no folder, so a pause leads to one scan of every root.
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
+    override val changes: Flow<List<String>> = library.observeLocalRoots().flatMapLatest { roots ->
         if ("device" !in roots) emptyFlow() else callbackFlow {
             val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean) { trySend(Unit) }
@@ -58,7 +61,7 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
             context.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
             awaitClose { context.contentResolver.unregisterContentObserver(observer) }
         }
-    }
+    }.debounce(300).map { roots() }
 
 
     override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> = withContext(Dispatchers.IO) {
@@ -100,14 +103,16 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
                     result += cached
                     continue
                 }
-                val temporary = File.createTempFile("music-index-", ".$extension", context.cacheDir)
+                // Only a file the app cannot read directly is copied first; creating the copy for every song cost a file per scan.
+                var temporary: File? = null
                 try {
                     val audio = try {
                         if (direct != null) AudioFileIO.read(direct) else {
+                            val copy = File.createTempFile("music-index-", ".$extension", context.cacheDir).also { temporary = it }
                             requireNotNull(resolver.openInputStream(uri)).use { input ->
-                                temporary.outputStream().use { input.copyTo(it) }
+                                copy.outputStream().use { input.copyTo(it) }
                             }
-                            AudioFileIO.read(temporary)
+                            AudioFileIO.read(copy)
                         }
                     } catch (_: Exception) { continue }
                     val metadata = audio.trackMetadata(name.substringBeforeLast('.'), cursor.getString(2).orEmpty().trimEnd('/'))
@@ -122,7 +127,7 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
             }
                     else if (track.sources.all { it.kind == SourceKind.LOCAL }) artwork?.remove(track.id)
                     result += track
-                } finally { temporary.delete() }
+                } finally { temporary?.delete() }
                 } finally { onProgress(LocalScanProgress(cursor.position + 1, cursor.count)) }
             }
         }

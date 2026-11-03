@@ -62,9 +62,10 @@ fun playlistedTrackIds(playlists: List<Playlist>): Set<String> = playlists.filte
 @Serializable
 internal data class PlaylistRemoval(val playlist: Playlist, val revision: String = Uuid.random().toString())
 
-internal suspend fun remapPlaylistTracks(store: MusicStore, from: String, to: String) {
-    fun remap(playlist: Playlist) = playlist.copy(trackIds = playlist.trackIds.map { if (it == from) to else it },
-        conflict = playlist.conflict?.let { conflict -> conflict.copy(trackIds = conflict.trackIds.map { if (it == from) to else it }) })
+internal suspend fun remapPlaylistTracks(store: MusicStore, mapping: Map<String, String>) {
+    if (mapping.isEmpty()) return
+    fun remap(playlist: Playlist) = playlist.copy(trackIds = playlist.trackIds.map { mapping[it] ?: it },
+        conflict = playlist.conflict?.let { conflict -> conflict.copy(trackIds = conflict.trackIds.map { mapping[it] ?: it }) })
     for (playlist in store.list<Playlist>("playlists")) {
         val updated = remap(playlist)
         if (updated != playlist) store.put("playlist:${playlist.id}", "playlists", updated.copy(revision = Uuid.random().toString()))
@@ -107,6 +108,10 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     }
     suspend fun get(id: String): Playlist? = store.read<Playlist>("playlist:$id")?.let { evaluate(listOf(it)).single() }
     suspend fun all(): List<Playlist> = evaluate(store.list("playlists"))
+    /** Whether any playlist downloads automatically; read from the stored records, without evaluating smart playlists. */
+    suspend fun anyAutoDownload(): Boolean = store.list<Playlist>("playlists").any { it.autoDownload }
+    /** Playlists waiting to reach the server; only these are evaluated, so unrelated smart playlists cost nothing. */
+    suspend fun pendingSync(): List<Playlist> = evaluate(store.list<Playlist>("playlists").filter { it.pendingSync })
     private suspend fun evaluate(playlists: List<Playlist>): List<Playlist> {
         if (playlists.none { it.rule != null }) return playlists
         val tracks = library.tracks()
@@ -120,7 +125,9 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     fun observe(): Flow<List<Playlist>> = store.database.records().observe("playlists").distinctUntilChanged().flatMapLatest { records ->
         val playlists = records.map { store.json.decodeFromString<Playlist>(it.value) }
         if (playlists.none { it.rule != null }) flowOf(playlists)
-        else combine(library.observe(), history.observe().map { listens -> listeningStatistics(listens) }.distinctUntilChanged(),
+        // Rules read play counts and play times only; listened time grows on every checkpoint and would re-filter the library each time.
+        else combine(library.observe(), history.observe().map { listens ->
+            listeningStatistics(listens).mapValues { (_, statistics) -> statistics.copy(listenedMs = 0) } }.distinctUntilChanged(),
         flow { while (true) { emit(clock()); delay(refreshEveryMs) } }) { tracks, statistics, now ->
         val playlisted = playlistedTrackIds(playlists)
         playlists.map { playlist ->

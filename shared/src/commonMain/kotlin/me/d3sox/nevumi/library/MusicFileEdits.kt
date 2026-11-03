@@ -28,6 +28,8 @@ interface MusicFileEdits {
     suspend fun fileName(trackId: String): String
     suspend fun readTags(trackId: String): TrackMetadata
     suspend fun linkTracks(keepId: String, otherId: String): Track
+    /** Links (keep, other) pairs in batches; pairs whose songs are gone or busy with a download or file edit are skipped. */
+    suspend fun linkTracks(pairs: List<Pair<String, String>>): List<Track>
     suspend fun history(): List<LocalFileEdit>
     suspend fun trimHistory(maxAgeMs: Long, maxBytes: Long)
     suspend fun recover()

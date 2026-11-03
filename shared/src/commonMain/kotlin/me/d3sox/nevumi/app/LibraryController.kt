@@ -3,7 +3,6 @@ package me.d3sox.nevumi.app
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -69,7 +68,7 @@ class LibraryController internal constructor(private val context: ControllerCont
             sources.pendingRefreshLocations().forEach { importSource(it).join() }
         } }
         localSources?.let { sources -> context.scope.launch {
-            sources.changes.debounce(300).collect { sources.roots().forEach { importSource(it).join() } }
+            sources.changes.collect { locations -> locations.forEach { importSource(it).join() } }
         } }
     }
 
@@ -86,40 +85,56 @@ class LibraryController internal constructor(private val context: ControllerCont
         }
         if (offline != null) offline.withLibraryChanges { link() } else link()
     }
-    private suspend fun mergeTracks(keepId: String, otherId: String): Track {
+    private suspend fun copyMissingCover(keepId: String, otherId: String) {
         val cover = if (artwork?.path(keepId) == null) artwork?.read(otherId) else null
         if (cover != null) artwork?.save(keepId, cover)
+    }
+    private suspend fun mergeTracks(keepId: String, otherId: String): Track {
+        copyMissingCover(keepId, otherId)
         val linked = fileEdits?.linkTracks(keepId, otherId) ?: library.linkTracks(keepId, otherId)
         if (context.state.value.playback.trackId == otherId || context.state.value.playback.trackId == keepId) offline?.useTrack(keepId)
         return linked
     }
     // Local files that were also uploaded to the server become one song, so they are not downloaded a second time.
     suspend fun linkSameFiles() {
+        // Download jobs, scans and server refreshes all ask; an unchanged library has no new copies to link. A song skipped
+        // for a running download or file edit changes when that finishes, which lets the next call try it again.
+        val revision = library.revision()
+        if (revision == linkedRevision) return
         val pairs = library.sameFileCopies()
-        if (pairs.isEmpty()) return
-        // One pair per lock keeps playback responsive during the first pass over a large library.
-        for ((serverId, localId) in pairs) context.operations.withLock {
+        if (pairs.isEmpty()) { linkedRevision = revision; return }
+        // Batches rewrite queues, playlists and history once per hundred songs, and holding the lock per batch keeps playback responsive.
+        for (batch in pairs.chunked(100)) context.operations.withLock {
             suspend fun link() {
-                val server = library.findTrack(serverId) ?: return
-                if (library.findTrack(localId) == null) return
-                val queued = playback.queueLoaded && queue.snapshot().entries.any { it.trackId == serverId || it.trackId == localId }
-                // The local song keeps its identity, so references to the file stay valid.
-                val linked = try { mergeTracks(localId, serverId) }
-                    // A song with a running download or file edit is linked on a later pass.
-                    catch (_: IllegalStateException) { return }
-                if (linked.favorite != server.favorite) serverChanges?.setFavorite(linked.id, linked.favorite)
-                if (linked.rating != server.rating) serverChanges?.setRating(linked.id, linked.rating)
+                val servers = batch.mapNotNull { (serverId, _) -> library.findTrack(serverId) }.associateBy { it.id }
+                val ids = batch.flatMap { it.toList() }.toSet()
+                val queued = playback.queueLoaded && queue.snapshot().entries.any { it.trackId in ids }
+                for ((serverId, localId) in batch) if (serverId in servers) copyMissingCover(localId, serverId)
+                // The local song keeps its identity, so references to the file stay valid. A song with a running download or
+                // file edit is skipped and linked on a later pass.
+                val keep = batch.map { (serverId, localId) -> localId to serverId }
+                val linked = (fileEdits?.linkTracks(keep) ?: library.linkTracks(keep)).associateBy { it.id }
+                for ((serverId, localId) in batch) {
+                    val track = linked[localId] ?: continue
+                    val server = servers[serverId] ?: continue
+                    if (track.favorite != server.favorite) serverChanges?.setFavorite(track.id, track.favorite)
+                    if (track.rating != server.rating) serverChanges?.setRating(track.id, track.rating)
+                }
+                val playing = context.state.value.playback.trackId
+                batch.firstOrNull { (serverId, localId) -> localId in linked && (playing == serverId || playing == localId) }
+                    ?.let { (_, localId) -> offline?.useTrack(localId) }
                 if (queued) engine.updateQueue(playback.playableQueue(queue.snapshot()))
             }
             if (offline != null) offline.withLibraryChanges { link() } else link()
         }
         context.operations.withLock { loader.refresh() }
+        linkedRevision = library.revision()
     }
+    @kotlin.concurrent.Volatile private var linkedRevision: Long? = null
     fun updatePreferences(change: (MusicSettings) -> MusicSettings) = context.action {
         val previous = context.state.value.preferences
-        val settings = requireNotNull(preferences) { "Settings are unavailable" }.update { current ->
-            change(current).let { if (it.rememberScrollPositions) it else it.copy(libraryPositions = emptyMap()) }
-        }
+        val settings = requireNotNull(preferences) { "Settings are unavailable" }.update(change)
+        if (!settings.rememberScrollPositions && previous.rememberScrollPositions) forgetLibraryPositions()
         if (settings.recordListeningHistory != previous.recordListeningHistory)
             listeningHistory?.record(engine.status.value, enabled = settings.recordListeningHistory)
         context.update { it.copy(preferences = settings) }
@@ -143,14 +158,20 @@ class LibraryController internal constructor(private val context: ControllerCont
             }
         }
     }
+    fun libraryPosition(key: String): LibraryPosition? = loader.libraryPositions?.get(key)
+    val libraryPositions: Map<String, LibraryPosition> get() = loader.libraryPositions.orEmpty()
     fun rememberLibraryPosition(key: String, position: LibraryPosition) = context.action(serialized = false) {
         loader.preferenceUpdates.withLock {
-            if (context.state.value.preferences.rememberScrollPositions && context.state.value.preferences.libraryPositions[key] != position) {
-                val settings = preferences?.update { if (it.rememberScrollPositions) it.copy(libraryPositions = it.libraryPositions + (key to position)) else it }
-                context.update { it.copy(preferences = it.preferences.copy(libraryPositions =
-                    if (!it.preferences.rememberScrollPositions) emptyMap() else settings?.libraryPositions ?: (it.preferences.libraryPositions + (key to position)))) }
+            val positions = loader.libraryPositions.orEmpty()
+            if (context.state.value.preferences.rememberScrollPositions && positions[key] != position) {
+                loader.libraryPositions = positions + (key to position)
+                preferences?.rememberLibraryPosition(key, position)
             }
         }
+    }
+    internal suspend fun forgetLibraryPositions() = loader.preferenceUpdates.withLock {
+        loader.libraryPositions = emptyMap()
+        preferences?.forgetLibraryPositions()
     }
     fun setFavorite(trackId: String, favorite: Boolean) = setFavorite(listOf(trackId), favorite)
     fun setFavorite(trackIds: List<String>, favorite: Boolean) = context.action {

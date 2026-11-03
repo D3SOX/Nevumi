@@ -17,6 +17,8 @@ internal actual fun artworkPreview(bytes: ByteArray): ByteArray {
     val scale = minOf(1f, 1024f / maxOf(decoded.width, decoded.height))
     val preview = Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt().coerceAtLeast(1),
         (decoded.height * scale).toInt().coerceAtLeast(1), true)
-    return try { ByteArrayOutputStream().also { preview.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray() }
+    // A lossless 1024 px cover is often over a megabyte; one without transparency loses nothing visible as a JPEG.
+    val format = if (preview.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+    return try { ByteArrayOutputStream().also { preview.compress(format, 90, it) }.toByteArray() }
     finally { if (preview !== decoded) preview.recycle(); decoded.recycle() }
 }

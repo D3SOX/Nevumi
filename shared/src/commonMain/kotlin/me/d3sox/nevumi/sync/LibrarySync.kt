@@ -71,8 +71,20 @@ private data class TrackMapping(val peerDeviceId: String, val remoteTrackKey: St
 @Serializable
 private data class FolderMapping(val token: String, val folder: String)
 
-internal suspend fun remapPairedTracks(store: MusicStore, from: String, to: String) {
-    val track = requireNotNull(MusicLibrary(store).findTrack(to))
+internal suspend fun remapPairedTracks(store: MusicStore, mapping: Map<String, String>) {
+    if (mapping.isEmpty()) return
+    val library = MusicLibrary(store)
+    for ((from, to) in mapping) remapPairedState(store, requireNotNull(library.findTrack(to)), from, to)
+    for (pair in store.list<TrackMapping>("sync-mappings")) mapping[pair.localTrackId]?.let { to ->
+        store.put("sync:mapping:${pair.peerDeviceId}:${pair.remoteTrackKey}", "sync-mappings", pair.copy(localTrackId = to))
+    }
+    for (playlist in store.list<SyncPlaylist>("sync-playlists").filter { it.trackKeys.any { key -> key in mapping } })
+        store.put("sync:playlist:${playlist.id}", "sync-playlists", playlist.copy(trackKeys = playlist.trackKeys.map { mapping[it] ?: it }))
+    for (queue in store.list<SyncSavedQueue>("sync-saved-queues").filter { it.trackKeys.any { key -> key in mapping } })
+        store.put("sync:saved-queue:${queue.id}", "sync-saved-queues", queue.copy(trackKeys = queue.trackKeys.map { mapping[it] ?: it }))
+}
+
+private suspend fun remapPairedState(store: MusicStore, track: Track, from: String, to: String) {
     val favorite = listOfNotNull(store.read<SyncFavorite>("sync:favorite:$from"), store.read<SyncFavorite>("sync:favorite:$to"))
         .filter { it.favorite == track.favorite }.maxByOrNull { it.revision }
     if (favorite != null) store.put("sync:favorite:$to", "sync-favorites", favorite.copy(trackKey = to))
@@ -81,12 +93,6 @@ internal suspend fun remapPairedTracks(store: MusicStore, from: String, to: Stri
         .filter { it.rating == track.rating }.maxByOrNull { it.revision }
     if (rating != null) store.put("sync:rating:$to", "sync-ratings", rating.copy(trackKey = to))
     store.database.records().delete("sync:rating:$from")
-    for (mapping in store.list<TrackMapping>("sync-mappings").filter { it.localTrackId == from })
-        store.put("sync:mapping:${mapping.peerDeviceId}:${mapping.remoteTrackKey}", "sync-mappings", mapping.copy(localTrackId = to))
-    for (playlist in store.list<SyncPlaylist>("sync-playlists").filter { from in it.trackKeys })
-        store.put("sync:playlist:${playlist.id}", "sync-playlists", playlist.copy(trackKeys = playlist.trackKeys.map { if (it == from) to else it }))
-    for (queue in store.list<SyncSavedQueue>("sync-saved-queues").filter { from in it.trackKeys })
-        store.put("sync:saved-queue:${queue.id}", "sync-saved-queues", queue.copy(trackKeys = queue.trackKeys.map { if (it == from) to else it }))
 }
 
 @Serializable
