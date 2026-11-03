@@ -164,7 +164,7 @@ class LibraryController internal constructor(private val context: ControllerCont
     fun rememberLibraryPosition(key: String, position: LibraryPosition) = context.action(serialized = false) {
         loader.preferenceUpdates.withLock {
             // A list can save before startup loaded the others; loading them first keeps them, and moves those of 0.17.0.
-            val positions = loader.libraryPositions ?: preferences?.libraryPositions().orEmpty()
+            val positions = loader.libraryPositions ?: preferences?.libraryPositions().orEmpty().also { loader.libraryPositions = it }
             if (context.state.value.preferences.rememberScrollPositions && positions[key] != position) {
                 loader.libraryPositions = positions + (key to position)
                 preferences?.rememberLibraryPosition(key, position)
