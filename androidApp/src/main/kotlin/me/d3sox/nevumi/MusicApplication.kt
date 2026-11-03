@@ -86,8 +86,7 @@ class MusicApplication : Application() {
         val scrobbling = Scrobbling(store, library, http, credentials, downloadNetwork.state, connection::client)
         val equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http)
         val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-        // A media button or another controller can start the process without any activity.
-        val engine = AndroidPlaybackEngine(this, PlaybackService::class.java).apply { setUiVisible(false) }
+        val engine = AndroidPlaybackEngine(this, PlaybackService::class.java)
         // The controller outlives the activities, so tell the engine when nothing is on screen and it can poll less often.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             private var started = 0
