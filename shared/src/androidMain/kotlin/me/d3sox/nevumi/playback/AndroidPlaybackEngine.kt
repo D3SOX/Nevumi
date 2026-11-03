@@ -50,13 +50,22 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
         override fun onEvents(player: Player, events: Player.Events) { requestStatus() }
     }
     // Only a playing song moves its position; a paused one is polled slowly and refreshed by player events and commands.
+    // Without a visible screen nothing shows the moving position, so playback is polled once a second to save battery.
     private val progress = object : Runnable {
         override fun run() {
             if (!closed) {
                 requestStatus()
-                main.postDelayed(this, if (mutableStatus.value.let { it.playWhenReady || it.playing } || pendingPlayback.get() != null) 100 else 1_000)
+                val fast = pendingPlayback.get() != null || uiVisible && mutableStatus.value.let { it.playWhenReady || it.playing }
+                main.postDelayed(this, if (fast) 100 else 1_000)
             }
         }
+    }
+    @Volatile private var uiVisible = true
+    /** Whether an activity is on screen; the app calls this as its activities start and stop. */
+    fun setUiVisible(visible: Boolean) {
+        if (uiVisible == visible) return
+        uiVisible = visible
+        if (visible) onMain { wakeProgress() }
     }
     private fun wakeProgress() { if (player != null) { main.removeCallbacks(progress); progress.run() } }
     init {

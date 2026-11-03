@@ -179,12 +179,12 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
 
     init {
         scope.launch {
-            store.database.records().observe("soundcloud-settings").distinctUntilChanged().collect {
+            store.database.records().observeRevision("soundcloud-settings").distinctUntilChanged().collect {
                 mutableProfile.value = store.read("soundcloud:profile")
             }
         }
         scope.launch {
-            store.database.records().observe("soundcloud-jobs").distinctUntilChanged().collect {
+            store.database.records().observeRevision("soundcloud-jobs").distinctUntilChanged().collect {
                 mutableJobs.value = store.list<SoundCloudJob>("soundcloud-jobs").sortedByDescending { it.createdAt }
             }
         }

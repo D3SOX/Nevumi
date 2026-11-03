@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.app
 
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.d3sox.nevumi.artwork.ArtworkLibrary
@@ -9,6 +10,7 @@ import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.navidrome.NavidromeConnection
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.queue.PlaybackQueue
+import me.d3sox.nevumi.settings.LibraryPosition
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.settings.MusicSettings
 import me.d3sox.nevumi.sftp.ServerFiles
@@ -22,11 +24,14 @@ internal class AppStateLoader(private val context: ControllerContext, private va
     val artworkUpdates = Mutex()
     /** Keeps a refresh from publishing settings it loaded before a remembered library tab or position was saved. */
     val preferenceUpdates = Mutex()
+    /** Saved scroll positions; kept out of the app state, since the lists only read them when they are created. */
+    @Volatile var libraryPositions: Map<String, LibraryPosition>? = null
 
     suspend fun refreshLibrary() {
         val tracks = library.tracks()
         val snapshot = queue.snapshot()
         preferenceUpdates.withLock {
+            if (libraryPositions == null) libraryPositions = preferences?.libraryPositions() ?: emptyMap()
             val settings = preferences?.load() ?: MusicSettings()
             context.update { it.copy(tracks = tracks, queue = snapshot, preferences = settings,
                 loading = it.serverRefresh?.running == true, libraryReady = true) }

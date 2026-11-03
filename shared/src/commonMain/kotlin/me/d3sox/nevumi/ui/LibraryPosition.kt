@@ -20,7 +20,7 @@ internal fun rememberLibraryListState(controller: MusicController, suffix: Strin
         controller.state.map { it.preferences.rememberScrollPositions }.distinctUntilChanged()
     }
     val enabled by enabledFlow.collectAsState(controller.state.value.preferences.rememberScrollPositions)
-    val initial = remember(key, enabled) { if (enabled) controller.state.value.preferences.libraryPositions[key] ?: LibraryPosition() else LibraryPosition() }
+    val initial = remember(key, enabled) { if (enabled) controller.libraryPosition(key) ?: LibraryPosition() else LibraryPosition() }
     val state = key(key, enabled) {
         if (enabled) rememberLazyListState(initial.index, initial.offset) else remember { LazyListState() }
     }
@@ -35,7 +35,7 @@ internal fun rememberLibraryGridState(controller: MusicController, suffix: Strin
         controller.state.map { it.preferences.rememberScrollPositions }.distinctUntilChanged()
     }
     val enabled by enabledFlow.collectAsState(controller.state.value.preferences.rememberScrollPositions)
-    val initial = remember(key, enabled) { if (enabled) controller.state.value.preferences.libraryPositions[key] ?: LibraryPosition() else LibraryPosition() }
+    val initial = remember(key, enabled) { if (enabled) controller.libraryPosition(key) ?: LibraryPosition() else LibraryPosition() }
     val state = key(key, enabled) {
         if (enabled) rememberLazyGridState(initial.index, initial.offset) else remember { LazyGridState() }
     }

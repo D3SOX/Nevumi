@@ -36,6 +36,9 @@ enum class PlaylistPickerSort { UPDATED, ADDED, NAME, PLAYED, LIBRARY }
 data class LibraryPosition(val index: Int = 0, val offset: Int = 0)
 
 @Serializable
+private data class StoredLibraryPosition(val key: String, val position: LibraryPosition)
+
+@Serializable
 enum class HomeSectionId(val label: StringResource) {
     MIXES(Res.string.home_section_mixes), RECENT(Res.string.home_section_recent), TOP(Res.string.home_section_top),
     RECENT_ALBUMS(Res.string.home_section_recent_albums), RECENT_ARTISTS(Res.string.home_section_recent_artists),
@@ -107,6 +110,7 @@ data class MusicSettings(
     val homeSections: List<HomeSectionId> = HomeSectionId.entries,
     val disabledHomeSections: Set<HomeSectionId> = emptySet(),
     val rememberScrollPositions: Boolean = true,
+    /** Only read to move the positions 0.17.0 saved here into their own records; see [MusicPreferences.libraryPositions]. */
     val libraryPositions: Map<String, LibraryPosition> = emptyMap(),
     val collectionLayouts: Map<LibraryTab, CollectionLayout> = emptyMap(),
     val playlistPickerSort: PlaylistPickerSort = PlaylistPickerSort.UPDATED,
@@ -126,6 +130,22 @@ class MusicPreferences(private val store: MusicStore) {
     suspend fun load(): MusicSettings = (store.read("settings:music") ?: MusicSettings()).let { settings ->
         settings.copy(homeSections = settings.homeSections.distinct() + HomeSectionId.entries.filterNot { it in settings.homeSections })
     }
+    /**
+     * Scroll positions are saved on every scroll stop. They live in their own records because each settings write wakes the
+     * download and scrobbling workers; positions an older version kept in the settings move here on first read.
+     */
+    suspend fun libraryPositions(): Map<String, LibraryPosition> = store.transaction {
+        val settings = store.read<MusicSettings>("settings:music")
+        if (settings != null && settings.libraryPositions.isNotEmpty()) {
+            for ((key, position) in settings.libraryPositions) rememberLibraryPosition(key, position)
+            store.put("settings:music", "settings", settings.copy(libraryPositions = emptyMap()))
+        }
+        store.list<StoredLibraryPosition>("library-positions").associate { it.key to it.position }
+    }
+    suspend fun rememberLibraryPosition(key: String, position: LibraryPosition) =
+        store.put("library-position:$key", "library-positions", StoredLibraryPosition(key, position))
+    suspend fun forgetLibraryPositions() = store.database.records().deleteKind("library-positions")
+
     suspend fun update(change: (MusicSettings) -> MusicSettings): MusicSettings = store.transaction {
         val settings = change(load())
         require(settings.customColor in 0xFF000000..0xFFFFFFFF) { "Choose an opaque RGB color" }

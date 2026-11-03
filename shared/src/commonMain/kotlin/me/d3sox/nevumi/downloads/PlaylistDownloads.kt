@@ -3,6 +3,7 @@ package me.d3sox.nevumi.downloads
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeException
+import me.d3sox.nevumi.navidrome.ServerSong
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.TrackSource
@@ -12,7 +13,9 @@ import kotlinx.coroutines.withContext
 
 class PlaylistDownloads(private val playlists: Playlists, private val library: MusicLibrary,
     private val downloads: AudioDownloads, private val client: NavidromeClient,
-    private val sourceAccessible: (String) -> Boolean = FileAudioAccess::available) {
+    private val sourceAccessible: (String) -> Boolean = FileAudioAccess::available,
+    /** Shares one catalogue download with the rest of a download pass. */
+    private val catalogue: suspend () -> Map<String, ServerSong> = { client.songs().associateBy { it.id } }) {
     /** Returns whether every song it had to download completed. */
     suspend fun synchronize(excluded: Set<String> = emptySet()): Boolean {
         val collections = playlists.all()
@@ -20,7 +23,8 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
         downloads.replacePlaylistPins(collections, excluded)
         val missing = linkedMapOf<String, String>()
         val wanted = collections.filter { it.autoDownload }.flatMap { it.trackIds }.distinct().filterNot { it in excluded }
-        val tracks = library.tracks().associateBy { it.id }
+        val all = library.tracks()
+        val tracks = all.associateBy { it.id }
         withContext(Dispatchers.IO) {
             for (trackId in wanted) {
                 val track = tracks[trackId] ?: continue
@@ -31,8 +35,8 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
                 missing[trackId] = remote.location
             }
         }
-        // A few songs are cheaper to look up one by one; many songs are cheaper as one catalogue download.
-        val catalogue = if (missing.size > SINGLE_LOOKUPS) client.songs().associateBy { it.id } else null
+        val serverSongs = all.count { track -> track.sources.any { it.kind == SourceKind.SERVER && it.id.startsWith("server:${client.serverId}:") } }
+        val catalogue = if (catalogueCheaper(missing.size, serverSongs)) catalogue() else null
         val releases = mutableMapOf<String, String>()
         var completed = true
         for ((trackId, songId) in missing) {
@@ -50,7 +54,13 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
     private fun accessible(source: TrackSource) = source.filePath?.let(FileAudioAccess::available) == true || sourceAccessible(source.location)
 
     internal companion object {
-        /** Up to this many missing songs are looked up individually; beyond it one catalogue download is cheaper. */
+        /** Up to this many missing songs are always looked up individually. */
         const val SINGLE_LOOKUPS = 20
+
+        /**
+         * A catalogue download costs about one request per 500 songs plus one per album, roughly a tenth of the server's songs;
+         * a single lookup costs one request. Beyond that share of the library, one catalogue download is cheaper.
+         */
+        fun catalogueCheaper(missing: Int, serverSongs: Int) = missing > SINGLE_LOOKUPS && missing > serverSongs / 10
     }
 }

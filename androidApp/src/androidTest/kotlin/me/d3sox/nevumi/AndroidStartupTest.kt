@@ -44,7 +44,7 @@ class AndroidStartupTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             compose.onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(24)
             compose.onNode(hasText("Artist 24") and hasAnyAncestor(hasTestTag("library-pager"))).assertIsDisplayed()
-            compose.waitUntil(5_000) { player.state.value.preferences.libraryPositions.values.any { it.index == 24 } }
+            compose.waitUntil(5_000) { player.libraryPositions.values.any { it.index == 24 } }
         }
     }
 

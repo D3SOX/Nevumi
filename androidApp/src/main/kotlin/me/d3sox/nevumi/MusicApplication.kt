@@ -86,8 +86,20 @@ class MusicApplication : Application() {
         val scrobbling = Scrobbling(store, library, http, credentials, downloadNetwork.state, connection::client)
         val equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http)
         val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+        val engine = AndroidPlaybackEngine(this, PlaybackService::class.java)
+        // The controller outlives the activities, so tell the engine when nothing is on screen and it can poll less often.
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var started = 0
+            override fun onActivityStarted(activity: android.app.Activity) { engine.setUiVisible(++started > 0) }
+            override fun onActivityStopped(activity: android.app.Activity) { engine.setUiVisible(--started > 0) }
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) = Unit
+            override fun onActivityResumed(activity: android.app.Activity) = Unit
+            override fun onActivityPaused(activity: android.app.Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) = Unit
+            override fun onActivityDestroyed(activity: android.app.Activity) = Unit
+        })
         controller = MusicController(library, PlaybackQueue(store),
-            AndroidPlaybackEngine(this, PlaybackService::class.java),
+            engine,
             connection, localSources, offline, playlists, AndroidAudioAccess(this)::available,
             MusicPreferences(store), artwork, serverChanges,
             AndroidFileEdits(this, store, library, File(filesDir, "file-edits").path, mediaWriteRequests::request, artwork),
@@ -108,7 +120,7 @@ class MusicApplication : Application() {
     }
 
     suspend fun refreshOfflinePlaylists() {
-        connection.client()?.let { serverChanges.refreshLibrary(it, includeFilePaths = serverFiles.configuration()?.serverId == it.serverId) }
+        connection.client()?.let { serverChanges.refreshPlaylists(it, includeFilePaths = serverFiles.configuration()?.serverId == it.serverId) }
     }
 
     fun retryUserDownloads() { downloadJobs.schedule(userInitiated = true) }
