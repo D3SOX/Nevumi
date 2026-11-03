@@ -26,7 +26,8 @@ class AndroidAdaptiveNavigationUiTest {
         onActivity { it.requestedOrientation = orientation }
         val expected = if (orientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) Configuration.ORIENTATION_LANDSCAPE
             else Configuration.ORIENTATION_PORTRAIT
-        val deadline = SystemClock.uptimeMillis() + 10_000
+        // A busy emulator can take well over 10 seconds to give the new window focus.
+        val deadline = SystemClock.uptimeMillis() + 30_000
         while (true) {
             var settled = false
             InstrumentationRegistry.getInstrumentation().runOnMainSync {

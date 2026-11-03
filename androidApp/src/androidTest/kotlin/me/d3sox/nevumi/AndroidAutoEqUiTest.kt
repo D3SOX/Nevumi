@@ -62,8 +62,9 @@ class AndroidAutoEqUiTest {
                 return requested
             }
             try {
-                // Finding the control and observing its resulting window each need their own wait.
-                compose.waitUntil(5_000) { update(allowClick = true) }
+                // Finding the control and observing its resulting window each need their own wait. The first includes opening the
+                // picker, which takes several seconds on a busy emulator.
+                compose.waitUntil(15_000) { update(allowClick = true) }
                 compose.waitUntil(5_000) { update(allowClick = false) }
             } catch (failure: ComposeTimeoutException) {
                 fun nodes(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> = listOf(node) +
