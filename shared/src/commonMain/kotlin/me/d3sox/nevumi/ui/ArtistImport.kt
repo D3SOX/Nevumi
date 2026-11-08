@@ -239,7 +239,7 @@ private fun ArtistChecklist(artists: List<ImportableArtist>, selected: Set<Impor
         }
         HorizontalDivider()
         LazyColumn(Modifier.heightIn(max = 320.dp)) {
-            items(artists, key = { it.id ?: "name:${it.name}" }) { artist ->
+            items(artists) { artist ->
                 val isFollowed = followed(artist)
                 val details = listOfNotNull(
                     if (isFollowed) stringResource(Res.string.releases_following) else null,
