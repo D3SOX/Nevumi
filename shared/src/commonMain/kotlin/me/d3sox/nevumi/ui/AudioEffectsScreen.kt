@@ -136,11 +136,6 @@ private fun EffectSwitch(label: String, value: Boolean, change: (Boolean) -> Uni
 private fun EffectSlider(label: String, value: Double, range: ClosedFloatingPointRange<Float>, steps: Int,
     enabled: Boolean, visibleLabel: String = label, change: (Double) -> Unit) {
     var draft by remember(value) { mutableFloatStateOf(value.toFloat()) }
-    Column {
-        Row(Modifier.fillMaxWidth()) {
-            Text(visibleLabel, Modifier.weight(1f))
-            Text("${draft.roundToInt()} dB", style = MaterialTheme.typography.labelLarge)
-        }
-        PreciseSlider(label, draft, range, steps, enabled, change = { draft = it }, finish = { change(draft.toDouble()) })
-    }
+    PreciseSlider(label, "${draft.roundToInt()} dB", draft, range, steps, enabled = enabled, visibleLabel = visibleLabel,
+        change = { draft = it }, finish = { change(draft.toDouble()) })
 }
