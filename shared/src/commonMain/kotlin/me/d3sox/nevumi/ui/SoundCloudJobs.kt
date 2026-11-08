@@ -111,7 +111,8 @@ internal fun SoundCloudJobItem(job: SoundCloudJob, controller: MusicController, 
         var link by remember { mutableStateOf("") }
         KeyboardAlertDialog(onDismissRequest = { pastingLink = false }, title = { Text(stringResource(Res.string.sources_paste_download_link)) },
             text = {
-                OutlinedTextField(link, { link = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_gate_or_download_link)) }, singleLine = true,
+                // Links have no whitespace, and a pasted line break would push the link onto a hidden second line of this single-line field.
+                OutlinedTextField(link, { link = it.filterNot(Char::isWhitespace) }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_gate_or_download_link)) }, singleLine = true,
                     supportingText = { Text(stringResource(Res.string.sources_gate_link_hint)) })
             },
             confirmButton = { TextButton(onClick = { controller.submitSoundCloudLink(job.id, link); pastingLink = false }, enabled = link.isNotBlank()) { Text(stringResource(Res.string.sources_continue)) } },
