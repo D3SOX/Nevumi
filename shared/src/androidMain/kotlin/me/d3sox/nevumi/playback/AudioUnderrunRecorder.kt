@@ -27,6 +27,11 @@ internal class AudioUnderrunRecorder(context: Context, private val player: Playe
 
     override fun onAudioUnderrun(eventTime: AnalyticsListener.EventTime, bufferSize: Int, bufferSizeMs: Long,
         elapsedSinceLastFeedMs: Long) {
+        // Listeners run on the main thread, where a failed system query would otherwise crash playback.
+        runCatching { record(eventTime, bufferSizeMs, elapsedSinceLastFeedMs) }
+    }
+
+    private fun record(eventTime: AnalyticsListener.EventTime, bufferSizeMs: Long, elapsedSinceLastFeedMs: Long) {
         val item = player.currentMediaItem
         // A gap longer than the output buffer since the last write means the decoder thread did not feed the output.
         val line = listOf("${OffsetDateTime.now().truncatedTo(ChronoUnit.MILLIS)} underrun",
