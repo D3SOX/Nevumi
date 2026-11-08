@@ -35,8 +35,12 @@ internal class FakeMusicBrainz {
             return@MockEngine respond("{}", if (status != HttpStatusCode.OK) status else HttpStatusCode.ServiceUnavailable, json)
         queries += query
         when {
-            request.url.encodedPath.endsWith("/collection") -> collections[request.url.parameters["editor"]]
-                ?.let { respond("""{"collections":[$it]}""", headers = json) } ?: respond("""{"error":"Not Found"}""", HttpStatusCode.NotFound, json)
+            request.url.encodedPath.endsWith("/collection") -> collections[request.url.parameters["editor"]]?.let { all ->
+                val items = Regex("""\{[^{}]*}""").findAll(all).map { it.value }.toList()
+                val offset = request.url.parameters["offset"]?.toInt() ?: 0
+                respond("""{"collection-count":${items.size},"collections":[${items.drop(offset).take(request.url.parameters["limit"]!!.toInt()).joinToString(",")}]}""",
+                    headers = json)
+            } ?: respond("""{"error":"Not Found"}""", HttpStatusCode.NotFound, json)
             request.url.encodedPath.endsWith("/artist") && request.url.parameters["collection"] != null -> {
                 val all = members[request.url.parameters["collection"]].orEmpty()
                 val offset = request.url.parameters["offset"]?.toInt() ?: 0
@@ -153,8 +157,9 @@ class ArtistReleasesTest {
 
     @Test fun anEditorsArtistCollectionsAndEveryPageOfTheirArtistsAreRead() = withReleases { releases, musicBrainz ->
         val collection = "33333333-3333-4333-8333-333333333333"
-        musicBrainz.collections["listener"] = """{"id":"$collection","name":"Favourites","entity-type":"artist","artist-count":150},
-            {"id":"44444444-4444-4444-8444-444444444444","name":"Attending","entity-type":"event","event-count":3}"""
+        // The artist collection comes after a full page of event collections.
+        musicBrainz.collections["listener"] = (1..100).joinToString(",") { """{"id":"${releaseId(500 + it)}","name":"Event $it","entity-type":"event"}""" } +
+            """,{"id":"$collection","name":"Favourites","entity-type":"artist","artist-count":150}"""
         musicBrainz.members[collection] = (1..150).map { """{"id":"${releaseId(it)}","name":"Artist $it","disambiguation":"${if (it == 1) "synth duo" else ""}"}""" }
         assertEquals(listOf(ArtistCollection(collection, "Favourites", 150)), releases.collections("listener"), "Only artist collections are offered")
         assertEquals(emptyList(), releases.collections("nobody"), "An unknown user has no collections")

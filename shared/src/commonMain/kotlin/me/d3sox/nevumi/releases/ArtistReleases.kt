@@ -108,8 +108,14 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
     /** The artist collections [editor] has made public; none when MusicBrainz has no such user. */
     suspend fun artistCollections(editor: String): List<ArtistCollection> {
         if (editor.isBlank()) return emptyList()
-        val body = requestOrNull("collection", mapOf("editor" to editor.trim(), "limit" to "100")) ?: return emptyList()
-        return body.array("collections").filter { it.text("entity-type") == "artist" && it.text("id").isNotBlank() }
+        val collections = mutableListOf<JsonObject>()
+        do {
+            val body = requestOrNull("collection", mapOf("editor" to editor.trim(), "limit" to "100", "offset" to collections.size.toString()))
+                ?: return emptyList()
+            val page = body.array("collections")
+            collections += page
+        } while (page.isNotEmpty() && collections.size < body.count("collection-count"))
+        return collections.filter { it.text("entity-type") == "artist" && it.text("id").isNotBlank() }
             .map { ArtistCollection(it.text("id"), it.text("name"), it.count("artist-count")) }
     }
 
