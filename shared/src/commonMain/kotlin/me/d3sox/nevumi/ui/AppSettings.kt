@@ -658,11 +658,6 @@ internal fun SettingsSlider(label: String, icon: AppIcon, selected: Float, range
     steps: Int = 0, format: @Composable (Float) -> String, change: (Float) -> Unit) {
     var value by remember(selected) { mutableFloatStateOf(selected) }
     SettingsCard(icon) {
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, Modifier.weight(1f)); Text(format(value), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            PreciseSlider(label, value, range, steps, change = { value = it }, finish = { change(value) })
-        }
+        PreciseSlider(label, format(value), value, range, steps, Modifier.weight(1f), change = { value = it }, finish = { change(value) })
     }
 }

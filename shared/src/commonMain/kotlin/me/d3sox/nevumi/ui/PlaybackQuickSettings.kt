@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import kotlinx.coroutines.delay
@@ -43,7 +44,9 @@ internal fun PlaybackQuickSettings(state: AppState, controller: MusicController,
     }
     val off = stringResource(Res.string.off)
     val crossfadeSeconds = (0..12).map { stringResource(Res.string.player_seconds, it) }
-    AlertDialog(onDismissRequest = close, title = { Text(stringResource(Res.string.player_playback_settings)) }, text = {
+    // Opt out of the platform's narrow default width so the sliders get room on phones.
+    AlertDialog(onDismissRequest = close, modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 560.dp).fillMaxWidth(),
+        properties = DialogProperties(usePlatformDefaultWidth = false), title = { Text(stringResource(Res.string.player_playback_settings)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             OutlinedButton(onClick = audioEffects, modifier = Modifier.fillMaxWidth()) {
                 Icon(AppIcon.EQUALIZER.vector, null, tint = MaterialTheme.colorScheme.primary)
