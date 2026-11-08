@@ -112,6 +112,14 @@ class ReleasesControllerTest {
             imported.undo!!().join()
             undone.await()
             assertEquals(listOf(NOVA), player.state.value.followedArtists.map { it.id }, "Undo unfollows only the imported artists")
+
+            musicBrainz.failingSearches += "Twin"
+            val before503 = musicBrainz.queries.size
+            releases.import(listOf(ImportableArtist("Echo"), ImportableArtist("Twin"), ImportableArtist("Later"))).join()
+            assertEquals(listOf(ECHO, NOVA).sorted(), player.state.value.followedArtists.map { it.id }.sorted(),
+                "A failed lookup keeps the artists found before it")
+            assertEquals("MusicBrainz is busy. Try again in a moment.", player.state.value.error)
+            assertTrue(musicBrainz.queries.drop(before503).none { it == "\"Later\"" }, "Lookups stop at the failure")
         } finally { player.closeAndJoin(); musicBrainz.http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 

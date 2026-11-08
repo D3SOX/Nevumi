@@ -106,7 +106,8 @@ class ReleasesController internal constructor(private val context: ControllerCon
 
     /**
      * Follows [artists] that aren't followed yet, looking up those without an ID like [findArtist]; a name with no single
-     * match is skipped. The lookups show as a refresh, as each takes a second.
+     * match is skipped. The lookups show as a refresh, as each takes a second. A failed lookup ends them; the artists
+     * found so far are still followed, and the failure shows as the app error.
      */
     fun import(artists: List<ImportableArtist>): Job = context.action(serialized = false) {
         val releases = requireNotNull(releases) { "Release tracking is unavailable" }
@@ -115,25 +116,31 @@ class ReleasesController internal constructor(private val context: ControllerCon
             followed.none { it.id == artist.id?.lowercase() || artist.id == null && it.libraryName.equals(artist.name, ignoreCase = true) }
         }
         var unmatched = 0
+        var failure: Exception? = null
         val resolved = refreshing.withLock {
             try {
                 context.update { it.copy(releaseRefresh = it.releaseRefresh.copy(running = true)) }
-                wanted.mapNotNull { artist ->
-                    val id = artist.id ?: (findArtist(artist.name) as? ArtistMatch.Found)?.artist?.id
-                    if (id == null) unmatched++
-                    id?.let { FollowedArtist(it, artist.name, artist.disambiguation) }
+                val found = mutableListOf<FollowedArtist>()
+                for (artist in wanted) {
+                    val id = artist.id ?: try { (findArtist(artist.name) as? ArtistMatch.Found)?.artist?.id }
+                        catch (error: Exception) { rethrowCancellation(error); failure = error; break }
+                    if (id == null) unmatched++ else found += FollowedArtist(id, artist.name, artist.disambiguation)
                 }
+                found
             } finally { context.update { it.copy(releaseRefresh = it.releaseRefresh.copy(running = false)) } }
         }
         val added = releases.follow(resolved)
         publish(releases)
         val (message, arguments) = if (unmatched == 0) Res.string.notice_imported_artists to listOf(added.size)
             else Res.string.notice_imported_artists_unmatched to listOf(added.size, unmatched)
-        if (added.isEmpty()) return@action context.confirm(message, arguments = arguments)
-        context.confirm(message, arguments = arguments, serializedUndo = false,
-            undo = { added.forEach { releases.unfollow(it.id) }; publish(releases) },
-            redo = { releases.follow(added); publish(releases); fetch(added.map { it.id }) })
-        fetch(added.map { it.id })
+        if (added.isEmpty()) context.confirm(message, arguments = arguments)
+        else {
+            context.confirm(message, arguments = arguments, serializedUndo = false,
+                undo = { added.forEach { releases.unfollow(it.id) }; publish(releases) },
+                redo = { releases.follow(added); publish(releases); fetch(added.map { it.id }) })
+            fetch(added.map { it.id })
+        }
+        failure?.let { throw it }
     }
 
     fun unfollow(id: String): Job = context.action(serialized = false) {

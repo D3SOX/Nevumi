@@ -24,6 +24,8 @@ internal class FakeMusicBrainz {
     val members = mutableMapOf<String, List<String>>()
     var status = HttpStatusCode.OK
     val failingArtists = mutableSetOf<String>()
+    /** Names whose search answers that MusicBrainz is busy. */
+    val failingSearches = mutableSetOf<String>()
     val covers = mutableMapOf<String, ByteArray>()
     val queries = mutableListOf<String>()
     val userAgents = mutableListOf<String?>()
@@ -31,7 +33,7 @@ internal class FakeMusicBrainz {
         userAgents += request.headers[HttpHeaders.UserAgent]
         val json = headersOf(HttpHeaders.ContentType, "application/json")
         val query = request.url.parameters["query"].orEmpty()
-        if (status != HttpStatusCode.OK || failingArtists.any { "arid:$it" in query })
+        if (status != HttpStatusCode.OK || failingArtists.any { "arid:$it" in query } || query.removeSurrounding("\"") in failingSearches)
             return@MockEngine respond("{}", if (status != HttpStatusCode.OK) status else HttpStatusCode.ServiceUnavailable, json)
         queries += query
         when {
