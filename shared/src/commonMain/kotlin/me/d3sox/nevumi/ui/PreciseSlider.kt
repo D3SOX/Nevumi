@@ -25,10 +25,12 @@ internal fun PreciseSlider(label: String, valueText: String, value: Float, range
         finish()
     }
     Column(modifier.fillMaxWidth()) {
-        // The value sits before the buttons so they stay in place while its text changes width.
+        // The value sits under the label so neither shares its width with the other, and the buttons stay put as the value changes.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(visibleLabel, Modifier.weight(1f))
-            Text(valueText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.weight(1f)) {
+                Text(visibleLabel, style = MaterialTheme.typography.bodyLarge)
+                Text(valueText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             AppIconButton(AppIcon.MINUS, stringResource(Res.string.library_decrease, label), enabled = enabled && value > range.start) { adjust(-1) }
             AppIconButton(AppIcon.PLUS, stringResource(Res.string.library_increase, label), enabled = enabled && value < range.endInclusive) { adjust(1) }
         }
