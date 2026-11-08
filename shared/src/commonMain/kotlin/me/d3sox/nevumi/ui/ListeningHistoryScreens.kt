@@ -66,6 +66,7 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
     var period by remember { mutableStateOf(ListeningPeriod.ALL_TIME) }
     var grouping by remember { mutableStateOf("Songs") }
     var selected by rememberSaveable(period, grouping) { mutableStateOf<String?>(null) }
+    OnLibraryTabReselected { selected = null }
     val now = rememberLibraryTime()
     val report = rememberDerived("statistics-report", listOf(period), listOf(tracks, state.listens, now)) { listeningReport(state.listens, tracks, period, now) }
     val ranks = when (grouping) { "Artists" -> report.artists; "Albums" -> report.albums; "Genres" -> report.genres; else -> report.songs }
