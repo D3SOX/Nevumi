@@ -88,6 +88,7 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
                         .setUsage(C.USAGE_MEDIA).build(), false).build()
                 player = created
                 created.addListener(listener)
+                created.addAnalyticsListener(AudioUnderrunRecorder(appContext, created))
                 pending.forEach { it(created) }
                 pending.clear()
                 progress.run()
