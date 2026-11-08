@@ -116,6 +116,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
             handledDestination = destination.revision
         }
     }
+    OnLibraryTabReselected { selected = null; folder = null }
     var creating by remember { mutableStateOf(false) }
     var smartEditor by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }

@@ -46,6 +46,7 @@ import me.d3sox.nevumi.library.recentAt
 import me.d3sox.nevumi.library.LocalFolderRules
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.queue.QueueAction
+import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
@@ -91,6 +92,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     val selection = remember { SongSelection() }
     val songPages = remember { SongGesturePages() }
     val headers = remember { mutableStateMapOf<LibraryTab, LibraryHeaderContext>() }
+    val reselects = remember { MutableSharedFlow<LibraryTab>(extraBufferCapacity = 1) }
     val tabs = remember(state.preferences.libraryTabs, destination) {
         (state.preferences.libraryTabs + listOfNotNull(destination?.tab)).distinct()
     }
@@ -181,7 +183,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     }
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages,
-        LocalDerivedResults provides derived, LocalLibraryHeaders provides headers) {
+        LocalDerivedResults provides derived, LocalLibraryHeaders provides headers, LocalLibraryReselects provides reselects) {
     Column(modifier.fillMaxWidth()) {
         // Search ignores the source and library filters, and Playlists only follow the source.
         val libraryFiltersApply = tabs[currentIndex] !in setOf(LibraryTab.SEARCH, LibraryTab.PLAYLISTS)
@@ -319,6 +321,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
             onNavigationHeight(it.height)
         }, state.preferences.bottomNavigationTabs) { page ->
             if (selectedTab != LibraryTab.SEARCH) searchReturnTab = selectedTab
+            if (page == tabs[currentIndex]) reselects.tryEmit(page)
             selection.clear(); selectedTab = page
         }
     }

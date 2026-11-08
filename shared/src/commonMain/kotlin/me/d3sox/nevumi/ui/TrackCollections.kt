@@ -34,6 +34,7 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
             selected = destination.collectionId; handledDestination = destination.revision
         }
     }
+    OnLibraryTabReselected { selected = null }
     val selecting = LocalSongSelection.current?.active == true
     val entries = rememberDerived("collections:${tab.name}", emptyList(), listOf(collections, state.artwork)) {
         collections.map { entry ->

@@ -74,6 +74,7 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
             selected = destination.collectionId; handled = destination.revision
         }
     }
+    OnLibraryTabReselected { selected = null }
     val navigate = LocalLibraryNavigate.current
     val homeQueues = remember(state.savedQueues) { state.savedQueues.filter { it.kind != me.d3sox.nevumi.queue.SavedQueueKind.RECOVERY } }
     val catalog = rememberDerived("home-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
