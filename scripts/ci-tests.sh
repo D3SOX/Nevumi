@@ -48,6 +48,8 @@ if [[ "$mode" == desktop ]]; then
     xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24 -nolisten tcp' ./gradlew --configure-on-demand :shared:desktopTest --console=plain
 else
     export ANDROID_SERIAL=emulator-5554
+    # A second emulator gets a new fixture, so do not reuse the ports the previous one wrote.
+    rm -rf .test-environment/paired-fixture
     setsid ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx512m --max-workers=2 \
         -Pkotlin.compiler.execution.strategy=in-process :shared:pairedFixture --console=plain > .test-environment/pairing.log 2>&1 &
     pairing_group="$!"
@@ -64,7 +66,10 @@ else
     adb -s "$ANDROID_SERIAL" push .test-environment/sftp-fixture/android-fixture.properties /data/local/tmp/nevumi-sftp-fixture.properties
     adb -s "$ANDROID_SERIAL" push .test-environment/paired-fixture/control-port /data/local/tmp/nevumi-sync-control-port
     shard="${NEVUMI_ANDROID_SHARD:-1/1}"
-    python3 scripts/test-android-suite.py --shard "$shard"
+    resume=()
+    # The previous emulator in this job stopped mid-suite; run only the classes it left.
+    if [[ -f .test-environment/android-unfinished-classes ]]; then resume=(--resume); fi
+    python3 scripts/test-android-suite.py --shard "$shard" "${resume[@]}"
     # The cold-start check runs once per device, on the first shard.
     if [[ "${shard%%/*}" == 1 ]]; then
         NEVUMI_TEST_SERIAL="$ANDROID_SERIAL" python3 scripts/test-android-startup.py

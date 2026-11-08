@@ -19,6 +19,8 @@ parser.add_argument("--classes", nargs="*")
 parser.add_argument("--shard", default="1/1", help="Run one balanced shard, as INDEX/COUNT")
 parser.add_argument("--matrix", action="store_true", help="Print the dynamic CI shard matrix without running tests")
 parser.add_argument("--class-timeout", type=int, default=300, help="Maximum seconds for one class, including Gradle setup")
+parser.add_argument("--resume", action="store_true",
+                    help="Run the classes a stopped emulator left behind, keeping the results from before it stopped")
 arguments = parser.parse_args()
 if arguments.class_timeout <= 0:
     parser.error("--class-timeout must be positive")
@@ -73,12 +75,20 @@ if arguments.matrix:
     print(json.dumps([{"index": index, "total": count} for index in range(1, count + 1)]))
     raise SystemExit(0)
 
-classes = distribute(int(shard[2]))[0][int(shard[1]) - 1]
+# Classes that had not passed when the emulator stopped, for a second emulator to run.
+unfinished = ROOT / ".test-environment/android-unfinished-classes"
+if arguments.resume:
+    classes = unfinished.read_text().split()
+    unfinished.unlink()
+else:
+    classes = distribute(int(shard[2]))[0][int(shard[1]) - 1]
 serial = os.environ["ANDROID_SERIAL"]
 if not re.fullmatch(r"emulator-[0-9]{4}", serial):
     raise SystemExit("Run this suite on an owned emulator")
 reports = ROOT / "androidApp/build/outputs/androidTest-results/connected/debug"
 output = ROOT / ".test-environment/android-class-results"
+if arguments.resume:
+    output /= "new-emulator"
 shutil.rmtree(output, ignore_errors=True)
 output.mkdir(parents=True)
 api = int(subprocess.run(["adb", "-s", serial, "shell", "getprop", "ro.build.version.sdk"],
@@ -124,6 +134,8 @@ def run(name, attempt):
                                stdout=log, stderr=subprocess.STDOUT, check=True, timeout=10)
             except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as error:
                 print(f"::warning::Could not capture device log for {name}: {error}", flush=True)
+        if device_lost():
+            return None
         # The killed run can leave its instrumentation on the device, so stop both packages before the next class
         # or the retry starts its own Gradle run.
         for package in ["me.d3sox.nevumi", "me.d3sox.nevumi.test"]:
@@ -150,18 +162,42 @@ def run(name, attempt):
     return completed if ok else None
 
 
+def device_lost():
+    """Wait out a soft restart, but report an emulator that stays gone for a minute."""
+    try:
+        subprocess.run(["adb", "-s", serial, "wait-for-device"], capture_output=True, check=True, timeout=60)
+        return False
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return True
+
+
+def stop_for_lost_device(remaining):
+    """Hosted emulators sometimes freeze and exit mid-suite. Leave the unfinished classes for a new emulator, once."""
+    message = f"{serial} stopped responding"
+    if failed or arguments.resume:
+        raise SystemExit(f"Android suite failed: {message}; failed: {failed}; not run: {remaining}")
+    unfinished.write_text("\n".join(remaining) + "\n")
+    print(f"::warning title=Android emulator stopped::{message}; {len(remaining)} classes will run on a new emulator",
+          flush=True)
+    raise SystemExit(f"Android suite stopped: {message}; unfinished classes: {remaining}")
+
+
 retry = []
-for name in classes:
+for index, name in enumerate(classes):
     cases = run(name, 1)
     if cases is None:
+        if device_lost():
+            stop_for_lost_device(retry + classes[index:])
         retry.append(name)
     else:
         executed += len(cases)
 # Hosted emulators share two slow cores with Gradle and keep settling for minutes after boot, so retry failures
 # once after the other classes have run; a second failure is a real failure.
-for name in retry:
+for index, name in enumerate(retry):
     cases = run(name, 2)
     if cases is None:
+        if device_lost():
+            stop_for_lost_device(retry[index:])
         failed.append(name)
         continue
     flaky.append(name)
