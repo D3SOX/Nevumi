@@ -37,6 +37,12 @@ data class FollowedArtist(val id: String, val name: String, val disambiguation: 
 data class ArtistCandidate(val id: String, val name: String, val disambiguation: String = "", val type: String = "",
     val country: String = "")
 
+/** A public MusicBrainz collection of [artistCount] artists. */
+data class ArtistCollection(val id: String, val name: String, val artistCount: Int)
+
+/** An artist offered for import; one without a MusicBrainz [id] is looked up by [name] when it is followed. */
+data class ImportableArtist(val name: String, val id: String? = null, val disambiguation: String = "", val plays: Int? = null)
+
 /**
  * A release group of a followed artist. [date] is its first release date as MusicBrainz has it: YYYY-MM-DD, YYYY-MM or YYYY.
  * [releaseIds] are its releases, which music files name in their MusicBrainz tags.
@@ -62,7 +68,7 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
 
     suspend fun searchArtists(name: String): List<ArtistCandidate> {
         if (name.isBlank()) return emptyList()
-        val body = request("artist", "\"${escape(name.trim())}\"", 25)
+        val body = request("artist", mapOf("query" to "\"${escape(name.trim())}\"", "limit" to "25"))
         return body.array("artists").map { artist ->
             ArtistCandidate(artist.text("id"), artist.text("name"), artist.text("disambiguation"), artist.text("type"),
                 artist.text("country"))
@@ -75,11 +81,11 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
         // A search returns at most 100 release groups at a time; a missed page would never be announced.
         val groups = mutableListOf<JsonObject>()
         do {
-            val body = request("release-group", "arid:$artistId AND firstreleasedate:[$since TO *]", 100, groups.size)
+            val body = request("release-group", mapOf("query" to "arid:$artistId AND firstreleasedate:[$since TO *]", "limit" to "100",
+                "offset" to groups.size.toString()))
             val page = body.array("release-groups")
             groups += page
-            val total = (body["count"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
-        } while (page.isNotEmpty() && groups.size < total)
+        } while (page.isNotEmpty() && groups.size < body.count("count"))
         return groups.mapNotNull { group ->
             val credits = group.array("artist-credit")
             ArtistRelease(id = group.text("id").ifBlank { return@mapNotNull null }, title = group.text("title"),
@@ -99,6 +105,35 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
         }
     }
 
+    /** The artist collections [editor] has made public; none when MusicBrainz has no such user. */
+    suspend fun artistCollections(editor: String): List<ArtistCollection> {
+        if (editor.isBlank()) return emptyList()
+        val collections = mutableListOf<JsonObject>()
+        do {
+            val body = requestOrNull("collection", mapOf("editor" to editor.trim(), "limit" to "100", "offset" to collections.size.toString()))
+                ?: return emptyList()
+            val page = body.array("collections")
+            collections += page
+        } while (page.isNotEmpty() && collections.size < body.count("collection-count"))
+        return collections.filter { it.text("entity-type") == "artist" && it.text("id").isNotBlank() }
+            .map { ArtistCollection(it.text("id"), it.text("name"), it.count("artist-count")) }
+    }
+
+    /** Every artist in the collection, in pages of 100. */
+    suspend fun collectionArtists(collectionId: String): List<ImportableArtist> {
+        require(collectionId.matches(musicBrainzId)) { "Not a MusicBrainz collection ID" }
+        val artists = mutableListOf<JsonObject>()
+        do {
+            val body = request("artist", mapOf("collection" to collectionId, "limit" to "100", "offset" to artists.size.toString()))
+            val page = body.array("artists")
+            artists += page
+        } while (page.isNotEmpty() && artists.size < body.count("artist-count"))
+        return artists.mapNotNull { artist ->
+            ImportableArtist(artist.text("name").ifBlank { return@mapNotNull null }, artist.text("id").ifBlank { return@mapNotNull null },
+                artist.text("disambiguation"))
+        }
+    }
+
     /** The release group's front cover, or null when it has none. */
     suspend fun artwork(releaseGroupId: String): ByteArray? {
         val response = http.get("${coverArtUrl.trimEnd('/')}/release-group/$releaseGroupId/front-250") { header(HttpHeaders.UserAgent, userAgent) }
@@ -107,16 +142,19 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
         return response.readRawBytes()
     }
 
-    private suspend fun request(entity: String, query: String, limit: Int, offset: Int = 0): JsonObject = pacing.withLock {
+    private suspend fun request(entity: String, parameters: Map<String, String>): JsonObject =
+        requestOrNull(entity, parameters) ?: error("MusicBrainz request failed: HTTP 404")
+
+    /** The response, or null when MusicBrainz has no such resource. */
+    private suspend fun requestOrNull(entity: String, parameters: Map<String, String>): JsonObject? = pacing.withLock {
         lastRequest?.let { delay(spacingMs - it.elapsedNow().inWholeMilliseconds) }
         try {
             val response = http.get("${baseUrl.trimEnd('/')}/$entity") {
                 header(HttpHeaders.UserAgent, userAgent)
-                parameter("query", query)
-                parameter("limit", limit)
-                if (offset > 0) parameter("offset", offset)
+                parameters.forEach { (key, value) -> parameter(key, value) }
                 parameter("fmt", "json")
             }
+            if (response.status == HttpStatusCode.NotFound) return@withLock null
             check(response.status != HttpStatusCode.ServiceUnavailable) { "MusicBrainz is busy. Try again in a moment." }
             check(response.status.isSuccess()) { "MusicBrainz request failed: HTTP ${response.status.value}" }
             Json.parseToJsonElement(response.bodyAsText()).jsonObject
@@ -124,6 +162,7 @@ class MusicBrainzClient(private val http: HttpClient, version: String, private v
     }
 
     private fun JsonObject.text(key: String) = (this[key] as? JsonPrimitive)?.contentOrNull.orEmpty().trim()
+    private fun JsonObject.count(key: String) = (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
     private fun JsonObject.array(key: String) = (this[key] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
 
     /** Escapes Lucene's special characters, so a name is searched as written. */
@@ -149,12 +188,20 @@ class ArtistReleases(private val store: MusicStore, private val musicBrainz: Mus
     suspend fun refreshedAt(): Long? = store.read(REFRESHED_KEY)
     suspend fun search(name: String): List<ArtistCandidate> = musicBrainz.searchArtists(name)
     suspend fun artwork(releaseId: String): ByteArray? = musicBrainz.artwork(releaseId)
+    suspend fun collections(editor: String): List<ArtistCollection> = musicBrainz.artistCollections(editor)
+    suspend fun collectionArtists(id: String): List<ImportableArtist> = musicBrainz.collectionArtists(id)
 
     /** Starts tracking [artist]; its current releases are fetched by the next [refresh] without counting as new. */
-    suspend fun follow(artist: FollowedArtist) = writes.withLock {
-        require(artist.id.matches(musicBrainzId)) { "Not a MusicBrainz artist ID" }
-        if (store.read<FollowedArtist>(followedKey(artist.id)) == null)
-            store.put(followedKey(artist.id), FOLLOWED_KIND, artist.copy(id = artist.id.lowercase(), followedAt = now(), checkedAt = null))
+    suspend fun follow(artist: FollowedArtist) { follow(listOf(artist)) }
+
+    /** Starts tracking each of [artists] not followed yet, which it returns. */
+    suspend fun follow(artists: List<FollowedArtist>): List<FollowedArtist> = writes.withLock {
+        require(artists.all { it.id.matches(musicBrainzId) }) { "Not a MusicBrainz artist ID" }
+        store.transaction {
+            artists.distinctBy { it.id.lowercase() }.filter { store.read<FollowedArtist>(followedKey(it.id)) == null }
+                .map { it.copy(id = it.id.lowercase(), followedAt = now(), checkedAt = null) }
+                .onEach { store.put(followedKey(it.id), FOLLOWED_KIND, it) }
+        }
     }
 
     /** Stops tracking the artist and forgets the releases no other followed artist is credited on. */

@@ -16,8 +16,16 @@ import kotlin.time.Instant
 internal class FakeMusicBrainz {
     val groups = mutableMapOf<String, MutableList<String>>()
     var artists = """{"artists":[]}"""
+    /** Search results by the searched name, before [artists]. */
+    val searches = mutableMapOf<String, String>()
+    /** The public collections JSON of each editor; any other editor is unknown. */
+    val collections = mutableMapOf<String, String>()
+    /** The artist JSON objects in each collection. */
+    val members = mutableMapOf<String, List<String>>()
     var status = HttpStatusCode.OK
     val failingArtists = mutableSetOf<String>()
+    /** Names whose search answers that MusicBrainz is busy. */
+    val failingSearches = mutableSetOf<String>()
     val covers = mutableMapOf<String, ByteArray>()
     val queries = mutableListOf<String>()
     val userAgents = mutableListOf<String?>()
@@ -25,11 +33,23 @@ internal class FakeMusicBrainz {
         userAgents += request.headers[HttpHeaders.UserAgent]
         val json = headersOf(HttpHeaders.ContentType, "application/json")
         val query = request.url.parameters["query"].orEmpty()
-        if (status != HttpStatusCode.OK || failingArtists.any { "arid:$it" in query })
+        if (status != HttpStatusCode.OK || failingArtists.any { "arid:$it" in query } || query.removeSurrounding("\"") in failingSearches)
             return@MockEngine respond("{}", if (status != HttpStatusCode.OK) status else HttpStatusCode.ServiceUnavailable, json)
         queries += query
         when {
-            request.url.encodedPath.endsWith("/artist") -> respond(artists, headers = json)
+            request.url.encodedPath.endsWith("/collection") -> collections[request.url.parameters["editor"]]?.let { all ->
+                val items = Regex("""\{[^{}]*}""").findAll(all).map { it.value }.toList()
+                val offset = request.url.parameters["offset"]?.toInt() ?: 0
+                respond("""{"collection-count":${items.size},"collections":[${items.drop(offset).take(request.url.parameters["limit"]!!.toInt()).joinToString(",")}]}""",
+                    headers = json)
+            } ?: respond("""{"error":"Not Found"}""", HttpStatusCode.NotFound, json)
+            request.url.encodedPath.endsWith("/artist") && request.url.parameters["collection"] != null -> {
+                val all = members[request.url.parameters["collection"]].orEmpty()
+                val offset = request.url.parameters["offset"]?.toInt() ?: 0
+                respond("""{"artist-count":${all.size},"artists":[${all.drop(offset).take(request.url.parameters["limit"]!!.toInt()).joinToString(",")}]}""",
+                    headers = json)
+            }
+            request.url.encodedPath.endsWith("/artist") -> respond(searches[query.removeSurrounding("\"")] ?: artists, headers = json)
             request.url.encodedPath.endsWith("/release-group") -> {
                 val artist = Regex("arid:([0-9a-f-]+)").find(query)!!.groupValues[1]
                 val since = Regex("firstreleasedate:\\[(\\S+) TO").find(query)!!.groupValues[1]
@@ -135,6 +155,26 @@ class ArtistReleasesTest {
         assertEquals(230, releases.releases().size)
         assertEquals(3, musicBrainz.queries.size)
         assertEquals("Nova feat. Echo", releases.releases().first { it.title == "Unnamed credit" }.artist)
+    }
+
+    @Test fun anEditorsArtistCollectionsAndEveryPageOfTheirArtistsAreRead() = withReleases { releases, musicBrainz ->
+        val collection = "33333333-3333-4333-8333-333333333333"
+        // The artist collection comes after a full page of event collections.
+        musicBrainz.collections["listener"] = (1..100).joinToString(",") { """{"id":"${releaseId(500 + it)}","name":"Event $it","entity-type":"event"}""" } +
+            """,{"id":"$collection","name":"Favourites","entity-type":"artist","artist-count":150}"""
+        musicBrainz.members[collection] = (1..150).map { """{"id":"${releaseId(it)}","name":"Artist $it","disambiguation":"${if (it == 1) "synth duo" else ""}"}""" }
+        assertEquals(listOf(ArtistCollection(collection, "Favourites", 150)), releases.collections("listener"), "Only artist collections are offered")
+        assertEquals(emptyList(), releases.collections("nobody"), "An unknown user has no collections")
+        val artists = releases.collectionArtists(collection)
+        assertEquals(150, artists.size)
+        assertEquals(ImportableArtist("Artist 1", releaseId(1), "synth duo"), artists.first())
+    }
+
+    @Test fun followingSeveralArtistsAddsOnlyNewOnes() = withReleases { releases, _ ->
+        releases.follow(FollowedArtist(NOVA, "Nova"))
+        val added = releases.follow(listOf(FollowedArtist(NOVA.uppercase(), "Nova"), FollowedArtist(ECHO.uppercase(), "Echo"), FollowedArtist(ECHO, "Echo")))
+        assertEquals(listOf(ECHO), added.map { it.id })
+        assertEquals(listOf("Echo", "Nova"), releases.followed().map { it.name })
     }
 
     @Test fun artistSearchIdentifiesTheAppAndSearchesTheNameAsWritten() = withReleases { releases, musicBrainz ->

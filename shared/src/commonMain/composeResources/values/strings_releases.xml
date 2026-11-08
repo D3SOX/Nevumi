@@ -12,7 +12,7 @@
     <string name="releases_upcoming">Upcoming</string>
     <string name="releases_recent">Recent</string>
     <string name="releases_followed_artists">Artists you follow</string>
-    <string name="releases_follow_hint">Follow artists from their pages to see their new releases here.</string>
+    <string name="releases_follow_hint">Follow artists from their pages, or import them from Last.fm or MusicBrainz, to see their new releases here.</string>
     <string name="releases_none">No releases from the artists you follow in the last year.</string>
     <string name="releases_refresh">Refresh releases</string>
     <string name="releases_refresh_failed">Couldn’t refresh releases: %1$s. Saved releases are still shown.</string>
@@ -34,4 +34,26 @@
     <string name="releases_notification_one">New release from %1$s</string>
     <string name="notice_following_artist">Following %1$s</string>
     <string name="notice_unfollowed_artist">Unfollowed %1$s</string>
+    <string name="releases_import">Import artists</string>
+    <string name="releases_import_lastfm">Last.fm top artists</string>
+    <string name="releases_import_lastfm_description">The artists %1$s plays most on Last.fm</string>
+    <string name="releases_import_lastfm_unavailable">Connect Last.fm in the scrobbling settings first</string>
+    <string name="releases_import_musicbrainz">MusicBrainz collection</string>
+    <string name="releases_import_musicbrainz_description">A public artist collection of a MusicBrainz user</string>
+    <string name="releases_import_period_month">Last month</string>
+    <string name="releases_import_period_quarter">Last 3 months</string>
+    <string name="releases_import_period_half_year">Last 6 months</string>
+    <string name="releases_import_period_year">Last year</string>
+    <string name="releases_import_period_overall">All time</string>
+    <string name="releases_import_username">MusicBrainz username</string>
+    <string name="releases_import_find">Find collections</string>
+    <string name="releases_import_no_collections">%1$s has no public artist collections on MusicBrainz.</string>
+    <string name="releases_import_too_large">Too large to import; the limit is %1$d artists</string>
+    <string name="releases_import_loading">Loading artists</string>
+    <string name="releases_import_none">There are no artists to import.</string>
+    <string name="releases_import_select_all">Select all</string>
+    <string name="releases_import_follow">Follow %1$d</string>
+    <string name="releases_import_lookup">Nevumi looks up artists without a MusicBrainz ID by name and skips names that match several artists.</string>
+    <string name="notice_imported_artists">Artists followed: %1$d</string>
+    <string name="notice_imported_artists_unmatched">Artists followed: %1$d. Not found on MusicBrainz: %2$d</string>
 </resources>

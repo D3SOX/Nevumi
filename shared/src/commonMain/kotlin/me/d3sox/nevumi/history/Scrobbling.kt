@@ -159,6 +159,17 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         store.database.records().delete("scrobbling:lastfm-sign-in")
     }
 
+    /** The connected Last.fm account's most played artists over [period]. */
+    suspend fun lastFmTopArtists(period: LastFmPeriod, limit: Int): List<LastFmArtist> {
+        val profile = requireNotNull(profiles().filter { it.service == ScrobblingService.LASTFM }.maxByOrNull { it.enabled }) {
+            "Connect Last.fm in the scrobbling settings"
+        }
+        val credentials = vault.read("scrobbling:${profile.id}")?.let { store.json.decodeFromString<LastFmCredentials>(it) }
+            ?: throw ScrobbleException(ScrobbleFailure.AUTHORIZATION, "Reconnect your Last.fm account.")
+        return LastFmClient(http, credentials.apiKey, credentials.sharedSecret, credentials.sessionKey, profile.baseUrl)
+            .topArtists(profile.username, period, limit)
+    }
+
     suspend fun configureNavidrome(): ScrobblingProfile? {
         val client = navidrome() ?: return null
         return activate(ScrobblingService.NAVIDROME, client.username, "", credentials = null, serverId = client.serverId)

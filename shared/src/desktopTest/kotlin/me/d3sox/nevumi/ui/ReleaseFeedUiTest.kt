@@ -7,7 +7,17 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
+import io.ktor.http.Parameters
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.headersOf
+import io.ktor.http.parseQueryString
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.history.Scrobbling
+import me.d3sox.nevumi.security.CredentialVault
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
@@ -45,16 +55,45 @@ class ReleaseFeedUiTest {
         javax.imageio.ImageIO.write(image, "png", Path.of(directory).also(Files::createDirectories).resolve("$name.png").toFile())
     }
 
-    private fun withPlayer(block: (MusicController, FakeMusicBrainz) -> Unit) {
+    /** Runs [block] with a player whose scrobbling, when [lastFm] answers, is signed in to Last.fm. */
+    private fun withPlayer(lastFm: ((Parameters) -> String)? = null, block: (MusicController, FakeMusicBrainz) -> Unit) {
         val directory = Files.createTempDirectory("nevumi-releases-ui")
         val store = openMusicStore(directory.resolve("music.db").toString())
         val library = MusicLibrary(store)
         runBlocking { library.importTrack(TrackMetadata("Song", "Nova", "First"), TrackSource("song", SourceKind.LOCAL, "/music/song.flac")) }
         val musicBrainz = FakeMusicBrainz()
+        val lastFmHttp = lastFm?.let { answer -> HttpClient(MockEngine { request ->
+            val form = parseQueryString((request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString())
+            respond(when (form["method"]) {
+                "auth.getToken" -> """{"token":"fixture-authorization"}"""
+                "auth.getSession" -> """{"session":{"name":"fixture","key":"fixture-session"}}"""
+                else -> answer(form)
+            }, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }) }
+        val scrobbling = lastFmHttp?.let { http ->
+            val secrets = mutableMapOf<String, String>()
+            Scrobbling(store, library, http, object : CredentialVault {
+                override suspend fun save(key: String, secret: String) { secrets[key] = secret }
+                override suspend fun read(key: String) = secrets[key]
+                override suspend fun delete(key: String) { secrets.remove(key) }
+            }).also { runBlocking { it.startLastFmAuthorization("fixture-api-key", "fixture-shared-secret"); it.completeLastFmAuthorization() } }
+        }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store),
-            releases = ArtistReleases(store, musicBrainz.client))
+            scrobbling = scrobbling, releases = ArtistReleases(store, musicBrainz.client))
         try { block(controller, musicBrainz) }
-        finally { runBlocking { controller.closeAndJoin() }; musicBrainz.http.close(); store.close(); directory.toFile().deleteRecursively() }
+        finally {
+            runBlocking { controller.closeAndJoin() }; musicBrainz.http.close(); lastFmHttp?.close(); store.close(); directory.toFile().deleteRecursively()
+        }
+    }
+
+    private fun ComposeUiTest.showFeed(controller: MusicController) {
+        waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+        setContent {
+            val state by controller.state.collectAsState()
+            MusicTheme(state.preferences, null) {
+                ReleaseFeedPage(state, releaseFeed(state.releases, releaseDate(Clock.System.now().toEpochMilliseconds())), emptyMap(), controller, {}, {})
+            }
+        }
     }
 
     @Test fun anArtistSharingItsNameIsConfirmedBeforeItIsFollowed() = withPlayer { controller, musicBrainz ->
@@ -76,6 +115,63 @@ class ReleaseFeedUiTest {
         }
     }
 
+    @Test fun artistsFromAMusicBrainzCollectionAreChosenAndFollowed() = withPlayer { controller, musicBrainz ->
+        val collection = "33333333-3333-4333-8333-333333333333"
+        musicBrainz.collections["listener"] = """{"id":"$collection","name":"Favourites","entity-type":"artist","artist-count":2},
+            {"id":"44444444-4444-4444-8444-444444444444","name":"Every composer","entity-type":"artist","artist-count":7431}"""
+        musicBrainz.members[collection] = listOf("""{"id":"$NOVA","name":"Nova","disambiguation":"synth duo"}""", """{"id":"$ECHO","name":"Echo"}""")
+        runComposeUiTest {
+            showFeed(controller)
+            onNodeWithText("Import artists").performClick()
+            onNodeWithText("Connect Last.fm in the scrobbling settings first").assertIsDisplayed()
+            snapshot("releases-import-sources", onNodeWithTag("artist-import"))
+            onNodeWithTag("import-source:lastfm").assertIsNotEnabled()
+            onNodeWithTag("import-source:musicbrainz").performClick()
+            onNodeWithTag("import-username").performTextInput("listener")
+            onNodeWithContentDescription("Find collections").performClick()
+            waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("import-collection:$collection").fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithText("Too large to import; the limit is 500 artists").assertIsDisplayed()
+            snapshot("releases-import-collections", onNodeWithTag("artist-import"))
+            onNodeWithTag("import-collection:$collection").performClick()
+            waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("import-artist:Echo").fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithTag("import-artist:Echo").performClick()
+            onNodeWithText("Follow 1").assertIsEnabled()
+            snapshot("releases-import-artists", onNodeWithTag("artist-import"))
+            onNodeWithTag("import-follow").performClick()
+            waitUntil(timeoutMillis = 3_000) { controller.state.value.followedArtists.isNotEmpty() }
+            assertEquals(listOf(NOVA), controller.state.value.followedArtists.map { it.id })
+            onNodeWithTag("artist-import").assertDoesNotExist()
+        }
+    }
+
+    @Test fun lastFmTopArtistsAreImportedAndNamesWithoutAnIdAreLookedUp() {
+        val periods = mutableListOf<String?>()
+        withPlayer(lastFm = { form ->
+            periods += form["period"]
+            """{"topartists":{"artist":[{"name":"Nova","mbid":"$NOVA","playcount":"128"},{"name":"Echo","mbid":"","playcount":"1"}]}}"""
+        }) { controller, musicBrainz ->
+            musicBrainz.searches["Echo"] = """{"artists":[{"id":"$ECHO","name":"Echo"}]}"""
+            runComposeUiTest {
+                showFeed(controller)
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.scrobbling.profiles.isNotEmpty() }
+                onNodeWithText("Import artists").performClick()
+                onNodeWithText("The artists fixture plays most on Last.fm").assertIsDisplayed()
+                onNodeWithTag("import-source:lastfm").performClick()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("import-artist:Echo").fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithText("All time").performClick()
+                waitUntil(timeoutMillis = 3_000) { periods.size == 2 && onAllNodesWithTag("import-artist:Echo").fetchSemanticsNodes().isNotEmpty() }
+                assertEquals(listOf<String?>("12month", "overall"), periods)
+                onNodeWithText("128 plays").assertIsDisplayed()
+                onNodeWithText("1 play").assertIsDisplayed()
+                onNodeWithText("Follow 2").assertIsEnabled()
+                snapshot("releases-import-lastfm", onNodeWithTag("artist-import"))
+                onNodeWithTag("import-follow").performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.followedArtists.size == 2 }
+                assertEquals(listOf(NOVA, ECHO), controller.state.value.followedArtists.map { it.id }.sorted())
+            }
+        }
+    }
+
     @Test fun homeLeadsToTheFeedWhichKeepsSavedReleasesThroughAFailedRefresh() = withPlayer { controller, musicBrainz ->
         val today = releaseDate(Clock.System.now().toEpochMilliseconds())
         musicBrainz.groups[NOVA] = mutableListOf(musicBrainz.group(releaseId(1), "First", today, NOVA to "Nova"),
@@ -91,7 +187,7 @@ class ReleaseFeedUiTest {
                     MusicTheme(state.preferences, null) { HomeScreen(state, controller, state.tracks, null, true, {}) }
                 }
             }
-            waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Follow artists from their pages to see their new releases here.").fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Follow artists from their pages, or import them from Last.fm or MusicBrainz, to see their new releases here.").fetchSemanticsNodes().isNotEmpty() }
             runBlocking { controller.releasesController.follow("Nova", ArtistCandidate(NOVA, "Nova")).join() }
             waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("home-release:${releaseId(1)}").fetchSemanticsNodes().isNotEmpty() }
             onNodeWithTag("home-page").performScrollToNode(hasTestTag("home-section:New releases"))
