@@ -28,8 +28,8 @@ internal fun PreciseSlider(label: String, valueText: String, value: Float, range
         // The value sits under the label so neither shares its width with the other, and the buttons stay put as the value changes.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(visibleLabel, style = MaterialTheme.typography.bodyLarge)
-                Text(valueText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(visibleLabel, Modifier.fillMaxWidth())
+                Text(valueText, Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             AppIconButton(AppIcon.MINUS, stringResource(Res.string.library_decrease, label), enabled = enabled && value > range.start) { adjust(-1) }
             AppIconButton(AppIcon.PLUS, stringResource(Res.string.library_increase, label), enabled = enabled && value < range.endInclusive) { adjust(1) }
