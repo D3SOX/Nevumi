@@ -43,6 +43,7 @@ import me.d3sox.nevumi.resources.releases_follow_artist
 import me.d3sox.nevumi.resources.releases_follow_hint
 import me.d3sox.nevumi.resources.releases_followed_artists
 import me.d3sox.nevumi.resources.releases_following
+import me.d3sox.nevumi.resources.releases_import
 import me.d3sox.nevumi.resources.releases_in_library
 import me.d3sox.nevumi.resources.releases_no_artist
 import me.d3sox.nevumi.resources.releases_none
@@ -250,7 +251,10 @@ internal fun ReleaseFeedPage(state: AppState, feed: ReleaseFeed, albums: Map<Str
     back: () -> Unit, open: (ArtistRelease) -> Unit) {
     val navigate = LocalLibraryNavigate.current
     val refresh = state.releaseRefresh
+    var importing by remember { mutableStateOf(false) }
+    if (importing) ArtistImportDialog(state, controller) { importing = false }
     SettingsScreen(back, title = { Text(stringResource(Res.string.releases_title)) }, actions = {
+        AppIconButton(AppIcon.FOLLOW, stringResource(Res.string.releases_import)) { importing = true }
         AppIconButton(AppIcon.REFRESH, stringResource(Res.string.releases_refresh), enabled = !refresh.running && state.followedArtists.isNotEmpty()) {
             controller.releasesController.refresh()
         }
@@ -272,7 +276,12 @@ internal fun ReleaseFeedPage(state: AppState, feed: ReleaseFeed, albums: Map<Str
                     }
                 }
             }
-            if (state.followedArtists.isEmpty()) item(key = "hint") { Text(stringResource(Res.string.releases_follow_hint), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (state.followedArtists.isEmpty()) item(key = "hint") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(Res.string.releases_follow_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ActionButton(stringResource(Res.string.releases_import), AppIcon.FOLLOW) { importing = true }
+                }
+            }
             else if (feed.all.isEmpty() && !refresh.running) item(key = "none") { Text(stringResource(Res.string.releases_none), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             listOf(Triple("upcoming", Res.string.releases_upcoming, feed.upcoming), Triple("recent", Res.string.releases_recent, feed.recent))
                 .forEach { (part, heading, releases) ->

@@ -139,7 +139,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val backupController = BackupController(context, loader, playbackController, fileEditController, queue, engine, backup)
     val lyricsController = LyricsController(context, lyrics)
     val serverQueueController = ServerQueueController(context, playbackController, queue, engine, navidrome)
-    val releasesController = ReleasesController(context, libraryController, releases, discovery, releaseNotifier)
+    val releasesController = ReleasesController(context, libraryController, releases, discovery, releaseNotifier, scrobbling)
     private val shutdown = Mutex()
     private var shutdownFinished = false
     val state = context.state

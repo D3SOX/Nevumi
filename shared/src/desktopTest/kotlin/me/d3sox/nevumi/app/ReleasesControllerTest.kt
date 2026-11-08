@@ -14,11 +14,13 @@ import me.d3sox.nevumi.releases.ArtistCandidate
 import me.d3sox.nevumi.releases.ArtistReleases
 import me.d3sox.nevumi.releases.ECHO
 import me.d3sox.nevumi.releases.FakeMusicBrainz
+import me.d3sox.nevumi.releases.ImportableArtist
 import me.d3sox.nevumi.releases.NOVA
 import me.d3sox.nevumi.releases.releaseDate
 import me.d3sox.nevumi.releases.releaseId
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.notice_following_artist
+import me.d3sox.nevumi.resources.notice_imported_artists_unmatched
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
@@ -75,6 +77,41 @@ class ReleasesControllerTest {
             withTimeout(3_000) { while (player.state.value.followedArtists.isNotEmpty()) delay(10) }
             assertEquals(emptyList(), player.state.value.releases)
             assertEquals(1, notifications.size)
+        } finally { player.closeAndJoin(); musicBrainz.http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun importingFollowsNewArtistsLooksUpNamesSkipsAmbiguousOnesAndUndoesTogether() = runBlocking {
+        val directory = Files.createTempDirectory("releases-import")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val musicBrainz = FakeMusicBrainz()
+        val player = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store),
+            releases = ArtistReleases(store, musicBrainz.client))
+        val releases = player.releasesController
+        val third = releaseId(900)
+        try {
+            withTimeout(3_000) { player.state.first { it.libraryReady } }
+            releases.follow("Nova", ArtistCandidate(NOVA, "Nova")).join()
+            musicBrainz.searches["Echo"] = """{"artists":[{"id":"$ECHO","name":"Echo"},{"id":"$third","name":"Echo Park"}]}"""
+            musicBrainz.searches["Twin"] = """{"artists":[{"id":"$third","name":"Twin"},{"id":"${releaseId(901)}","name":"Twin"}]}"""
+            musicBrainz.groups[ECHO] = mutableListOf(musicBrainz.group(releaseId(1), "Echoes", today, ECHO to "Echo"))
+            val before = musicBrainz.queries.size
+
+            val notice = async(start = CoroutineStart.UNDISPATCHED) { player.notices.first() }
+            releases.import(listOf(ImportableArtist("nova"), ImportableArtist("Echo"), ImportableArtist("Twin"),
+                ImportableArtist("Third", third.uppercase()))).join()
+            val imported = notice.await()
+            assertEquals(Res.string.notice_imported_artists_unmatched, imported.message)
+            assertEquals(listOf<Any>(2, 1), imported.arguments, "Two artists followed; the ambiguous name is skipped")
+            assertEquals(listOf("\"Echo\"", "\"Twin\""), musicBrainz.queries.drop(before).filter { it.startsWith("\"") },
+                "An artist already followed by name is not looked up")
+            withTimeout(3_000) { player.state.first { state -> state.releases.any { it.title == "Echoes" } } }
+            assertEquals(listOf(ECHO, NOVA, third).sorted(), player.state.value.followedArtists.map { it.id }.sorted())
+            assertFalse(player.state.value.releaseRefresh.running)
+
+            val undone = async(start = CoroutineStart.UNDISPATCHED) { player.notices.first() }
+            imported.undo!!().join()
+            undone.await()
+            assertEquals(listOf(NOVA), player.state.value.followedArtists.map { it.id }, "Undo unfollows only the imported artists")
         } finally { player.closeAndJoin(); musicBrainz.http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 

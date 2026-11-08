@@ -48,6 +48,24 @@ class ScrobblingClientsTest {
     }
 
     @Test
+    fun topArtistsAreReadForTheUserAndPeriodIncludingASingleArtistChart() = runBlocking {
+        var payload = ""
+        var form: Parameters? = null
+        val http = HttpClient(MockEngine { request -> form = parseQueryString(body(request.body)); respond(payload, headers = jsonHeaders) })
+        try {
+            val client = LastFmClient(http, "fixture-key", "fixture-secret")
+            payload = """{"topartists":{"artist":[{"name":"Nova","mbid":"11111111-1111-4111-8111-111111111111","playcount":"42"},
+                {"name":"Echo","mbid":"","playcount":"7"},{"name":" ","mbid":""}]}}"""
+            assertEquals(listOf(LastFmArtist("Nova", "11111111-1111-4111-8111-111111111111", 42), LastFmArtist("Echo", "", 7)),
+                client.topArtists("fixture", LastFmPeriod.QUARTER, 50))
+            assertEquals(mapOf("method" to "user.getTopArtists", "user" to "fixture", "period" to "3month", "limit" to "50"),
+                listOf("method", "user", "period", "limit").associateWith { form!![it] })
+            payload = """{"topartists":{"artist":{"name":"Solo","playcount":"1"}}}"""
+            assertEquals(listOf(LastFmArtist("Solo", "", 1)), client.topArtists("fixture", LastFmPeriod.OVERALL, 50))
+        } finally { http.close() }
+    }
+
+    @Test
     fun invalidOptionalRecordingIdentifiersAreOmittedWithoutDroppingTheListen() = runBlocking {
         var metadata: JsonObject? = null
         var form: Parameters? = null

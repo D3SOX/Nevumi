@@ -96,6 +96,12 @@ class LastFmSession(val username: String, internal val key: String) {
     override fun toString() = "LastFmSession(username=$username, key=[redacted])"
 }
 
+/** The periods Last.fm ranks a user's top artists over. */
+enum class LastFmPeriod(internal val value: String) { MONTH("1month"), QUARTER("3month"), HALF_YEAR("6month"), YEAR("12month"), OVERALL("overall") }
+
+/** An artist from a Last.fm chart; [mbid] is blank when Last.fm does not know the artist's MusicBrainz ID. */
+data class LastFmArtist(val name: String, val mbid: String, val plays: Int)
+
 class LastFmClient(private val http: HttpClient, private val apiKey: String, private val sharedSecret: String,
     private val sessionKey: String? = null, private val endpoint: String = "https://ws.audioscrobbler.com/2.0/") {
     suspend fun requestAuthorization(): LastFmAuthorization = scrobbleRequest {
@@ -112,6 +118,18 @@ class LastFmClient(private val http: HttpClient, private val apiKey: String, pri
         val key = session.getValue("key").jsonPrimitive.content
         check(name.isNotBlank() && key.isNotBlank())
         LastFmSession(name, key)
+    }
+
+    /** [username]'s most played artists over [period], most played first. */
+    suspend fun topArtists(username: String, period: LastFmPeriod, limit: Int): List<LastFmArtist> = scrobbleRequest {
+        val chart = request("user.getTopArtists", mapOf("user" to username, "period" to period.value, "limit" to limit.toString()))
+            .getValue("topartists").jsonObject["artist"]
+        // Last.fm's JSON turns a list of one into a bare object.
+        val artists = (chart as? JsonArray)?.mapNotNull { it as? JsonObject } ?: listOfNotNull(chart as? JsonObject)
+        artists.mapNotNull { artist ->
+            fun text(key: String) = artist[key]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+            LastFmArtist(text("name").ifBlank { return@mapNotNull null }, text("mbid"), text("playcount").toIntOrNull() ?: 0)
+        }
     }
 
     suspend fun submit(listen: Listen) {
