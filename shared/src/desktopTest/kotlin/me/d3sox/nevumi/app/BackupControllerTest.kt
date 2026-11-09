@@ -85,7 +85,10 @@ class BackupControllerTest {
             val summary = assertNotNull(player.backupController.status.value.summary)
             assertEquals(1 to true, summary.playlistsAdded to summary.settings)
             assertEquals(ThemeMode.DARK, player.state.value.preferences.themeMode)
-            assertEquals(listOf("Road"), player.state.value.playlists.map { it.name })
+            // The playlist observer may still publish the list it read before the restore, then catches up.
+            val restored = playlists.all()
+            assertEquals(listOf("Road"), restored.map { it.name })
+            withTimeout(3_000) { player.state.first { it.playlists == restored } }
             assertFalse(player.backupController.status.value.working)
             player.backupController.dismissSummary()
             assertNull(player.backupController.status.value.summary)

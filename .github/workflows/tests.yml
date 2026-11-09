@@ -101,7 +101,8 @@ jobs:
     needs: android-shards
     name: android (${{ matrix.device.api }}, shard ${{ matrix.shard.index }}/${{ matrix.shard.total }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Leaves room for a second emulator when the first one stops.
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -153,10 +154,13 @@ jobs:
           bash scripts/sdkmanager-retry.sh emulator platform-tools 'build-tools;37.0.0'
           'platforms;android-${{ matrix.device.api }}'
           'system-images;android-${{ matrix.device.api }};${{ matrix.device.target }};x86_64'
-      - uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+      - id: suite
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        # The next steps decide the result, so a stopped emulator can be replaced.
+        continue-on-error: true
         # Leave time for uploading reports if emulator boot, fixture setup, or teardown stalls.
         timeout-minutes: 20
-        with:
+        with: &emulator
           api-level: ${{ matrix.device.api }}
           target: ${{ matrix.device.target }}
           arch: x86_64
@@ -167,6 +171,17 @@ jobs:
           ram-size: 6144M
           emulator-options: -no-window -gpu swangle -noaudio -no-boot-anim -camera-back virtualscene -camera-front emulated
           script: NEVUMI_ANDROID_SHARD=${{ matrix.shard.index }}/${{ matrix.shard.total }} bash scripts/ci-tests.sh android
+      # Hosted emulators occasionally freeze and exit mid-suite: memory is to spare, and neither the host nor the guest
+      # kernel logs a cause. The suite then leaves its unfinished classes, and a new emulator runs them once; test
+      # failures on a running emulator are not retried.
+      - id: resume
+        if: steps.suite.outcome == 'failure' && hashFiles('.test-environment/android-unfinished-classes') != ''
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        timeout-minutes: 20
+        with: *emulator
+      - name: Fail when the Android suite failed
+        if: steps.suite.outcome == 'failure' && steps.resume.outcome != 'success'
+        run: exit 1
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

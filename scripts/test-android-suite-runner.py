@@ -42,7 +42,8 @@ retry = os.environ.get('RETRY') == 'true' and attempt == 1
 suite = ET.Element('testsuite')
 if not retry:
     source = Path('androidApp/src/androidTest/kotlin/me/d3sox/nevumi') / (name.split('.')[-1] + '.kt')
-    count = 1 if os.environ.get('PARTIAL') == 'true' else source.read_text().count('@Test')
+    partial = os.environ.get('PARTIAL') == 'true' or len(Path('invocations').read_text().splitlines()) > int(os.environ.get('PARTIAL_AFTER', 1 << 30))
+    count = 1 if partial else source.read_text().count('@Test')
     for index in range(count):
         case = ET.SubElement(suite, 'testcase', classname=name, name=f'example{index}')
         if os.environ.get('SKIPPED') == 'true' or os.environ.get('SKIPPED_INDEX') == str(index):
@@ -107,6 +108,45 @@ with patch('subprocess.run', side_effect=run):
         self.assertTrue((self.root / ".test-environment/android-class-results/AndroidExampleTest/device.log").is_file())
         log = self.root / ".test-environment/android-class-results/AndroidExampleTest/device-logcat.txt"
         self.assertEqual("Device hang diagnostics\n", log.read_text())
+
+    def test_stopped_emulator_leaves_unfinished_classes_for_a_new_one(self):
+        for name in ["AndroidFirstTest", "AndroidSecondTest", "AndroidThirdTest"]:
+            self.source(name, tests=2)
+        # The emulator stops during the second class and does not come back.
+        self.executable("adb", """
+import sys
+from pathlib import Path
+calls = Path('invocations').read_text().splitlines() if Path('invocations').exists() else []
+sys.exit(1 if 'wait-for-device' in sys.argv and len(calls) >= 2 else print('36'))
+""")
+        result = self.run_suite(PARTIAL_AFTER="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("emulator-5554 stopped responding", result.stdout + result.stderr)
+        unfinished = self.root / ".test-environment/android-unfinished-classes"
+        self.assertEqual(["AndroidSecondTest", "AndroidThirdTest"], unfinished.read_text().split())
+        output = self.root / ".test-environment/android-class-results"
+        self.assertTrue((output / "AndroidFirstTest/TEST-example.xml").is_file())
+
+        self.executable("adb", "print('36')\n")
+        (self.root / "invocations").unlink()
+        result = self.run_suite("--resume")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(["me.d3sox.nevumi.AndroidSecondTest", "me.d3sox.nevumi.AndroidThirdTest"],
+                         (self.root / "invocations").read_text().splitlines())
+        self.assertFalse(unfinished.exists())
+        # The first emulator's results stay next to the new ones.
+        self.assertTrue((output / "AndroidFirstTest/TEST-example.xml").is_file())
+        self.assertTrue((output / "new-emulator/AndroidThirdTest/TEST-example.xml").is_file())
+
+    def test_a_second_stopped_emulator_fails_the_shard(self):
+        self.source("AndroidExampleTest", tests=2)
+        (self.root / ".test-environment").mkdir()
+        (self.root / ".test-environment/android-unfinished-classes").write_text("AndroidExampleTest\n")
+        self.executable("adb", "import sys\nsys.exit(1 if 'wait-for-device' in sys.argv else print('36'))\n")
+        result = self.run_suite("--resume", PARTIAL="true")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Android suite failed: emulator-5554 stopped responding", result.stdout + result.stderr)
+        self.assertFalse((self.root / ".test-environment/android-unfinished-classes").exists())
 
     def matrix(self):
         # Planning runs on a fresh runner with neither an Android SDK nor a device.
