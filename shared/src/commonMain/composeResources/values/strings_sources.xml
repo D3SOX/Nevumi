@@ -407,6 +407,7 @@
     <string name="sources_enter_search_term">Enter a search term</string>
     <string name="sources_no_results_for">No results for “%1$s”</string>
     <string name="sources_see_all">See all</string>
+    <string name="sources_see_all_count">See all %1$s</string>
     <string name="sources_open_album">Open album: %1$s</string>
     <string name="sources_open_artist">Open artist: %1$s</string>
     <string name="sources_open_playlist">Open playlist: %1$s</string>

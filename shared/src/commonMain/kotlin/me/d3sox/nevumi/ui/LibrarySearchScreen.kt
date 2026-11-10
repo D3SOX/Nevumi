@@ -2,6 +2,7 @@ package me.d3sox.nevumi.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -48,6 +49,12 @@ import me.d3sox.nevumi.resources.sources_playlist_options
 import me.d3sox.nevumi.resources.sources_search_soundcloud_prompt
 import me.d3sox.nevumi.resources.sources_search_your_library
 import me.d3sox.nevumi.resources.sources_see_all
+import me.d3sox.nevumi.resources.sources_see_all_count
+import me.d3sox.nevumi.resources.albums
+import me.d3sox.nevumi.resources.artists
+import me.d3sox.nevumi.resources.folders
+import me.d3sox.nevumi.resources.genres
+import me.d3sox.nevumi.resources.playlists
 
 /** Accessibility text of a search result collection and of its options button, by [SearchType]. */
 private fun SearchType.collectionDescriptions() = when (this) {
@@ -56,6 +63,16 @@ private fun SearchType.collectionDescriptions() = when (this) {
     SearchType.PLAYLISTS -> Res.string.sources_open_playlist to Res.string.sources_playlist_options
     SearchType.GENRES -> Res.string.sources_open_genre to Res.string.sources_genre_options
     else -> Res.string.sources_open_folder to Res.string.sources_folder_options
+}
+
+/** The counted noun of a search result section, as in "See all 143 songs". */
+private fun SearchType.noun() = when (this) {
+    SearchType.SONGS -> Res.plurals.songs
+    SearchType.ALBUMS -> Res.plurals.albums
+    SearchType.ARTISTS -> Res.plurals.artists
+    SearchType.PLAYLISTS -> Res.plurals.playlists
+    SearchType.GENRES -> Res.plurals.genres
+    else -> Res.plurals.folders
 }
 
 @Composable
@@ -123,21 +140,26 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD } else listOf(type)
                     val count = if (type == SearchType.ALL) results.count else results.collections[type].orEmpty().size
                     CompositionLocalProvider(LocalTrackRowStrings provides trackRowStrings()) {
-                    LazyColumn(Modifier.fillMaxSize().testTag("search-results")) {
+                    // Each chip starts at its top instead of reusing the scroll position of the list it was opened from.
+                    LazyColumn(Modifier.fillMaxSize().testTag("search-results"), key(type) { rememberLazyListState() }) {
                         if (count == 0) item { Text(stringResource(Res.string.sources_no_results_for, query.trim()), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         categories.forEach { category ->
                             val collections = results.collections[category].orEmpty()
                             val total = if (category == SearchType.SONGS) results.songs.size else collections.size
-                            if (total > 0) item(key = "heading:${category.name}") {
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val limit = if (type != SearchType.ALL) total else if (category == SearchType.SONGS) 20 else 10
+                            val seeAll = { type = category; stopTyping() }
+                            // The heading stays pinned while its section scrolls by, so its See all button is always within reach.
+                            if (total > 0) stickyHeader(key = "heading:${category.name}") {
+                                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).heightIn(min = 48.dp).padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
                                     Text("${stringResource(category.label)} · $total", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                                    if (type == SearchType.ALL) TextButton(onClick = { type = category; stopTyping() }) { Text(stringResource(Res.string.sources_see_all)) }
+                                    if (total > limit) TextButton(onClick = seeAll) { Text(stringResource(Res.string.sources_see_all)) }
                                 }
                             }
-                            if (category == SearchType.SONGS) itemsIndexed(results.songs.take(20), key = { _, song -> "song:${song.id}" }) { index, song ->
+                            if (category == SearchType.SONGS) itemsIndexed(results.songs.take(limit), key = { _, song -> "song:${song.id}" }) { index, song ->
                                 TrackRow(song, controller, songIds, index, selectionMode = selection.active, selected = song.id in selection.selectedIds,
                                     onSelect = { selection.toggle(song.id, songIds) }, contextName = "Search")
-                            } else items(if (type == SearchType.ALL) collections.take(10) else collections, key = { "${category.name}:${it.id}" }) { collection ->
+                            } else items(collections.take(limit), key = { "${category.name}:${it.id}" }) { collection ->
                                 val tab = requireNotNull(category.tab)
                                 val (openText, optionsText) = category.collectionDescriptions()
                                 val openDescription = stringResource(openText, collection.title)
@@ -153,6 +175,11 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                                     leadingContent = { CollectionArtwork(entry.artwork, collection.title, tab.icon(), Modifier.size(48.dp)) },
                                     trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(optionsText, collection.title), onClick = menu) })
                                 }
+                            }
+                            if (total > limit) item(key = "see-all:${category.name}") {
+                                ListItem(modifier = Modifier.clickable(onClick = seeAll).testTag("search-see-all:${category.name}"),
+                                    headlineContent = { Text(stringResource(Res.string.sources_see_all_count, countLabel(total, category.noun())), color = MaterialTheme.colorScheme.primary) },
+                                    trailingContent = { Icon(AppIcon.FORWARD.vector, null, tint = MaterialTheme.colorScheme.primary) })
                             }
                         }
                         if (type == SearchType.ALL && state.soundCloud != null) item(key = "search-soundcloud") {
