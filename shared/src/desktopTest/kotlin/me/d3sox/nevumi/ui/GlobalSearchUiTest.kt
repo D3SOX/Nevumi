@@ -185,6 +185,32 @@ class GlobalSearchUiTest {
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test fun truncatedSectionsEndWithSeeAllAndKeepTheirHeadingPinned() {
+        val directory = Files.createTempDirectory("search-see-all-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        runBlocking { (1..25).forEach { index -> library.importTrack(TrackMetadata("Wave song ${index.toString().padStart(2, '0')}", "Wave artist", album = "Wave album"),
+            TrackSource("see-all:$index", SourceKind.LOCAL, "/music/wave-$index.flac")) } }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
+        try {
+            runSkikoComposeUiTest(size = Size(420f, 900f)) {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                onNodeWithContentDescription("Search").performClick()
+                onNodeWithContentDescription("Search your library").performTextInput("Wave")
+                // Only the cut-off songs section offers See all; the single album and artist are already shown in full.
+                onAllNodesWithText("See all").assertCountEquals(1)
+                onNodeWithTag("search-see-all:ALBUMS").assertDoesNotExist()
+                onNodeWithTag("search-results").performScrollToKey("see-all:SONGS")
+                onNodeWithText("Songs · 25").assertIsDisplayed()
+                onNodeWithText("See all").assertIsDisplayed()
+                captureSearch("search-see-all")
+                onNodeWithTag("search-see-all:SONGS").assertTextEquals("See all 25 songs").performClick()
+                onNodeWithTag("search-type:SONGS").assertIsSelected()
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
     private fun ComposeUiTest.captureSearch(name: String) {
         System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { directory ->
             val pixels = onNodeWithTag("app-window").captureToImage().toPixelMap()
