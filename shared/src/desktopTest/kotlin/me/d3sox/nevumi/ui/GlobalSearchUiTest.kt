@@ -189,24 +189,31 @@ class GlobalSearchUiTest {
         val directory = Files.createTempDirectory("search-see-all-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
-        runBlocking { (1..25).forEach { index -> library.importTrack(TrackMetadata("Wave song ${index.toString().padStart(2, '0')}", "Wave artist", album = "Wave album"),
-            TrackSource("see-all:$index", SourceKind.LOCAL, "/music/wave-$index.flac")) } }
+        runBlocking { (1..25).forEach { index -> val number = index.toString().padStart(2, '0')
+            library.importTrack(TrackMetadata("Wave song $number", "Wave artist", album = "Wave album $number"),
+                TrackSource("see-all:$index", SourceKind.LOCAL, "/music/wave-$index.flac")) } }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
         try {
             runSkikoComposeUiTest(size = Size(420f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
                 onNodeWithContentDescription("Search").performClick()
-                onNodeWithContentDescription("Search your library").performTextInput("Wave")
-                // Only the cut-off songs section offers See all; the single album and artist are already shown in full.
-                onAllNodesWithText("See all").assertCountEquals(1)
-                onNodeWithTag("search-see-all:ALBUMS").assertDoesNotExist()
+                // Sections that show every result offer no See all.
+                onNodeWithContentDescription("Search your library").performTextInput("01")
+                onNodeWithText("Songs · 1").assertIsDisplayed()
+                onNodeWithText("Albums · 1").assertIsDisplayed()
+                onAllNodesWithText("See all", substring = true).assertCountEquals(0)
+                onNodeWithContentDescription("Search your library").performTextReplacement("Wave")
                 onNodeWithTag("search-results").performScrollToKey("see-all:SONGS")
                 onNodeWithText("Songs · 25").assertIsDisplayed()
-                onNodeWithText("See all").assertIsDisplayed()
                 captureSearch("search-see-all")
                 onNodeWithTag("search-see-all:SONGS").assertTextEquals("See all 25 songs").performClick()
                 onNodeWithTag("search-type:SONGS").assertIsSelected()
+                onNodeWithTag("search-type:ALL").performClick()
+                onNodeWithTag("search-results").performScrollToKey("see-all:ALBUMS")
+                onNodeWithTag("search-see-all:ALBUMS").assertTextEquals("See all 25 albums").performClick()
+                onNodeWithTag("search-type:ALBUMS").assertIsSelected()
+                onNodeWithContentDescription("Open album: Wave album 01").assertIsDisplayed()
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
