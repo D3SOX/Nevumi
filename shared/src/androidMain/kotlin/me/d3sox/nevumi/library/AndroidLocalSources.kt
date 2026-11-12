@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.TagOptionSingleton
 import java.io.File
+import java.security.MessageDigest
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import android.database.ContentObserver
 import android.os.Handler
@@ -51,26 +52,44 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
             DocumentsContract.isDocumentUri(context, opened) -> runCatching { MediaStore.getMediaUri(context, opened) }.getOrNull()
             else -> null
         } ?: sameFile(opened)
-        // Media items, files and downloads on every volume share their IDs with the collection whole-device scans index;
-        // albums and artists have IDs of their own.
-        val id = media?.takeIf { it.pathSegments.dropLast(1).lastOrNull() in setOf("media", "file", "downloads") }
+        // Media items, files and downloads on every external volume share their IDs with the collection whole-device scans index;
+        // albums, artists and the internal volume's system sounds have IDs of their own.
+        val id = media?.takeIf { it.pathSegments.firstOrNull() != MediaStore.VOLUME_INTERNAL &&
+            it.pathSegments.dropLast(1).lastOrNull() in setOf("media", "file", "downloads") }
             ?.lastPathSegment?.toLongOrNull() ?: error(getString(Res.string.open_not_on_device))
         ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString()
     }
 
-    /** Finds the device song with the name and size [uri] reports, for links that file managers serve themselves. */
+    /**
+     * Finds the device song with the name, size and contents [uri] has, for links that file managers serve themselves. Different
+     * recordings can share a name and a size, like WAV files of the same length.
+     */
     private fun sameFile(uri: Uri): Uri? = runCatching {
         val resolver = context.contentResolver
         val (name, size) = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use {
             if (it.moveToFirst() && !it.isNull(0) && !it.isNull(1)) it.getString(0) to it.getLong(1) else null
         } ?: return null
-        resolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Audio.Media._ID),
+        val candidates = resolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Audio.Media._ID),
             "${MediaStore.Audio.Media.DISPLAY_NAME} = ? AND ${MediaStore.Audio.Media.SIZE} = ? AND " +
                 "${MediaStore.Audio.Media.IS_TRASHED} = 0 AND ${MediaStore.Audio.Media.IS_PENDING} = 0",
-            arrayOf(name, size.toString()), null)?.use {
-            if (it.moveToFirst()) ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it.getLong(0)) else null
-        }
+            arrayOf(name, size.toString()), null)?.use { cursor ->
+            buildList { while (cursor.moveToNext()) add(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0))) }
+        }.orEmpty()
+        if (candidates.isEmpty()) return null
+        val opened = digest(uri) ?: return null
+        candidates.firstOrNull { digest(it)?.contentEquals(opened) == true }
     }.getOrNull()
+
+    private fun digest(uri: Uri): ByteArray? = context.contentResolver.openInputStream(uri)?.use { input ->
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
+        digest.digest()
+    }
 
     private suspend fun deviceStamp(): String = buildString {
         append(library.localFolderStamp())
