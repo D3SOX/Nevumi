@@ -221,6 +221,7 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
 
     // The server answered, so an oversized cover must not read as a connection failure.
     private suspend fun HttpResponse.artwork(): ByteArray = try { readArtwork() }
+        catch (cancelled: CancellationException) { throw cancelled }
         catch (_: IllegalStateException) { throw ScGateException("The artwork from sc-gate-dl is larger than 10 MiB") }
 
     private suspend fun json(method: HttpMethod, path: String, timeoutMillis: Long = 30_000, body: JsonObject? = null,
