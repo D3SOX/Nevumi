@@ -92,7 +92,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     fun stopTyping() { keyboard?.hide(); focusManager.clearFocus() }
     val visible = remember(state.tracks, state.preferences.includeFolders, state.preferences.excludeFolders) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
-        state.tracks.filter { track -> track.inLibrary && track.sources.any { it.available } && (track.sources.any { it.kind != SourceKind.LOCAL } ||
+        state.tracks.filter { track -> track.inLibrary && track.sources.any { it.available } && (track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE } ||
             folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))) }
     }
     // Grouping the library is the expensive part; it happens once per library change, off the main thread for large ones.

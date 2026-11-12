@@ -125,12 +125,14 @@ internal object Mp4Defragmenter {
             if (tfhdFlags and 0x2 != 0) at += 4
             val defaultDuration = if (tfhdFlags and 0x8 != 0) tfhd.int(at).also { at += 4 } else trexDuration
             val defaultSize = if (tfhdFlags and 0x10 != 0) tfhd.int(at).also { at += 4 } else trexSize
+            // A run without its own data offset starts where the previous run of the fragment ended.
+            var nextData = baseOffset
             children.filter { it.type == "trun" }.map { trunBox ->
                 val trun = read(file, trunBox)
                 val flags = trun.int(8) and 0xFFFFFF
                 val count = trun.int(12)
                 var position = 16
-                val dataOffset = if (flags and 0x1 != 0) trun.int(position).also { position += 4 } else 0
+                val dataStart = if (flags and 0x1 != 0) baseOffset + trun.int(position).also { position += 4 } else nextData
                 if (flags and 0x4 != 0) position += 4
                 val durations = IntArray(count)
                 val sizes = IntArray(count)
@@ -141,7 +143,8 @@ internal object Mp4Defragmenter {
                     if (flags and 0x800 != 0) position += 4
                 }
                 if (sizes.any { it <= 0 }) throw IOException("The audio has samples of unknown size")
-                Run(baseOffset + dataOffset, sizes, durations)
+                nextData = dataStart + sizes.sumOf { it.toLong() }
+                Run(dataStart, sizes, durations)
             }
         }
 

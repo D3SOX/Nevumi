@@ -45,9 +45,9 @@ private object UrlConnectionDownloader : Downloader() {
             connection.readTimeout = 30_000
             connection.requestMethod = request.httpMethod()
             connection.setRequestProperty("User-Agent", YOUTUBE_USER_AGENT)
+            // The first value replaces any set before, such as the User-Agent, so a header is never sent twice.
             request.headers().forEach { (name, values) ->
-                connection.setRequestProperty(name, null)
-                values.forEach { connection.addRequestProperty(name, it) }
+                values.forEachIndexed { index, value -> if (index == 0) connection.setRequestProperty(name, value) else connection.addRequestProperty(name, value) }
             }
             request.dataToSend()?.let { body ->
                 connection.doOutput = true

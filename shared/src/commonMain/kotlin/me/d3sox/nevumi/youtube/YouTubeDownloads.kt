@@ -303,15 +303,21 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
                     timeout { requestTimeoutMillis = 120_000; socketTimeoutMillis = 30_000 }
                 }.execute { response ->
                     if (response.status.value == 206) withContext(Dispatchers.IO) {
+                        // Appending another part of the audio, or nothing at all, would damage the file or ask for the same range forever.
+                        if (response.headers[HttpHeaders.ContentRange]?.startsWith("bytes $position-") != true)
+                            throw YouTubeException("YouTube sent the wrong part of the audio")
+                        val start = position
                         fs.appendingSink(target).buffer().use { sink ->
                             val channel = response.bodyAsChannel()
                             val buffer = ByteArray(64 * 1024)
-                            while (true) {
+                            while (position <= last) {
                                 val count = channel.readAvailable(buffer)
                                 if (count == -1) break
-                                if (count > 0) { sink.write(buffer, 0, count); position += count }
+                                val kept = minOf(count.toLong(), last + 1 - position).toInt()
+                                if (kept > 0) { sink.write(buffer, 0, kept); position += kept }
                             }
                         }
+                        if (position == start) throw YouTubeException("YouTube sent no audio")
                     }
                     response.status.value
                 }
@@ -351,7 +357,9 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
             withContext(Dispatchers.IO) { deleteFiles(job.id) }
         }
         val indexed = importLocal(job)
-        val next = if (job.destination == YouTubeDestination.SERVER && indexed.trackId != null)
+        // Only a library song can be uploaded, so a song that could not be indexed waits for a retry instead of skipping its upload.
+        if (job.destination == YouTubeDestination.SERVER && indexed.trackId == null) throw YouTubeException("Nevumi could not read the saved song")
+        val next = if (job.destination == YouTubeDestination.SERVER)
             indexed.copy(state = YouTubeJobState.UPLOADING, message = "Uploading to your music server") else indexed
         if (replace(job, next)) { if (next.state == YouTubeJobState.COMPLETE) mutableCompleted.tryEmit(next) else advance(next) }
     }

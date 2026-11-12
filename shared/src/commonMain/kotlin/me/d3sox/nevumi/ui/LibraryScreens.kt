@@ -158,7 +158,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         fun localAllowed(track: Track) =
             folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
-        val unfiltered = state.tracks.filter { track -> track.inLibrary && (localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL }) }
+        val unfiltered = state.tracks.filter { track -> track.inLibrary && (localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE }) }
         val visible = if (sources == SourceKind.LOCAL) unfiltered.filter(::localAllowed) else unfiltered
         filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now, playlisted) to
             unfiltered

@@ -15,6 +15,7 @@ import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.settings.HomeSectionId
 import me.d3sox.nevumi.navidrome.NavidromeChanges
@@ -295,7 +296,8 @@ private class TrackMatcher(tracks: List<Track>) {
     private val identities = tracks.mapNotNull { track -> LibrarySync.identity(track.metadata)?.let { it to track } }.groupBy({ it.first }, { it.second })
     private val servers = tracks.flatMap { track -> track.sources.filter { it.kind == SourceKind.SERVER }.map { it.id to track } }
         .groupBy({ it.first }, { it.second })
-    private val tags = tracks.groupBy { tagKey(it.metadata.title, it.metadata.artist, it.metadata.album) }
+    // A song that only streams from YouTube shares its tags with the library copy it was found for, which would make the match ambiguous.
+    private val tags = tracks.filter { it.inLibrary }.groupBy { tagKey(it.metadata.title, it.metadata.artist, it.metadata.album) }
 
     fun find(track: BackupTrack): String? {
         fun List<Track>.closest() = filter { it.metadata.durationMs <= 0 || track.durationMs <= 0 ||

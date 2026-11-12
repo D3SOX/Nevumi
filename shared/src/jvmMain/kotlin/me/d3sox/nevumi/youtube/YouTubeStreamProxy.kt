@@ -26,6 +26,7 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
     private val token = Uuid.random().toHexString()
     private val workers = Executors.newCachedThreadPool { task -> Thread(task, "youtube-stream").apply { isDaemon = true } }
     @Volatile private var server: ServerSocket? = null
+    private val clients = java.util.concurrent.Semaphore(16)
 
     fun location(videoId: String): String = "http://127.0.0.1:${listening().localPort}/$token/$videoId"
 
@@ -34,7 +35,9 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
         workers.execute {
             while (!socket.isClosed) {
                 val client = try { socket.accept() } catch (_: IOException) { break }
-                workers.execute { client.use(::serve) }
+                // Other apps can connect too, so only a few connections are served at once and the rest are closed.
+                if (!clients.tryAcquire()) { client.close(); continue }
+                workers.execute { try { client.use(::serve) } finally { clients.release() } }
             }
         }
     }
@@ -90,7 +93,10 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
                         continue
                     }
                     if (code != 206) return
-                    position += connection.inputStream.use { it.copyTo(output) }
+                    val copied = connection.inputStream.use { it.copyTo(output) }
+                    // A range without bytes would be asked for again forever.
+                    if (copied == 0L) return
+                    position += copied
                 } finally { connection.disconnect() }
             }
             output.flush()

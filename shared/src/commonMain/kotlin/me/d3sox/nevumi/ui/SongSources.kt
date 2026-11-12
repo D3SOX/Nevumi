@@ -54,7 +54,8 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
             TextButton(enabled = !saving, onClick = {
                 saving = true
                 scope.launch {
-                    controller.linkTracks(track.id, selected.id).join()
+                    // A song that only streams from YouTube has sparse tags, so the library song is the one kept.
+                    if (track.inLibrary) controller.linkTracks(track.id, selected.id).join() else controller.linkTracks(selected.id, track.id).join()
                     saving = false
                     if (controller.state.value.error == null) dismiss()
                 }

@@ -28,6 +28,18 @@ class YouTubeAudioFileTest {
         return types
     }
 
+    private fun mdatPayloads(file: File): ByteArray {
+        val bytes = file.readBytes()
+        val payloads = java.io.ByteArrayOutputStream()
+        var position = 0
+        while (position + 8 <= bytes.size) {
+            val size = ByteBuffer.wrap(bytes, position, 4).int
+            if (bytes.decodeToString(position + 4, position + 8) == "mdat") payloads.write(bytes, position + 8, size - 8)
+            position += size
+        }
+        return payloads.toByteArray()
+    }
+
     @Test fun aFragmentedDownloadBecomesAPlainTaggedM4aWithTheSameAudio() = runBlocking {
         val directory = Files.createTempDirectory("youtube-audio")
         try {
@@ -48,8 +60,8 @@ class YouTubeAudioFileTest {
             assertEquals("House", tag.getFirst(FieldKey.GENRE))
             assertEquals("2001", tag.getFirst(FieldKey.YEAR))
             assertNotNull(tag.firstArtwork)
-            // The audio is copied unchanged; only the fragment headers give way to one sample table and the tags.
-            assertTrue(target.length() in (source.length() / 2)..(source.length() + cover.size + 4_096))
+            // The audio is copied unchanged: the mdat payloads of the fragments, in order, are the plain file's one mdat.
+            assertTrue(mdatPayloads(source).contentEquals(mdatPayloads(target)))
         } finally { directory.toFile().deleteRecursively() }
     }
 

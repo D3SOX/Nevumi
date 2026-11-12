@@ -157,7 +157,8 @@ class YouTubeDownloadsTest {
             fixture.downloads.cancel(job.id)
             val canceled = fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.CANCELLED }
             assertFalse(canceled.downloaded)
-            assertEquals(emptyList(), fixture.directory.resolve("work").toFile().list().orEmpty().toList())
+            // A writer that was still finishing deletes the files itself once it stops.
+            withTimeout(5_000) { while (fixture.directory.resolve("work").toFile().list().orEmpty().isNotEmpty()) kotlinx.coroutines.delay(20) }
             fixture.downloads.retry(job.id)
             fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.NEEDS_TAGS }
             fixture.downloads.dismiss(job.id)

@@ -56,6 +56,7 @@ import me.d3sox.nevumi.resources.sources_youtube_video
 import me.d3sox.nevumi.resources.sources_youtube_videos
 import me.d3sox.nevumi.youtube.YouTubeContinuation
 import me.d3sox.nevumi.youtube.YouTubeDestination
+import me.d3sox.nevumi.youtube.YouTubeException
 import me.d3sox.nevumi.youtube.YouTubeSearchKind
 import me.d3sox.nevumi.youtube.YouTubeTrack
 import me.d3sox.nevumi.youtube.smallArtwork
@@ -75,6 +76,8 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
     var next by remember(query, kind) { mutableStateOf<YouTubeContinuation?>(null) }
     var loading by remember(query, kind) { mutableStateOf(true) }
     var error by remember(query, kind) { mutableStateOf<String?>(null) }
+    // Trying again cannot bring back a private or removed video that a pasted link found.
+    var permanent by remember(query, kind) { mutableStateOf(false) }
     var attempt by remember(query, kind) { mutableStateOf(0) }
     var picked by remember { mutableStateOf<YouTubeTrack?>(null) }
     val scope = rememberCoroutineScope()
@@ -84,10 +87,10 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
         try {
             val page = controller.searchYouTube(query, kind, continuation)
             if (continuation == null) results.clear()
-            results += page.results.filter { result -> results.none { it.videoId == result.videoId } }
+            results += page.results.distinctBy { it.videoId }.filter { result -> results.none { it.videoId == result.videoId } }
             next = page.next
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { error = failure.message ?: searchFailed }
+        catch (failure: Exception) { error = failure.message ?: searchFailed; permanent = (failure as? YouTubeException)?.retryable == false }
         finally { loading = false }
     }
     LaunchedEffect(query, kind, attempt) {
@@ -126,7 +129,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
                 item {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(message, color = MaterialTheme.colorScheme.error)
-                        ActionButton(stringResource(Res.string.retry), AppIcon.REFRESH, style = ActionStyle.TONAL) {
+                        if (!permanent) ActionButton(stringResource(Res.string.retry), AppIcon.REFRESH, style = ActionStyle.TONAL) {
                             if (results.isEmpty()) attempt++ else scope.launch { load(next) }
                         }
                     }
