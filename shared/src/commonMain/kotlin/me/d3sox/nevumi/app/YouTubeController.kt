@@ -79,8 +79,10 @@ class YouTubeController internal constructor(private val context: ControllerCont
     /** The library song that streams [track], kept out of the library views; the same video always maps to the same song. */
     private suspend fun libraryTrack(track: YouTubeTrack): String {
         val (title, artist) = track.suggestedTags()
-        val song = library.importTrack(TrackMetadata(title, artist, durationMs = track.durationMs),
-            TrackSource("youtube:${track.videoId}", SourceKind.YOUTUBE, track.videoId))
+        val sourceId = "youtube:${track.videoId}"
+        // A video played before keeps its song, whose tags may be richer, such as after linking it to a local copy.
+        val song = library.trackForSource(sourceId) ?: library.importTrack(TrackMetadata(title, artist, durationMs = track.durationMs),
+            TrackSource(sourceId, SourceKind.YOUTUBE, track.videoId))
         if (artwork != null && context.state.value.artwork[song.id] == null) track.artworkUrl?.let { url ->
             try { artwork.save(song.id, source().artwork(largeArtwork(url))) }
             catch (cancelled: CancellationException) { throw cancelled }

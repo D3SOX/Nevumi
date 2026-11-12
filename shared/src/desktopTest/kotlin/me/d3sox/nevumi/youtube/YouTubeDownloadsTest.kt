@@ -35,13 +35,13 @@ class YouTubeDownloadsTest {
     private val track = YouTubeTrack("abcdefghijk", "One More Time", "Daft Punk", 3_000, song = true)
 
     /** Answers like YouTube: [audio] in byte ranges only, from addresses that [expired] rejects. */
-    private class FakeYouTube(val audio: ByteArray, val failure: Exception? = null) : YouTubeSource {
+    private class FakeYouTube(val audio: ByteArray, val failure: Exception? = null, val mimeType: String = "audio/mp4") : YouTubeSource {
         val lookups = Collections.synchronizedList(mutableListOf<Boolean>())
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?) = YouTubePage(emptyList(), null)
         override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {
             lookups += fresh
             failure?.let { throw it }
-            return YouTubeAudio("https://media.test/${lookups.size}", "audio/mp4", audio.size.toLong(), 48, YouTubeDetails("Discovery", 2001))
+            return YouTubeAudio("https://media.test/${lookups.size}", mimeType, audio.size.toLong(), 48, YouTubeDetails("Discovery", 2001))
         }
         override fun playbackLocation(videoId: String) = "http://127.0.0.1/$videoId"
         override suspend fun artwork(url: String) = ByteArray(0)
@@ -136,6 +136,17 @@ class YouTubeDownloadsTest {
             val job = offline.downloads.download(track, YouTubeDestination.DEVICE, reviewTags = false)
             assertFalse(offline.downloads.awaitJob(job.id) { it.state == YouTubeJobState.FAILED }.permanent)
         } finally { offline.close() }
+    }
+
+    @Test fun aVideoWithoutMp4AudioFailsBeforeDownloadingAnything() = runBlocking {
+        val fixture = fixture(FakeYouTube(audio, mimeType = "audio/webm"))
+        try {
+            val job = fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags = false)
+            val failed = fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.FAILED }
+            assertEquals("YouTube offers no M4A audio for this video to save", failed.message)
+            assertTrue(failed.permanent)
+            assertEquals(emptyList(), fixture.requests.toList())
+        } finally { fixture.close() }
     }
 
     @Test fun cancelingAWaitingDownloadDeletesItsAudioAndRetryingStartsOver() = runBlocking {

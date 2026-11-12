@@ -280,6 +280,8 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
             if (!replace(job, next)) return
             job = next
         }
+        // Only MP4 audio becomes a taggable M4A without converting it; YouTube offers it for nearly every video.
+        if (audio.mimeType != "audio/mp4") throw YouTubeException("YouTube offers no M4A audio for this video to save", retryable = false)
         val total = audio.contentLength.takeIf { it > 0 } ?: throw YouTubeException("YouTube did not say how long this audio is")
         val target = partFile(job.id)
         val fs = FileSystem.SYSTEM
