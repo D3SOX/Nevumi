@@ -304,7 +304,8 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
                 }.execute { response ->
                     if (response.status.value == 206) withContext(Dispatchers.IO) {
                         // Appending another part of the audio, or nothing at all, would damage the file or ask for the same range forever.
-                        if (response.headers[HttpHeaders.ContentRange]?.startsWith("bytes $position-") != true)
+                        val range = response.headers[HttpHeaders.ContentRange]
+                        if (range?.startsWith("bytes $position-") != true || !range.endsWith("/$total"))
                             throw YouTubeException("YouTube sent the wrong part of the audio")
                         val start = position
                         fs.appendingSink(target).buffer().use { sink ->
@@ -325,7 +326,12 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
             when {
                 status == 206 -> refreshed = false
                 // The stream's address expired, such as during a long pause; the next one continues from the same byte.
-                (status == 403 || status == 410) && !refreshed -> { refreshed = true; audio = source.audio(job.track.videoId, fresh = true) }
+                (status == 403 || status == 410) && !refreshed -> {
+                    refreshed = true
+                    audio = source.audio(job.track.videoId, fresh = true)
+                    // The rest of the file must come from the same stream.
+                    if (audio.mimeType != "audio/mp4" || audio.contentLength != total) throw YouTubeException("YouTube changed this video's audio. Retry to download it again.")
+                }
                 else -> throw YouTubeException("YouTube stopped the download (HTTP $status)")
             }
             val percent = (position * 100 / total).toInt()

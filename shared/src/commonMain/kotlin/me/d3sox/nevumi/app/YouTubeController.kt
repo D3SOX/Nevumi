@@ -70,9 +70,14 @@ class YouTubeController internal constructor(private val context: ControllerCont
     suspend fun youTubeArtwork(url: String): ByteArray = source().artwork(url)
 
     /** Plays [track] on its own, or with [action] adds it to the queue. Its audio is looked up first, so an unavailable video says why. */
-    fun playYouTube(track: YouTubeTrack, action: QueueAction? = null) = context.action(serialized = false) {
-        requireEnabled()
+    fun playYouTube(track: YouTubeTrack, action: QueueAction? = null): kotlinx.coroutines.Job {
+        // Numbered when tapped, so the order of the taps decides, not the order the lookups finish in.
         val request = if (action == null) ++latestPlay else 0
+        return playYouTube(track, action, request)
+    }
+
+    private fun playYouTube(track: YouTubeTrack, action: QueueAction?, request: Long) = context.action(serialized = false) {
+        requireEnabled()
         source().audio(track.videoId)
         val trackId = libraryTrack(track)
         // Looking a video up takes a moment, so a later Play may finish first; the latest one wins.

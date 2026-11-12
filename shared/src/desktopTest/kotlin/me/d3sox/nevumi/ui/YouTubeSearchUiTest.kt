@@ -35,7 +35,9 @@ class YouTubeSearchUiTest {
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?): YouTubePage {
             searches += query to kind
             if (searches.size == 1) throw YouTubeException("Could not reach YouTube. Check your connection.")
+            // YouTube can list a video twice on one page.
             return YouTubePage(listOf(YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist", 201_000, song = true),
+                YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist", 201_000, song = true),
                 YouTubeTrack("bbbbbbbbbbb", "Other - Night Swim (Official Video)", "OtherVEVO", 180_000)), null)
         }
         override suspend fun audio(videoId: String, fresh: Boolean) = YouTubeAudio("https://media.test/$videoId", "audio/mp4", 1, 128)
@@ -66,6 +68,7 @@ class YouTubeSearchUiTest {
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("YouTube song: Night Drive by Artist").fetchSemanticsNodes().isNotEmpty() }
                 assertEquals(listOf("Night" to YouTubeSearchKind.SONGS, "Night" to YouTubeSearchKind.SONGS), youTube.searches.toList())
                 onAllNodesWithText("In library", useUnmergedTree = true).assertCountEquals(1)
+                onAllNodesWithContentDescription("YouTube song: Night Drive by Artist").assertCountEquals(1)
                 snapshot("youtube-search")
 
                 onNodeWithContentDescription("More options: Other - Night Swim (Official Video)").performClick()
