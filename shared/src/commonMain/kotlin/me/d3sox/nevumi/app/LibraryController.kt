@@ -257,6 +257,8 @@ class LibraryController internal constructor(private val context: ControllerCont
         }.distinct()
     }
 
+    internal suspend fun openedSong(uri: String) = requireNotNull(localSources) { "Local music access is unavailable" }.openedSong(uri)
+
     /** Scans [locations]; [chosenSongs] are files the user picked, indexed even outside the library's folders. */
     private suspend fun importSources(locations: List<String>, chosenSongs: Boolean = false) = imports.withLock {
         context.update { it.copy(loading = true, error = null) }

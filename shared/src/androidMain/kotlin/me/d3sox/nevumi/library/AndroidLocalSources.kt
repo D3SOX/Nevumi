@@ -1,9 +1,14 @@
 package me.d3sox.nevumi.library
 
+import android.Manifest
 import android.content.Context
 import android.content.ContentUris
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jaudiotagger.audio.AudioFileIO
@@ -20,10 +25,52 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.open_needs_permission
+import me.d3sox.nevumi.resources.open_not_on_device
+import org.jetbrains.compose.resources.getString
 
 class AndroidLocalSources(private val context: Context, private val library: MusicLibrary,
     private val artwork: ArtworkLibrary? = null) : LocalSources {
     override suspend fun roots(): List<String> = library.localRoots()
+
+    // Songs the user opened stay in the library, also when a later scan of the device follows the folder rules.
+    override suspend fun scanSong(location: String): List<Track> {
+        if (location.startsWith("content://media/")) library.rememberChosenSong(location)
+        return scan(location)
+    }
+
+    // The library indexes device songs under their media store entry, so a link another app hands over is matched to one.
+    // Reading that entry, then and when the song plays later, needs the audio permission; a link's own grant ends with the activity.
+    override suspend fun openedSong(uri: String): String = withContext(Dispatchers.IO) {
+        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) error(getString(Res.string.open_needs_permission))
+        val opened = Uri.parse(uri)
+        val media = when {
+            opened.authority == MediaStore.AUTHORITY -> opened
+            DocumentsContract.isDocumentUri(context, opened) -> runCatching { MediaStore.getMediaUri(context, opened) }.getOrNull()
+            else -> null
+        } ?: sameFile(opened)
+        // Media items, files and downloads on every volume share their IDs with the collection whole-device scans index;
+        // albums and artists have IDs of their own.
+        val id = media?.takeIf { it.pathSegments.dropLast(1).lastOrNull() in setOf("media", "file", "downloads") }
+            ?.lastPathSegment?.toLongOrNull() ?: error(getString(Res.string.open_not_on_device))
+        ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString()
+    }
+
+    /** Finds the device song with the name and size [uri] reports, for links that file managers serve themselves. */
+    private fun sameFile(uri: Uri): Uri? = runCatching {
+        val resolver = context.contentResolver
+        val (name, size) = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use {
+            if (it.moveToFirst() && !it.isNull(0) && !it.isNull(1)) it.getString(0) to it.getLong(1) else null
+        } ?: return null
+        resolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Audio.Media._ID),
+            "${MediaStore.Audio.Media.DISPLAY_NAME} = ? AND ${MediaStore.Audio.Media.SIZE} = ? AND " +
+                "${MediaStore.Audio.Media.IS_TRASHED} = 0 AND ${MediaStore.Audio.Media.IS_PENDING} = 0",
+            arrayOf(name, size.toString()), null)?.use {
+            if (it.moveToFirst()) ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it.getLong(0)) else null
+        }
+    }.getOrNull()
 
     private suspend fun deviceStamp(): String = buildString {
         append(library.localFolderStamp())
@@ -77,6 +124,7 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
         val result = mutableListOf<Track>()
         val seen = mutableSetOf<String>()
         val folders = library.localFolderRules()
+        val chosen = library.chosenSongs()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
         requireNotNull(resolver.query(queryUri, arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME,
             MediaStore.Audio.Media.RELATIVE_PATH, MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.DATE_MODIFIED, MediaStore.Audio.Media.SIZE),
@@ -89,8 +137,8 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
                 val name = cursor.getString(1)
                 val extension = name.substringAfterLast('.', "").lowercase()
                 if (extension !in setOf("mp3", "wav", "flac")) continue
-                if (!folders.allows(cursor.getString(2).orEmpty(), cursor.getString(3)?.let { File(it).parent })) continue
                 val uri = if (wholeDevice) ContentUris.withAppendedId(collection, cursor.getLong(0)) else queryUri
+                if (uri.toString() !in chosen && !folders.allows(cursor.getString(2).orEmpty(), cursor.getString(3)?.let { File(it).parent })) continue
                 val direct = cursor.getString(3)?.let(::File)?.takeIf { it.isFile && it.canRead() }
                 val modifiedAt = direct?.lastModified()?.takeIf { it > 0 } ?: (cursor.getLong(4) * 1_000)
                 val size = direct?.length() ?: cursor.getLong(5)
