@@ -122,7 +122,7 @@ private class AndroidFileEditAccess(private val context: Context, private val st
             put(MediaStore.Audio.Media.DISPLAY_NAME, name)
             put(MediaStore.Audio.Media.RELATIVE_PATH, folder)
             put(MediaStore.Audio.Media.MIME_TYPE, when (name.substringAfterLast('.').lowercase()) {
-                "mp3" -> "audio/mpeg"; "wav" -> "audio/wav"; else -> "audio/flac"
+                "mp3" -> "audio/mpeg"; "wav" -> "audio/wav"; "m4a" -> "audio/mp4"; else -> "audio/flac"
             })
             put(MediaStore.Audio.Media.IS_PENDING, 1)
         })) { "The original music file cannot be restored" }

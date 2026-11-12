@@ -12,7 +12,7 @@ import org.jaudiotagger.tag.wav.WavTag
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 
 /** The audio formats a local scan indexes. */
-val localMusicExtensions = setOf("mp3", "wav", "flac")
+val localMusicExtensions = setOf("mp3", "m4a", "wav", "flac")
 
 /** The tag a file's fields are read from, which in a WAV file with an ID3 tag is that tag rather than the INFO chunk. */
 val AudioFile.fieldTag: Tag? get() = tag.let { if (it is WavTag && it.isExistingId3Tag) it.getID3Tag() else it }
