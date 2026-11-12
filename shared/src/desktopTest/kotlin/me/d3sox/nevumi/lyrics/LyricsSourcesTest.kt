@@ -31,11 +31,13 @@ class LyricsSourcesTest {
             requests += request.url.encodedPath.substringAfterLast('/') + "?id=" + request.url.parameters["id"]
             respond(subsonic(""","lyricsList":{"structuredLyrics":[
                 {"lang":"xxx","synced":false,"line":[{"value":"Plain"}]},
-                {"lang":"eng","synced":true,"offset":100,"line":[{"start":2100,"value":"Two"},{"start":1100,"value":"One"}]}]}"""),
+                {"lang":"eng","synced":true,"offset":100,"line":[{"start":2100,"value":"<00:02.10>Tw<00:02.40>o"},{"start":1100,"value":"One"}]}]}"""),
                 headers = json)
         }, "https://music.example", ServerCredentials("listener", "secret"))
         val lyrics = assertNotNull(client.lyrics("song-1", "Fixture Artist", "Northern Light"))
-        assertEquals(Lyrics(LyricsSource.SERVER, listOf(LyricLine(1_000, "One"), LyricLine(2_000, "Two"))), lyrics)
+        // Enhanced LRC word timestamps passed on by the server time the words, and the offset moves them too.
+        assertEquals(Lyrics(LyricsSource.SERVER, listOf(LyricLine(1_000, "One"),
+            LyricLine(2_000, "Two", listOf(LyricWord(2_000, "Tw"), LyricWord(2_300, "o"))))), lyrics)
         assertEquals(listOf("getLyricsBySongId.view?id=song-1"), requests)
     }
 
@@ -159,6 +161,8 @@ class LyricsSourcesTest {
     @Test fun netEaseTakesTheFirstCopyOfTheSameRecordingWithLyricsAndDropsItsCredits() = runBlocking {
         val searches = mutableListOf<String?>()
         val lyricIds = mutableListOf<String?>()
+        val wordTiming = mutableListOf<String?>()
+        var firstCopy = """{"code":200,"lrc":{"lyric":"Plain copy"}}"""
         var lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:01.000] 作曲 : Someone\n[00:02.50]你说：First line\n[00:04.00]Second"}}"""
         val netEase = NetEaseClient(http { request ->
             if (request.url.encodedPath == "/api/cloudsearch/pc") {
@@ -173,17 +177,35 @@ class LyricsSourcesTest {
             } else {
                 val id = request.url.parameters["id"]
                 lyricIds += id
-                respond(when (id) { "4" -> """{"code":200,"lrc":{"lyric":"Plain copy"}}"""; else -> lyric }, headers = json)
+                wordTiming += request.url.parameters["yv"]
+                respond(if (id == "4") firstCopy else lyric, headers = json)
             }
         }, "1.0")
         assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(2_500, "你说：First line"), LyricLine(4_000, "Second"))), netEase.lyrics(metadata))
         assertEquals(listOf<String?>("Fixture Artist Northern Light"), searches)
         // Other versions, artists and lengths are never fetched, and a plain copy gives way to a synced one.
         assertEquals(listOf<String?>("4", "5"), lyricIds)
+        // The lyrics timed word by word are asked for in the same request.
+        assertEquals(listOf<String?>("1", "1"), wordTiming)
         for (opening in listOf("I : remember", "僕 : まだ", "2 : 1", "你说 : First line")) {
             lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:00.100]制作人 : Someone\n[00:00.200]录音师 : Someone\n[00:00.300]混音工程师 : Someone\n[00:01.00]$opening"}}"""
             assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, opening))), netEase.lyrics(metadata))
         }
+        // Lyrics timed word by word are preferred, without their credits, and lyrics timed by line remain when there are none.
+        lyric = """{"code":200,"lrc":{"lyric":"[00:01.00]By line"},"yrc":{"lyric":"[0,0](0,0,0) 作词 : Someone\n[1000,800](1000,300,0)Word (1300,500,0)by word"}}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "Word by word", listOf(LyricWord(1_000, "Word "), LyricWord(1_300, "by word"))), LyricLine(1_800, ""))),
+            netEase.lyrics(metadata))
+        // A later copy timed word by word beats an earlier one timed by line.
+        firstCopy = """{"code":200,"lrc":{"lyric":"[00:01.00]First copy by line"}}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "Word by word", listOf(LyricWord(1_000, "Word "), LyricWord(1_300, "by word"))), LyricLine(1_800, ""))),
+            netEase.lyrics(metadata))
+        // A refusal while looking for better timing keeps what the earlier copy had.
+        lyric = """{"code":-462,"message":"Verify your phone"}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "First copy by line"))), netEase.lyrics(metadata))
+        lyric = """{"code":200,"lrc":{"lyric":"[00:01.00]By line"},"yrc":{"lyric":"[0,0](0,0,0) 作词 : Someone"}}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "First copy by line"))), netEase.lyrics(metadata))
+        firstCopy = """{"code":200,"lrc":{"lyric":"Plain copy"}}"""
+        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "By line"))), netEase.lyrics(metadata))
         lyric = """{"code":200,"lrc":{"lyric":""}}"""
         assertEquals(Lyrics(LyricsSource.NETEASE, plain = "Plain copy"), netEase.lyrics(metadata))
         lyric = """{"code":200,"pureMusic":true,"lrc":{"lyric":"[00:00.00]纯音乐，请欣赏"}}"""
@@ -197,7 +219,7 @@ class LyricsSourcesTest {
         Unit
     }
 
-    @Test fun onlineServicesAreAskedInOrderUntilOneHasSyncedLyrics() = runBlocking {
+    @Test fun onlineServicesAreAskedTogetherAndTheMostPreciselyTimedLyricsWin() = runBlocking {
         val asked = mutableListOf<LyricsSource>()
         fun service(source: LyricsSource, answer: suspend () -> Lyrics?) = object : OnlineLyrics {
             override val source = source
@@ -217,11 +239,15 @@ class LyricsSourcesTest {
         // Synced lyrics from a later service beat plain text from an earlier one, which stays as the fallback.
         assertEquals(synced, find({ plain }, { synced }, both))
         assertEquals(plain, find({ plain }, { null }, both))
-        assertEquals(listOf(LyricsSource.LRCLIB, LyricsSource.NETEASE), asked)
+        assertEquals(both, asked.toSet())
         assertEquals(plain, find({ plain }, { synced }, setOf(LyricsSource.LRCLIB)))
         assertEquals(listOf(LyricsSource.LRCLIB), asked)
-        assertEquals(synced.copy(source = LyricsSource.LRCLIB), find({ synced.copy(source = LyricsSource.LRCLIB) }, { error("unused") }, both))
-        assertEquals(listOf(LyricsSource.LRCLIB), asked)
+        // Lyrics timed word by word beat lyrics timed by line, and the earlier service wins between equally timed ones.
+        val byLine = synced.copy(source = LyricsSource.LRCLIB)
+        val byWord = Lyrics(LyricsSource.NETEASE, listOf(LyricLine(0, "Synced", listOf(LyricWord(0, "Synced")))))
+        assertEquals(byWord, find({ byLine }, { byWord }, both))
+        assertEquals(byLine, find({ byLine }, { synced }, both))
+        assertEquals(both, asked.toSet())
         // A failing or stalled service gives way to the next one.
         assertEquals(synced, find({ error("HTTP 503") }, { synced }, both))
         assertEquals(synced, find({ awaitCancellation() }, { synced }, both))

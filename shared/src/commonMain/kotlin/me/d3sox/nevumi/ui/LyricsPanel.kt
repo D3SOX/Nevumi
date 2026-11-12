@@ -14,12 +14,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -29,6 +34,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.LyricsState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.lyrics.LyricLine
 import me.d3sox.nevumi.lyrics.Lyrics
 import me.d3sox.nevumi.lyrics.LyricsQuery
 import me.d3sox.nevumi.lyrics.LyricsSource
@@ -150,6 +156,8 @@ private fun SyncedLyrics(lyrics: Lyrics, controller: MusicController) {
     val position by positionFlow.collectAsState(controller.state.value.playback.positionMs)
     val lines = lyrics.lines
     val active by remember(lines) { derivedStateOf { lines.indexOfLast { it.startMs <= position } } }
+    // The last word reached in the current line, when the lyrics are timed word by word.
+    val sung by remember(lines) { derivedStateOf { lines.getOrNull(active)?.words?.indexOfLast { it.startMs <= position } ?: -1 } }
     val list = rememberLazyListState()
     var autoScrolling by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
@@ -169,13 +177,21 @@ private fun SyncedLyrics(lyrics: Lyrics, controller: MusicController) {
         LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(horizontal = 24.dp, vertical = maxHeight / 3)) {
             itemsIndexed(lines) { index, line ->
                 val current = index == active
-                Text(line.text.ifBlank { "♪" }, Modifier.fillMaxWidth().clickable(onClickLabel = seekLabel) { controller.seek(line.startMs) }
+                val color = MaterialTheme.colorScheme.onSecondaryContainer
+                // Only the current line follows its words, so the others don't change as the song plays.
+                val text = if (current && line.words.isNotEmpty()) sungWords(line, sung, color.copy(alpha = 0.5f))
+                    else AnnotatedString(line.text.ifBlank { "♪" })
+                Text(text, Modifier.fillMaxWidth().clickable(onClickLabel = seekLabel) { controller.seek(line.startMs) }
                     .padding(vertical = 8.dp).testTag("lyrics-line-$index").semantics { selected = current },
-                    style = MaterialTheme.typography.titleLarge, fontWeight = if (current) FontWeight.Bold else FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    style = MaterialTheme.typography.titleLarge, fontWeight = if (current) FontWeight.Bold else FontWeight.Normal, color = color)
             }
         }
     }
+}
+
+/** The [line]'s words, with those after the [sung] one in the [upcoming] color. */
+private fun sungWords(line: LyricLine, sung: Int, upcoming: Color) = buildAnnotatedString {
+    line.words.forEachIndexed { index, word -> if (index <= sung) append(word.text) else withStyle(SpanStyle(color = upcoming)) { append(word.text) } }
 }
 
 private fun LyricsSource.label() = when (this) {

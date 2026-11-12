@@ -17,5 +17,5 @@
     <string name="lyrics_keywords_online">lyrics lrclib netease 163 cloud music synced words text karaoke internet</string>
     <string name="lyrics_setting_online_description">Sends the artist, title, album and length of songs without lyrics to LRCLIB.</string>
     <string name="lyrics_setting_netease">Also search NetEase Cloud Music</string>
-    <string name="lyrics_setting_netease_description">When LRCLIB has no synced lyrics, sends the song’s artist and title to NetEase Cloud Music, a Chinese streaming service. Its lyrics search isn’t an official API.</string>
+    <string name="lyrics_setting_netease_description">Sends the song’s artist and title to NetEase Cloud Music, a Chinese streaming service, and uses its lyrics when they’re timed more precisely. Not an official API.</string>
 </resources>

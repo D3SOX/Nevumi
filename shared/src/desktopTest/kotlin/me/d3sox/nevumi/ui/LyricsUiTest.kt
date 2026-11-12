@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.lyrics.LyricLine
+import me.d3sox.nevumi.lyrics.LyricWord
 import me.d3sox.nevumi.lyrics.Lyrics
 import me.d3sox.nevumi.lyrics.LyricsLibrary
 import me.d3sox.nevumi.lyrics.LyricsQuery
@@ -23,7 +24,8 @@ import kotlin.test.*
 
 @OptIn(ExperimentalTestApi::class)
 class LyricsUiTest {
-    private val lines = listOf(LyricLine(0, "First line"), LyricLine(2_000, "Second line"), LyricLine(4_000, "Third line"))
+    private val lines = listOf(LyricLine(0, "First line"), LyricLine(2_000, "Second line", listOf(LyricWord(2_000, "Second "), LyricWord(3_000, "line"))),
+        LyricLine(4_000, "Third line"))
 
     @Test fun nowPlayingShowsSyncedLyricsInPlaceOfTheArtworkHighlightsTheCurrentLineAndSeeksOnTap() {
         val directory = Files.createTempDirectory("lyrics-panel")
@@ -49,6 +51,12 @@ class LyricsUiTest {
                     onNodeWithTag("lyrics-line-1").fetchSemanticsNode().config.getOrElse(SemanticsProperties.Selected) { false }
                 }
                 onNodeWithTag("lyrics-line-0").assertIsNotSelected()
+                // The current line sets its words still to come apart until they are sung.
+                fun upcoming() = onNodeWithTag("lyrics-line-1").fetchSemanticsNode().config[SemanticsProperties.Text].single().spanStyles
+                    .map { it.start until it.end }
+                assertEquals(listOf(7 until 11), upcoming())
+                runBlocking { controller.seek(3_200).join() }
+                waitUntil(timeoutMillis = 3_000) { upcoming().isEmpty() }
                 onNodeWithText("Third line").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.positionMs == 4_000L }
                 onNodeWithContentDescription("Lyrics").performClick()
@@ -73,7 +81,7 @@ class LyricsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.fetchLyricsOnline }
                 onNodeWithContentDescription("Find lyrics online").assertIsOn()
                 // NetEase stays off, and only appears once online lyrics are on.
-                onNodeWithText("When LRCLIB has no synced lyrics, sends the song’s artist and title to NetEase Cloud Music, a Chinese streaming service. Its lyrics search isn’t an official API.").assertExists()
+                onNodeWithText("Sends the song’s artist and title to NetEase Cloud Music, a Chinese streaming service, and uses its lyrics when they’re timed more precisely. Not an official API.").assertExists()
                 onNodeWithContentDescription("Also search NetEase Cloud Music").assertIsOff().performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.fetchLyricsFromNetEase }
             }
