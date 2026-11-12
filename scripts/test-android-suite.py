@@ -127,13 +127,8 @@ def run(name, attempt):
     if timed_out:
         print(f"::warning title=Hung Android test::{name} timed out after {arguments.class_timeout} seconds", flush=True)
         # Instrumentation reports can stop before the device hangs. Retain its final log as well.
-        diagnostics.mkdir(parents=True, exist_ok=True)
-        with (diagnostics / "device-logcat.txt").open("w") as log:
-            try:
-                subprocess.run(["adb", "-s", serial, "logcat", "-d", "-v", "threadtime"],
-                               stdout=log, stderr=subprocess.STDOUT, check=True, timeout=10)
-            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as error:
-                print(f"::warning::Could not capture device log for {name}: {error}", flush=True)
+        capture(diagnostics, "device-logcat.txt", "logcat", "-d", "-v", "threadtime")
+        capture_focus(diagnostics)
         if device_lost():
             return None
         # The killed run can leave its instrumentation on the device, so stop both packages before the next class
@@ -159,7 +154,25 @@ def run(name, attempt):
     ok = (process.returncode == 0 and complete
           and all(case.get("classname") == "me.d3sox.nevumi." + name
                   and case.find("failure") is None and case.find("error") is None for case in cases))
+    if not ok:
+        capture_focus(diagnostics)
     return completed if ok else None
+
+
+def capture(diagnostics, filename, *command):
+    """Save the output of an adb command next to a class's reports."""
+    diagnostics.mkdir(parents=True, exist_ok=True)
+    with (diagnostics / filename).open("w") as log:
+        try:
+            subprocess.run(["adb", "-s", serial, *command], stdout=log, stderr=subprocess.STDOUT, check=True, timeout=10)
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as error:
+            print(f"::warning::Could not capture {filename} in {diagnostics.name}: {error}", flush=True)
+
+
+def capture_focus(diagnostics):
+    # Some fresh API 36 emulators route neither keys nor the keyboard to the app for their whole life,
+    # so record which window holds focus.
+    capture(diagnostics, "device-focus.txt", "shell", "dumpsys window; dumpsys input; dumpsys input_method")
 
 
 def device_lost():
@@ -171,38 +184,40 @@ def device_lost():
         return True
 
 
-def stop_for_lost_device(remaining):
-    """Hosted emulators sometimes freeze and exit mid-suite. Leave the unfinished classes for a new emulator, once."""
-    message = f"{serial} stopped responding"
-    if failed or arguments.resume:
-        raise SystemExit(f"Android suite failed: {message}; failed: {failed}; not run: {remaining}")
+def hand_over(remaining, message):
+    """Leave classes for a new emulator, once: hosted emulators sometimes freeze and exit mid-suite, and some fresh
+    API 36 emulators never give the app input focus, so their keyboard and Back tests fail on every attempt."""
+    if arguments.resume:
+        raise SystemExit(f"Android suite failed on a second emulator: {message}; failed: {failed}; not run: {remaining}")
     unfinished.write_text("\n".join(remaining) + "\n")
-    print(f"::warning title=Android emulator stopped::{message}; {len(remaining)} classes will run on a new emulator",
+    print(f"::warning title=Android emulator replaced::{message}; {len(remaining)} classes will run on a new emulator",
           flush=True)
     raise SystemExit(f"Android suite stopped: {message}; unfinished classes: {remaining}")
 
 
+lost = f"{serial} stopped responding"
 retry = []
 for index, name in enumerate(classes):
     cases = run(name, 1)
     if cases is None:
         if device_lost():
-            stop_for_lost_device(retry + classes[index:])
+            hand_over(retry + classes[index:], lost)
         retry.append(name)
     else:
         executed += len(cases)
 # Hosted emulators share two slow cores with Gradle and keep settling for minutes after boot, so retry failures
-# once after the other classes have run; a second failure is a real failure.
+# once after the other classes have run. A class that fails again runs on a new emulator, where failing twice more
+# is a real failure.
 for index, name in enumerate(retry):
     cases = run(name, 2)
     if cases is None:
         if device_lost():
-            stop_for_lost_device(retry[index:])
+            hand_over(failed + retry[index:], lost)
         failed.append(name)
         continue
     flaky.append(name)
     print(f"::warning title=Flaky Android test::{name} failed once and passed on retry", flush=True)
     executed += len(cases)
 if failed:
-    raise SystemExit(f"Android suite failed: {failed}; passed on retry: {flaky}; {executed} cases across {len(classes)} classes")
+    hand_over(failed, f"{failed} failed twice on {serial}; passed on retry: {flaky}")
 print(f"Passed {executed} Android checks across {len(classes)} classes; passed on retry: {flaky or 'none'}")

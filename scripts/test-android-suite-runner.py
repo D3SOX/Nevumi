@@ -77,8 +77,10 @@ ET.ElementTree(suite).write(reports / 'TEST-example.xml')
         pid = int((self.root / "gradle.pid").read_text())
         with self.assertRaises(ProcessLookupError):
             os.kill(pid, 0)
-        # A hang is retried once in a new Gradle run, like any other failure, and fails the shard when it repeats.
+        # A hang is retried once in a new Gradle run, like any other failure, and moves to a new emulator when it repeats.
         self.assertEqual(2, len((self.root / "invocations").read_text().splitlines()))
+        self.assertEqual(["AndroidExampleTest"],
+                         (self.root / ".test-environment/android-unfinished-classes").read_text().split())
 
     def test_unresponsive_device_stops_the_shard_without_retrying_or_losing_diagnostics(self):
         self.source("AndroidExampleTest")
@@ -145,8 +147,35 @@ sys.exit(1 if 'wait-for-device' in sys.argv and len(calls) >= 2 else print('36')
         self.executable("adb", "import sys\nsys.exit(1 if 'wait-for-device' in sys.argv else print('36'))\n")
         result = self.run_suite("--resume", PARTIAL="true")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Android suite failed: emulator-5554 stopped responding", result.stdout + result.stderr)
+        self.assertIn("Android suite failed on a second emulator: emulator-5554 stopped responding", result.stdout + result.stderr)
         self.assertFalse((self.root / ".test-environment/android-unfinished-classes").exists())
+
+    def test_a_class_that_fails_twice_runs_once_more_on_a_new_emulator(self):
+        self.source("AndroidPassingTest")
+        self.source("AndroidFailingTest", tests=2)
+        result = self.run_suite(PARTIAL="true")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Android emulator replaced", result.stdout)
+        unfinished = self.root / ".test-environment/android-unfinished-classes"
+        self.assertEqual(["AndroidFailingTest"], unfinished.read_text().split())
+        output = self.root / ".test-environment/android-class-results"
+        # Both failed attempts keep the device's focus state for diagnosis.
+        self.assertTrue((output / "AndroidFailingTest/device-focus.txt").is_file())
+        self.assertTrue((output / "AndroidFailingTest-attempt2/device-focus.txt").is_file())
+        self.assertFalse((output / "AndroidPassingTest/device-focus.txt").exists())
+
+        (self.root / "invocations").unlink()
+        result = self.run_suite("--resume")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(["me.d3sox.nevumi.AndroidFailingTest"], (self.root / "invocations").read_text().splitlines())
+
+        # A class that also fails twice on the new emulator fails the shard.
+        unfinished.write_text("AndroidFailingTest\n")
+        result = self.run_suite("--resume", PARTIAL="true")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Android suite failed on a second emulator: ['AndroidFailingTest'] failed twice",
+                      result.stdout + result.stderr)
+        self.assertFalse(unfinished.exists())
 
     def matrix(self):
         # Planning runs on a fresh runner with neither an Android SDK nor a device.

@@ -172,8 +172,8 @@ jobs:
           emulator-options: -no-window -gpu swangle -noaudio -no-boot-anim -camera-back virtualscene -camera-front emulated
           script: NEVUMI_ANDROID_SHARD=${{ matrix.shard.index }}/${{ matrix.shard.total }} bash scripts/ci-tests.sh android
       # Hosted emulators occasionally freeze and exit mid-suite: memory is to spare, and neither the host nor the guest
-      # kernel logs a cause. The suite then leaves its unfinished classes, and a new emulator runs them once; test
-      # failures on a running emulator are not retried.
+      # kernel logs a cause. Some fresh API 36 emulators also never route keys or the keyboard to the app. The suite
+      # then leaves its unfinished classes, or those that failed twice, and a new emulator runs them once.
       - id: resume
         if: steps.suite.outcome == 'failure' && hashFiles('.test-environment/android-unfinished-classes') != ''
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
