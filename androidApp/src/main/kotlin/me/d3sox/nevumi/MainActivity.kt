@@ -15,11 +15,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
-import me.d3sox.nevumi.app.MusicController
-import me.d3sox.nevumi.library.MusicLibrary
-import me.d3sox.nevumi.playback.AndroidPlaybackEngine
-import me.d3sox.nevumi.queue.PlaybackQueue
-import me.d3sox.nevumi.storage.openMusicStore
 import me.d3sox.nevumi.ui.MusicPlayerApp
 
 class MainActivity : ComponentActivity() {
