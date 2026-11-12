@@ -333,6 +333,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun detachSavedQueue() = queueController.detachSavedQueue()
     fun startEmptyQueue() = queueController.startEmptyQueue()
     fun setQueueShuffled(enabled: Boolean) = queueController.setQueueShuffled(enabled)
+    fun shuffleStart(trackIds: List<String>) = queueController.shuffleStart(trackIds)
     fun setQueueRepeat(mode: RepeatMode, playCount: Int? = null) = queueController.setQueueRepeat(mode, playCount)
     fun shuffleQueueAlbums() = queueController.shuffleQueueAlbums()
     fun cancelPlaybackConfirmation() = queueController.cancelPlaybackConfirmation()

@@ -22,7 +22,6 @@ import androidx.compose.ui.semantics.stateDescription
 import me.d3sox.nevumi.playlists.PlaylistSort
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.recentAt
-import kotlin.random.Random
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.materialkolor.ktx.themeColor
@@ -186,7 +185,7 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
                     checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)) { Icon(AppIcon.SHUFFLE.vector, null) }
             Spacer(Modifier.width(8.dp))
             FilledIconButton(onClick = {
-                val index = if (playlist.shuffle) Random.nextInt(orderedIds.size) else 0
+                val index = if (playlist.shuffle) controller.shuffleStart(orderedIds) else 0
                 controller.playTrack(orderedIds[index], orderedIds, index, playlist.name, shuffleContext = playlist.shuffle, origin = origin)
             }, enabled = orderedIds.isNotEmpty(), modifier = Modifier.size(56.dp)) {
                 Icon(AppIcon.PLAY.vector, stringResource(Res.string.library_play_playlist), Modifier.size(32.dp))

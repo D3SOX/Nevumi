@@ -91,8 +91,11 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
             AppMenuItem(text = { Text(stringResource(if (saved != null) Res.string.library_select_queue else Res.string.play)) }, leadingIcon = { Icon(AppIcon.PLAY.vector, null) },
                 enabled = trackIds.isNotEmpty(), onClick = { close {
                     if (saved != null) controller.loadSavedQueue(saved.id)
-                    else controller.playTrack(trackIds.first(), trackIds, 0, entry.title,
-                        shuffleContext = playlist?.shuffle == true || tab == LibraryTab.HOME, origin = QueueOrigin(tab, entry.id))
+                    else {
+                        val shuffle = playlist?.shuffle == true || tab == LibraryTab.HOME
+                        val index = if (shuffle) controller.shuffleStart(trackIds) else 0
+                        controller.playTrack(trackIds[index], trackIds, index, entry.title, shuffleContext = shuffle, origin = QueueOrigin(tab, entry.id))
+                    }
                 } })
             QueueActionMenuItems(trackIds, controller) { menu = false }
             AppMenuItem(text = { Text(stringResource(Res.string.manage_playlists)) }, leadingIcon = { Icon(AppIcon.PLAYLIST_PLUS.vector, null) },

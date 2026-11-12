@@ -151,6 +151,8 @@ import me.d3sox.nevumi.resources.settings_show_audio_info_description
 import me.d3sox.nevumi.resources.settings_show_options_buttons_description
 import me.d3sox.nevumi.resources.settings_show_previous_tracks
 import me.d3sox.nevumi.resources.settings_show_previous_tracks_description
+import me.d3sox.nevumi.resources.settings_smart_shuffle
+import me.d3sox.nevumi.resources.settings_smart_shuffle_description
 import me.d3sox.nevumi.resources.settings_soundcloud
 import me.d3sox.nevumi.resources.settings_soundcloud_description
 import me.d3sox.nevumi.resources.settings_source_local
@@ -379,6 +381,9 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                     { value -> "${value.roundToInt()} dB" }) { value ->
                     controller.updatePreferences { it.copy(replayGain = it.replayGain.copy(preampDb = value.roundToInt().toDouble())) }
                 }
+            }
+            SettingsToggle(stringResource(Res.string.settings_smart_shuffle), AppIcon.SHUFFLE, stringResource(Res.string.settings_smart_shuffle_description), settings.smartShuffle) {
+                enabled -> controller.updatePreferences { it.copy(smartShuffle = enabled) }
             }
             SettingsToggle(stringResource(Res.string.settings_show_previous_tracks), AppIcon.HISTORY, stringResource(Res.string.settings_show_previous_tracks_description), settings.showPreviousQueueTracks) {
                 enabled -> controller.updatePreferences { it.copy(showPreviousQueueTracks = enabled) }

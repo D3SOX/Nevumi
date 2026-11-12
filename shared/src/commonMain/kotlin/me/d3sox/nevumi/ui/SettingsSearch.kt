@@ -90,6 +90,7 @@ import me.d3sox.nevumi.resources.settings_keywords_server_files
 import me.d3sox.nevumi.resources.settings_keywords_show_audio_info
 import me.d3sox.nevumi.resources.settings_keywords_show_options_buttons
 import me.d3sox.nevumi.resources.settings_keywords_show_previous_tracks
+import me.d3sox.nevumi.resources.settings_keywords_smart_shuffle
 import me.d3sox.nevumi.resources.settings_keywords_soundcloud
 import me.d3sox.nevumi.resources.settings_keywords_source_priority
 import me.d3sox.nevumi.resources.settings_keywords_swipe_left
@@ -116,6 +117,7 @@ import me.d3sox.nevumi.resources.settings_show_audio_info
 import me.d3sox.nevumi.resources.lyrics_keywords_online
 import me.d3sox.nevumi.resources.lyrics_setting_online
 import me.d3sox.nevumi.resources.settings_show_previous_tracks
+import me.d3sox.nevumi.resources.settings_smart_shuffle
 import me.d3sox.nevumi.resources.settings_soundcloud
 import me.d3sox.nevumi.resources.settings_title_scroll_speed
 import me.d3sox.nevumi.resources.show_options_buttons
@@ -168,6 +170,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_replay_gain to Res.string.settings_keywords_replay_gain,
                 Res.string.settings_show_audio_info to Res.string.settings_keywords_show_audio_info,
                 Res.string.lyrics_setting_online to Res.string.lyrics_keywords_online,
+                Res.string.settings_smart_shuffle to Res.string.settings_keywords_smart_shuffle,
                 Res.string.settings_show_previous_tracks to Res.string.settings_keywords_show_previous_tracks,
                 Res.string.settings_previous_track_limit to Res.string.settings_keywords_previous_track_limit,
                 Res.string.settings_confirm_queue_jumps to Res.string.settings_keywords_confirm_queue_jumps,

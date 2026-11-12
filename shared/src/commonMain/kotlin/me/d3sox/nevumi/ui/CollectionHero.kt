@@ -20,7 +20,6 @@ import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.queue.QueueAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 import org.jetbrains.compose.resources.stringResource
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.add_to_queue
@@ -78,7 +77,7 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
                     checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)) { Icon(AppIcon.SHUFFLE.vector, null) }
             Spacer(Modifier.width(8.dp))
             FilledIconButton(onClick = {
-                val index = if (shuffle) Random.nextInt(ids.size) else 0
+                val index = if (shuffle) controller.shuffleStart(ids) else 0
                 controller.playTrack(ids[index], ids, index, collection.title, shuffleContext = shuffle, origin = origin)
             }, enabled = ids.isNotEmpty(), modifier = Modifier.size(56.dp)) { Icon(AppIcon.PLAY.vector, stringResource(Res.string.library_play_collection), Modifier.size(32.dp)) }
         }

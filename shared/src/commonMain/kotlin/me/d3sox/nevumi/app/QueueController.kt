@@ -23,6 +23,8 @@ import me.d3sox.nevumi.queue.QueueOrigin
 import me.d3sox.nevumi.queue.QueueSection
 import me.d3sox.nevumi.queue.QueueSnapshot
 import me.d3sox.nevumi.queue.SavedQueueKind
+import me.d3sox.nevumi.queue.smartShuffleWeights
+import me.d3sox.nevumi.queue.weightedIndex
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.notice_added_to_play_after
 import me.d3sox.nevumi.resources.notice_added_to_play_next
@@ -33,6 +35,7 @@ import me.d3sox.nevumi.resources.notice_queue_cleared
 import me.d3sox.nevumi.resources.notice_removed_from_queue
 import me.d3sox.nevumi.settings.QueueRecoveryMode
 import me.d3sox.nevumi.sync.PairedDevices
+import kotlin.random.Random
 
 /** Keeps the queue and the saved queues: what plays next, shuffle and repeat, saved queues and the undo of queue changes. */
 class QueueController internal constructor(private val context: ControllerContext, private val playback: PlaybackController,
@@ -100,7 +103,8 @@ class QueueController internal constructor(private val context: ControllerContex
         persistPlaybackPosition()
         val manualQueue = currentQueue.upNext.isNotEmpty() || currentQueue.entries.getOrNull(currentQueue.currentIndex)?.section == QueueSection.MANUAL
         if (preserveManualQueue && manualQueue) queue.playNow(trackId)
-        else queue.replace(tracks.map { it.id }, index, contextName, shuffle = shuffleContext, origin = origin)
+        else queue.replace(tracks.map { it.id }, index, contextName, shuffle = shuffleContext, origin = origin,
+            weight = if (shuffleContext) shuffleWeights() else null)
         playback.loadSnapshot(queue.snapshot())
         // Only a successful load counts as a play.
         if (origin.tab == LibraryTab.PLAYLISTS) origin.collectionId?.let { playlists?.markPlayed(it) }
@@ -146,8 +150,18 @@ class QueueController internal constructor(private val context: ControllerContex
         context.update { it.copy(queue = snapshot) }
         if (playback.queueLoaded) engine.updateQueue(playback.playableQueue(snapshot))
     }
+    /** Smart shuffle's weight for each song ID, or null when the setting is off and shuffling stays uniform. */
+    private fun shuffleWeights(): ((String) -> Double)? = context.state.value.takeIf { it.preferences.smartShuffle }?.let { state ->
+        smartShuffleWeights(state.tracks, state.listens, kotlin.time.Clock.System.now().toEpochMilliseconds())
+    }
+    /** The index a shuffled play of [trackIds] starts at: any song, or one picked by its weight with smart shuffle. */
+    fun shuffleStart(trackIds: List<String>): Int {
+        require(trackIds.isNotEmpty()) { "There is nothing to shuffle" }
+        val weight = shuffleWeights() ?: return Random.nextInt(trackIds.size)
+        return trackIds.weightedIndex(Random.Default, weight)
+    }
     fun setQueueShuffled(enabled: Boolean) = context.action {
-        queue.shuffle(enabled)
+        queue.shuffle(enabled, weight = if (enabled) shuffleWeights() else null)
         val snapshot = queue.snapshot()
         if (playback.queueLoaded) engine.updateQueue(playback.playableQueue(snapshot))
         context.update { it.copy(queue = snapshot) }
