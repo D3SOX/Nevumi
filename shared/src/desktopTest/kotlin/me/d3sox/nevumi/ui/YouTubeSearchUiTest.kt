@@ -54,8 +54,9 @@ class YouTubeSearchUiTest {
         val preferences = MusicPreferences(store)
         runBlocking { preferences.update { it.copy(youTube = true) } }
         val youTube = FakeYouTube()
+        val history = me.d3sox.nevumi.history.ListeningHistory(store, library)
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), localSources = LocalFiles(library),
-            preferences = preferences, youTube = youTube)
+            preferences = preferences, listeningHistory = history, youTube = youTube)
         try {
             runSkikoComposeUiTest(size = Size(420f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
@@ -96,6 +97,13 @@ class YouTubeSearchUiTest {
                 openLibraryPage("Songs")
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Night Drive").fetchSemanticsNodes().isNotEmpty() }
                 onAllNodes(listed).assertCountEquals(0)
+
+                // Listening to a streamed song shows it in History, although the library views leave it out.
+                runBlocking { history.import(listOf(me.d3sox.nevumi.history.Listen("listen", queued.id, "play", 1_000, queued.metadata,
+                    listenedMs = 180_000, playedMs = 180_000, durationMs = 180_000, ended = true))) }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.listens.any { it.trackId == queued.id } }
+                openLibraryPage("History")
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("track-row:${queued.id}").fetchSemanticsNodes().isNotEmpty() }
 
                 // Turning YouTube off stops this device from streaming the YouTube songs it already queued.
                 controller.updatePreferences { it.copy(youTube = false) }.let { runBlocking { it.join() } }

@@ -167,6 +167,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         Triple(shown, unfiltered + streamed, if (streamed.isEmpty()) shown.filter { it.favorite }
             else filterTracks(visible + streamed, query, statistics, now, playlisted).filter { it.favorite })
     }
+    val listenedTracks = remember(tracks, state.tracks) { tracks + state.tracks.filterNot { it.inLibrary } }
     val currentTab = tabs[currentIndex]
     val headerContext = headers[currentTab]
     val headerTitle = headerContext?.title ?: stringResource(currentTab.label)
@@ -312,8 +313,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                 }, controller, scrollSort = LibrarySort.RECENT, contextName = "Recently added")
                 LibraryTab.PLAYLISTS -> PlaylistsScreen(state, controller, backEnabled = handleBack, destination = destination,
                     rearranging = rearrangingPlaylists, finishRearranging = { rearrangingPlaylists = false })
-                LibraryTab.HISTORY -> ListeningHistoryScreen(state, controller, tracks)
-                LibraryTab.STATISTICS -> ListeningStatisticsScreen(state, controller, tracks, handleBack)
+                // Songs streamed from YouTube were played too, so History and Statistics count them.
+                LibraryTab.HISTORY -> ListeningHistoryScreen(state, controller, listenedTracks)
+                LibraryTab.STATISTICS -> ListeningStatisticsScreen(state, controller, listenedTracks, handleBack)
                 LibraryTab.RECOMMENDATIONS -> ListeningRecommendationsScreen(state, controller, tracks)
             }
             }
