@@ -42,6 +42,9 @@ class ReleaseJobService : JobService() {
                 }
             } catch (_: CancellationException) {
                 // The next run checks again.
+            } catch (_: Exception) {
+                // A store that cannot be read now may be readable on the retry.
+                retry = true
             } finally { if (isActive) jobFinished(params, retry) }
         }
         return true

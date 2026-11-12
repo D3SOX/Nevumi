@@ -168,7 +168,10 @@ class LastFmClient(private val http: HttpClient, private val apiKey: String, pri
             parameters.forEach { (key, value) -> append(key, value) }
             append("api_sig", signature); append("format", "json")
         })
-        val body = response.bodyAsText()
+        // A body that cannot be read still leaves the status to classify the failure.
+        val body = try { response.bodyAsText() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { checkStatus(response); throw error }
         val result = try { Json.parseToJsonElement(body) as? JsonObject } catch (_: SerializationException) { null }
         // Last.fm also sends its error codes with non-2xx statuses, so the code decides before the status does.
         (result?.get("error") as? JsonPrimitive)?.intOrNull?.let { code ->

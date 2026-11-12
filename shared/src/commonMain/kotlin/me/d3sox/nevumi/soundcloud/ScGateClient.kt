@@ -130,7 +130,7 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
 
     /** A search result's cover, which sc-gate-dl fetches so this device never contacts SoundCloud. */
     suspend fun artwork(url: String): ByteArray = scGateRequest {
-        request(HttpMethod.Get, "/api/artwork", timeoutMillis = 30_000, configure = { parameter("url", url) }) { it.readArtwork() }
+        request(HttpMethod.Get, "/api/artwork", timeoutMillis = 30_000, configure = { parameter("url", url) }) { it.artwork() }
     }
 
     /**
@@ -165,7 +165,7 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
 
     /** The cover sc-gate-dl found for the job, or with [fromFile] the one the downloaded MP3 already has. */
     suspend fun cover(id: String, fromFile: Boolean = false): ByteArray = scGateRequest {
-        request(HttpMethod.Get, "/api/job/$id/${if (fromFile) "existing-artwork" else "artwork"}", timeoutMillis = 30_000) { it.readArtwork() }
+        request(HttpMethod.Get, "/api/job/$id/${if (fromFile) "existing-artwork" else "artwork"}", timeoutMillis = 30_000) { it.artwork() }
     }
 
     /** Tags the file of a job waiting at `waiting_metadata`; sc-gate-dl then saves it where the job's destination says. */
@@ -218,6 +218,10 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
             received
         }
     }
+
+    // The server answered, so an oversized cover must not read as a connection failure.
+    private suspend fun HttpResponse.artwork(): ByteArray = try { readArtwork() }
+        catch (_: IllegalStateException) { throw ScGateException("The artwork from sc-gate-dl is larger than 10 MiB") }
 
     private suspend fun json(method: HttpMethod, path: String, timeoutMillis: Long = 30_000, body: JsonObject? = null,
         configure: HttpRequestBuilder.() -> Unit = {}): JsonObject = scGateRequest {
