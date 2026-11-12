@@ -28,6 +28,7 @@ import me.d3sox.nevumi.navidrome.NavidromeRequestException
 import me.d3sox.nevumi.navidrome.ServerCredentials
 import me.d3sox.nevumi.navidrome.ServerRefreshProgress
 import me.d3sox.nevumi.navidrome.ServerRefreshStage
+import me.d3sox.nevumi.navidrome.SkippedItems
 import me.d3sox.nevumi.navidrome.serverUnavailable
 import me.d3sox.nevumi.playback.PlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
@@ -130,9 +131,7 @@ class ServerController internal constructor(private val context: ControllerConte
     fun refreshServer() = serverRefreshAction {
         navidrome?.profile()?.let { musicServerAccess(it.baseUrl) }
         val client = requireNotNull(navidrome?.client()) { "Connect to the music server first" }
-        val count = importServer(client)
-        offline?.retry()
-        count
+        importServer(client).also { offline?.retry() }
     }
 
     fun cancelServerRefresh() { serverRefreshJob.value?.cancel() }
@@ -141,15 +140,16 @@ class ServerController internal constructor(private val context: ControllerConte
         context.update { if (it.serverRefresh?.running == true) it else it.copy(serverRefresh = null) }
     }
 
-    private fun serverRefreshAction(block: suspend () -> Int) = context.action(serialized = false) {
+    /** Runs a server import, which returns its completed progress. */
+    private fun serverRefreshAction(block: suspend () -> ServerRefreshProgress) = context.action(serialized = false) {
         if (!serverImports.tryLock()) return@action
         serverRefreshJob.value = currentCoroutineContext()[Job]
         context.update { it.copy(loading = true, error = null, serverRefresh = ServerRefreshProgress(ServerRefreshStage.CONNECTING)) }
         var result = ServerRefreshProgress(ServerRefreshStage.CANCELLED)
         try {
-            val count = block()
+            val complete = block()
             context.operations.withLock { loader.refresh() }
-            result = ServerRefreshProgress(ServerRefreshStage.COMPLETE, processed = count)
+            result = complete
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -187,10 +187,13 @@ class ServerController internal constructor(private val context: ControllerConte
         }
     }
 
-    private suspend fun importServer(client: NavidromeClient): Int {
-        val progress: (ServerRefreshProgress) -> Unit = { value -> context.update { it.copy(serverRefresh = value) } }
+    private suspend fun importServer(client: NavidromeClient): ServerRefreshProgress {
+        val skipped = SkippedItems()
+        val progress: (ServerRefreshProgress) -> Unit = { value -> context.update {
+            it.copy(serverRefresh = value.copy(skippedPlaylists = skipped.playlists, skippedCovers = skipped.covers))
+        } }
         val paths = serverFiles?.configuration()?.serverId == client.serverId
-        val catalogue = serverChanges?.refreshLibrary(client, includeFilePaths = paths, onProgress = progress)
+        val catalogue = serverChanges?.refreshLibrary(client, includeFilePaths = paths, onProgress = progress, skipped = skipped)
             ?: client.songs(includeFilePaths = paths, onProgress = progress).let { songs ->
                 progress(ServerRefreshProgress(ServerRefreshStage.IMPORTING, total = songs.size))
                 songs.mapIndexed { index, song ->
@@ -217,16 +220,23 @@ class ServerController internal constructor(private val context: ControllerConte
             pending.close()
             coroutineScope { repeat(CONCURRENT_COVERS) { launch {
                 for ((coverId, trackIds) in pending) {
-                    try { if (versioned) artwork.fetchChanged(trackIds, client, coverId) else artwork.fetch(trackIds, client, coverId) }
+                    try {
+                        if (versioned) artwork.fetchChanged(trackIds, client, coverId) else artwork.fetch(trackIds, client, coverId)
+                        skipped.delivered()
+                    }
                     catch (cancelled: CancellationException) { throw cancelled }
-                    catch (error: NavidromeRequestException) { if (error.serverUnavailable) throw error }
+                    // A cover the server failed to send is skipped; the next refresh downloads it.
+                    catch (error: NavidromeRequestException) { if (error.serverUnavailable) skipped.cover(error) }
                     catch (_: Exception) { /* A missing cover must not prevent importing its music. */ }
-                    context.update { state -> state.copy(serverRefresh = state.serverRefresh?.let { it.copy(processed = it.processed + 1) }) }
+                    context.update { state -> state.copy(serverRefresh = state.serverRefresh?.let {
+                        it.copy(processed = it.processed + 1, skippedCovers = skipped.covers)
+                    }) }
                 }
             } } }
         }
         progress(ServerRefreshProgress(ServerRefreshStage.MATCHING))
         libraryController.linkSameFiles()
-        return catalogue.size
+        return ServerRefreshProgress(ServerRefreshStage.COMPLETE, processed = catalogue.size,
+            skippedPlaylists = skipped.playlists, skippedCovers = skipped.covers)
     }
 }

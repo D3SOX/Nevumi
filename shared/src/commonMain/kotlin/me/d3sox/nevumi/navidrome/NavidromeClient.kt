@@ -50,6 +50,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
 data class ServerPlaylist(val id: String, val name: String, val songIds: List<String>, val changed: String,
@@ -100,16 +101,25 @@ class NavidromeRequestException(message: String = "Could not complete the music 
 internal fun Throwable.isUnreachableHost(): Boolean = this::class.simpleName in setOf("UnknownHostException", "ConnectException",
     "NoRouteToHostException", "ConnectTimeoutException", "UnresolvedAddressException")
 
+/** Ktor wraps a failure while reading a response body, such as a read timeout, in a ClosedByteChannelException. */
+private fun Throwable.withCauses(): Sequence<Throwable> = generateSequence(this) { it.cause }.take(8)
+
 /** Failures of the connection rather than of one request: nothing else will succeed against this server right now. */
-internal fun Throwable.isConnectionFailure(): Boolean = isUnreachableHost() || this::class.simpleName in setOf("SocketTimeoutException",
+internal fun Throwable.isConnectionFailure(): Boolean = isUnreachableHost() || withCauses().any { it::class.simpleName in setOf("SocketTimeoutException",
     "HttpRequestTimeoutException", "SocketException", "SSLException", "SSLHandshakeException", "SSLPeerUnverifiedException",
-    "EOFException", "IOException", "StreamResetException", "ConnectionShutdownException")
+    "EOFException", "IOException", "ProtocolException", "StreamResetException", "ConnectionShutdownException") }
 
 /** Requests with more parameters than this are sent as a form body instead of a URL; see NavidromeClient.request. */
 private const val LONG_REQUEST_PARAMETERS = 50
 private const val SLOW_SERVER = "The music server took too long to respond. Try again later."
 
-private fun Throwable.isTimeout(): Boolean = this::class.simpleName in setOf("SocketTimeoutException", "HttpRequestTimeoutException")
+private fun Throwable.isTimeout(): Boolean = withCauses().any { it::class.simpleName in setOf("SocketTimeoutException", "HttpRequestTimeoutException") }
+
+/** Timeouts, dropped connections and gateway errors, which a busy server or its proxy often clears within seconds. */
+private val NavidromeRequestException.transient: Boolean get() = connectionFailure && !unreachable || httpStatus in setOf(502, 503, 504)
+
+/** Reads that change nothing on the server, so repeating one is safe; a library refresh depends on them. */
+private val CATALOGUE_READS = setOf("search3", "getAlbum", "getAlbumList2", "getIndexes", "getMusicDirectory", "getPlaylists", "getPlaylist")
 
 private class DownloadCallbackFailure(val failure: Exception) : Exception()
 
@@ -134,13 +144,20 @@ internal const val CONCURRENT_REQUESTS = 6
 // Navidrome draws covers for half as many requests as it has CPU cores, at least two, and queues the rest; on a small server more would wait out their timeout.
 internal const val CONCURRENT_COVERS = 2
 
-/** Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server. */
+/**
+ * Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server.
+ * A request fails once the server sends nothing for [idleTimeoutMillis], before the response starts or within its body, so a
+ * large response that keeps arriving never times out; [requestDeadlineMillis] still ends one that trickles in forever.
+ * Catalogue and cover reads that fail transiently are repeated after each of [retryDelaysMillis].
+ */
 class NavidromeClient(
     private val http: HttpClient,
     baseUrl: String,
     private val credentials: ServerCredentials,
     requestUrl: String = baseUrl,
-    private val requestTimeoutMillis: Long = 30_000,
+    private val idleTimeoutMillis: Long = 30_000,
+    private val requestDeadlineMillis: Long = 5 * 60_000,
+    private val retryDelaysMillis: List<Long> = listOf(2_000, 8_000),
 ) {
     private val baseUrl = normalizeServerAddress(requestUrl)
     val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username).serverId
@@ -149,14 +166,28 @@ class NavidromeClient(
     private var nativeToken: String? = null
 
     // OkHttp gives up on a response that takes more than ten seconds to start, long before a busy server answers.
+    // Its socket timeout bounds each wait for data, from the first byte of the response to every later read of the body.
     private fun client(followRedirects: Boolean = true) = http.config {
         this.followRedirects = followRedirects
-        install(HttpTimeout) { socketTimeoutMillis = this@NavidromeClient.requestTimeoutMillis }
+        install(HttpTimeout) { socketTimeoutMillis = this@NavidromeClient.idleTimeoutMillis }
     }
 
     private suspend fun <T : Any> timedRequest(block: suspend () -> T): T =
-        withTimeoutOrNull(requestTimeoutMillis) { block() }
+        withTimeoutOrNull(requestDeadlineMillis) { block() }
             ?: throw NavidromeRequestException(SLOW_SERVER, connectionFailure = true)
+
+    /**
+     * Repeats a read that failed transiently, since a briefly stalled server often answers the next attempt.
+     * Other failures, such as a rejected account or an unreachable host, would fail every attempt and are not repeated.
+     */
+    private suspend fun <T> retried(block: suspend () -> T): T {
+        for (pause in retryDelaysMillis) {
+            try { return block() }
+            catch (failure: NavidromeRequestException) { if (!failure.transient) throw failure }
+            delay(pause)
+        }
+        return block()
+    }
 
     private fun checkResponse(response: HttpResponse) {
         if (response.status.value !in 200..299) throw NavidromeRequestException(
@@ -278,7 +309,10 @@ class NavidromeClient(
      * Requests with many song IDs, such as saving a large playlist, would exceed the URL limits of common reverse proxies,
      * so they go as a form body (OpenSubsonic's formPost). A server that rejects the body gets the long URL instead.
      */
-    private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject {
+    private suspend fun request(endpoint: String, parameters: List<Pair<String, String>> = emptyList()): JsonObject =
+        if (endpoint in CATALOGUE_READS) retried { send(endpoint, parameters) } else send(endpoint, parameters)
+
+    private suspend fun send(endpoint: String, parameters: List<Pair<String, String>>): JsonObject {
         if (parameters.size <= LONG_REQUEST_PARAMETERS) return request(endpoint, parameters, form = false)
         return try { request(endpoint, parameters, form = true) }
         // A redirect is not followed for a form, and a server without formPost may reject it; the URL is followed and accepted.
@@ -324,7 +358,7 @@ class NavidromeClient(
     }
 
     /** Downloads a cover scaled to [size] pixels, or the original image when [size] is null. */
-    suspend fun coverArt(coverId: String, size: Int? = 1024): ByteArray = serverRequest { timedRequest {
+    suspend fun coverArt(coverId: String, size: Int? = 1024): ByteArray = retried { serverRequest { timedRequest {
         val salt = Uuid.random().toString()
         client().use { it.prepareGet("${baseUrl.trimEnd('/')}/rest/getCoverArt.view") {
             parameter("u", credentials.username)
@@ -351,7 +385,7 @@ class NavidromeClient(
             }
             bytes.readByteArray()
         } }
-    } }
+    } } }
 
     // One salt per client keeps a song's URL stable, so queue updates can tell an unchanged stream from a new route.
     private val streamSalt = Uuid.random().toString()
@@ -421,7 +455,8 @@ class NavidromeClient(
         Unit
     }
 
-    suspend fun isNavidrome(): Boolean = request("ping")["type"]?.jsonPrimitive?.content == "navidrome"
+    // A refresh asks this before reading files and covers; unlike ping, which checks a new connection, it is repeated.
+    suspend fun isNavidrome(): Boolean = retried { request("ping") }["type"]?.jsonPrimitive?.content == "navidrome"
 
     /** Looks up one song's music file without downloading the file catalogue; null once the server no longer has the song. */
     suspend fun musicFile(songId: String): NavidromeMusicFile? = serverRequest {
@@ -469,14 +504,15 @@ class NavidromeClient(
                 val seen = mutableSetOf<String>()
                 var offset = 0
                 while (true) {
-                    val body = timedRequest {
+                    val body = retried { serverRequest { timedRequest {
                         val response = nativeGet(nativeHttp, "$baseUrl/api/song") {
                             parameter("_start", offset); parameter("_end", offset + 500)
                             parameter("_sort", "id"); parameter("_order", "ASC")
                         }
-                        if (response.status.value !in 200..299) throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}")
+                        if (response.status.value !in 200..299) throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}",
+                            response.status.value)
                         response.bodyAsText()
-                    }
+                    } } }
                     val entries = Json.parseToJsonElement(body).jsonArray.map { parseMusicFile(it.jsonObject) }
                     if (entries.isEmpty()) break
                     val fresh = entries.filter { seen.add(it.songId) }

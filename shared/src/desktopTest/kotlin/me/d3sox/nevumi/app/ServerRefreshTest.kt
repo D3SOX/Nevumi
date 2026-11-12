@@ -88,6 +88,84 @@ class ServerRefreshTest {
     }
 
     @Test
+    fun aRefreshSkipsAPlaylistAndACoverTheServerFailsToSendAndPicksThemUpNextTime() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-refresh-skips")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val failing = AtomicBoolean(true)
+        val coverRequests = AtomicInteger()
+        val coverVersion = AtomicInteger(1)
+        val cover = ByteArrayOutputStream().also {
+            ImageIO.write(BufferedImage(8, 8, BufferedImage.TYPE_INT_RGB), "png", it)
+        }.toByteArray()
+        val http = HttpClient(MockEngine { request ->
+            val id = request.url.parameters["id"]
+            when (request.url.encodedPath) {
+                "/rest/ping.view" -> respond("""{"subsonic-response":{"status":"ok","type":"navidrome"}}""")
+                "/rest/search3.view" -> {
+                    val songs = if (request.url.parameters["songOffset"] == "0") (1..30).joinToString(",") {
+                        """{"id":"$it","title":"Song $it","coverArt":"cover-$it-v${coverVersion.get()}"}"""
+                    } else ""
+                    respond("""{"subsonic-response":{"status":"ok","searchResult3":{"song":[$songs]}}}""")
+                }
+                "/rest/getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"favs"},{"id":"liked"}]}}}""")
+                "/rest/getPlaylist.view" -> if (id == "favs" && failing.get()) respond("unavailable", HttpStatusCode.InternalServerError)
+                    else respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"$id","name":"$id","owner":"fixture","entry":[{"id":"1"}]}}}""")
+                "/rest/getCoverArt.view" -> {
+                    coverRequests.incrementAndGet()
+                    if (failing.get() && (id == "cover-7-v1" || coverVersion.get() == 2)) respond("unavailable", HttpStatusCode.InternalServerError)
+                    else respond(cover, headers = headersOf(HttpHeaders.ContentType, "image/png"))
+                }
+                else -> error("Unexpected endpoint: ${request.url.encodedPath}")
+            }
+        })
+        val vault = object : CredentialVault {
+            override suspend fun save(key: String, secret: String) {}
+            override suspend fun read(key: String) = "test"
+            override suspend fun delete(key: String) {}
+        }
+        val connection = NavidromeConnection(store, http, vault)
+        connection.connect("https://music.example.test", ServerCredentials("fixture", "test"))
+        val library = MusicLibrary(store)
+        val artwork = ArtworkLibrary(directory.resolve("artwork").toString())
+        val changes = NavidromeChanges(store, library, artwork, savedConnection = true, client = connection::client)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"),
+            connection, artwork = artwork, serverChanges = changes)
+        try {
+            withTimeout(3_000) { controller.state.first { it.libraryReady } }
+            withTimeout(10_000) { controller.refreshServer().join() }
+            val partial = controller.state.value.serverRefresh
+            assertEquals(ServerRefreshStage.COMPLETE, partial?.stage, partial?.message)
+            assertEquals(30, partial?.processed)
+            assertEquals(1, partial?.skippedPlaylists)
+            assertEquals(1, partial?.skippedCovers)
+            assertEquals(listOf("liked"), Playlists(store).all().map { it.name }, "The other playlists still import")
+            withTimeout(3_000) { controller.state.first { it.artwork.size == 29 } }
+            failing.set(false)
+            coverRequests.set(0)
+            withTimeout(10_000) { controller.refreshServer().join() }
+            val complete = controller.state.value.serverRefresh
+            assertEquals(ServerRefreshStage.COMPLETE, complete?.stage, complete?.message)
+            assertEquals(0, complete?.skippedPlaylists)
+            assertEquals(0, complete?.skippedCovers)
+            assertEquals(1, coverRequests.get(), "Covers downloaded before are not requested again")
+            assertEquals(setOf("favs", "liked"), Playlists(store).all().map { it.name }.toSet())
+            withTimeout(3_000) { controller.state.first { it.artwork.size == 30 } }
+            // A server that fails every cover is down rather than busy, so the refresh stops instead of trying each one.
+            failing.set(true)
+            coverVersion.set(2)
+            coverRequests.set(0)
+            withTimeout(10_000) { controller.refreshServer().join() }
+            val stopped = controller.state.value.serverRefresh
+            assertEquals(ServerRefreshStage.FAILED, stopped?.stage)
+            assertTrue(stopped?.message.orEmpty().startsWith("Songs are saved. Artwork could not finish."), stopped?.message)
+            assertTrue(coverRequests.get() <= 11, "Only about ten of 30 covers are tried, not ${coverRequests.get()}")
+        } finally {
+            controller.closeAndJoin()
+            http.close(); store.close(); directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun serverOverloadStopsTheArtworkBatchKeepsImportedSongsAndAllowsRetry() = verifyCoverOverload(false)
 
     @Test

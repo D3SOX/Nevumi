@@ -7,7 +7,9 @@ import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.storage.MusicStore
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
 import kotlin.time.Duration.Companion.minutes
@@ -113,8 +115,9 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         }
     }
 
+    /** Imports the server's catalogue and playlists; [skipped] counts the playlists and covers the server failed to deliver. */
     suspend fun refreshLibrary(connection: NavidromeClient, includeFilePaths: Boolean = false,
-        onProgress: (ServerRefreshProgress) -> Unit = {}): List<Pair<Track, ServerSong>> {
+        onProgress: (ServerRefreshProgress) -> Unit = {}, skipped: SkippedItems = SkippedItems()): List<Pair<Track, ServerSong>> {
         onProgress(ServerRefreshProgress(ServerRefreshStage.WAITING))
         return synchronization.withLock {
             val catalogue = connection.songs(includeFilePaths, onProgress)
@@ -136,7 +139,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 imported
             }
             ensureConnected(connection)
-            importPlaylists(connection, onProgress = onProgress)
+            importPlaylists(connection, onProgress = onProgress, skipped = skipped)
             songs
         }
     }
@@ -177,28 +180,39 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
     /**
      * Imports the server's playlists. With [changedOnly], only playlists whose change time moved are downloaded,
      * and those containing songs missing from the library wait for the next library refresh.
+     * A playlist the server fails to send is counted in [skipped] and keeps its saved copy until a later import downloads it.
      */
     suspend fun importPlaylists(connection: NavidromeClient, changedOnly: Boolean = false,
-        onProgress: (ServerRefreshProgress) -> Unit = {}) { importPlaylistsWaiting(connection, changedOnly, onProgress) }
+        onProgress: (ServerRefreshProgress) -> Unit = {}, skipped: SkippedItems = SkippedItems()) {
+        importPlaylistsWaiting(connection, changedOnly, onProgress, skipped)
+    }
 
     /** Imports like [importPlaylists]; returns whether a changed playlist waits for songs the library does not know yet. */
     private suspend fun importPlaylistsWaiting(connection: NavidromeClient, changedOnly: Boolean,
-        onProgress: (ServerRefreshProgress) -> Unit = {}): Boolean {
+        onProgress: (ServerRefreshProgress) -> Unit = {}, skipped: SkippedItems = SkippedItems()): Boolean {
         var waiting = false
         onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS))
         val tracks = library.tracks()
         val mapping = tracks.flatMap { track -> track.sources.filter {
             it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
         }.map { it.location to track.id } }.toMap()
-        val versions = if (changedOnly) connection.playlistVersions() else null
-        val remotes = if (versions == null) connection.playlists() else {
+        val versions = connection.playlistVersions()
+        val wanted = if (!changedOnly) versions.keys else {
             val known = store.list<Playlist>("playlists").mapNotNull { it.server?.takeIf { link -> link.serverId == connection.serverId && link.id != null } }
                 .associate { it.id to it.changed }
             // Servers that omit change times get every playlist downloaded again.
-            versions.filter { (id, changed) -> changed.isEmpty() || known[id] != changed }.keys.map { connection.playlist(it) }
+            versions.filter { (id, changed) -> changed.isEmpty() || known[id] != changed }.keys
+        }
+        val limit = Semaphore(CONCURRENT_REQUESTS)
+        val remotes = coroutineScope {
+            wanted.map { id -> async { limit.withPermit {
+                try { connection.playlist(id).also { skipped.delivered() } }
+                catch (failure: NavidromeRequestException) { skipped.playlist(failure); null }
+            } } }.awaitAll().filterNotNull()
         }
         // Playlists deleted on the server leave the app too; one with unsynced edits is settled by synchronize() instead.
-        val present = versions?.keys ?: remotes.mapTo(HashSet()) { it.id }
+        // The server's list decides, so a playlist skipped above stays.
+        val present = versions.keys
         val deleted = store.transaction {
             store.list<Playlist>("playlists").filter { playlist ->
                 val remoteId = playlist.server?.takeIf { it.serverId == connection.serverId }?.id
@@ -237,7 +251,10 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                 val (id, changed) = imported
                 val key = "server-playlist-cover:$id"
                 // Navidrome keeps a playlist's cover ID when its image changes, so its change time decides when to download again.
-                try { if (remote.coverArt == null) artwork.remove(key) else if (changed || artwork.path(key) == null) artwork.fetch(key, connection, remote.coverArt) }
+                try {
+                    if (remote.coverArt == null) artwork.remove(key)
+                    else if (changed || artwork.path(key) == null) { artwork.fetch(key, connection, remote.coverArt); skipped.delivered() }
+                }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
                     // A missing cover must not prevent importing the playlist; forget its change time so the next pull retries it.
@@ -245,7 +262,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                         val current = playlists.get(id)
                         current?.server?.let { store.put("playlist:$id", "playlists", current.copy(server = it.copy(changed = ""))) }
                     }
-                    if (!changedOnly && error is NavidromeRequestException && error.serverUnavailable) throw error
+                    if (!changedOnly && error is NavidromeRequestException && error.serverUnavailable) skipped.cover(error)
                 }
             }
             onProgress(ServerRefreshProgress(ServerRefreshStage.PLAYLISTS, index + 1, remotes.size))

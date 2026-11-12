@@ -24,6 +24,8 @@ import me.d3sox.nevumi.resources.sources_refresh_cancelled_description
 import me.d3sox.nevumi.resources.sources_refresh_checked
 import me.d3sox.nevumi.resources.sources_refresh_received
 import me.d3sox.nevumi.resources.sources_refresh_saved
+import me.d3sox.nevumi.resources.sources_refresh_skipped
+import me.d3sox.nevumi.resources.sources_refresh_skipped_both
 import me.d3sox.nevumi.resources.sources_refresh_slow
 import me.d3sox.nevumi.resources.sources_refresh_stage_artwork
 import me.d3sox.nevumi.resources.sources_refresh_stage_cancelled
@@ -69,6 +71,10 @@ internal fun ServerRefreshStatus(progress: ServerRefreshProgress, cancel: () -> 
         ServerRefreshStage.CANCELLED -> stringResource(Res.string.sources_refresh_cancelled_description)
         else -> null
     }
+    val skippedPlaylists = progress.skippedPlaylists.takeIf { it > 0 }?.let { countLabel(it, Res.plurals.playlists) }
+    val skippedCovers = progress.skippedCovers.takeIf { it > 0 }?.let { countLabel(it, Res.plurals.sources_covers) }
+    val skipped = if (skippedPlaylists != null && skippedCovers != null)
+        stringResource(Res.string.sources_refresh_skipped_both, skippedPlaylists, skippedCovers) else skippedPlaylists ?: skippedCovers
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
         color = if (progress.stage == ServerRefreshStage.FAILED) MaterialTheme.colorScheme.errorContainer
             else MaterialTheme.colorScheme.surfaceContainer) {
@@ -76,6 +82,7 @@ internal fun ServerRefreshStatus(progress: ServerRefreshProgress, cancel: () -> 
             Text(title, style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             count?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            skipped?.let { Text(stringResource(Res.string.sources_refresh_skipped, it), style = MaterialTheme.typography.bodyMedium) }
             progress.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             if (progress.running) {
                 val barDescription = stringResource(Res.string.sources_library_refresh_progress)
