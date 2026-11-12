@@ -305,16 +305,18 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
                     if (response.status.value == 206) withContext(Dispatchers.IO) {
                         // Appending another part of the audio, or nothing at all, would damage the file or ask for the same range forever.
                         val range = response.headers[HttpHeaders.ContentRange]
-                        if (range?.startsWith("bytes $position-") != true || !range.endsWith("/$total"))
-                            throw YouTubeException("YouTube sent the wrong part of the audio")
+                        val end = range?.takeIf { it.startsWith("bytes $position-") && it.endsWith("/$total") }
+                            ?.substringAfter('-')?.substringBefore('/')?.toLongOrNull()?.takeIf { it in position..last }
+                            ?: throw YouTubeException("YouTube sent the wrong part of the audio")
                         val start = position
                         fs.appendingSink(target).buffer().use { sink ->
                             val channel = response.bodyAsChannel()
                             val buffer = ByteArray(64 * 1024)
-                            while (position <= last) {
+                            // A shorter range than asked for is fine; the next request continues after it.
+                            while (position <= end) {
                                 val count = channel.readAvailable(buffer)
                                 if (count == -1) break
-                                val kept = minOf(count.toLong(), last + 1 - position).toInt()
+                                val kept = minOf(count.toLong(), end + 1 - position).toInt()
                                 if (kept > 0) { sink.write(buffer, 0, kept); position += kept }
                             }
                         }
