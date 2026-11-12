@@ -176,7 +176,7 @@ class NavidromeTimeoutTest {
     /** A real HTTP server whose handlers can pause, so OkHttp's own socket timeouts apply. */
     private class SlowServer : AutoCloseable {
         private val threads = Executors.newCachedThreadPool()
-        private val server = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0).apply { executor = threads; start() }
+        private val server = HttpServer.create(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0).apply { executor = threads; start() }
         private val counts = java.util.concurrent.ConcurrentHashMap<String, AtomicInteger>()
         val address get() = "http://127.0.0.1:${server.address.port}"
 
