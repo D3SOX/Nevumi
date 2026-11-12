@@ -162,7 +162,6 @@ class LyricsSourcesTest {
         val searches = mutableListOf<String?>()
         val lyricIds = mutableListOf<String?>()
         val wordTiming = mutableListOf<String?>()
-        var firstCopy = """{"code":200,"lrc":{"lyric":"Plain copy"}}"""
         var lyric = """{"code":200,"lrc":{"lyric":"[00:00.000] 作词 : Someone\n[00:01.000] 作曲 : Someone\n[00:02.50]你说：First line\n[00:04.00]Second"}}"""
         val netEase = NetEaseClient(http { request ->
             if (request.url.encodedPath == "/api/cloudsearch/pc") {
@@ -178,7 +177,7 @@ class LyricsSourcesTest {
                 val id = request.url.parameters["id"]
                 lyricIds += id
                 wordTiming += request.url.parameters["yv"]
-                respond(if (id == "4") firstCopy else lyric, headers = json)
+                respond(when (id) { "4" -> """{"code":200,"lrc":{"lyric":"Plain copy"}}"""; else -> lyric }, headers = json)
             }
         }, "1.0")
         assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(2_500, "你说：First line"), LyricLine(4_000, "Second"))), netEase.lyrics(metadata))
@@ -195,16 +194,7 @@ class LyricsSourcesTest {
         lyric = """{"code":200,"lrc":{"lyric":"[00:01.00]By line"},"yrc":{"lyric":"[0,0](0,0,0) 作词 : Someone\n[1000,800](1000,300,0)Word (1300,500,0)by word"}}"""
         assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "Word by word", listOf(LyricWord(1_000, "Word "), LyricWord(1_300, "by word"))), LyricLine(1_800, ""))),
             netEase.lyrics(metadata))
-        // A later copy timed word by word beats an earlier one timed by line.
-        firstCopy = """{"code":200,"lrc":{"lyric":"[00:01.00]First copy by line"}}"""
-        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "Word by word", listOf(LyricWord(1_000, "Word "), LyricWord(1_300, "by word"))), LyricLine(1_800, ""))),
-            netEase.lyrics(metadata))
-        // A refusal while looking for better timing keeps what the earlier copy had.
-        lyric = """{"code":-462,"message":"Verify your phone"}"""
-        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "First copy by line"))), netEase.lyrics(metadata))
         lyric = """{"code":200,"lrc":{"lyric":"[00:01.00]By line"},"yrc":{"lyric":"[0,0](0,0,0) 作词 : Someone"}}"""
-        assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "First copy by line"))), netEase.lyrics(metadata))
-        firstCopy = """{"code":200,"lrc":{"lyric":"Plain copy"}}"""
         assertEquals(Lyrics(LyricsSource.NETEASE, listOf(LyricLine(1_000, "By line"))), netEase.lyrics(metadata))
         lyric = """{"code":200,"lrc":{"lyric":""}}"""
         assertEquals(Lyrics(LyricsSource.NETEASE, plain = "Plain copy"), netEase.lyrics(metadata))

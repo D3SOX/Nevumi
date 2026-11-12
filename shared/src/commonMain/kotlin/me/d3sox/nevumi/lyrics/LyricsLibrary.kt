@@ -159,25 +159,20 @@ class NetEaseClient(private val http: HttpClient, version: String, private val b
             parameter("type", 1)
             parameter("limit", 10)
         }["result"]?.jsonObject?.get("songs")?.jsonArray.orEmpty().map { it.jsonObject }
-        // The catalogue often holds the same recording more than once, and only some copies have synced lyrics, or lyrics timed by word.
-        var best: Lyrics? = null
+        // The catalogue often holds the same recording more than once, and only some copies have synced lyrics.
+        var plain: Lyrics? = null
         for (song in songs.filter { matches(it, metadata) }.take(3)) {
             val id = song["id"]?.jsonPrimitive?.longOrNull ?: continue
             // The same request also returns the lyrics timed word by word, as yrc, when the catalogue has them.
-            val body = try { request("song/lyric") { parameter("id", id); parameter("lv", 1); parameter("yv", 1) } }
-            catch (error: Exception) {
-                // A failure while looking for better timing keeps the lyrics an earlier copy had.
-                if (error is CancellationException || best == null) throw error
-                break
-            }
+            val body = request("song/lyric") { parameter("id", id); parameter("lv", 1); parameter("yv", 1) }
             if (body["pureMusic"]?.jsonPrimitive?.booleanOrNull == true) return null
             fun lyric(key: String) = body[key]?.jsonObject?.get("lyric")?.jsonPrimitive?.contentOrNull
             val found = lyric("yrc")?.let(YrcParser::parse)?.withoutCredits()
                 ?: lyric("lrc")?.let { LrcParser.parse(it, LyricsSource.NETEASE) }?.withoutCredits() ?: continue
-            if (found.timedByWord) return found
-            if (best == null || found.synced && !best.synced) best = found
+            if (found.synced) return found
+            plain = plain ?: found
         }
-        return best
+        return plain
     }
 
     private suspend fun request(path: String, parameters: HttpRequestBuilder.() -> Unit): JsonObject {
