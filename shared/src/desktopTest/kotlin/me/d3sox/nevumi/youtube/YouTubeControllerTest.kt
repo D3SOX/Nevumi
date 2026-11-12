@@ -33,8 +33,9 @@ class YouTubeControllerTest {
         preferences.update { it.copy(youTube = true) }
         val chosen = library.importTrack(TrackMetadata("Night Drive", "Artist"), TrackSource("local", SourceKind.LOCAL, "/music/night-drive.flac"))
         val lookup = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var held = lookup
         val slow = object : YouTubeSource by Source {
-            override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio { lookup.await(); return Source.audio(videoId, fresh) }
+            override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio { held.await(); return Source.audio(videoId, fresh) }
         }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences, youTube = slow,
             sourceAccessible = { true })
@@ -45,6 +46,15 @@ class YouTubeControllerTest {
             lookup.complete(Unit)
             video.join()
             assertEquals(listOf(chosen.id), controller.state.value.queue.entries.map { it.trackId })
+            // Clearing the queue during a lookup counts as a choice too.
+            val cleared = kotlinx.coroutines.CompletableDeferred<Unit>()
+            held = cleared
+            val again = controller.playYouTube(YouTubeTrack("bbbbbbbbbbb", "Night Swim", "Other"))
+            controller.clearQueue().join()
+            val afterClearing = controller.state.value.queue.entries
+            cleared.complete(Unit)
+            again.join()
+            assertEquals(afterClearing, controller.state.value.queue.entries)
         } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 

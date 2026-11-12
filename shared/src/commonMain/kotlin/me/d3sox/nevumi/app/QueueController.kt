@@ -142,7 +142,7 @@ class QueueController internal constructor(private val context: ControllerContex
         queue.detachSaved()
         context.update { it.copy(queue = it.queue.copy(selectedSavedQueueId = null)) }
     }
-    fun startEmptyQueue() = context.action {
+    fun startEmptyQueue() = context.also { it.playRequests++ }.action {
         playback.discardIncomingPlayback()
         persistPlaybackPosition()
         queue.startEmpty()
@@ -197,7 +197,7 @@ class QueueController internal constructor(private val context: ControllerContex
         cancelPlaybackConfirmation()
         request.play()
     }
-    fun loadSavedQueue(id: String, confirmed: Boolean = false): Job = context.action {
+    fun loadSavedQueue(id: String, confirmed: Boolean = false): Job = context.also { it.playRequests++ }.action {
         if (queue.snapshot().selectedSavedQueueId == id) return@action
         if (requestPlaybackConfirmation(context.state.value.savedQueues.firstOrNull { it.id == id }?.name ?: "this saved queue", confirmed) {
                 loadSavedQueue(id, confirmed = true)
@@ -250,7 +250,7 @@ class QueueController internal constructor(private val context: ControllerContex
         context.update { it.copy(queue = snapshot) }
         if (playback.queueLoaded) engine.updateQueue(playback.playableQueue(snapshot))
     }
-    fun clearQueue(selection: QueueClear = QueueClear.ALL) = context.action {
+    fun clearQueue(selection: QueueClear = QueueClear.ALL) = context.also { it.playRequests++ }.action {
         persistPlaybackPosition()
         val before = queue.snapshot()
         queue.clear(selection)
