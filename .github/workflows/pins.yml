@@ -1,0 +1,66 @@
+name: Pins
+# Opens a pull request for each version pin that Dependabot cannot track. See scripts/update-pins.py.
+on:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pin: [projectm, mpv, appimagetool, milkdrop-presets, android-build-tools, android-ndk, android-cmake]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: startsWith(matrix.pin, 'android-')
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - if: startsWith(matrix.pin, 'android-')
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          log-accepted-android-sdk-licenses: false
+      - name: Open or refresh the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN: ${{ matrix.pin }}
+        run: |
+          set -euo pipefail
+          summary="$(python3 scripts/update-pins.py "$PIN")"
+          if [[ -z "$summary" ]]; then
+            echo "$PIN is up to date"
+            exit 0
+          fi
+          branch="pins/$PIN"
+          title="chore(deps): update $summary"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --create "$branch"
+          git commit --all --message "$title"
+          open="$(gh pr list --head "$branch" --state open --json number --jq '.[].number')"
+          # Skip the push and test run when the open pull request already holds this update on the current base.
+          if git fetch --quiet origin "$branch" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            if [[ -n "$open" ]]; then
+              echo "$branch is current"
+              exit 0
+            fi
+          else
+            git push --force origin "$branch"
+          fi
+          if [[ -z "$open" ]]; then
+            gh pr create --head "$branch" --title "$title" \
+              --body "Updates a pin that Dependabot cannot track. \`scripts/update-pins.py $PIN\` made this change."
+          else
+            gh pr edit "$branch" --title "$title"
+          fi
+          # Pull requests from the workflow token start no workflows, so run the required tests on the branch directly.
+          gh workflow run tests.yml --ref "$branch"
