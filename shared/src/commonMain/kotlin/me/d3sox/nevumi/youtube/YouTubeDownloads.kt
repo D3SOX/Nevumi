@@ -104,6 +104,8 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private val runs = Mutex()
     private val edits = Mutex()
+    // Jobs whose audio this process is writing; a cancellation leaves their files to the writer, which deletes them once it stops.
+    private val fetching = mutableSetOf<String>()
     private val mutableJobs = MutableStateFlow<List<YouTubeJob>?>(null)
     /** Newest first, or null until the stored jobs are loaded. */
     val jobs = mutableJobs.asStateFlow()
@@ -187,13 +189,13 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     }
 
     suspend fun cancel(id: String) {
-        edits.withLock {
+        val idle = edits.withLock {
             val job = job(id)
             require(job.state == YouTubeJobState.DOWNLOADING || job.state == YouTubeJobState.NEEDS_TAGS) { "This download can no longer be canceled" }
             save(job.copy(state = YouTubeJobState.CANCELLED, message = "Canceled", downloaded = false, percent = 0))
+            id !in fetching
         }
-        // A running download notices the cancellation after its current range and leaves its partial file to this.
-        withContext(Dispatchers.IO) { deleteFiles(id) }
+        if (idle) withContext(Dispatchers.IO) { deleteFiles(id) }
     }
 
     /** Resumes where the job stopped: uploading a saved song, saving a downloaded file, or downloading the rest of the audio. */
@@ -213,11 +215,12 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     }
 
     suspend fun dismiss(id: String) {
-        edits.withLock {
+        val idle = edits.withLock {
             check(store.read<YouTubeJob>("youtube-job:$id")?.active != true) { "Wait for the download to finish" }
             store.database.records().delete("youtube-job:$id")
+            id !in fetching
         }
-        withContext(Dispatchers.IO) { deleteFiles(id) }
+        if (idle) withContext(Dispatchers.IO) { deleteFiles(id) }
     }
 
     /** Indexes a saved download again after its folder joined the library. */
@@ -257,6 +260,19 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     }
 
     private suspend fun fetch(found: YouTubeJob) {
+        edits.withLock { fetching += found.id }
+        try { fetchRanges(found) }
+        finally {
+            withContext(NonCancellable) { edits.withLock {
+                fetching -= found.id
+                // A retry right after a cancellation continues this file, so only a stopped download loses it.
+                val current = store.read<YouTubeJob>("youtube-job:${found.id}")
+                if (current == null || current.state == YouTubeJobState.CANCELLED) withContext(Dispatchers.IO) { deleteFiles(found.id) }
+            } }
+        }
+    }
+
+    private suspend fun fetchRanges(found: YouTubeJob) {
         var job = found
         var audio = source.audio(job.track.videoId)
         // YouTube Music's song descriptions name the album and year, which are good defaults for the tags.
@@ -307,11 +323,7 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
             }
             val percent = (position * 100 / total).toInt()
             val current = store.read<YouTubeJob>("youtube-job:${job.id}")
-            if (current?.state != YouTubeJobState.DOWNLOADING) {
-                // The range written during a cancellation or removal may have recreated the deleted partial file.
-                if (current == null || current.state == YouTubeJobState.CANCELLED) withContext(Dispatchers.IO) { deleteFiles(job.id) }
-                return
-            }
+            if (current?.state != YouTubeJobState.DOWNLOADING) return
             if (percent != current.percent || current.message != "Downloading") {
                 val next = current.copy(percent = percent, message = "Downloading")
                 if (!replace(current, next)) return
@@ -352,7 +364,10 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     }
 
     private suspend fun importLocal(job: YouTubeJob): YouTubeJob {
-        val track = requireNotNull(localSources) { "Local music access is unavailable" }.scan(requireNotNull(job.location)).firstOrNull()
+        val sources = requireNotNull(localSources) { "Local music access is unavailable" }
+        // A song meant for the music server is indexed wherever it was saved, since the upload needs it in the library.
+        val track = (if (job.destination == YouTubeDestination.SERVER) sources.scanSong(requireNotNull(job.location))
+            else sources.scan(requireNotNull(job.location))).firstOrNull()
         return if (track == null) job.copy(state = YouTubeJobState.COMPLETE, message = "Saved to ${files?.folder}", excludedFolder = files?.folder)
         else job.copy(state = YouTubeJobState.COMPLETE, message = "Added to your library", trackId = track.id, excludedFolder = null)
     }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.withTimeout
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
+import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.soundcloud.DirectoryMusicFiles
 import me.d3sox.nevumi.soundcloud.ScGateTagChoice
 import me.d3sox.nevumi.soundcloud.ScGateTags
@@ -49,9 +50,11 @@ class YouTubeDownloadsTest {
     private class Fixture(val directory: Path, val downloads: YouTubeDownloads, val library: MusicLibrary, val requests: MutableList<String>,
         val close: () -> Unit)
 
-    private fun fixture(source: YouTubeSource, expired: Set<String> = emptySet()): Fixture {
+    private fun fixture(source: YouTubeSource, expired: Set<String> = emptySet(), includeFolder: String? = null,
+        upload: (suspend (String, String) -> Unit)? = null): Fixture {
         val directory = Files.createTempDirectory("youtube-downloads")
         val store = openMusicStore(directory.resolve("library.db").toString())
+        includeFolder?.let { folder -> runBlocking { MusicPreferences(store).update { it.copy(includeFolders = listOf(directory.resolve(folder).toString())) } } }
         val library = MusicLibrary(store)
         val requests = Collections.synchronizedList(mutableListOf<String>())
         val http = HttpClient(MockEngine { request ->
@@ -66,7 +69,7 @@ class YouTubeDownloadsTest {
             }
         })
         val downloads = YouTubeDownloads(store, http, source, directory.resolve("work").toString(),
-            DirectoryMusicFiles(directory.resolve("Music/YouTube").toString()), LocalFiles(library), chunkBytes = 4_096)
+            DirectoryMusicFiles(directory.resolve("Music/YouTube").toString()), LocalFiles(library), upload = upload, chunkBytes = 4_096)
         return Fixture(directory, downloads, library, requests) {
             runBlocking { downloads.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively()
         }
@@ -96,6 +99,17 @@ class YouTubeDownloadsTest {
             assertEquals("One More Time", song.metadata.title)
             // The work files are gone once the song is saved.
             assertEquals(emptyList(), fixture.directory.resolve("work").toFile().list().orEmpty().toList())
+        } finally { fixture.close() }
+    }
+
+    @Test fun aSongForTheMusicServerIsUploadedEvenWhenTheFolderRulesLeaveItsFolderOut() = runBlocking {
+        val uploads = Collections.synchronizedList(mutableListOf<String>())
+        val fixture = fixture(FakeYouTube(audio), includeFolder = "Elsewhere", upload = { _, path -> uploads += path })
+        try {
+            val job = fixture.downloads.download(track, YouTubeDestination.SERVER, reviewTags = false)
+            val done = fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.COMPLETE }
+            assertEquals("Added to your music server", done.message)
+            assertEquals(listOf("Daft Punk/Discovery/Daft Punk - One More Time.m4a"), uploads.toList())
         } finally { fixture.close() }
     }
 

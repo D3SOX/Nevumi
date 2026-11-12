@@ -466,7 +466,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
         // Leaving out the song the player holds would remove it from the player, so it stays until its source is gone or fails.
         val status = engine.status.value
         return lastResolved[entry.id]?.takeIf { current -> status.entryId == entry.id &&
-            status.sourceId == current.sourceId && status.error == null && track.sources.any { it.id == current.sourceId } }
+            status.sourceId == current.sourceId && status.error == null && track.sources.any { it.id == current.sourceId && it.kind != SourceKind.YOUTUBE } }
     }
 
     private suspend fun resolve(track: Track, entry: QueueEntry, snapshot: QueueSnapshot, checkAllSources: Boolean, lookup: SourceLookup): PlayableTrack? {
