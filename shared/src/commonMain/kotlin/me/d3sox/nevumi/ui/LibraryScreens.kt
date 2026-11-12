@@ -165,11 +165,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         val streamed = state.tracks.filterNot { it.inLibrary }
         val query = state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources)
         val shown = filterTracks(visible, query, statistics, now, playlisted)
-        val shownStreams = if (streamed.isEmpty()) emptyList() else filterTracks(streamed, query, statistics, now, playlisted)
-        listOf(shown, unfiltered + streamed.filter { it.favorite },
-            if (shownStreams.none { it.favorite }) shown.filter { it.favorite }
-            else filterTracks(visible + streamed, query, statistics, now, playlisted).filter { it.favorite },
-            shown + shownStreams)
+        // One pass over both, so a song limit counts streamed songs and library songs together.
+        val listened = if (streamed.isEmpty()) shown else filterTracks(visible + streamed, query, statistics, now, playlisted)
+        listOf(shown, unfiltered + streamed.filter { it.favorite }, listened.filter { it.favorite }, listened)
     }
     val currentTab = tabs[currentIndex]
     val headerContext = headers[currentTab]

@@ -107,6 +107,11 @@ class YouTubeSearchUiTest {
                 // The library's source filter applies to it like to any other song.
                 controller.updatePreferences { it.copy(sourceFilter = SourceKind.LOCAL) }.let { runBlocking { it.join() } }
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("track-row:${queued.id}").fetchSemanticsNodes().isEmpty() }
+                controller.updatePreferences { it.copy(sourceFilter = null) }.let { runBlocking { it.join() } }
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("track-row:${queued.id}").fetchSemanticsNodes().isNotEmpty() }
+                // A song limit counts library and streamed songs together: "Night Drive" sorts first and fills a limit of one.
+                controller.updatePreferences { it.copy(libraryFilter = it.libraryFilter.copy(limit = 1)) }.let { runBlocking { it.join() } }
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("track-row:${queued.id}").fetchSemanticsNodes().isEmpty() }
 
                 // Turning YouTube off stops this device from streaming the YouTube songs it already queued.
                 controller.updatePreferences { it.copy(youTube = false) }.let { runBlocking { it.join() } }
