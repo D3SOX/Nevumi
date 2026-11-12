@@ -85,7 +85,10 @@ class QueueController internal constructor(private val context: ControllerContex
     }
 
     fun playTrack(trackId: String, contextTrackIds: List<String>? = null, contextIndex: Int? = null, contextName: String = "Library", shuffleContext: Boolean = false,
-        origin: QueueOrigin = QueueOrigin(), preserveManualQueue: Boolean = false, confirmed: Boolean = false): Job = context.also { it.playRequests++ }.action {
+        origin: QueueOrigin = QueueOrigin(), preserveManualQueue: Boolean = false, confirmed: Boolean = false,
+        /** A play request counted earlier, such as a YouTube Play while its video was looked up; the queue only changes while it is the latest. */
+        request: Long? = null): Job = context.also { if (request == null) it.playRequests++ }.action {
+        if (request != null && request != context.playRequests) return@action
         if (requestPlaybackConfirmation(
                 context.state.value.tracks.firstOrNull { it.id == trackId }?.metadata?.title ?: "this music", confirmed) {
                 playTrack(trackId, contextTrackIds, contextIndex, contextName, shuffleContext, origin, preserveManualQueue, confirmed = true)

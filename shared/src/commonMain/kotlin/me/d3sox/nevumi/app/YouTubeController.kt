@@ -79,8 +79,8 @@ class YouTubeController internal constructor(private val context: ControllerCont
         requireEnabled()
         source().audio(track.videoId)
         val trackId = libraryTrack(track)
-        // Looking a video up takes a moment; anything played meanwhile, such as another video or a library song, wins.
-        if (action == null) { if (request == context.playRequests) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube").join() }
+        // Looking a video up takes a moment. The queue checks the request when it plays, so anything chosen before then wins.
+        if (action == null) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube", request = request).join()
         else queueController.enqueue(trackId, action).join()
     }
 
