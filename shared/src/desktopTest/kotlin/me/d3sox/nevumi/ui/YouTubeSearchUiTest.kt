@@ -83,6 +83,17 @@ class YouTubeSearchUiTest {
                 onNodeWithTag("youtube-kind:VIDEOS").performClick()
                 waitUntil(timeoutMillis = 5_000) { youTube.searches.lastOrNull() == "Night" to YouTubeSearchKind.VIDEOS }
 
+                // A streamed song stays out of the library views, but a favorite one is listed in Favorites.
+                controller.setFavorite(queued.id, true).let { runBlocking { it.join() } }
+                onNodeWithContentDescription("Close search").performClick()
+                // The mini player shows the queued song too, so only list rows count.
+                val listed = hasText("Night Swim (Official Video)") and !hasContentDescription("Mini-player", substring = true)
+                openLibraryPage("Favorites")
+                waitUntil(timeoutMillis = 5_000) { onAllNodes(listed).fetchSemanticsNodes().isNotEmpty() }
+                openLibraryPage("Songs")
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Night Drive").fetchSemanticsNodes().isNotEmpty() }
+                onAllNodes(listed).assertCountEquals(0)
+
                 // Turning YouTube off stops this device from streaming the YouTube songs it already queued.
                 controller.updatePreferences { it.copy(youTube = false) }.let { runBlocking { it.join() } }
                 val refused = runCatching { runBlocking { controller.playbackController.requirePlayable(queued.id) } }.exceptionOrNull()

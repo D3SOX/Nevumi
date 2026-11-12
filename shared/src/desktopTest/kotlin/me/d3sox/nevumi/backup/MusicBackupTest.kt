@@ -281,6 +281,17 @@ class MusicBackupTest {
     }
 
     @Test
+    fun aStreamedSongMatchesOnlyWhenNoLibrarySongHasItsTags() = devices { source, target ->
+        val streamed = TrackMetadata("Night Swim", "Other", durationMs = 180_000)
+        val loved = source.library.importTrack(streamed, TrackSource("youtube:bbbbbbbbbbb", SourceKind.YOUTUBE, "bbbbbbbbbbb")).id
+        source.library.setFavorite(loved, true)
+        // The target streamed the same video, so only that streamed song has these tags.
+        val again = target.library.importTrack(streamed, TrackSource("youtube:bbbbbbbbbbb", SourceKind.YOUTUBE, "bbbbbbbbbbb")).id
+        target.backup.restore(source.backup.export())
+        assertTrue(target.library.findTrack(again)!!.favorite)
+    }
+
+    @Test
     fun theBackupContainsNoSecretsOrDevicePaths() = devices { source, _ ->
         source.fill()
         source.queue.addSaved("Sky folder", QueueSnapshot(listOf(QueueEntry("f1", source.id(northern.title))), currentEntryId = "f1",
