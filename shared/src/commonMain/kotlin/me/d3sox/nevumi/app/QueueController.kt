@@ -85,7 +85,7 @@ class QueueController internal constructor(private val context: ControllerContex
     }
 
     fun playTrack(trackId: String, contextTrackIds: List<String>? = null, contextIndex: Int? = null, contextName: String = "Library", shuffleContext: Boolean = false,
-        origin: QueueOrigin = QueueOrigin(), preserveManualQueue: Boolean = false, confirmed: Boolean = false): Job = context.action {
+        origin: QueueOrigin = QueueOrigin(), preserveManualQueue: Boolean = false, confirmed: Boolean = false): Job = context.also { it.playRequests++ }.action {
         if (requestPlaybackConfirmation(
                 context.state.value.tracks.firstOrNull { it.id == trackId }?.metadata?.title ?: "this music", confirmed) {
                 playTrack(trackId, contextTrackIds, contextIndex, contextName, shuffleContext, origin, preserveManualQueue, confirmed = true)
@@ -111,7 +111,7 @@ class QueueController internal constructor(private val context: ControllerContex
         playback.queueLoaded = true
     }
 
-    fun selectQueueEntry(entryId: String) = context.action {
+    fun selectQueueEntry(entryId: String) = context.also { it.playRequests++ }.action {
         queue.snapshot().entries.firstOrNull { it.id == entryId }?.let { playback.requirePlayable(it.trackId) }
         queue.select(entryId)
         val snapshot = queue.snapshot()

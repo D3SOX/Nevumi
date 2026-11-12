@@ -25,6 +25,29 @@ class YouTubeControllerTest {
         override suspend fun artwork(url: String) = ByteArray(0)
     }
 
+    @Test fun aSlowVideoLookupDoesNotReplaceASongPlayedMeanwhile() = runBlocking {
+        val directory = Files.createTempDirectory("youtube-controller")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val preferences = MusicPreferences(store)
+        preferences.update { it.copy(youTube = true) }
+        val chosen = library.importTrack(TrackMetadata("Night Drive", "Artist"), TrackSource("local", SourceKind.LOCAL, "/music/night-drive.flac"))
+        val lookup = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slow = object : YouTubeSource by Source {
+            override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio { lookup.await(); return Source.audio(videoId, fresh) }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences, youTube = slow,
+            sourceAccessible = { true })
+        try {
+            withTimeout(5_000) { controller.state.first { it.libraryReady && it.preferences.youTube } }
+            val video = controller.playYouTube(YouTubeTrack("bbbbbbbbbbb", "Night Swim", "Other"))
+            controller.playTrack(chosen.id, listOf(chosen.id), 0).join()
+            lookup.complete(Unit)
+            video.join()
+            assertEquals(listOf(chosen.id), controller.state.value.queue.entries.map { it.trackId })
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun queueingAVideoAgainKeepsTheTagsOfTheSongItIsLinkedTo() = runBlocking {
         val directory = Files.createTempDirectory("youtube-controller")
         val store = openMusicStore(directory.resolve("library.db").toString())

@@ -56,7 +56,6 @@ class YouTubeController internal constructor(private val context: ControllerCont
         } }
     }
 
-    @kotlin.concurrent.Volatile private var latestPlay = 0L
 
     private fun source() = requireNotNull(source) { "YouTube is unavailable" }
     private fun downloads() = requireNotNull(downloads) { "YouTube downloads are unavailable" }
@@ -72,7 +71,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
     /** Plays [track] on its own, or with [action] adds it to the queue. Its audio is looked up first, so an unavailable video says why. */
     fun playYouTube(track: YouTubeTrack, action: QueueAction? = null): kotlinx.coroutines.Job {
         // Numbered when tapped, so the order of the taps decides, not the order the lookups finish in.
-        val request = if (action == null) ++latestPlay else 0
+        val request = if (action == null) ++context.playRequests else 0
         return playYouTube(track, action, request)
     }
 
@@ -80,8 +79,8 @@ class YouTubeController internal constructor(private val context: ControllerCont
         requireEnabled()
         source().audio(track.videoId)
         val trackId = libraryTrack(track)
-        // Looking a video up takes a moment, so a later Play may finish first; the latest one wins.
-        if (action == null) { if (request == latestPlay) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube").join() }
+        // Looking a video up takes a moment; anything played meanwhile, such as another video or a library song, wins.
+        if (action == null) { if (request == context.playRequests) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube").join() }
         else queueController.enqueue(trackId, action).join()
     }
 
