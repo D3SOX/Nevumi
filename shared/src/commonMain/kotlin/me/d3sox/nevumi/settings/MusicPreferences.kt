@@ -81,6 +81,8 @@ data class MusicSettings(
     val showPreviousQueueTracks: Boolean = true,
     val confirmQueueJumps: Boolean = true,
     val confirmNextUpInterruption: Boolean = false,
+    /** Shuffling favors favorites and higher ratings and holds back songs played in the last days; see [me.d3sox.nevumi.queue.smartShuffleWeight]. */
+    val smartShuffle: Boolean = false,
     val queueRecoveryEnabled: Boolean = false,
     val queueRecoveryMode: QueueRecoveryMode = QueueRecoveryMode.BEFORE_REPLACE,
     val queueRecoveryIntervalMinutes: Int = 5,

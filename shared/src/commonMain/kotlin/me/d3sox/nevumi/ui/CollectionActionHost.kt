@@ -89,10 +89,15 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
         DropdownMenu(menu, { menu = false }) {
             val (trackIds, tracks) = rememberTracks()
             AppMenuItem(text = { Text(stringResource(if (saved != null) Res.string.library_select_queue else Res.string.play)) }, leadingIcon = { Icon(AppIcon.PLAY.vector, null) },
-                enabled = trackIds.isNotEmpty(), onClick = { close {
+                enabled = if (saved != null) trackIds.isNotEmpty() else tracks.isNotEmpty(), onClick = { close {
                     if (saved != null) controller.loadSavedQueue(saved.id)
-                    else controller.playTrack(trackIds.first(), trackIds, 0, entry.title,
-                        shuffleContext = playlist?.shuffle == true || tab == LibraryTab.HOME, origin = QueueOrigin(tab, entry.id))
+                    else {
+                        // Songs the library no longer has would shift the index playTrack checks.
+                        val ids = tracks.map { it.id }
+                        val shuffle = playlist?.shuffle == true || tab == LibraryTab.HOME
+                        val index = if (shuffle) controller.shuffleStart(ids) else 0
+                        controller.playTrack(ids[index], ids, index, entry.title, shuffleContext = shuffle, origin = QueueOrigin(tab, entry.id))
+                    }
                 } })
             QueueActionMenuItems(trackIds, controller) { menu = false }
             AppMenuItem(text = { Text(stringResource(Res.string.manage_playlists)) }, leadingIcon = { Icon(AppIcon.PLAYLIST_PLUS.vector, null) },

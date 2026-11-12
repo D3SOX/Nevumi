@@ -27,6 +27,20 @@ class PlaybackQueueTest {
     }
 
     @Test
+    fun smartShuffleOnlyWeighsTheContextAndTurningItOffRestoresTheOriginalOrder() = runBlocking {
+        withQueue { queue ->
+            queue.replace(listOf("playing", "a", "b", "c", "d", "favorite"))
+            queue.append("requested")
+            val original = queue.snapshot()
+            queue.shuffle(true, Random(71)) { if (it == "favorite") 1_000.0 else 1.0 }
+            assertEquals(listOf("playing", "requested", "favorite"), queue.snapshot().entries.take(3).map { it.trackId })
+            assertEquals(original.entries.toSet(), queue.snapshot().entries.toSet())
+            queue.shuffle(false)
+            assertEquals(original, queue.snapshot())
+        }
+    }
+
+    @Test
     fun movingTracksBetweenTheManualAndContextQueueChangesTheirSectionAndSurvivesRestart() = runBlocking {
         val directory = Files.createTempDirectory("queue-sections")
         val path = directory.resolve("library.db").toString()

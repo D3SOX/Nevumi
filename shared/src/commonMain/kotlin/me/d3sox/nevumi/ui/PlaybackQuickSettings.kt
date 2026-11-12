@@ -30,6 +30,8 @@ import me.d3sox.nevumi.resources.player_seconds
 import me.d3sox.nevumi.resources.player_sleep_timer
 import me.d3sox.nevumi.resources.player_visualizer_background
 import me.d3sox.nevumi.resources.player_visualizer_background_text
+import me.d3sox.nevumi.resources.settings_smart_shuffle
+import me.d3sox.nevumi.resources.settings_smart_shuffle_description
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -59,6 +61,8 @@ internal fun PlaybackQuickSettings(state: AppState, controller: MusicController,
             }
             SettingsToggle(stringResource(Res.string.player_gapless_playback), AppIcon.MUSIC, stringResource(Res.string.player_gapless_playback_text),
                 state.preferences.gaplessPlayback) { enabled -> controller.updatePreferences { it.copy(gaplessPlayback = enabled) } }
+            SettingsToggle(stringResource(Res.string.settings_smart_shuffle), AppIcon.SHUFFLE, stringResource(Res.string.settings_smart_shuffle_description),
+                state.preferences.smartShuffle) { enabled -> controller.updatePreferences { it.copy(smartShuffle = enabled) } }
             if (milkDropBackgroundSupported) {
                 val milkDrop = state.preferences.milkDrop
                 fun visualizer(update: (me.d3sox.nevumi.visualizer.MilkDropSettings) -> me.d3sox.nevumi.visualizer.MilkDropSettings) =

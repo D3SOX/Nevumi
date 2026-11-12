@@ -107,8 +107,9 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(stringResource(mix.description), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             PageAction(stringResource(Res.string.library_play_mix), AppIcon.PLAY) {
-                                controller.playTrack(mix.tracks.first().id, mix.tracks.map { it.id }, 0, mixTitle,
-                                    shuffleContext = true, origin = QueueOrigin(LibraryTab.HOME, mix.id))
+                                val ids = mix.tracks.map { it.id }
+                                val index = controller.shuffleStart(ids)
+                                controller.playTrack(ids[index], ids, index, mixTitle, shuffleContext = true, origin = QueueOrigin(LibraryTab.HOME, mix.id))
                             }
                         }
                     })

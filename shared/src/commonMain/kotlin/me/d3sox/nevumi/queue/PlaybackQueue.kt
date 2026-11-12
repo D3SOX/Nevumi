@@ -15,6 +15,10 @@ import me.d3sox.nevumi.settings.QueueRecoveryMode
 private fun List<QueueEntry>.indexOfFirstAfter(index: Int, predicate: (QueueEntry) -> Boolean): Int =
     ((index + 1).coerceAtLeast(0) until size).firstOrNull { predicate(this[it]) } ?: size
 
+/** A uniform shuffle, or smart shuffle's weighted one when [weight] gives each song's weight by its ID. */
+private fun List<QueueEntry>.shuffledWith(random: Random, weight: ((String) -> Double)?): List<QueueEntry> =
+    if (weight == null) shuffled(random) else weightedShuffled(random) { weight(it.trackId) }
+
 @Serializable
 enum class QueueSection { MANUAL, CONTEXT }
 
@@ -133,12 +137,13 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         write(snapshot().copy(repeatMode = mode, repeatPlays = playCount))
     }
 
-    suspend fun shuffle(enabled: Boolean, random: Random = Random.Default) = store.transaction {
+    /** Shuffles what plays after Up next; [weight] gives smart shuffle's weight for each song ID, or null for a uniform shuffle. */
+    suspend fun shuffle(enabled: Boolean, random: Random = Random.Default, weight: ((String) -> Double)? = null) = store.transaction {
         val current = snapshot()
         if (enabled && (current.unshuffledEntryIds == null || current.albumShuffled)) {
             val upcoming = (current.currentIndex + 1).coerceAtLeast(0)
             write(current.copy(
-                entries = current.entries.take(upcoming) + current.upNext + current.context.shuffled(random),
+                entries = current.entries.take(upcoming) + current.upNext + current.context.shuffledWith(random, weight),
                 unshuffledEntryIds = current.unshuffledEntryIds ?: current.entries.map { it.id }, albumShuffled = false))
         } else if (!enabled && current.unshuffledEntryIds != null) {
             val entries = current.entries.associateBy { it.id }
@@ -293,11 +298,11 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
     }
 
     suspend fun replace(trackIds: List<String>, startIndex: Int = 0, contextName: String = "Library", shuffle: Boolean = false,
-        origin: QueueOrigin = QueueOrigin()) {
+        origin: QueueOrigin = QueueOrigin(), weight: ((String) -> Double)? = null) {
         val original = trackIds.map { QueueEntry(Uuid.random().toString(), it) }
         val current = original.getOrNull(startIndex)
         val remaining = original.filterNot { it.id == current?.id }
-        val entries = if (shuffle && current != null) listOf(current) + remaining.shuffled() else original
+        val entries = if (shuffle && current != null) listOf(current) + remaining.shuffledWith(Random.Default, weight) else original
         write(QueueSnapshot(entries, current?.id, contextName = contextName, origin = origin,
             unshuffledEntryIds = if (shuffle && current != null) (listOf(current) + remaining).map { it.id } else null), replacement = true)
     }
