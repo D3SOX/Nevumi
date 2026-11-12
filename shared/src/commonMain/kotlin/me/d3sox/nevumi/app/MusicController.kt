@@ -45,6 +45,8 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.drop_queue_name
+import me.d3sox.nevumi.resources.open_queue_name
+import me.d3sox.nevumi.resources.open_unsupported
 
 data class AppState(
     val tracks: List<Track> = emptyList(),
@@ -201,6 +203,12 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun addMusic(folders: List<String>, songs: List<String>) = context.action(serialized = false) {
         val ids = libraryController.addMusic(folders, songs)
         if (ids.isNotEmpty()) playTrack(ids.first(), ids, 0, contextName = getString(Res.string.drop_queue_name)).join()
+    }
+    /** Adds a song another app opened in Nevumi to the library, like a dropped song, and plays it. */
+    fun openSong(uri: String) = context.action(serialized = false) {
+        val ids = libraryController.addMusic(emptyList(), listOf(libraryController.openedSong(uri)))
+        if (ids.isEmpty()) error(getString(Res.string.open_unsupported))
+        playTrack(ids.first(), ids, 0, contextName = getString(Res.string.open_queue_name)).join()
     }
     fun dismissError(error: String) = context.dismissError(error)
 

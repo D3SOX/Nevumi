@@ -221,6 +221,11 @@
     <string name="drop_unsupported">Drop music folders or MP3, FLAC and WAV files</string>
     <string name="drop_folder_excluded">Your excluded folder %1$s also hides %2$s. Remove that exclusion in Settings › Local music to add it.</string>
     <string name="drop_queue_name">Dropped songs</string>
+    <!-- Android: songs other apps open in Nevumi -->
+    <string name="open_queue_name">Opened file</string>
+    <string name="open_unsupported">Nevumi can open MP3, FLAC and WAV files</string>
+    <string name="open_needs_permission">Allow access to music and audio to open songs from other apps</string>
+    <string name="open_not_on_device">Save the song to your device’s storage to open it in Nevumi</string>
     <plurals name="player_rating_stars">
         <item quantity="one">Rating: %1$d star</item>
         <item quantity="other">Rating: %1$d stars</item>

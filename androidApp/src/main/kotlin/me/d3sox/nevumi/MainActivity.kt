@@ -7,6 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.IntentSenderRequest
 import android.Manifest
+import android.content.Intent
+import androidx.activity.result.ActivityResultLauncher
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.lifecycle.Lifecycle
@@ -23,6 +25,11 @@ import me.d3sox.nevumi.ui.MusicPlayerApp
 class MainActivity : ComponentActivity() {
     private var launchedWriteRequest: String? = null
     private var launchedNetworkRequest: String? = null
+    private val audioPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
+        else Manifest.permission.READ_EXTERNAL_STORAGE
+    /** A song another app opened while Nevumi asks for the audio permission it needs to find the song. */
+    private var songAwaitingPermission: String? = null
+    private lateinit var openSongPermission: ActivityResultLauncher<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,22 +91,45 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
-            else Manifest.permission.READ_EXTERNAL_STORAGE
         val request = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) controller.importSource("device")
         }
+        // A refusal still tries, so the app explains why it cannot open the song.
+        songAwaitingPermission = savedInstanceState?.getString("song-awaiting-permission")
+        openSongPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            songAwaitingPermission?.let(controller::openSong)
+            songAwaitingPermission = null
+        }
+        // A recreated activity, or one reopened from recents, already handled its song.
+        if (savedInstanceState == null) openSong(intent)
         setContent {
             MusicPlayerApp(controller, onAddMusic = {
-                if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) controller.importSource("device")
-                else request.launch(permission)
+                if (checkSelfPermission(audioPermission) == PackageManager.PERMISSION_GRANTED) controller.importSource("device")
+                else request.launch(audioPermission)
             })
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openSong(intent)
+    }
+
+    /** Plays a song another app opened in Nevumi. */
+    private fun openSong(intent: Intent) {
+        if (intent.action != Intent.ACTION_VIEW || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val uri = intent.data?.toString() ?: return
+        if (checkSelfPermission(audioPermission) == PackageManager.PERMISSION_GRANTED) (application as MusicApplication).controller.openSong(uri)
+        else {
+            songAwaitingPermission = uri
+            openSongPermission.launch(audioPermission)
         }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("launched-write-request", launchedWriteRequest)
         outState.putString("launched-network-request", launchedNetworkRequest)
+        outState.putString("song-awaiting-permission", songAwaitingPermission)
         super.onSaveInstanceState(outState)
     }
 }
