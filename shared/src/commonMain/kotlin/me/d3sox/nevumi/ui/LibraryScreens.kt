@@ -154,20 +154,23 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     // Sort and filter choices answer at once; a library change, such as one song's favorite, re-sorts in the background.
     val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders)
     // The unfiltered count is what the library shows without its source and filters, so the header can say "4 of 12 songs".
-    // Favorites also lists songs that only stream from YouTube, which the other library views leave out.
-    val (tracks, unfilteredTracks, favoriteTracks) = rememberDerived(null, trackChoices, listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
+    // Favorites, History and Statistics also list songs that only stream from YouTube, which the other library views leave out.
+    val (tracks, unfilteredTracks, favoriteTracks, listenedTracks) = rememberDerived(null, trackChoices,
+        listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         fun localAllowed(track: Track) =
             folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
         val unfiltered = state.tracks.filter { track -> track.inLibrary && (localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE }) }
         val visible = if (sources == SourceKind.LOCAL) unfiltered.filter(::localAllowed) else unfiltered
-        val streamed = state.tracks.filter { !it.inLibrary && it.favorite }
+        val streamed = state.tracks.filterNot { it.inLibrary }
         val query = state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources)
         val shown = filterTracks(visible, query, statistics, now, playlisted)
-        Triple(shown, unfiltered + streamed, if (streamed.isEmpty()) shown.filter { it.favorite }
-            else filterTracks(visible + streamed, query, statistics, now, playlisted).filter { it.favorite })
+        val shownStreams = if (streamed.isEmpty()) emptyList() else filterTracks(streamed, query, statistics, now, playlisted)
+        listOf(shown, unfiltered + streamed.filter { it.favorite },
+            if (shownStreams.none { it.favorite }) shown.filter { it.favorite }
+            else filterTracks(visible + streamed, query, statistics, now, playlisted).filter { it.favorite },
+            shown + shownStreams)
     }
-    val listenedTracks = remember(tracks, state.tracks) { tracks + state.tracks.filterNot { it.inLibrary } }
     val currentTab = tabs[currentIndex]
     val headerContext = headers[currentTab]
     val headerTitle = headerContext?.title ?: stringResource(currentTab.label)

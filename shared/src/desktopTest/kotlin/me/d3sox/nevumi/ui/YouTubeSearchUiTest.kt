@@ -104,6 +104,9 @@ class YouTubeSearchUiTest {
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.listens.any { it.trackId == queued.id } }
                 openLibraryPage("History")
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("track-row:${queued.id}").fetchSemanticsNodes().isNotEmpty() }
+                // The library's source filter applies to it like to any other song.
+                controller.updatePreferences { it.copy(sourceFilter = SourceKind.LOCAL) }.let { runBlocking { it.join() } }
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("track-row:${queued.id}").fetchSemanticsNodes().isEmpty() }
 
                 // Turning YouTube off stops this device from streaming the YouTube songs it already queued.
                 controller.updatePreferences { it.copy(youTube = false) }.let { runBlocking { it.join() } }
