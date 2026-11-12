@@ -82,6 +82,11 @@ class YouTubeSearchUiTest {
 
                 onNodeWithTag("youtube-kind:VIDEOS").performClick()
                 waitUntil(timeoutMillis = 5_000) { youTube.searches.lastOrNull() == "Night" to YouTubeSearchKind.VIDEOS }
+
+                // Turning YouTube off stops this device from streaming the YouTube songs it already queued.
+                controller.updatePreferences { it.copy(youTube = false) }.let { runBlocking { it.join() } }
+                val refused = runCatching { runBlocking { controller.playbackController.requirePlayable(queued.id) } }.exceptionOrNull()
+                assertEquals("This track has no available audio source", refused?.message)
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
