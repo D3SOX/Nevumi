@@ -130,6 +130,12 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
     }.debounce(300).map { roots() }
 
 
+    /** Indexes a song the user chose, such as a download, and keeps it in the library wherever the folder rules leave its folder. */
+    override suspend fun scanSong(location: String): List<Track> {
+        if (location.startsWith("content://media/")) library.rememberChosenSong(location)
+        return scan(location)
+    }
+
     override suspend fun scan(location: String, force: Boolean, onProgress: suspend (LocalScanProgress) -> Unit): List<Track> = withContext(Dispatchers.IO) {
         TagOptionSingleton.getInstance().isAndroid = true
         if (location != "device" && !location.startsWith("content:"))

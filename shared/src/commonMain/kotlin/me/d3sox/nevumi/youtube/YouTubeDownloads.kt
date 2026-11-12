@@ -189,13 +189,13 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     }
 
     suspend fun cancel(id: String) {
-        val idle = edits.withLock {
+        edits.withLock {
             val job = job(id)
             require(job.state == YouTubeJobState.DOWNLOADING || job.state == YouTubeJobState.NEEDS_TAGS) { "This download can no longer be canceled" }
             save(job.copy(state = YouTubeJobState.CANCELLED, message = "Canceled", downloaded = false, percent = 0))
-            id !in fetching
+            // Deleting under the lock keeps a quick retry from starting a new writer before the old files are gone.
+            if (id !in fetching) withContext(Dispatchers.IO) { deleteFiles(id) }
         }
-        if (idle) withContext(Dispatchers.IO) { deleteFiles(id) }
     }
 
     /** Resumes where the job stopped: uploading a saved song, saving a downloaded file, or downloading the rest of the audio. */
@@ -215,12 +215,11 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     }
 
     suspend fun dismiss(id: String) {
-        val idle = edits.withLock {
+        edits.withLock {
             check(store.read<YouTubeJob>("youtube-job:$id")?.active != true) { "Wait for the download to finish" }
             store.database.records().delete("youtube-job:$id")
-            id !in fetching
+            if (id !in fetching) withContext(Dispatchers.IO) { deleteFiles(id) }
         }
-        if (idle) withContext(Dispatchers.IO) { deleteFiles(id) }
     }
 
     /** Indexes a saved download again after its folder joined the library. */
