@@ -159,6 +159,9 @@
     <string name="sources_refresh_saved">%1$d of %2$s saved</string>
     <string name="sources_refresh_checked">%1$d of %2$s checked</string>
     <string name="sources_refresh_updated">%1$s updated</string>
+    <!-- Playlists and covers the server didn't send during a refresh, e.g. "1 playlist and 12 covers" -->
+    <string name="sources_refresh_skipped">Couldn’t download %1$s. The next refresh tries again.</string>
+    <string name="sources_refresh_skipped_both">%1$s and %2$s</string>
     <string name="sources_refresh_cancelled_description">Songs already saved are kept. You can refresh again later.</string>
     <string name="sources_library_refresh_progress">Library refresh progress</string>
     <string name="sources_refresh_slow">This step is taking longer than usual. You can cancel and try again.</string>

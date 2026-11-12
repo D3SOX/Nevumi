@@ -109,6 +109,52 @@ class NavidromeIntegrationTest {
     }
 
     @Test
+    fun aRefreshFromTheRealServerSkipsAPlaylistThatTimesOutKeepsItsSavedCopyAndImportsItNextTime() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-real-skipped-playlist")
+        val store = me.d3sox.nevumi.storage.openMusicStore(directory.resolve("library.db").toString())
+        val address = System.getenv("MUSICPLAYER_TEST_NAVIDROME_URL") ?: "http://127.0.0.1:14533"
+        val stalledId = java.util.concurrent.atomic.AtomicReference<String?>()
+        val attempts = java.util.concurrent.atomic.AtomicInteger()
+        // OkHttp raises this when the server sends nothing for the read timeout; only this playlist stalls, the rest is the real server.
+        val http = HttpClient(OkHttp) { engine { addInterceptor { chain ->
+            val url = chain.request().url
+            if (url.encodedPath.endsWith("/getPlaylist.view") && url.queryParameter("id") == stalledId.get()) {
+                attempts.incrementAndGet()
+                throw java.net.SocketTimeoutException("timeout")
+            }
+            chain.proceed(chain.request())
+        } } }
+        val client = NavidromeClient(http, address, ServerCredentials("fixture", "fixture-password"), retryDelaysMillis = listOf(1, 1))
+        val created = mutableListOf<String>()
+        try {
+            val songs = client.songs().map { it.id }
+            val stalled = client.savePlaylist("Stalled ${Uuid.random()}", songs).also { created += it.id }
+            val arriving = client.savePlaylist("Arriving ${Uuid.random()}", songs.take(1)).also { created += it.id }
+            val library = me.d3sox.nevumi.library.MusicLibrary(store)
+            val changes = NavidromeChanges(store, library) { client }
+            val playlists = me.d3sox.nevumi.playlists.Playlists(store)
+            changes.refreshLibrary(client)
+            val saved = playlists.all().single { it.server?.id == stalled.id }
+            client.updatePlaylistDetails(stalled.id, "Renamed ${Uuid.random()}", "")
+            client.savePlaylist(arriving.name, songs, arriving.id)
+            stalledId.set(stalled.id)
+            val skipped = SkippedItems()
+            assertEquals(songs.size, changes.refreshLibrary(client, skipped = skipped).size)
+            assertEquals(1, skipped.playlists)
+            assertEquals(3, attempts.get())
+            assertEquals(saved, playlists.get(saved.id), "The skipped playlist keeps its saved copy")
+            assertEquals(songs.size, playlists.all().single { it.server?.id == arriving.id }.trackIds.size, "The other playlist is updated")
+            stalledId.set(null)
+            changes.refreshLibrary(client)
+            assertEquals(client.playlist(stalled.id).name, playlists.get(saved.id)!!.name)
+        } finally {
+            stalledId.set(null)
+            created.forEach { client.deletePlaylist(it) }
+            http.close(); store.close(); directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun aServerPlaylistCanBeCreatedEditedAndDeletedWithoutLosingRepeatedSongs() = runBlocking {
         val http = HttpClient(OkHttp)
         val client = NavidromeClient(http,

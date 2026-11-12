@@ -52,7 +52,8 @@ class NavidromeClientTest {
             else awaitCancellation()
         })
         try {
-            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test"), requestTimeoutMillis = 50)
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test"), requestDeadlineMillis = 50,
+                retryDelaysMillis = emptyList())
             withTimeout(3_000) {
                 val metadata = assertFailsWith<NavidromeRequestException> { client.songs() }
                 assertTrue(metadata.connectionFailure)

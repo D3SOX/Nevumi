@@ -113,16 +113,8 @@ class ServerRefreshUiTest {
                                 }
                             }
                         }
-                        for (text in listOf("Updating artwork", "3210 of 4000 covers checked")) {
-                            onNodeWithText(text).performScrollTo().assertIsDisplayed()
-                            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-                            onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-                            assertTrue(layouts.isNotEmpty() && layouts.all { layout ->
-                                !layout.didOverflowHeight && layout.getLineEnd(layout.lineCount - 1) == text.length &&
-                                    (0 until layout.lineCount).all { line -> !layout.isLineEllipsized(line) &&
-                                        layout.getLineRight(line) - layout.getLineLeft(line) <= layout.size.width + 1f }
-                            }, "$text must remain fully readable at $width x $height with font scale $fontScale")
-                        }
+                        for (text in listOf("Updating artwork", "3210 of 4000 covers checked"))
+                            assertFullyReadable(text, "$width x $height with font scale $fontScale")
                         onNodeWithText("Cancel refresh").performScrollTo().assertIsDisplayed()
                         assertTrue(onNodeWithText("Cancel refresh").fetchSemanticsNode().boundsInRoot.height >= 48f)
                         if (fontScale == 1f) captureUiSnapshot("server-refresh-$width-$theme")
@@ -130,5 +122,52 @@ class ServerRefreshUiTest {
                 }
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aRefreshThatSkippedItemsCompletesAndSaysWhatTheNextRefreshTriesAgain() {
+        val directory = Files.createTempDirectory("nevumi-refresh-skipped")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val progress = ServerRefreshProgress(ServerRefreshStage.COMPLETE, 10_816, skippedPlaylists = 1, skippedCovers = 12)
+        try {
+            for (theme in listOf(ThemeMode.LIGHT, ThemeMode.DARK)) for (fontScale in listOf(1f, 2f)) {
+                runSkikoComposeUiTest(size = Size(375 * 2f, 812 * 2f), effectContext = object : MotionDurationScale { override val scaleFactor = 0f }) {
+                    setContent {
+                        CompositionLocalProvider(LocalDensity provides Density(2f, fontScale)) {
+                            MusicTheme(MusicSettings(themeMode = theme), null) {
+                                Box(Modifier.size(375.dp, 812.dp)) {
+                                    ServerSettings(AppState(loading = false, server = ServerProfile("https://music.example.test", "fixture"), serverRefresh = progress), controller, {})
+                                }
+                            }
+                        }
+                    }
+                    for (text in listOf("Library refreshed", "10816 songs updated",
+                        "Couldn’t download 1 playlist and 12 covers. The next refresh tries again."))
+                        assertFullyReadable(text, "$theme with font scale $fontScale")
+                    onNodeWithText("Dismiss").performScrollTo().assertIsDisplayed()
+                    if (fontScale == 1f) captureUiSnapshot("server-refresh-skipped-$theme")
+                }
+            }
+            runSkikoComposeUiTest(size = Size(375 * 2f, 812 * 2f)) {
+                setContent {
+                    CompositionLocalProvider(LocalDensity provides Density(2f)) {
+                        ServerRefreshStatus(progress.copy(skippedPlaylists = 0, skippedCovers = 1), {}, {})
+                    }
+                }
+                onNodeWithText("Couldn’t download 1 cover. The next refresh tries again.").assertExists()
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    private fun ComposeUiTest.assertFullyReadable(text: String, context: String) {
+        onNodeWithText(text).performScrollTo().assertIsDisplayed()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.isNotEmpty() && layouts.all { layout ->
+            !layout.didOverflowHeight && layout.getLineEnd(layout.lineCount - 1) == text.length &&
+                (0 until layout.lineCount).all { line -> !layout.isLineEllipsized(line) &&
+                    layout.getLineRight(line) - layout.getLineLeft(line) <= layout.size.width + 1f }
+        }, "$text must remain fully readable at $context")
     }
 }
