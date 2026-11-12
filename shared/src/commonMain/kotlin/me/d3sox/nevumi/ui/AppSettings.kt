@@ -154,6 +154,8 @@ import me.d3sox.nevumi.resources.settings_show_previous_tracks_description
 import me.d3sox.nevumi.resources.settings_smart_shuffle
 import me.d3sox.nevumi.resources.settings_smart_shuffle_description
 import me.d3sox.nevumi.resources.settings_soundcloud
+import me.d3sox.nevumi.resources.settings_youtube_description
+import me.d3sox.nevumi.resources.youtube
 import me.d3sox.nevumi.resources.settings_soundcloud_description
 import me.d3sox.nevumi.resources.settings_source_local
 import me.d3sox.nevumi.resources.settings_theme_dark
@@ -203,6 +205,7 @@ internal fun settingsPageTitle(page: String): String = stringResource(when (page
     "Server files (SFTP)" -> Res.string.server_files_sftp
     "Tunnel" -> Res.string.tunnel
     "SoundCloud" -> Res.string.settings_soundcloud
+    "YouTube" -> Res.string.youtube
     "Paired devices" -> Res.string.paired_devices
     "Saved queues" -> Res.string.saved_queues
     "About Nevumi" -> Res.string.about_nevumi
@@ -413,9 +416,9 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsGroup {
             val sourceNames = mapOf(SourceKind.LOCAL to stringResource(Res.string.settings_source_local), SourceKind.DOWNLOAD to stringResource(Res.string.downloads),
                 SourceKind.SERVER to stringResource(Res.string.server))
-            val sourceOrders = SourceKind.entries.flatMap { first ->
-                SourceKind.entries.filter { it != first }.map { second ->
-                    listOf(first, second, SourceKind.entries.first { it != first && it != second })
+            val sourceOrders = SourceKind.prioritized.flatMap { first ->
+                SourceKind.prioritized.filter { it != first }.map { second ->
+                    listOf(first, second, SourceKind.prioritized.first { it != first && it != second })
                 }
             }
             SettingChoice(Res.string.source_priority, settings.sourcePriority, sourceOrders.map { order -> order to order.joinToString(" → ") { source ->
@@ -432,6 +435,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 SettingsLink(stringResource(Res.string.settings_manage_downloads), AppIcon.DOWNLOAD, stringResource(Res.string.settings_manage_downloads_description), downloads)
                         }
 }
+            if (category == "YouTube") YouTubeSettings(settings, controller)
             if (category == "Listening & scrobbling") {
             SettingsGroup {
             SettingChoice(Res.string.record_listening_history, settings.recordListeningHistory,
@@ -512,6 +516,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 SettingsLink(stringResource(Res.string.music_server), AppIcon.SERVER, stringResource(Res.string.settings_music_server_description), server)
                 if (controller.tunnel != null) SettingsLink(stringResource(Res.string.tunnel), AppIcon.TAILSCALE, stringResource(Res.string.settings_tunnel_description), tunnel)
                 if (controller.soundCloudAvailable) SettingsLink(stringResource(Res.string.settings_soundcloud), AppIcon.CLOUD, stringResource(Res.string.settings_soundcloud_description), soundCloud)
+                if (controller.youTubeAvailable) SettingsLink(stringResource(Res.string.youtube), AppIcon.YOUTUBE, stringResource(Res.string.settings_youtube_description)) { categoryState.value = "YouTube" }
                 SettingsLink(stringResource(Res.string.settings_listening_scrobbling), AppIcon.HISTORY, stringResource(Res.string.settings_listening_scrobbling_description)) { categoryState.value = "Listening & scrobbling" }
                 }
                 SettingsGroup {
@@ -582,7 +587,7 @@ private fun <T> SettingChoice(label: String, key: StringResource?, icon: AppIcon
             me.d3sox.nevumi.soundcloud.SoundCloudDestination.SERVER -> AppIcon.SERVER
             me.d3sox.nevumi.soundcloud.SoundCloudDestination.DEVICE -> AppIcon.DEVICE
         }
-        is SourceKind -> when (value) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD }
+        is SourceKind -> when (value) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD; SourceKind.YOUTUBE -> AppIcon.YOUTUBE }
         is List<*> -> when (value.firstOrNull()) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD; else -> null }
         is Boolean -> if (key == Res.string.download_network) { if (value) AppIcon.NETWORK else AppIcon.WIFI }
             else if (value) AppIcon.CHECK else AppIcon.CLOSE

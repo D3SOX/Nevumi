@@ -488,4 +488,23 @@
     </plurals>
     <string name="sources_not_on_server">Not on server</string>
     <string name="sources_not_in_any_playlist">Not in any playlist</string>
+    <string name="sources_youtube_videos">Videos</string>
+    <string name="sources_youtube_search_failed">YouTube search failed</string>
+    <string name="sources_no_youtube_results">No YouTube results for “%1$s”</string>
+    <string name="sources_youtube_song_description">YouTube song: %1$s by %2$s</string>
+    <string name="sources_youtube_options_for">More options: %1$s</string>
+    <string name="sources_close_youtube_options">Close options</string>
+    <string name="sources_search_youtube_for">Search YouTube for “%1$s”</string>
+    <string name="sources_search_youtube_description">Find songs to stream or download</string>
+    <string name="sources_search_youtube_prompt">Search YouTube or paste a video link</string>
+    <string name="sources_open_on_youtube">Open on YouTube</string>
+    <string name="sources_youtube_save_to_device_description">Save the audio as an M4A file and add it to your local music</string>
+    <string name="sources_youtube_save_to_server">Save to this device and your music server</string>
+    <string name="sources_youtube_save_to_server_description">Also upload it to %1$s over SFTP</string>
+    <string name="sources_youtube_download_description">YouTube download: %1$s</string>
+    <string name="sources_youtube_video">Video</string>
+    <string name="sources_youtube_job_needs_tags">Downloaded. Nevumi saves it once you check its tags.</string>
+    <string name="sources_youtube_tags_intro">Nevumi downloaded “%1$s”. It saves the song with these tags.</string>
+    <string name="sources_to_device_and_server">To this device and music server</string>
+    <string name="sources_youtube_disabled">Turn on YouTube in Settings to search it</string>
 </resources>

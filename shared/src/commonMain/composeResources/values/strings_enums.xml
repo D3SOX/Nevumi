@@ -50,4 +50,5 @@
     <string name="search_type_genres">Genres</string>
     <string name="search_type_folders">Folders</string>
     <string name="search_type_soundcloud">SoundCloud</string>
+    <string name="search_type_youtube">YouTube</string>
 </resources>

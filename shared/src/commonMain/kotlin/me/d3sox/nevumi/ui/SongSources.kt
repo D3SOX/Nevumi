@@ -16,6 +16,7 @@ import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.music_server
+import me.d3sox.nevumi.resources.youtube
 import me.d3sox.nevumi.resources.player_downloaded_audio
 import me.d3sox.nevumi.resources.player_link_another_copy
 import me.d3sox.nevumi.resources.player_link_choose_text
@@ -66,7 +67,7 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
             if (choosing) {
                 Text(stringResource(Res.string.player_link_choose_text))
                 OutlinedTextField(search, { search = it }, label = { Text(stringResource(Res.string.player_search_songs)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                val candidates = filterTracks(state.tracks.filterNot { it.id == track.id }, LibraryQuery(text = search))
+                val candidates = filterTracks(state.tracks.filter { it.id != track.id && it.inLibrary }, LibraryQuery(text = search))
                 LazyColumn(Modifier.fillMaxWidth().height(280.dp)) {
                     items(candidates, key = { it.id }) { copy ->
                         val linkDescription = stringResource(Res.string.player_link_copy, copy.metadata.title)
@@ -83,7 +84,7 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
                 }
             } else {
                 track.sources.forEach { source ->
-                    Text(stringResource(when (source.kind) { SourceKind.LOCAL -> Res.string.player_local_file; SourceKind.DOWNLOAD -> Res.string.player_downloaded_audio; SourceKind.SERVER -> Res.string.music_server }),
+                    Text(stringResource(when (source.kind) { SourceKind.LOCAL -> Res.string.player_local_file; SourceKind.DOWNLOAD -> Res.string.player_downloaded_audio; SourceKind.SERVER -> Res.string.music_server; SourceKind.YOUTUBE -> Res.string.youtube }),
                         style = MaterialTheme.typography.titleSmall)
                     Text(source.location, style = MaterialTheme.typography.bodySmall)
                     if (!source.available) Text(stringResource(Res.string.player_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant)

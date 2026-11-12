@@ -75,7 +75,7 @@ class SoundCloudSearchUiTest {
                 else -> respond("""{"error":"Unexpected request"}""", HttpStatusCode.NotFound, json)
             }
         })
-        val downloads = SoundCloudDownloads(store, http, files = DirectorySoundCloudFiles(directory.resolve("SoundCloud").toString()),
+        val downloads = SoundCloudDownloads(store, http, files = DirectoryMusicFiles(directory.resolve("SoundCloud").toString()),
             localSources = LocalFiles(library), pollMillis = 10)
         runBlocking { downloads.connect("http://sc-gate.test", ScGateFormat.MP3_320, SoundCloudDestination.ASK) }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), localSources = LocalFiles(library),

@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import me.d3sox.nevumi.library.inLibrary
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.ui.state.ToggleableState
@@ -454,7 +455,7 @@ internal fun SmartPlaylistDialog(state: AppState, controller: MusicController, p
     var name by remember { mutableStateOf(playlist?.name.orEmpty()) }
     var rule by remember { mutableStateOf<LibraryQuery?>(playlist?.rule ?: LibraryQuery()) }
     val count = remember(state.tracks, state.playlists, rule) {
-        rule?.let { filterTracks(state.tracks, it, playlisted = playlistedTrackIds(state.playlists)).size }
+        rule?.let { filterTracks(state.tracks.filter { track -> track.inLibrary }, it, playlisted = playlistedTrackIds(state.playlists)).size }
     }
     KeyboardAlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(if (playlist == null) Res.string.library_new_smart_playlist else Res.string.edit_rules)) },
         text = {

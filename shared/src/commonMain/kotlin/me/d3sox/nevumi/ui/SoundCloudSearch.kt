@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.soundcloud.ScGateDestination
 import me.d3sox.nevumi.soundcloud.SoundCloudDestination
 import me.d3sox.nevumi.soundcloud.SoundCloudSource
@@ -81,7 +82,7 @@ internal fun SoundCloudSearchResults(query: String, state: AppState, controller:
         delay(500)
         load(0)
     }
-    val owned = remember(state.tracks) { state.tracks.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
+    val owned = remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
     val jobs = remember(state.soundCloudJobs) { state.soundCloudJobs.groupBy { it.track.url } }
     val profile = state.soundCloud
     fun pick(track: SoundCloudTrack) {

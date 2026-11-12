@@ -80,6 +80,7 @@ data class AppState(
     val sleepTimerEndsAt: Long? = null,
     val soundCloud: SoundCloudProfile? = null,
     val soundCloudJobs: List<SoundCloudJob> = emptyList(),
+    val youTubeJobs: List<me.d3sox.nevumi.youtube.YouTubeJob> = emptyList(),
     val followedArtists: List<me.d3sox.nevumi.releases.FollowedArtist> = emptyList(),
     val releases: List<me.d3sox.nevumi.releases.ArtistRelease> = emptyList(),
     val releaseRefresh: ReleaseRefresh = ReleaseRefresh(),
@@ -118,6 +119,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val tunnel: me.d3sox.nevumi.tunnel.Tunnel? = null,
     private val networkAccess: suspend (String) -> Unit = {},
     private val soundCloud: SoundCloudDownloads? = null,
+    private val youTube: me.d3sox.nevumi.youtube.YouTubeSource? = null,
+    private val youTubeDownloads: me.d3sox.nevumi.youtube.YouTubeDownloads? = null,
     discovery: me.d3sox.nevumi.navidrome.ServerDiscovery? = null,
     backup: me.d3sox.nevumi.backup.MusicBackup? = null,
     lyrics: me.d3sox.nevumi.lyrics.LyricsLibrary? = null,
@@ -126,7 +129,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     private val context = ControllerContext()
     private val loader = AppStateLoader(context, library, queue, preferences, navidrome, playlists, fileEdits, serverFiles, listeningHistory, artwork)
     val playbackController = PlaybackController(context, library, queue, engine, navidrome, sourceAccessible, preferences, offline,
-        listeningHistory, scrobbling, pairedDevices)
+        listeningHistory, scrobbling, pairedDevices, youTube)
     val fileEditController = FileEditController(context, loader, fileEdits, serverFiles, preferences)
     val libraryController = LibraryController(context, loader, playbackController, fileEditController, library, queue, engine, localSources,
         offline, preferences, artwork, serverChanges, fileEdits, listeningHistory)
@@ -137,6 +140,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val playlistController = PlaylistController(context, serverController, library, playlists, artwork, navidrome, serverChanges, offline)
     val downloadController = DownloadController(context, loader, playbackController, library, queue, engine, offline)
     val soundCloudController = SoundCloudController(context, serverController, libraryController, queueController, soundCloud)
+    val youTubeController = YouTubeController(context, library, libraryController, queueController, artwork, youTube, youTubeDownloads)
     val discoveryController = DiscoveryController(context, queueController, discovery)
     val backupController = BackupController(context, loader, playbackController, fileEditController, queue, engine, backup)
     val lyricsController = LyricsController(context, lyrics)
@@ -154,6 +158,9 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val scrobblingAvailable: Boolean get() = historyController.scrobblingAvailable
     val soundCloudAvailable: Boolean get() = soundCloudController.soundCloudAvailable
     val soundCloudDeviceDownloads: Boolean get() = soundCloudController.soundCloudDeviceDownloads
+    val youTubeAvailable: Boolean get() = youTubeController.youTubeAvailable
+    val youTubeDeviceDownloads: Boolean get() = youTubeController.youTubeDeviceDownloads
+    val youTubeServerUploads: Boolean get() = youTubeController.youTubeServerUploads
 
     init {
         context.action(serialized = false) {
@@ -268,6 +275,20 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun dismissSoundCloudDownload(id: String) = soundCloudController.dismissSoundCloudDownload(id)
     fun addSoundCloudFolder(id: String) = soundCloudController.addSoundCloudFolder(id)
 
+    // YouTube
+    suspend fun searchYouTube(query: String, kind: me.d3sox.nevumi.youtube.YouTubeSearchKind,
+        continuation: me.d3sox.nevumi.youtube.YouTubeContinuation? = null) = youTubeController.searchYouTube(query, kind, continuation)
+    suspend fun youTubeArtwork(url: String): ByteArray = youTubeController.youTubeArtwork(url)
+    fun playYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, action: QueueAction? = null) = youTubeController.playYouTube(track, action)
+    fun downloadFromYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, destination: me.d3sox.nevumi.youtube.YouTubeDestination, reviewTags: Boolean) =
+        youTubeController.downloadFromYouTube(track, destination, reviewTags)
+    suspend fun youTubeCover(id: String): ByteArray? = youTubeController.youTubeCover(id)
+    suspend fun finishYouTubeTags(id: String, choice: ScGateTagChoice) = youTubeController.finishYouTubeTags(id, choice)
+    fun cancelYouTubeDownload(id: String) = youTubeController.cancelYouTubeDownload(id)
+    fun retryYouTubeDownload(id: String) = youTubeController.retryYouTubeDownload(id)
+    fun dismissYouTubeDownload(id: String) = youTubeController.dismissYouTubeDownload(id)
+    fun addYouTubeFolder(id: String) = youTubeController.addYouTubeFolder(id)
+
     // Listening history and scrobbling
     fun clearListeningHistory() = historyController.clearListeningHistory()
     suspend fun connectListenBrainz(token: String, address: String = "https://api.listenbrainz.org") = historyController.connectListenBrainz(token, address)
@@ -350,7 +371,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun enqueue(trackId: String, operation: QueueAction) = queueController.enqueue(trackId, operation)
     fun enqueue(trackIds: List<String>, operation: QueueAction) = queueController.enqueue(trackIds, operation)
 
-    override fun close() { context.scope.cancel(); pairedDevices?.close(); serverChanges?.close(); offline?.close(); scrobbling?.close(); soundCloud?.close(); engine.close() }
+    override fun close() { context.scope.cancel(); pairedDevices?.close(); serverChanges?.close(); offline?.close(); scrobbling?.close(); soundCloud?.close(); youTubeDownloads?.close(); engine.close() }
 
     suspend fun closeAndJoin() = withContext(NonCancellable) {
         shutdown.withLock {
@@ -363,6 +384,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 offline?.closeAndJoin()
                 scrobbling?.closeAndJoin()
                 soundCloud?.closeAndJoin()
+                youTubeDownloads?.closeAndJoin()
                 context.supervisor.join()
                 val playback = engine.status.value
                 listeningHistory?.record(playback.copy(playing = false), enabled = state.value.preferences.recordListeningHistory)

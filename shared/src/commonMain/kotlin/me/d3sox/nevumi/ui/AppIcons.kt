@@ -128,6 +128,7 @@ import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.HowToReg
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -248,6 +249,7 @@ internal enum class AppIcon(val vector: ImageVector) {
     DESCENDING(Icons.Rounded.ArrowDownward),
     LIBRARY(Icons.Rounded.LibraryMusic),
     DEVICE(Icons.Rounded.Smartphone),
+    YOUTUBE(Icons.Rounded.SmartDisplay),
     GRID(Icons.Rounded.GridView),
     LIST(Icons.Rounded.ViewList),
     MORE_PAGES(Icons.Rounded.MoreHoriz),

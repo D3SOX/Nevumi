@@ -8,7 +8,7 @@ import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.library.AndroidLocalSources
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
-import me.d3sox.nevumi.soundcloud.MediaStoreSoundCloudFiles
+import me.d3sox.nevumi.soundcloud.MediaStoreMusicFiles
 import me.d3sox.nevumi.storage.openMusicStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -28,7 +28,7 @@ class AndroidSoundCloudFilesTest {
         val store = openMusicStore(context, "soundcloud-$id.db")
         var location: String? = null
         try {
-            location = MediaStoreSoundCloudFiles(context).save("Fixture Artist - $id.mp3") { it.write(audio) }
+            location = MediaStoreMusicFiles(context).save("Fixture Artist - $id.mp3") { it.write(audio) }
             val uri = Uri.parse(location)
             requireNotNull(resolver.query(uri, arrayOf(MediaStore.Audio.Media.RELATIVE_PATH, MediaStore.Audio.Media.IS_PENDING,
                 MediaStore.Audio.Media.SIZE, MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)).use {

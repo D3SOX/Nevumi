@@ -91,8 +91,14 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
             downloadNetwork?.state ?: MutableStateFlow(DownloadNetwork()))
         val localFiles = WatchingLocalFiles(library, artwork)
         val soundCloud = me.d3sox.nevumi.soundcloud.SoundCloudDownloads(store, http, tunnel::scGateUrl,
-            me.d3sox.nevumi.soundcloud.DirectorySoundCloudFiles("${me.d3sox.nevumi.soundcloud.musicDirectory()}/SoundCloud"), localFiles,
+            me.d3sox.nevumi.soundcloud.DirectoryMusicFiles("${me.d3sox.nevumi.soundcloud.musicDirectory()}/SoundCloud"), localFiles,
             connection::client, serverChanges, artwork, offline)
+        val serverFiles = me.d3sox.nevumi.sftp.SftpConnection(store, library, connection::client, credentials,
+            File(directory, "server-edits").path, changes = serverChanges, artwork = artwork, tailscale = tunnel::serverFiles)
+        val youTube = me.d3sox.nevumi.youtube.NewPipeYouTube().also { resources += { it.close() } }
+        val youTubeDownloads = me.d3sox.nevumi.youtube.YouTubeDownloads(store, http, youTube, File(directory, "youtube-downloads").path,
+            me.d3sox.nevumi.soundcloud.DirectoryMusicFiles("${me.d3sox.nevumi.soundcloud.musicDirectory()}/YouTube"), localFiles,
+            upload = { trackId, path -> serverFiles.upload(trackId, path) })
         val scrobbling = Scrobbling(store, library, http, credentials, offline.network, connection::client)
         val equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http)
         val controller = MusicController(library, PlaybackQueue(store),
@@ -102,11 +108,10 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
             fileEdits = LocalFileEdits(store, library, File(directory, "file-edits").path, localSources = LocalFiles(library, artwork)),
             listeningHistory = history,
             scrobbling = scrobbling, equalizerProfiles = equalizerProfiles,
-            serverFiles = me.d3sox.nevumi.sftp.SftpConnection(store, library, connection::client, credentials,
-                File(directory, "server-edits").path, changes = serverChanges, artwork = artwork, tailscale = tunnel::serverFiles),
+            serverFiles = serverFiles,
             pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges), credentials, "Linux desktop"),
-            tunnel = tunnel, soundCloud = soundCloud, discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client),
+            tunnel = tunnel, soundCloud = soundCloud, youTube = youTube, youTubeDownloads = youTubeDownloads, discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client),
             backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles),
             lyrics = me.d3sox.nevumi.lyrics.LyricsSources(store, me.d3sox.nevumi.lyrics.FileLyrics(), connection::client,
                 listOf(me.d3sox.nevumi.lyrics.LrcLibClient(http, me.d3sox.nevumi.ui.NEVUMI_VERSION),

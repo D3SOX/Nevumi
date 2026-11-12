@@ -53,6 +53,8 @@
             android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".SoundCloudDownloadService" android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".YouTubeDownloadService" android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".ReleaseJobService" android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
         <receiver android:name=".DownloadActionReceiver" android:exported="false" />

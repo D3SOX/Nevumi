@@ -23,6 +23,7 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
     private val scheduler = context.getSystemService(JobScheduler::class.java)
     private val service = ComponentName(context, DownloadService::class.java)
     private val soundCloudService = ComponentName(context, SoundCloudDownloadService::class.java)
+    private val youTubeService = ComponentName(context, YouTubeDownloadService::class.java)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val scheduling = Mutex()
     // JobScheduler keeps listing a job for a moment after it finishes, so only this process knows whether a download job runs.
@@ -94,17 +95,22 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
     }
 
     /** Follows SoundCloud downloads; they ignore the offline download pause and network settings, because each one was requested directly. */
-    fun scheduleSoundCloud(userInitiated: Boolean = false) {
+    fun scheduleSoundCloud(userInitiated: Boolean = false) = scheduleSource(SOUNDCLOUD_JOB, soundCloudService, userInitiated)
+
+    /** Runs YouTube downloads, which like SoundCloud's were each requested directly. */
+    fun scheduleYouTube(userInitiated: Boolean = false) = scheduleSource(YOUTUBE_JOB, youTubeService, userInitiated)
+
+    private fun scheduleSource(id: Int, service: ComponentName, userInitiated: Boolean) {
         if (userInitiated) onUserDownload()
         scope.launch { scheduling.withLock {
-            val builder = JobInfo.Builder(SOUNDCLOUD_JOB, soundCloudService)
+            val builder = JobInfo.Builder(id, service)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPersisted(true)
                 .setBackoffCriteria(30_000, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
                 .setExtras(PersistableBundle().apply { putString(DOWNLOAD_SCHEDULE_ID, UUID.randomUUID().toString()) })
             val foregroundTransfer = Build.VERSION.SDK_INT >= 34 && userInitiated
             if (Build.VERSION.SDK_INT >= 34) builder.setUserInitiated(foregroundTransfer)
-            val pending = scheduler.getPendingJob(SOUNDCLOUD_JOB)
+            val pending = scheduler.getPendingJob(id)
             if (pending != null && (Build.VERSION.SDK_INT < 34 || !userInitiated || pending.isUserInitiated)) return@withLock
             if (scheduler.schedule(builder.build()) == JobScheduler.RESULT_FAILURE && foregroundTransfer)
                 scheduler.schedule(builder.setUserInitiated(false).build())
@@ -115,5 +121,6 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
         const val DOWNLOAD_JOB = 1001
         const val PLAYLIST_JOB = 1002
         const val SOUNDCLOUD_JOB = 1003
+        const val YOUTUBE_JOB = 1004
     }
 }

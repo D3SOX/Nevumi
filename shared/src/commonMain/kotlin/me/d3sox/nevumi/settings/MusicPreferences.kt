@@ -92,6 +92,10 @@ data class MusicSettings(
     val fetchLyricsOnline: Boolean = false,
     /** Also off by default, and only asked when LRCLIB has no synced lyrics, as NetEase Cloud Music's lyrics search is not a documented API. */
     val fetchLyricsFromNetEase: Boolean = false,
+    /** Off by default because searching and streaming YouTube contacts it straight from this device. */
+    val youTube: Boolean = false,
+    /** New YouTube downloads wait until their tags are checked, since video titles rarely make good tags. */
+    val youTubeReviewTags: Boolean = true,
     val notifyNewReleases: Boolean = false,
     /** Linux: closing the window while music plays hides it instead of quitting. */
     val keepPlayingInBackground: Boolean = false,
@@ -170,7 +174,7 @@ class MusicPreferences(private val store: MusicStore) {
         require(settings.queueRecoveryIntervalMinutes in 1..60) { "Choose a recovery interval between 1 and 60 minutes" }
         require(settings.scrobblePercent in 1..100) { "Choose a scrobbling percentage between 1 and 100" }
         require(settings.scrobbleMaxSeconds in 0..600) { "Choose a scrobbling time limit between 0 and 600 seconds" }
-        require(settings.sourcePriority.size == SourceKind.entries.size && settings.sourcePriority.toSet() == SourceKind.entries.toSet()) {
+        require(settings.sourcePriority.size == SourceKind.prioritized.size && settings.sourcePriority.toSet() == SourceKind.prioritized.toSet()) {
             "Choose each audio source once"
         }
         store.put("settings:music", "settings", settings)

@@ -119,6 +119,8 @@ import me.d3sox.nevumi.resources.lyrics_setting_online
 import me.d3sox.nevumi.resources.settings_show_previous_tracks
 import me.d3sox.nevumi.resources.settings_smart_shuffle
 import me.d3sox.nevumi.resources.settings_soundcloud
+import me.d3sox.nevumi.resources.settings_youtube_enable
+import me.d3sox.nevumi.resources.settings_keywords_youtube
 import me.d3sox.nevumi.resources.settings_title_scroll_speed
 import me.d3sox.nevumi.resources.show_options_buttons
 import me.d3sox.nevumi.resources.source_priority
@@ -208,6 +210,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             if (controller.tunnel != null) add(SettingEntry(Res.string.tunnel, "Tunnel", AppIcon.TAILSCALE, Res.string.settings_keywords_tunnel))
             if (controller.soundCloudAvailable) add(SettingEntry(Res.string.settings_soundcloud, "SoundCloud", AppIcon.CLOUD,
                 Res.string.settings_keywords_soundcloud))
+            if (controller.youTubeAvailable) category("YouTube", AppIcon.YOUTUBE, Res.string.settings_youtube_enable to Res.string.settings_keywords_youtube)
             if (controller.pairedDevices != null) add(SettingEntry(Res.string.paired_devices, "Paired devices", AppIcon.DEVICES,
                 Res.string.settings_keywords_paired_devices))
             add(SettingEntry(Res.string.saved_queues, "Saved queues", AppIcon.QUEUE, Res.string.settings_keywords_saved_queues))

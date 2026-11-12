@@ -27,6 +27,7 @@ import me.d3sox.nevumi.playlists.folder
 import me.d3sox.nevumi.playlists.title
 import me.d3sox.nevumi.downloads.DownloadProblem
 import me.d3sox.nevumi.soundcloud.SoundCloudJobState
+import me.d3sox.nevumi.youtube.YouTubeJobState
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.downloads
@@ -35,6 +36,7 @@ import me.d3sox.nevumi.resources.library_tab_songs
 import me.d3sox.nevumi.resources.player_search_songs
 import me.d3sox.nevumi.resources.settings_soundcloud
 import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.youtube
 import me.d3sox.nevumi.resources.sources_action_for_item
 import me.d3sox.nevumi.resources.sources_cancel_download
 import me.d3sox.nevumi.resources.sources_count_downloaded
@@ -64,14 +66,16 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
     fun count(group: DownloadGroup) = when (group) {
         DownloadGroup.PLAYLISTS -> state.playlistDownloads.size
         DownloadGroup.SOUNDCLOUD -> state.soundCloudJobs.size
+        DownloadGroup.YOUTUBE -> state.youTubeJobs.size
         DownloadGroup.SONGS -> state.downloads.size
     }
     val groups = DownloadGroup.entries.filter { count(it) > 0 }
     // Open where something needs the user; the choice stays put while downloads finish so the page does not jump.
-    // It is kept above the tag editor so returning from it stays on SoundCloud.
+    // It is kept above the tag editors so returning from one stays on its group.
     var selected by rememberSaveable {
         mutableStateOf(when {
             state.soundCloudJobs.any { it.attention || it.state in SOUNDCLOUD_NEEDS_USER } -> DownloadGroup.SOUNDCLOUD
+            state.youTubeJobs.any { it.state == YouTubeJobState.NEEDS_TAGS || it.state == YouTubeJobState.FAILED } -> DownloadGroup.YOUTUBE
             state.downloads.values.any { it.status == DownloadStatus.FAILED } -> DownloadGroup.SONGS
             else -> groups.firstOrNull()
         })
@@ -80,6 +84,11 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
     val taggedJob = tagging?.let { id -> state.soundCloudJobs.firstOrNull { it.id == id && it.state == SoundCloudJobState.NEEDS_TAGS } }
     if (taggedJob != null) {
         SoundCloudTagEditor(taggedJob, controller) { tagging = null }
+        return
+    }
+    val taggedVideo = tagging?.let { id -> state.youTubeJobs.firstOrNull { it.id == id && it.state == YouTubeJobState.NEEDS_TAGS } }
+    if (taggedVideo != null) {
+        YouTubeTagEditor(taggedVideo, controller) { tagging = null }
         return
     }
     // The tags were written or the download was canceled elsewhere, so a later wait for tags does not open the editor by itself.
@@ -143,6 +152,9 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
                         val viewer = state.soundCloud?.let { it.baseUrl == job.baseUrl && it.browserViewUrl != null } == true
                         SoundCloudJobItem(job, controller, viewer) { tagging = job.id }
                     }
+                    DownloadGroup.YOUTUBE -> items(state.youTubeJobs, key = { "youtube:${it.id}" }) { job ->
+                        YouTubeJobItem(job, controller) { tagging = job.id }
+                    }
                     DownloadGroup.SONGS -> items(shownSongs, key = { it.trackId }) { record ->
                         SongDownloadItem(record, metadata[record.trackId], controller)
                     }
@@ -154,7 +166,7 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
 }
 
 private enum class DownloadGroup(val label: StringResource) {
-    PLAYLISTS(Res.string.library_tab_playlists), SOUNDCLOUD(Res.string.settings_soundcloud), SONGS(Res.string.library_tab_songs),
+    PLAYLISTS(Res.string.library_tab_playlists), SOUNDCLOUD(Res.string.settings_soundcloud), YOUTUBE(Res.string.youtube), SONGS(Res.string.library_tab_songs),
 }
 
 private val SOUNDCLOUD_NEEDS_USER = setOf(SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK, SoundCloudJobState.NEEDS_TAGS,

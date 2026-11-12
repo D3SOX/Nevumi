@@ -78,7 +78,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         val priority = state.preferences.sourcePriority
         state.tracks.sortedByDescending { track -> track.sources.maxOfOrNull { it.modifiedAt } ?: 0 }.mapNotNull { track ->
             track.sources.sortedBy { priority.indexOf(it.kind) }
-                .firstOrNull { it.available && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER }
+                .firstOrNull { it.available && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER && it.kind != me.d3sox.nevumi.library.SourceKind.YOUTUBE }
                 ?.takeIf { track.metadata.durationMs > 0 }?.let { track.id to (it to track.metadata.durationMs) }
         }
     }

@@ -127,7 +127,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 collectionLayouts = if (document.playlistOrder != null) restored.collectionLayouts else restored.collectionLayouts +
                     (LibraryTab.PLAYLISTS to restored.collectionLayout(LibraryTab.PLAYLISTS).copy(order = current.collectionLayout(LibraryTab.PLAYLISTS).order)),
                 homeSections = restored.homeSections.distinct() + HomeSectionId.entries.filterNot { it in restored.homeSections },
-                sourcePriority = restored.sourcePriority.distinct() + SourceKind.entries.filterNot { it in restored.sourcePriority }) }
+                sourcePriority = restored.sourcePriority.distinct().filter { it in SourceKind.prioritized } + SourceKind.prioritized.filterNot { it in restored.sourcePriority }) }
         } != null
 
         // The backup wins for the flags it sets; songs it leaves unflagged keep theirs.

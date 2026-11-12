@@ -253,7 +253,7 @@ class MusicLibrary(private val store: MusicStore) {
         val counterpart = when (source.kind) {
             SourceKind.LOCAL -> SourceKind.SERVER
             SourceKind.SERVER -> SourceKind.LOCAL
-            SourceKind.DOWNLOAD -> return null
+            SourceKind.DOWNLOAD, SourceKind.YOUTUBE -> return null
         }
         fun identified(value: TrackMetadata) = value.recordingId.matches(musicBrainzId) && value.releaseId.matches(musicBrainzId) &&
             value.trackNumber > 0 && value.discNumber > 0 && value.durationMs > 0

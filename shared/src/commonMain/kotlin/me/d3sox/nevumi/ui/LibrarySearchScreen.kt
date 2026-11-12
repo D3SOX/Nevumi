@@ -47,6 +47,7 @@ import me.d3sox.nevumi.resources.sources_open_genre
 import me.d3sox.nevumi.resources.sources_open_playlist
 import me.d3sox.nevumi.resources.sources_playlist_options
 import me.d3sox.nevumi.resources.sources_search_soundcloud_prompt
+import me.d3sox.nevumi.resources.sources_search_youtube_prompt
 import me.d3sox.nevumi.resources.sources_search_your_library
 import me.d3sox.nevumi.resources.sources_see_all
 import me.d3sox.nevumi.resources.sources_see_all_count
@@ -80,6 +81,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     focusRequest: Int = 0) {
     var search by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     val query = search.text
+    val youTube = controller.youTubeAvailable && state.preferences.youTube
     var type by rememberSaveable { mutableStateOf(SearchType.ALL) }
     var openedType by rememberSaveable { mutableStateOf<SearchType?>(null) }
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -90,7 +92,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     fun stopTyping() { keyboard?.hide(); focusManager.clearFocus() }
     val visible = remember(state.tracks, state.preferences.includeFolders, state.preferences.excludeFolders) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
-        state.tracks.filter { track -> track.sources.any { it.available } && (track.sources.any { it.kind != SourceKind.LOCAL } ||
+        state.tracks.filter { track -> track.inLibrary && track.sources.any { it.available } && (track.sources.any { it.kind != SourceKind.LOCAL } ||
             folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))) }
     }
     // Grouping the library is the expensive part; it happens once per library change, off the main thread for large ones.
@@ -121,7 +123,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 LaunchedEffect(focusRequest) { focus.requestFocus() }
             }
             if (opened == null) LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(SearchType.entries.filter { it != SearchType.SOUNDCLOUD || state.soundCloud != null }, key = { it }) { category ->
+                items(SearchType.entries.filter { (it != SearchType.SOUNDCLOUD || state.soundCloud != null) && (it != SearchType.YOUTUBE || youTube) }, key = { it }) { category ->
                     FilterChip(type == category, { type = category; selection.clear(); stopTyping() }, label = { Text(stringResource(category.label)) },
                         modifier = Modifier.testTag("search-type:${category.name}"))
                 }
@@ -133,11 +135,13 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                         header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) })
                 } else if (query.isBlank()) {
                     if (type == SearchType.SOUNDCLOUD) SearchPrompt(AppIcon.CLOUD, stringResource(Res.string.sources_search_soundcloud_prompt), Modifier.align(Alignment.Center))
+                    else if (type == SearchType.YOUTUBE) SearchPrompt(AppIcon.YOUTUBE, stringResource(Res.string.sources_search_youtube_prompt), Modifier.align(Alignment.Center))
                     else SearchPrompt(AppIcon.MUSIC, stringResource(Res.string.sources_enter_search_term), Modifier.align(Alignment.Center))
                 } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller)
+                else if (type == SearchType.YOUTUBE) YouTubeSearchResults(query, state, controller)
                 else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search")
                 else {
-                    val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD } else listOf(type)
+                    val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD && it != SearchType.YOUTUBE } else listOf(type)
                     val count = if (type == SearchType.ALL) results.count else results.collections[type].orEmpty().size
                     CompositionLocalProvider(LocalTrackRowStrings provides trackRowStrings()) {
                     // Each chip starts at its top instead of reusing the scroll position of the list it was opened from.
@@ -184,6 +188,9 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                         }
                         if (type == SearchType.ALL && state.soundCloud != null) item(key = "search-soundcloud") {
                             SearchSoundCloudRow(query) { type = SearchType.SOUNDCLOUD; stopTyping() }
+                        }
+                        if (type == SearchType.ALL && youTube) item(key = "search-youtube") {
+                            SearchYouTubeRow(query) { type = SearchType.YOUTUBE; stopTyping() }
                         }
                     }
                     }
