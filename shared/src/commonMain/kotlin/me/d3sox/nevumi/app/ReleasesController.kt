@@ -17,7 +17,7 @@ import me.d3sox.nevumi.releases.ArtistRelease
 import me.d3sox.nevumi.releases.ArtistReleases
 import me.d3sox.nevumi.releases.FollowedArtist
 import me.d3sox.nevumi.releases.ImportableArtist
-import me.d3sox.nevumi.releases.musicBrainzId
+import me.d3sox.nevumi.library.musicBrainzId
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.notice_following_artist
 import me.d3sox.nevumi.resources.notice_imported_artists
@@ -160,6 +160,9 @@ class ReleasesController internal constructor(private val context: ControllerCon
      * runs are not evenly spaced and one just short of the period would otherwise skip a whole period.
      */
     suspend fun refreshIfStale(maxAgeMs: Long = REFRESH_INTERVAL_MS) = fetch(null, maxAgeMs)
+
+    /** Reads the stored follows, which the app state may not have loaded yet when a background job starts. */
+    suspend fun followsArtists(): Boolean = releases?.followed()?.isNotEmpty() == true
 
     fun setNotifications(enabled: Boolean) {
         libraryController.updatePreferences { it.copy(notifyNewReleases = enabled) }

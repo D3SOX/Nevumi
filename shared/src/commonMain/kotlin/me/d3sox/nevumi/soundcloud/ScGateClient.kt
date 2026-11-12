@@ -13,7 +13,6 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
@@ -37,6 +36,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import me.d3sox.nevumi.artwork.readArtwork
 import me.d3sox.nevumi.navidrome.normalizeServerAddress
 import kotlin.math.roundToInt
 
@@ -130,7 +130,7 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
 
     /** A search result's cover, which sc-gate-dl fetches so this device never contacts SoundCloud. */
     suspend fun artwork(url: String): ByteArray = scGateRequest {
-        request(HttpMethod.Get, "/api/artwork", timeoutMillis = 30_000, configure = { parameter("url", url) }) { it.readRawBytes() }
+        request(HttpMethod.Get, "/api/artwork", timeoutMillis = 30_000, configure = { parameter("url", url) }) { it.readArtwork() }
     }
 
     /**
@@ -165,7 +165,7 @@ class ScGateClient(private val http: HttpClient, baseUrl: String, requestUrl: St
 
     /** The cover sc-gate-dl found for the job, or with [fromFile] the one the downloaded MP3 already has. */
     suspend fun cover(id: String, fromFile: Boolean = false): ByteArray = scGateRequest {
-        request(HttpMethod.Get, "/api/job/$id/${if (fromFile) "existing-artwork" else "artwork"}", timeoutMillis = 30_000) { it.readRawBytes() }
+        request(HttpMethod.Get, "/api/job/$id/${if (fromFile) "existing-artwork" else "artwork"}", timeoutMillis = 30_000) { it.readArtwork() }
     }
 
     /** Tags the file of a job waiting at `waiting_metadata`; sc-gate-dl then saves it where the job's destination says. */

@@ -50,6 +50,31 @@ class SubsonicClientTest {
         } finally { http.close() }
     }
 
+    @Test fun anErrorAfterTheFirstPageFailsTheRefreshInsteadOfEndingTheCatalogue() = runBlocking {
+        for (pagedEndpoint in listOf("search3", "getAlbumList2")) {
+            val http = HttpClient(MockEngine { request ->
+                val endpoint = request.url.encodedPath.substringAfterLast('/').removeSuffix(".view")
+                val failed = """{"subsonic-response":{"status":"failed","error":{"code":0}}}"""
+                val offset = request.url.parameters["songOffset"] ?: request.url.parameters["offset"]
+                val body = when {
+                    endpoint == pagedEndpoint && offset != "0" -> failed
+                    endpoint == "search3" && pagedEndpoint == "getAlbumList2" -> """{"subsonic-response":{"status":"failed","error":{"code":10}}}"""
+                    endpoint == "search3" -> json(""""searchResult3":{"song":[{"id":"first","title":"First"}]}""")
+                    endpoint == "getAlbumList2" -> json(""""albumList2":{"album":[{"id":"album-a"}]}""")
+                    endpoint == "getAlbum" -> json(""""album":{"song":[{"id":"first","title":"First"}]}""")
+                    else -> error("Unexpected endpoint $endpoint")
+                }
+                respond(body, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+            })
+            try {
+                assertFailsWith<NavidromeException>(pagedEndpoint) {
+                    NavidromeClient(http, "https://server.test", ServerCredentials("user", "secret")).songs()
+                }
+                Unit
+            } finally { http.close() }
+        }
+    }
+
     @Test fun directoryOnlyServersIncludeLooseFilesAndDoNotRevisitDirectories() = runBlocking {
         val visited = mutableListOf<String>()
         val http = HttpClient(MockEngine { request ->
