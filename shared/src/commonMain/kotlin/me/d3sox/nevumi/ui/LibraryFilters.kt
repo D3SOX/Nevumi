@@ -24,6 +24,7 @@ import me.d3sox.nevumi.resources.album_artist
 import me.d3sox.nevumi.resources.artist
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.downloads
+import me.d3sox.nevumi.resources.youtube
 import me.d3sox.nevumi.resources.library_all_sources
 import me.d3sox.nevumi.resources.library_clear_all_filters
 import me.d3sox.nevumi.resources.library_device
@@ -84,7 +85,7 @@ internal fun LibraryFiltersDialog(state: AppState, controller: MusicController, 
         title = { Text(stringResource(Res.string.sources_filter_library)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             LibraryQueryFields(state.preferences.libraryFilter, includeSearchAndOrder = false) { query = it }
-            query?.let { Text(countLabel(filterTracks(state.tracks, it, listeningStatistics(state.listens),
+            query?.let { Text(countLabel(filterTracks(state.tracks.filter { track -> track.inLibrary }, it, listeningStatistics(state.listens),
                 playlisted = playlistedTrackIds(state.playlists)).size, Res.plurals.matching_songs)) }
         }
     }, confirmButton = {
@@ -154,6 +155,7 @@ internal fun SourceKind?.sourceName(): StringResource = when (this) {
     SourceKind.LOCAL -> Res.string.library_device
     SourceKind.SERVER -> Res.string.server
     SourceKind.DOWNLOAD -> Res.string.downloads
+    SourceKind.YOUTUBE -> Res.string.youtube
     null -> Res.string.library_all_sources
 }
 
@@ -161,6 +163,7 @@ internal fun SourceKind?.sourceIcon(): AppIcon = when (this) {
     SourceKind.LOCAL -> AppIcon.DEVICE
     SourceKind.SERVER -> AppIcon.CLOUD
     SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD
+    SourceKind.YOUTUBE -> AppIcon.YOUTUBE
     null -> AppIcon.LIBRARY
 }
 

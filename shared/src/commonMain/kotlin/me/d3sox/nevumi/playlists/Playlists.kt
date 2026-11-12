@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.playlists
 
+import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.storage.MusicStore
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid
@@ -114,7 +115,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     suspend fun pendingSync(): List<Playlist> = evaluate(store.list<Playlist>("playlists").filter { it.pendingSync })
     private suspend fun evaluate(playlists: List<Playlist>): List<Playlist> {
         if (playlists.none { it.rule != null }) return playlists
-        val tracks = library.tracks()
+        val tracks = library.tracks().filter { it.inLibrary }
         val statistics = history.statistics()
         val playlisted = playlistedTrackIds(store.list<Playlist>("playlists"))
         return playlists.map { playlist -> playlist.rule?.let { rule ->
@@ -131,7 +132,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         flow { while (true) { emit(clock()); delay(refreshEveryMs) } }) { tracks, statistics, now ->
         val playlisted = playlistedTrackIds(playlists)
         playlists.map { playlist ->
-            playlist.rule?.let { rule -> playlist.copy(trackIds = filterTracks(tracks, rule, statistics, now, playlisted).map { it.id }) } ?: playlist
+            playlist.rule?.let { rule -> playlist.copy(trackIds = filterTracks(tracks.filter { it.inLibrary }, rule, statistics, now, playlisted).map { it.id }) } ?: playlist
         }
         }
     }.distinctUntilChanged()

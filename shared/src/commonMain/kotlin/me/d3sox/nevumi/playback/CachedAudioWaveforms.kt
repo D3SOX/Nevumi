@@ -33,7 +33,7 @@ class CachedAudioWaveforms(private val directory: String, private val decode: su
     }
     private fun key(source: TrackSource) = "${source.id}|${source.location}|${source.modifiedAt}|${source.indexedSize}".encodeUtf8().sha256().hex()
     override suspend fun cached(source: TrackSource): List<Float>? {
-        if (source.kind == SourceKind.SERVER || !source.available) return null
+        if (source.kind == SourceKind.SERVER || source.kind == SourceKind.YOUTUBE || !source.available) return null
         val key = key(source)
         remembered(key)?.let { return it }
         // Atomic cache writes allow readers to bypass an unrelated long-running decoder.
@@ -46,7 +46,7 @@ class CachedAudioWaveforms(private val directory: String, private val decode: su
         return saved?.takeIf { it.size == 128 && it.all { point -> point.isFinite() && point in 0f..1f } }?.also { points -> remember(key, points) }
     }
     override suspend fun load(source: TrackSource, durationMs: Long): List<Float> {
-        if (source.kind == SourceKind.SERVER || !source.available || durationMs <= 0) return emptyList()
+        if (source.kind == SourceKind.SERVER || source.kind == SourceKind.YOUTUBE || !source.available || durationMs <= 0) return emptyList()
         val dispatcher = currentCoroutineContext()[WaveformPreparationContext]?.dispatcher ?: Dispatchers.IO
         val key = key(source)
         val sourceLock = lock.withLock { sourceLocks.getOrPut(key) { SourceLock() }.apply { users++ } }

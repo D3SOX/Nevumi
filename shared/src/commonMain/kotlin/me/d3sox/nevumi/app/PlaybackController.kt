@@ -47,7 +47,8 @@ import kotlin.uuid.Uuid
 class PlaybackController internal constructor(private val context: ControllerContext, private val library: MusicLibrary,
     private val queue: PlaybackQueue, private val engine: PlaybackEngine, private val navidrome: NavidromeConnection?,
     private val sourceAccessible: (String) -> Boolean, private val preferences: MusicPreferences?, private val offline: OfflineMusic?,
-    private val listeningHistory: ListeningHistory?, private val scrobbling: Scrobbling?, private val pairedDevices: PairedDevices?) {
+    private val listeningHistory: ListeningHistory?, private val scrobbling: Scrobbling?, private val pairedDevices: PairedDevices?,
+    private val youTube: me.d3sox.nevumi.youtube.YouTubeSource? = null) {
     private var sleepTimer: Job? = null
     private val transport = Mutex()
     private data class TransportIntent(val revision: Long = 0, val play: Boolean = false)
@@ -465,12 +466,14 @@ class PlaybackController internal constructor(private val context: ControllerCon
         // Leaving out the song the player holds would remove it from the player, so it stays until its source is gone or fails.
         val status = engine.status.value
         return lastResolved[entry.id]?.takeIf { current -> status.entryId == entry.id &&
-            status.sourceId == current.sourceId && status.error == null && track.sources.any { it.id == current.sourceId } }
+            status.sourceId == current.sourceId && status.error == null && track.sources.any { it.id == current.sourceId && it.kind != SourceKind.YOUTUBE } }
     }
 
     private suspend fun resolve(track: Track, entry: QueueEntry, snapshot: QueueSnapshot, checkAllSources: Boolean, lookup: SourceLookup): PlayableTrack? {
-        val sources = track.sources.filterNot { it.id in failedSources[entry.id].orEmpty() }.map { source ->
-            if (source.kind == SourceKind.SERVER) source
+        // Turning YouTube off in Settings also stops this device from streaming the YouTube songs still queued.
+        val streams = youTube != null && context.state.value.preferences.youTube
+        val sources = track.sources.filterNot { it.id in failedSources[entry.id].orEmpty() || it.kind == SourceKind.YOUTUBE && !streams }.map { source ->
+            if (source.kind == SourceKind.SERVER || source.kind == SourceKind.YOUTUBE) source
             else source.copy(available = source.available && ((!checkAllSources && entry.id != snapshot.currentEntryId) || withContext(Dispatchers.IO) { sourceAccessible(source.location) }))
         }
         var source = SourceResolver.resolve(sources, context.state.value.preferences.sourcePriority) ?: return null
@@ -480,8 +483,12 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 candidate.kind != SourceKind.SERVER || connection != null && candidate.id.startsWith("server:${connection.serverId}:")
             }
             source = SourceResolver.resolve(connectedSources, context.state.value.preferences.sourcePriority) ?: return null
-            if (source.kind == SourceKind.SERVER) requireNotNull(connection).streamUrl(source.location) else source.location
-        } else source.location
+            when (source.kind) {
+                SourceKind.SERVER -> requireNotNull(connection).streamUrl(source.location)
+                SourceKind.YOUTUBE -> requireNotNull(youTube).playbackLocation(source.location)
+                else -> source.location
+            }
+        } else if (source.kind == SourceKind.YOUTUBE) requireNotNull(youTube).playbackLocation(source.location) else source.location
         return PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id)
     }
 

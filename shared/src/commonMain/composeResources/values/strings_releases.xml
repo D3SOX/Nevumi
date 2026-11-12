@@ -56,4 +56,5 @@
     <string name="releases_import_lookup">Nevumi looks up artists without a MusicBrainz ID by name and skips names that match several artists.</string>
     <string name="notice_imported_artists">Artists followed: %1$d</string>
     <string name="notice_imported_artists_unmatched">Artists followed: %1$d. Not found on MusicBrainz: %2$d</string>
+    <string name="releases_search_youtube">Search YouTube</string>
 </resources>

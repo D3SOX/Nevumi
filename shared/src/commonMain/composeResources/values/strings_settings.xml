@@ -280,4 +280,10 @@
         <item quantity="one">−%1$d semitone</item>
         <item quantity="other">-%1$d semitones</item>
     </plurals>
+    <string name="settings_youtube_description">Search, stream and download songs from YouTube</string>
+    <string name="settings_youtube_enable">Use YouTube</string>
+    <string name="settings_youtube_enable_description">Search YouTube from Nevumi and stream or download songs. This device contacts YouTube directly, without an account, so YouTube sees its IP address.</string>
+    <string name="settings_youtube_review_tags_description">YouTube downloads wait for you to check their title, artist, album and cover</string>
+    <string name="settings_youtube_about">Nevumi uses NewPipe Extractor to read YouTube’s pages and streams. It prefers songs from YouTube Music, saves downloads as M4A files without converting them, and uploads them to your music server only when server file access is set up. YouTube changes often, so searches or streams can stop working until Nevumi is updated.</string>
+    <string name="settings_keywords_youtube">youtube music video stream download newpipe topic channel m4a</string>
 </resources>

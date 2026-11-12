@@ -2,8 +2,16 @@ package me.d3sox.nevumi.library
 
 import kotlinx.serialization.Serializable
 
+/** Where a song's audio comes from; a [YOUTUBE] source's location is the video's ID. */
 @Serializable
-enum class SourceKind { LOCAL, DOWNLOAD, SERVER }
+enum class SourceKind {
+    LOCAL, DOWNLOAD, SERVER, YOUTUBE;
+
+    companion object {
+        /** The kinds the source priority setting orders. A YouTube stream always comes last, after every copy the library holds. */
+        val prioritized = listOf(LOCAL, DOWNLOAD, SERVER)
+    }
+}
 
 @Serializable
 data class TrackSource(
@@ -18,12 +26,15 @@ data class TrackSource(
     val hasArtwork: Boolean = false,
 )
 
+/** Songs streamed or queued from YouTube are kept for the queue and history, but only songs with another source belong to the library. */
+val Track.inLibrary: Boolean get() = sources.any { it.kind != SourceKind.YOUTUBE }
+
 object SourceResolver {
     fun resolve(
         sources: List<TrackSource>,
-        priority: List<SourceKind> = listOf(SourceKind.LOCAL, SourceKind.DOWNLOAD, SourceKind.SERVER),
+        priority: List<SourceKind> = SourceKind.prioritized,
         online: Boolean = true,
-    ): TrackSource? = priority.firstNotNullOfOrNull { kind ->
-        sources.firstOrNull { it.kind == kind && it.available && (online || kind != SourceKind.SERVER) }
+    ): TrackSource? = (priority + SourceKind.YOUTUBE).firstNotNullOfOrNull { kind ->
+        sources.firstOrNull { it.kind == kind && it.available && (online || kind != SourceKind.SERVER && kind != SourceKind.YOUTUBE) }
     }
 }

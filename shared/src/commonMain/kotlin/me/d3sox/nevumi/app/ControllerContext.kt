@@ -32,6 +32,8 @@ internal class ControllerContext {
     val state = mutableState.asStateFlow()
     val seeks = mutableSeeks.asSharedFlow()
     val notices = mutableNotices.asSharedFlow()
+    /** Counts requests to play something, when they are made, so a slow request can tell that a later one replaced it. */
+    @kotlin.concurrent.Volatile var playRequests = 0L
 
     /** Inline like [MutableStateFlow.update], so a state change may read suspending sources. */
     inline fun update(change: (AppState) -> AppState) = mutableState.update(change)

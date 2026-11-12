@@ -8,7 +8,8 @@ import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.library.AndroidLocalSources
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
-import me.d3sox.nevumi.soundcloud.MediaStoreSoundCloudFiles
+import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.soundcloud.MediaStoreMusicFiles
 import me.d3sox.nevumi.storage.openMusicStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -28,7 +29,7 @@ class AndroidSoundCloudFilesTest {
         val store = openMusicStore(context, "soundcloud-$id.db")
         var location: String? = null
         try {
-            location = MediaStoreSoundCloudFiles(context).save("Fixture Artist - $id.mp3") { it.write(audio) }
+            location = MediaStoreMusicFiles(context).save("Fixture Artist - $id.mp3") { it.write(audio) }
             val uri = Uri.parse(location)
             requireNotNull(resolver.query(uri, arrayOf(MediaStore.Audio.Media.RELATIVE_PATH, MediaStore.Audio.Media.IS_PENDING,
                 MediaStore.Audio.Media.SIZE, MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)).use {
@@ -43,6 +44,31 @@ class AndroidSoundCloudFilesTest {
         } finally {
             store.close(); context.deleteDatabase("soundcloud-$id.db")
             location?.let { resolver.delete(Uri.parse(it), null, null) }
+        }
+    }
+
+    @Test
+    fun aChosenDownloadJoinsTheLibraryAndStaysThereWhereTheFolderRulesLeaveItsFolderOut() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val id = UUID.randomUUID().toString()
+        val audio = instrumentation.context.assets.open("youtube-fragmented.m4a").use { it.readBytes() }
+        val store = openMusicStore(context, "youtube-$id.db")
+        var location: String? = null
+        try {
+            MusicPreferences(store).update { it.copy(includeFolders = listOf("Music/Elsewhere")) }
+            val library = MusicLibrary(store)
+            val sources = AndroidLocalSources(context, library)
+            location = MediaStoreMusicFiles(context, "Music/Nevumi/YouTube").save("Fixture Artist - $id.m4a") { it.write(audio) }
+            assertEquals(emptyList<Any>(), sources.scan(location))
+            val track = sources.scanSong(location).single()
+            assertEquals(location, track.sources.single { it.kind == SourceKind.LOCAL }.location)
+            // A rescan of the whole device follows the folder rules everywhere else, but keeps the chosen song.
+            sources.scan("device")
+            assertTrue(library.tracks().single { it.id == track.id }.sources.single().available)
+        } finally {
+            store.close(); context.deleteDatabase("youtube-$id.db")
+            location?.let { context.contentResolver.delete(Uri.parse(it), null, null) }
         }
     }
 }

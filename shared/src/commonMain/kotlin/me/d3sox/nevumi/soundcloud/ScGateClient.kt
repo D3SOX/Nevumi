@@ -40,7 +40,7 @@ import kotlinx.serialization.json.put
 import me.d3sox.nevumi.navidrome.normalizeServerAddress
 import kotlin.math.roundToInt
 
-/** Output formats the local scanner can index; sc-gate-dl's original format may be AIFF, M4A or OGG. */
+/** Output formats Nevumi asks sc-gate-dl for; its original format may be AIFF or OGG, which the local scanner cannot index. */
 @Serializable
 enum class ScGateFormat(val apiName: String, val label: String) { MP3_320("mp3-320", "MP3 320"), FLAC("flac", "FLAC") }
 

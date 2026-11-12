@@ -423,7 +423,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
             val location = files.normalize(requireNotNull(files.sourceLocation(source)))
             require(files.exists(location)) { "The music file is missing" }
             val extension = files.name(location).substringAfterLast('.', "").lowercase()
-            require(extension in setOf("mp3", "wav", "flac")) { "Unsupported music format" }
+            require(extension in localMusicExtensions) { "Unsupported music format" }
             Files.createDirectories(backups.toPath())
             val id = UUID.randomUUID().toString()
             val backup = backups.resolve("$id.$extension")

@@ -729,8 +729,8 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
     val durationMs = state.playback.durationMs.takeIf { it > 0 } ?: current.metadata.durationMs
     val duration = durationMs.coerceAtLeast(1).toFloat()
     val waveforms = LocalAudioWaveforms.current ?: rememberAudioWaveforms()
-    val source = current.sources.firstOrNull { it.id == state.playback.sourceId && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER }
-        ?: current.sources.firstOrNull { it.available && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER }
+    val source = current.sources.firstOrNull { it.id == state.playback.sourceId && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER && it.kind != me.d3sox.nevumi.library.SourceKind.YOUTUBE }
+        ?: current.sources.firstOrNull { it.available && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER && it.kind != me.d3sox.nevumi.library.SourceKind.YOUTUBE }
     val peaks by produceState<List<Float>>(emptyList(), source, durationMs > 0) {
         value = emptyList()
         if (source != null) value = waveforms.load(source, durationMs)

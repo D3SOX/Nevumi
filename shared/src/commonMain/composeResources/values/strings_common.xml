@@ -68,6 +68,7 @@
     <string name="library">Library</string>
     <string name="server">Server</string>
     <string name="downloads">Downloads</string>
+    <string name="youtube">YouTube</string>
 
     <!-- App and settings destinations -->
     <string name="app_name">Nevumi</string>

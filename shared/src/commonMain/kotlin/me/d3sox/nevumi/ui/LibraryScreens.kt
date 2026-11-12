@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import me.d3sox.nevumi.library.inLibrary
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -153,14 +154,20 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     // Sort and filter choices answer at once; a library change, such as one song's favorite, re-sorts in the background.
     val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders)
     // The unfiltered count is what the library shows without its source and filters, so the header can say "4 of 12 songs".
-    val (tracks, unfilteredTracks) = rememberDerived(null, trackChoices, listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
+    // Favorites, History and Statistics also list songs that only stream from YouTube, which the other library views leave out.
+    val (tracks, unfilteredTracks, favoriteTracks, listenedTracks) = rememberDerived(null, trackChoices,
+        listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
         val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
         fun localAllowed(track: Track) =
             folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
-        val unfiltered = state.tracks.filter { track -> localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL } }
+        val unfiltered = state.tracks.filter { track -> track.inLibrary && (localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE }) }
         val visible = if (sources == SourceKind.LOCAL) unfiltered.filter(::localAllowed) else unfiltered
-        filterTracks(visible, state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources), statistics, now, playlisted) to
-            unfiltered
+        val streamed = state.tracks.filterNot { it.inLibrary }
+        val query = state.preferences.libraryFilter.copy(sort = order, descending = reversed, sourceKind = sources)
+        val shown = filterTracks(visible, query, statistics, now, playlisted)
+        // One pass over both, so a song limit counts streamed songs and library songs together.
+        val listened = if (streamed.isEmpty()) shown else filterTracks(visible + streamed, query, statistics, now, playlisted)
+        listOf(shown, unfiltered + streamed.filter { it.favorite }, listened.filter { it.favorite }, listened)
     }
     val currentTab = tabs[currentIndex]
     val headerContext = headers[currentTab]
@@ -168,11 +175,11 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     val displayedCount = headerContext?.songCount ?: when (currentTab) {
         LibraryTab.HOME, LibraryTab.PLAYLISTS -> null
         LibraryTab.HISTORY, LibraryTab.STATISTICS, LibraryTab.RECOMMENDATIONS -> 0
-        LibraryTab.FAVORITES -> tracks.count { it.favorite }
+        LibraryTab.FAVORITES -> favoriteTracks.size
         else -> tracks.size
     }
     val headerTotal = remember(unfilteredTracks, currentTab) {
-        if (currentTab == LibraryTab.FAVORITES) unfilteredTracks.count { it.favorite } else unfilteredTracks.size
+        if (currentTab == LibraryTab.FAVORITES) unfilteredTracks.count { it.favorite } else unfilteredTracks.count { it.inLibrary }
     }
     val filteredCount = headerContext?.title == null && currentTab in setOf(LibraryTab.SONGS, LibraryTab.RECENT,
         LibraryTab.FAVORITES, LibraryTab.ALBUMS, LibraryTab.ARTISTS, LibraryTab.ALBUM_ARTISTS, LibraryTab.GENRES, LibraryTab.FOLDERS) &&
@@ -300,15 +307,16 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                     }
                     TrackCollections(collections, tab, state, controller, statistics, handleBack, destination)
                 }
-                LibraryTab.FAVORITES -> SongList(rememberDerived("favorites", trackChoices, listOf(tracks)) { tracks.filter { it.favorite } }, controller,
+                LibraryTab.FAVORITES -> SongList(favoriteTracks, controller,
                     statistics = statistics, scrollSort = order, contextName = "Favorites")
                 LibraryTab.RECENT -> SongList(rememberDerived("recent", trackChoices, listOf(tracks)) {
                     tracks.map { it to it.recentAt }.sortedByDescending { it.second }.map { it.first }
                 }, controller, scrollSort = LibrarySort.RECENT, contextName = "Recently added")
                 LibraryTab.PLAYLISTS -> PlaylistsScreen(state, controller, backEnabled = handleBack, destination = destination,
                     rearranging = rearrangingPlaylists, finishRearranging = { rearrangingPlaylists = false })
-                LibraryTab.HISTORY -> ListeningHistoryScreen(state, controller, tracks)
-                LibraryTab.STATISTICS -> ListeningStatisticsScreen(state, controller, tracks, handleBack)
+                // Songs streamed from YouTube were played too, so History and Statistics count them.
+                LibraryTab.HISTORY -> ListeningHistoryScreen(state, controller, listenedTracks)
+                LibraryTab.STATISTICS -> ListeningStatisticsScreen(state, controller, listenedTracks, handleBack)
                 LibraryTab.RECOMMENDATIONS -> ListeningRecommendationsScreen(state, controller, tracks)
             }
             }

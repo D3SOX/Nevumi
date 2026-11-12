@@ -77,6 +77,26 @@ internal class TagLayout(val size: Long, val tags: List<LongRange>, val audio: L
                     val sound = audio ?: throw UnreadableTags("The WAV file has no audio")
                     TagLayout(size, listOf(0 until sound.first, sound.last + 1 until size), sound)
                 }
+                // Tag edits rewrite the MP4 header and its chunk offsets, but copy the audio of the one mdat box unchanged.
+                "m4a" -> {
+                    var position = 0L
+                    var audio: LongRange? = null
+                    while (position + 8 <= size) {
+                        val header = bytes(position, 8)
+                        var length = (0..3).fold(0L) { total, index -> (total shl 8) or (header[index].toLong() and 0xff) }
+                        var headerSize = 8
+                        if (length == 1L) { length = bytes(position + 8, 8).fold(0L) { total, byte -> (total shl 8) or (byte.toLong() and 0xff) }; headerSize = 16 }
+                        else if (length == 0L) length = size - position
+                        if (length < headerSize) throw UnreadableTags("The MP4 file is damaged")
+                        if (header.decodeToString(4, 8) == "mdat") {
+                            if (audio != null) throw UnreadableTags("The MP4 file has its audio in several parts")
+                            audio = position + headerSize until minOf(position + length, size)
+                        }
+                        position += length
+                    }
+                    val sound = audio ?: throw UnreadableTags("The MP4 file has no audio")
+                    TagLayout(size, listOf(0 until sound.first, sound.last + 1 until size), sound)
+                }
                 else -> throw UnreadableTags("Unsupported music format")
             }
             if (layout.audio.first > layout.size || layout.tags.any { it.last >= layout.size }) throw UnreadableTags("The music file ends inside its tags")

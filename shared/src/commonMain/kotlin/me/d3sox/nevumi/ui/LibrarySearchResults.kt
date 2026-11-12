@@ -11,7 +11,9 @@ internal enum class SearchType(val label: StringResource, val tab: LibraryTab?) 
     PLAYLISTS(Res.string.search_type_playlists, LibraryTab.PLAYLISTS), GENRES(Res.string.search_type_genres, LibraryTab.GENRES),
     FOLDERS(Res.string.search_type_folders, LibraryTab.FOLDERS),
     /** Searches SoundCloud through sc-gate-dl instead of the library. */
-    SOUNDCLOUD(Res.string.search_type_soundcloud, null)
+    SOUNDCLOUD(Res.string.search_type_soundcloud, null),
+    /** Searches YouTube from this device instead of the library. */
+    YOUTUBE(Res.string.search_type_youtube, null)
 }
 
 internal data class LibrarySearchResults(val songs: List<Track>, val collections: Map<SearchType, List<TrackCollection>>) {

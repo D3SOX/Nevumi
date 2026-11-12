@@ -107,7 +107,7 @@ data class SoundCloudJob(
 }
 
 /** Saves finished downloads on this device. */
-interface SoundCloudFiles {
+interface DeviceMusicFiles {
     /** The folder downloads go to, written like a folder picked in Local music. */
     val folder: String
     /** Writes a new file named like [fileName] through [write] and returns its location for the local scanner. */
@@ -121,7 +121,7 @@ internal fun downloadFileName(name: String): String {
 }
 
 /** Saves downloads into a folder, without replacing a file that already has the same name. */
-class DirectorySoundCloudFiles(override val folder: String) : SoundCloudFiles {
+class DirectoryMusicFiles(override val folder: String) : DeviceMusicFiles {
     override suspend fun save(fileName: String, write: suspend (BufferedSink) -> Unit): String = withContext(Dispatchers.IO) {
         val fs = FileSystem.SYSTEM
         val root = folder.toPath()
@@ -147,7 +147,7 @@ class DirectorySoundCloudFiles(override val folder: String) : SoundCloudFiles {
  */
 class SoundCloudDownloads(private val store: MusicStore, private val http: HttpClient,
     private val route: suspend (String) -> String = { it },
-    private val files: SoundCloudFiles? = null,
+    private val files: DeviceMusicFiles? = null,
     private val localSources: LocalSources? = null,
     private val server: suspend () -> NavidromeClient? = { null },
     private val serverChanges: NavidromeChanges? = null,

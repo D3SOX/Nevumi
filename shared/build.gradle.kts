@@ -69,6 +69,7 @@ kotlin {
             dependencies {
                 implementation(libs.ktor.client.okhttp)
                 implementation(libs.jaudiotagger)
+                implementation(libs.newpipe.extractor)
                 implementation(libs.sshj)
                 implementation(libs.bouncycastle.provider)
                 implementation(libs.bouncycastle.pkix)
@@ -92,6 +93,7 @@ kotlin {
                 api(libs.dbus.core)
                 implementation(libs.dbus.unix)
                 implementation(libs.jaudiotagger)
+                implementation(libs.newpipe.extractor)
                 implementation(libs.sshj)
                 implementation(libs.bouncycastle.provider)
                 implementation(libs.bouncycastle.pkix)

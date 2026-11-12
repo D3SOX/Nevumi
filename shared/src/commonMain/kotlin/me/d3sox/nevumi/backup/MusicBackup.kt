@@ -15,6 +15,7 @@ import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.settings.HomeSectionId
 import me.d3sox.nevumi.navidrome.NavidromeChanges
@@ -127,7 +128,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 collectionLayouts = if (document.playlistOrder != null) restored.collectionLayouts else restored.collectionLayouts +
                     (LibraryTab.PLAYLISTS to restored.collectionLayout(LibraryTab.PLAYLISTS).copy(order = current.collectionLayout(LibraryTab.PLAYLISTS).order)),
                 homeSections = restored.homeSections.distinct() + HomeSectionId.entries.filterNot { it in restored.homeSections },
-                sourcePriority = restored.sourcePriority.distinct() + SourceKind.entries.filterNot { it in restored.sourcePriority }) }
+                sourcePriority = restored.sourcePriority.distinct().filter { it in SourceKind.prioritized } + SourceKind.prioritized.filterNot { it in restored.sourcePriority }) }
         } != null
 
         // The backup wins for the flags it sets; songs it leaves unflagged keep theirs.
@@ -295,14 +296,16 @@ private class TrackMatcher(tracks: List<Track>) {
     private val identities = tracks.mapNotNull { track -> LibrarySync.identity(track.metadata)?.let { it to track } }.groupBy({ it.first }, { it.second })
     private val servers = tracks.flatMap { track -> track.sources.filter { it.kind == SourceKind.SERVER }.map { it.id to track } }
         .groupBy({ it.first }, { it.second })
-    private val tags = tracks.groupBy { tagKey(it.metadata.title, it.metadata.artist, it.metadata.album) }
+    // A song that only streams from YouTube can share its tags with a library copy, so it only matches when no library song has them.
+    private val tags = tracks.filter { it.inLibrary }.groupBy { tagKey(it.metadata.title, it.metadata.artist, it.metadata.album) }
+    private val streamedTags = tracks.filterNot { it.inLibrary }.groupBy { tagKey(it.metadata.title, it.metadata.artist, it.metadata.album) }
 
     fun find(track: BackupTrack): String? {
         fun List<Track>.closest() = filter { it.metadata.durationMs <= 0 || track.durationMs <= 0 ||
             abs(it.metadata.durationMs - track.durationMs) <= 2_000 }.distinctBy { it.id }.singleOrNull()
         return (track.identity?.let { identities[it] }?.closest()
             ?: track.serverSources.flatMap { servers[it].orEmpty() }.distinctBy { it.id }.singleOrNull()
-            ?: tags[tagKey(track.title, track.artist, track.album)]?.closest())?.id
+            ?: tagKey(track.title, track.artist, track.album).let { key -> tags[key]?.closest() ?: if (key in tags) null else streamedTags[key]?.closest() })?.id
     }
 
     private fun tagKey(vararg values: String) = values.joinToString("\u0000") { it.trim().lowercase() }

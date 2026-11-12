@@ -56,6 +56,7 @@ import me.d3sox.nevumi.resources.releases_refresh
 import me.d3sox.nevumi.resources.releases_refresh_failed
 import me.d3sox.nevumi.resources.releases_release_options
 import me.d3sox.nevumi.resources.releases_search_soundcloud
+import me.d3sox.nevumi.resources.releases_search_youtube
 import me.d3sox.nevumi.resources.releases_searching
 import me.d3sox.nevumi.resources.releases_source
 import me.d3sox.nevumi.resources.releases_title
@@ -327,7 +328,8 @@ private fun FeedHeading(text: String) {
 /** What can be done with a release: open it in the library, look for it on SoundCloud, or read about it on MusicBrainz. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ReleaseOptions(release: ArtistRelease, album: String?, state: AppState, dismiss: () -> Unit, searchSoundCloud: () -> Unit) {
+internal fun ReleaseOptions(release: ArtistRelease, album: String?, state: AppState, dismiss: () -> Unit, searchSoundCloud: () -> Unit,
+    searchYouTube: (() -> Unit)? = null) {
     val navigate = LocalLibraryNavigate.current
     val browser = LocalUriHandler.current
     AppBottomSheet(onDismissRequest = dismiss) {
@@ -342,17 +344,19 @@ internal fun ReleaseOptions(release: ArtistRelease, album: String?, state: AppSt
             modifier = Modifier.clickable { dismiss(); navigate(LibraryTab.ALBUMS, album) })
         if (state.soundCloud != null) ListItem(headlineContent = { Text(stringResource(Res.string.releases_search_soundcloud)) },
             leadingContent = { Icon(AppIcon.CLOUD.vector, null) }, modifier = Modifier.clickable { dismiss(); searchSoundCloud() })
+        if (searchYouTube != null) ListItem(headlineContent = { Text(stringResource(Res.string.releases_search_youtube)) },
+            leadingContent = { Icon(AppIcon.YOUTUBE.vector, null) }, modifier = Modifier.clickable { dismiss(); searchYouTube() })
         ListItem(headlineContent = { Text(stringResource(Res.string.releases_open_musicbrainz)) }, leadingContent = { Icon(AppIcon.OPEN_EXTERNAL.vector, null) },
             modifier = Modifier.clickable { dismiss(); runCatching { browser.openUri(release.musicBrainzUrl) } })
         Spacer(Modifier.height(16.dp))
     }
 }
 
-/** Searches the existing SoundCloud integration for a release. */
+/** Searches SoundCloud, or with [youTube] YouTube, for a release, so the user picks the matching recording. */
 @Composable
-internal fun ReleaseSoundCloudSearch(release: ArtistRelease, state: AppState, controller: MusicController, back: () -> Unit) {
+internal fun ReleaseSearch(release: ArtistRelease, youTube: Boolean, state: AppState, controller: MusicController, back: () -> Unit) {
     if (!LocalPageBackHandled.current) PlatformBackHandler(back)
-    Column(Modifier.fillMaxSize().testTag("release-soundcloud-search")) {
+    Column(Modifier.fillMaxSize().testTag(if (youTube) "release-youtube-search" else "release-soundcloud-search")) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(AppIcon.BACK, stringResource(Res.string.back), onClick = back)
             Column(Modifier.weight(1f)) {
@@ -360,6 +364,7 @@ internal fun ReleaseSoundCloudSearch(release: ArtistRelease, state: AppState, co
                 Text(release.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        SoundCloudSearchResults("${release.artist} ${release.title}", state, controller)
+        val query = "${release.artist} ${release.title}"
+        if (youTube) YouTubeSearchResults(query, state, controller) else SoundCloudSearchResults(query, state, controller)
     }
 }

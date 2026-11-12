@@ -87,17 +87,18 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
         releaseAlbums(state.releases, state.followedArtists, tracks)
     }
     var releaseOptions by remember { mutableStateOf<me.d3sox.nevumi.releases.ArtistRelease?>(null) }
-    // A SoundCloud search for a release returns to the page it was opened from.
+    // A SoundCloud or YouTube search for a release returns to the page it was opened from.
     var searchParent by rememberSaveable { mutableStateOf<String?>(null) }
     val searching = selected?.startsWith(RELEASE_SEARCH) == true
     AnimatedNavigation(selected, if (searching) searchParent else null, canGoBack = backEnabled && selected != null,
         onBack = { selected = if (searching) searchParent else null },
         depth = { when { it == null -> 0; it.startsWith(RELEASE_SEARCH) && searchParent != null -> 2; else -> 1 } }) { mixId ->
         val mix = feed.mixes.firstOrNull { it.id == mixId }
-        val searchedRelease = mixId?.takeIf { it.startsWith(RELEASE_SEARCH) }?.removePrefix(RELEASE_SEARCH)?.let { id -> state.releases.firstOrNull { it.id == id } }
+        val search = mixId?.takeIf { it.startsWith(RELEASE_SEARCH) }?.removePrefix(RELEASE_SEARCH)
+        val searchedRelease = search?.removePrefix(YOUTUBE_SEARCH)?.let { id -> state.releases.firstOrNull { it.id == id } }
         if (mixId == "customize-home") HomeCustomization(state.preferences.homeSections, controller) { selected = null }
         else if (mixId == RELEASES) ReleaseFeedPage(state, releases, releaseAlbums, controller, { selected = null }) { releaseOptions = it }
-        else if (searchedRelease != null) ReleaseSoundCloudSearch(searchedRelease, state, controller) { selected = searchParent }
+        else if (searchedRelease != null) ReleaseSearch(searchedRelease, search.startsWith(YOUTUBE_SEARCH), state, controller) { selected = searchParent }
         else if (mix != null) Column(Modifier.fillMaxSize()) {
             val mixTitle = stringResource(mix.title)
             CompositionLocalProvider(LocalLibraryOrigin provides QueueOrigin(LibraryTab.HOME, mix.id),
@@ -213,14 +214,17 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
         }
     }
     releaseOptions?.let { release ->
-        ReleaseOptions(release, releaseAlbums[release.id], state, { releaseOptions = null }) {
-            searchParent = selected; selected = RELEASE_SEARCH + release.id
-        }
+        ReleaseOptions(release, releaseAlbums[release.id], state, { releaseOptions = null },
+            searchSoundCloud = { searchParent = selected; selected = RELEASE_SEARCH + release.id },
+            searchYouTube = if (controller.youTubeAvailable && state.preferences.youTube) ({
+                searchParent = selected; selected = RELEASE_SEARCH + YOUTUBE_SEARCH + release.id
+            }) else null)
     }
 }
 
 private const val RELEASES = "releases"
 private const val RELEASE_SEARCH = "release-search:"
+private const val YOUTUBE_SEARCH = "youtube:"
 
 @Composable
 internal fun HomeSection(title: String, all: (() -> Unit)? = null, content: @Composable () -> Unit) {

@@ -46,6 +46,7 @@ I started it because I couldn't find a music player with all the features I want
 - **Discovery.** Artist pages show the biography, similar artists and top songs. Play similar songs from any server song or artist.
 - **New releases.** Follow artists, or import them from Last.fm or a MusicBrainz collection. Home lists their recent and upcoming releases, and Nevumi can notify you about new ones. It contacts MusicBrainz only after you follow or import an artist.
 - **SoundCloud.** Search and download songs through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server. Nevumi never contacts SoundCloud.
+- **YouTube.** Search YouTube Music songs and videos or paste a link, then stream a result or save it as an M4A file after checking its tags. Nevumi contacts YouTube from your device through [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor), only after you turn it on in Settings.
 - **Tag editing.** Edit tags and artwork of local files, or of your Navidrome files over SFTP. Look up metadata on MusicBrainz.
 - **Scrobbling.** Nevumi keeps a listening history and scrobbles to your music server, Last.fm or ListenBrainz.
 - **Tailscale.** The built-in client reaches servers on your tailnet without the Tailscale app or a VPN. Headscale works too.

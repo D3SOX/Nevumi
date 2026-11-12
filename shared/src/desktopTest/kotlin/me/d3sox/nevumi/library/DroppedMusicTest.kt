@@ -96,7 +96,7 @@ class DroppedMusicTest {
                 "Remove that exclusion in Settings › Local music to add it.", controller.state.value.error)
             assertEquals(emptyList(), controller.state.value.preferences.includeFolders)
             controller.addMusic(emptyList(), emptyList()).join()
-            assertEquals("Drop music folders or MP3, FLAC and WAV files", controller.state.value.error)
+            assertEquals("Drop music folders or MP3, M4A, FLAC and WAV files", controller.state.value.error)
         } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 }

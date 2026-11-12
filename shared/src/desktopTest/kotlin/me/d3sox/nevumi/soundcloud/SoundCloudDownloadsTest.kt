@@ -65,7 +65,7 @@ class SoundCloudDownloadsTest {
                 else -> respond("""{"error":"Unexpected request"}""", HttpStatusCode.NotFound, json)
             }
         })
-        val downloads = SoundCloudDownloads(store, http, route, files = DirectorySoundCloudFiles(directory.resolve("SoundCloud").toString()),
+        val downloads = SoundCloudDownloads(store, http, route, files = DirectoryMusicFiles(directory.resolve("SoundCloud").toString()),
             localSources = LocalFiles(library), pollMillis = 10)
         return Fixture(directory, store, library, http, downloads, requests)
     }

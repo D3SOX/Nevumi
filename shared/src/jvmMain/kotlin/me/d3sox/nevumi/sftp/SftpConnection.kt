@@ -130,7 +130,7 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         val track = requireNotNull(library.findTrack(trackId)) { "Track is missing" }
         val source = requireNotNull(track.sources.firstOrNull { it.kind == SourceKind.LOCAL && it.available }) { "Choose an available local song to upload" }
         val extension = relativePath.substringAfterLast('.').lowercase()
-        require(extension in setOf("mp3", "wav", "flac")) { "Use an MP3, WAV or FLAC filename" }
+        require(extension in localMusicExtensions) { "Use an MP3, M4A, WAV or FLAC filename" }
         val staging = Files.createDirectories(File(backupDirectory, ".uploads").toPath())
         val staged = Files.createTempFile(staging, "upload-", ".$extension")
         try {

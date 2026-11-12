@@ -143,7 +143,7 @@ class LibraryController internal constructor(private val context: ControllerCont
         if (settings.crossfadeDurationMs != previous.crossfadeDurationMs) engine.setCrossfadeDuration(settings.crossfadeDurationMs)
         if (settings.gaplessPlayback != previous.gaplessPlayback) engine.setGaplessPlayback(settings.gaplessPlayback)
         if (settings.replayGain != previous.replayGain) engine.setReplayGain(settings.replayGain)
-        if (playback.queueLoaded && settings.sourcePriority != previous.sourcePriority)
+        if (playback.queueLoaded && (settings.sourcePriority != previous.sourcePriority || settings.youTube != previous.youTube))
             engine.updateQueue(playback.playableQueue(queue.snapshot()))
         if (settings.undoRetentionDays != previous.undoRetentionDays || settings.undoBackupBytes != previous.undoBackupBytes) {
             fileEditing.trimFileHistory()

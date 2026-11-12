@@ -77,12 +77,22 @@ private enum class TagField(val label: StringResource, val copy: StringResource,
     }
 }
 
+/**
+ * What the tag editor offers for one download: the [original] tags, the tags and cover the downloaded file already has,
+ * and how to load covers and save the choice. SoundCloud and YouTube downloads each describe theirs.
+ */
+internal class DownloadTagReview(val key: String, val intro: String, val original: ScGateTags, val hint: String? = null,
+    val fileTags: ScGateTags? = null, val cover: Boolean = false, val fileCover: Boolean = false,
+    val fileName: (artistTitle: Boolean, tags: ScGateTags) -> String,
+    val loadCover: suspend (fromFile: Boolean) -> ByteArray?,
+    val finish: suspend (ScGateTagChoice) -> Unit)
+
 @Composable
-private fun rememberCover(job: SoundCloudJob, available: Boolean, fromFile: Boolean, controller: MusicController): ImageBitmap? {
-    val cover by produceState<ImageBitmap?>(null, job.id, available) {
+private fun rememberCover(review: DownloadTagReview, available: Boolean, fromFile: Boolean): ImageBitmap? {
+    val cover by produceState<ImageBitmap?>(null, review.key, available) {
         if (!available) return@produceState
         value = try {
-            val bytes = controller.soundCloudCover(job.id, fromFile)
+            val bytes = review.loadCover(fromFile) ?: return@produceState
             withContext(Dispatchers.Default) { decodeArtwork(bytes, 512) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { null }
@@ -94,16 +104,28 @@ private fun rememberCover(job: SoundCloudJob, available: Boolean, fromFile: Bool
 @Composable
 internal fun SoundCloudTagEditor(job: SoundCloudJob, controller: MusicController, dismiss: () -> Unit) {
     val review = job.review ?: SoundCloudTagReview(ScGateTags(job.track.title, job.track.artist))
-    val original = review.tags
-    var tags by remember(job.id) { mutableStateOf(original) }
-    var artistTitle by remember(job.id) { mutableStateOf(true) }
-    var cover by remember(job.id) { mutableStateOf<ByteArray?>(null) }
+    DownloadTagEditor(DownloadTagReview(job.id, stringResource(if (job.destination == ScGateDestination.LIBRARY) Res.string.sources_tags_intro_server
+            else Res.string.sources_tags_intro_device, job.track.title), review.tags,
+        hint = if (job.format == ScGateFormat.FLAC && review.lossySource) stringResource(Res.string.sources_lossy_flac_hint) else null,
+        fileTags = review.fileTags, cover = review.cover, fileCover = review.fileCover,
+        fileName = { artistTitle, tags -> taggedFileName(review.fileName, job.format, artistTitle, tags) },
+        loadCover = { fromFile -> controller.soundCloudCover(job.id, fromFile) },
+        finish = { choice -> controller.finishSoundCloudTags(job.id, choice) }), dismiss)
+}
+
+/** Checks a download's tags and cover before it is saved. */
+@Composable
+internal fun DownloadTagEditor(review: DownloadTagReview, dismiss: () -> Unit) {
+    val original = review.original
+    var tags by remember(review.key) { mutableStateOf(original) }
+    var artistTitle by remember(review.key) { mutableStateOf(true) }
+    var cover by remember(review.key) { mutableStateOf<ByteArray?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val picker = LocalArtworkPicker.current
     val scope = rememberCoroutineScope()
-    val serverCover = rememberCover(job, review.cover, fromFile = false, controller)
-    val fileCover = rememberCover(job, review.fileCover, fromFile = true, controller)
+    val serverCover = rememberCover(review, review.cover, fromFile = false)
+    val fileCover = rememberCover(review, review.fileCover, fromFile = true)
     val chosenCover by produceState<ImageBitmap?>(null, cover) { value = cover?.let { withContext(Dispatchers.Default) { decodeArtwork(it, 512) } } }
     val writeFailed = stringResource(Res.string.sources_write_tags_failed)
     val fileCoverUnavailable = stringResource(Res.string.sources_file_cover_unavailable)
@@ -119,16 +141,14 @@ internal fun SoundCloudTagEditor(job: SoundCloudJob, controller: MusicController
         }
     }
     fun finish(keepFileTags: Boolean) = run(writeFailed) {
-        controller.finishSoundCloudTags(job.id, ScGateTagChoice(written, keepFileTags, artistTitle, cover.takeUnless { keepFileTags }))
+        review.finish(ScGateTagChoice(written, keepFileTags, artistTitle, cover.takeUnless { keepFileTags }))
         dismiss()
     }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     SettingsScreen(onDismissRequest = { if (!busy) dismiss() }, title = { Text(stringResource(Res.string.sources_check_the_tags)) }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(if (job.destination == ScGateDestination.LIBRARY) Res.string.sources_tags_intro_server
-                else Res.string.sources_tags_intro_device, job.track.title))
-            if (job.format == ScGateFormat.FLAC && review.lossySource)
-                Text(stringResource(Res.string.sources_lossy_flac_hint), color = muted)
+            Text(review.intro)
+            review.hint?.let { Text(it, color = muted) }
             val fileRows = review.fileTags?.let { fileTags -> TagField.entries.map { it to it.of(fileTags).trim() }.filter { (_, value) -> value.isNotEmpty() } }.orEmpty()
             if (fileRows.isNotEmpty() || review.fileCover) Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -147,7 +167,7 @@ internal fun SoundCloudTagEditor(job: SoundCloudJob, controller: MusicController
                         CoverThumbnail(fileCover, 56, stringResource(Res.string.sources_cover_in_file))
                         Text(stringResource(Res.string.sources_cover), Modifier.weight(1f))
                         AppIconButton(AppIcon.COPY, stringResource(Res.string.sources_copy_cover_into_form), enabled = !busy) {
-                            run(fileCoverUnavailable) { cover = controller.soundCloudCover(job.id, fromFile = true) }
+                            run(fileCoverUnavailable) { cover = review.loadCover(true) }
                         }
                     }
                     ActionButton(stringResource(Res.string.sources_keep_file_tags), AppIcon.CHECK, enabled = !busy, style = ActionStyle.OUTLINED) { finish(keepFileTags = true) }
@@ -185,7 +205,7 @@ internal fun SoundCloudTagEditor(job: SoundCloudJob, controller: MusicController
                 Checkbox(artistTitle, null, enabled = !busy)
                 Text(stringResource(Res.string.sources_name_file_artist_title))
             }
-            taggedFileName(review.fileName, job.format, artistTitle, written).takeIf { it.isNotEmpty() }?.let {
+            review.fileName(artistTitle, written).takeIf { it.isNotEmpty() }?.let {
                 Text(stringResource(Res.string.sources_file_name, it), style = MaterialTheme.typography.bodyMedium, color = muted)
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())

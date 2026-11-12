@@ -155,7 +155,7 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
                 try {
                 val name = cursor.getString(1)
                 val extension = name.substringAfterLast('.', "").lowercase()
-                if (extension !in setOf("mp3", "wav", "flac")) continue
+                if (extension !in localMusicExtensions) continue
                 val uri = if (wholeDevice) ContentUris.withAppendedId(collection, cursor.getLong(0)) else queryUri
                 if (uri.toString() !in chosen && !folders.allows(cursor.getString(2).orEmpty(), cursor.getString(3)?.let { File(it).parent })) continue
                 val direct = cursor.getString(3)?.let(::File)?.takeIf { it.isFile && it.canRead() }

@@ -85,7 +85,10 @@ class QueueController internal constructor(private val context: ControllerContex
     }
 
     fun playTrack(trackId: String, contextTrackIds: List<String>? = null, contextIndex: Int? = null, contextName: String = "Library", shuffleContext: Boolean = false,
-        origin: QueueOrigin = QueueOrigin(), preserveManualQueue: Boolean = false, confirmed: Boolean = false): Job = context.action {
+        origin: QueueOrigin = QueueOrigin(), preserveManualQueue: Boolean = false, confirmed: Boolean = false,
+        /** A play request counted earlier, such as a YouTube Play while its video was looked up; the queue only changes while it is the latest. */
+        request: Long? = null): Job = context.also { if (request == null) it.playRequests++ }.action {
+        if (request != null && request != context.playRequests) return@action
         if (requestPlaybackConfirmation(
                 context.state.value.tracks.firstOrNull { it.id == trackId }?.metadata?.title ?: "this music", confirmed) {
                 playTrack(trackId, contextTrackIds, contextIndex, contextName, shuffleContext, origin, preserveManualQueue, confirmed = true)
@@ -111,7 +114,7 @@ class QueueController internal constructor(private val context: ControllerContex
         playback.queueLoaded = true
     }
 
-    fun selectQueueEntry(entryId: String) = context.action {
+    fun selectQueueEntry(entryId: String) = context.also { it.playRequests++ }.action {
         queue.snapshot().entries.firstOrNull { it.id == entryId }?.let { playback.requirePlayable(it.trackId) }
         queue.select(entryId)
         val snapshot = queue.snapshot()
@@ -142,7 +145,7 @@ class QueueController internal constructor(private val context: ControllerContex
         queue.detachSaved()
         context.update { it.copy(queue = it.queue.copy(selectedSavedQueueId = null)) }
     }
-    fun startEmptyQueue() = context.action {
+    fun startEmptyQueue() = context.also { it.playRequests++ }.action {
         playback.discardIncomingPlayback()
         persistPlaybackPosition()
         queue.startEmpty()
@@ -197,7 +200,7 @@ class QueueController internal constructor(private val context: ControllerContex
         cancelPlaybackConfirmation()
         request.play()
     }
-    fun loadSavedQueue(id: String, confirmed: Boolean = false): Job = context.action {
+    fun loadSavedQueue(id: String, confirmed: Boolean = false): Job = context.also { it.playRequests++ }.action {
         if (queue.snapshot().selectedSavedQueueId == id) return@action
         if (requestPlaybackConfirmation(context.state.value.savedQueues.firstOrNull { it.id == id }?.name ?: "this saved queue", confirmed) {
                 loadSavedQueue(id, confirmed = true)
@@ -250,7 +253,7 @@ class QueueController internal constructor(private val context: ControllerContex
         context.update { it.copy(queue = snapshot) }
         if (playback.queueLoaded) engine.updateQueue(playback.playableQueue(snapshot))
     }
-    fun clearQueue(selection: QueueClear = QueueClear.ALL) = context.action {
+    fun clearQueue(selection: QueueClear = QueueClear.ALL) = context.also { it.playRequests++ }.action {
         persistPlaybackPosition()
         val before = queue.snapshot()
         queue.clear(selection)

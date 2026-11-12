@@ -29,7 +29,7 @@ import me.d3sox.nevumi.sftp.SftpConnection
 import me.d3sox.nevumi.tunnel.Tailscale
 import me.d3sox.nevumi.tunnel.TailscaleTunnel
 import android.net.Uri
-import me.d3sox.nevumi.soundcloud.MediaStoreSoundCloudFiles
+import me.d3sox.nevumi.soundcloud.MediaStoreMusicFiles
 import me.d3sox.nevumi.soundcloud.SoundCloudDownloads
 
 class MusicApplication : Application() {
@@ -42,6 +42,8 @@ class MusicApplication : Application() {
     lateinit var offline: OfflineMusic
         private set
     lateinit var soundCloud: SoundCloudDownloads
+        private set
+    lateinit var youTubeDownloads: me.d3sox.nevumi.youtube.YouTubeDownloads
         private set
     private lateinit var http: HttpClient
     private lateinit var downloadNetwork: AndroidDownloadNetwork
@@ -82,8 +84,12 @@ class MusicApplication : Application() {
         offline = OfflineMusic(store, library, connection::client, File(filesDir, "audio").path, playlists, downloadNetwork.state,
             sourceAccessible = AndroidAudioAccess(this)::available, scheduleWork = downloadJobs::schedule)
         val localSources = AndroidLocalSources(this, library, artwork)
-        soundCloud = SoundCloudDownloads(store, http, tunnel::scGateUrl, MediaStoreSoundCloudFiles(this), localSources,
+        soundCloud = SoundCloudDownloads(store, http, tunnel::scGateUrl, MediaStoreMusicFiles(this), localSources,
             connection::client, serverChanges, artwork, offline, scheduleWork = downloadJobs::scheduleSoundCloud)
+        val youTube = me.d3sox.nevumi.youtube.NewPipeYouTube()
+        youTubeDownloads = me.d3sox.nevumi.youtube.YouTubeDownloads(store, http, youTube, File(noBackupFilesDir, "youtube-downloads").path,
+            MediaStoreMusicFiles(this, "Music/Nevumi/YouTube"), localSources, upload = { trackId, path -> serverFiles.upload(trackId, path) },
+            scheduleWork = downloadJobs::scheduleYouTube)
         val scrobbling = Scrobbling(store, library, http, credentials, downloadNetwork.state, connection::client)
         val equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http)
         val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
@@ -110,6 +116,7 @@ class MusicApplication : Application() {
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges, AndroidAudioAccess(this)::contentId), credentials, "Android phone",
                 networkAccess = localNetworkRequests::request),
             tunnel = tunnel, networkAccess = localNetworkRequests::request, soundCloud = soundCloud,
+            youTube = youTube, youTubeDownloads = youTubeDownloads,
             discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client),
             backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles),
             lyrics = me.d3sox.nevumi.lyrics.LyricsSources(store, me.d3sox.nevumi.lyrics.FileLyrics { contentResolver.openInputStream(Uri.parse(it)) },
