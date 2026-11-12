@@ -24,6 +24,8 @@ bouncycastle = "1.86"
 camerax = "1.6.2"
 zxing = "3.5.4"
 glance = "1.2.0"
+# JitPack builds this from a movable tag, so gradle/verification-metadata.xml pins its checksums. After a bump, regenerate them with
+# ./gradlew --write-verification-metadata sha256 :shared:dependencies --configuration desktopRuntimeClasspath
 newpipeExtractor = "v0.27.1"
 
 [libraries]
