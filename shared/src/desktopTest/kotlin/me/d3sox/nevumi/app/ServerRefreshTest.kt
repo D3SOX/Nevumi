@@ -40,7 +40,7 @@ class ServerRefreshTest {
         val searches = AtomicInteger()
         val http = HttpClient(MockEngine { request ->
             when (request.url.encodedPath) {
-                "/rest/ping.view" -> respond("""{"subsonic-response":{"status":"ok"}}""")
+                "/rest/ping.view" -> respond("""{"subsonic-response":{"status":"ok","type":"navidrome"}}""")
                 "/rest/search3.view" -> {
                     if (searches.incrementAndGet() == 2) retryEntered.complete(Unit)
                     searchEntered.complete(Unit)
