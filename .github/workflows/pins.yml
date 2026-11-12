@@ -47,24 +47,28 @@ jobs:
           git commit --all --message "$title"
           open="$(gh pr list --head "$branch" --state open --json number --jq '.[].number')"
           push=true
-          if git fetch --quiet origin "$branch" 2>/dev/null; then
+          # An unreachable remote fails here instead of looking like a missing branch.
+          remote="$(git ls-remote origin "refs/heads/$branch" | cut -f1)"
+          if [[ -n "$remote" ]]; then
             # Never replace commits someone added to the pull request, such as an updated preset count.
-            authors="$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$branch" --jq '.commits[].commit.author.email')"
+            authors="$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$remote" --jq '.commits[].commit.author.email')"
             if [[ -n "$authors" ]] && grep -qvxF '41898282+github-actions[bot]@users.noreply.github.com' <<< "$authors"; then
               echo "$branch has commits from someone else, so it is left as it is"
               exit 0
             fi
             # The branch already holds this update on the current base.
-            if git diff --quiet FETCH_HEAD HEAD; then push=false; fi
+            git fetch --quiet origin "$remote"
+            if git diff --quiet "$remote" HEAD; then push=false; fi
           fi
-          if [[ "$push" == true ]]; then git push --force origin "$branch"; fi
+          # The lease fails the push if someone pushed to the branch after the check above.
+          if [[ "$push" == true ]]; then git push --force-with-lease="refs/heads/$branch:$remote" origin "HEAD:refs/heads/$branch"; fi
           if [[ -z "$open" ]]; then
             # Pull requests and pushes from the workflow token start no workflows, and a dispatched run does not count
             # as a required check, so reopening the pull request is what starts its tests.
             gh pr create --head "$branch" --title "$title" --body "$(printf '%s\n\n%s' \
               "Updates a pin that Dependabot cannot track. \`scripts/update-pins.py $PIN\` made this change." \
-              'GitHub Actions opened this pull request, so no checks start on their own. Close and reopen it to run them.')"
+              'GitHub Actions opened this pull request, so no checks start on their own. Approve its workflows if GitHub offers that, or close and reopen it to run them.')"
           elif [[ "$push" == true ]]; then
             gh pr edit "$branch" --title "$title"
-            gh pr comment "$branch" --body 'The update changed. Close and reopen this pull request to run the checks again.'
+            gh pr comment "$branch" --body 'The update changed. Approve the workflows or close and reopen this pull request to run the checks again.'
           fi
