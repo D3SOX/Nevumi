@@ -49,8 +49,10 @@ class M3uPlaylists(private val library: MusicLibrary, private val playlists: Pla
             appendLine("#EXTM3U")
             trackIds.forEach { trackId ->
                 val track = requireNotNull(library.findTrack(trackId)) { "A playlist song is missing from the library" }
-                val source = track.sources.firstOrNull { it.kind == SourceKind.LOCAL }
-                    ?: track.sources.firstOrNull { it.kind == SourceKind.SERVER } ?: track.sources.firstOrNull()
+                // A missing local copy would export a dead path, so an available source of any kind comes first.
+                val source = track.sources.filter { it.available }.ifEmpty { track.sources }.let { sources ->
+                    sources.firstOrNull { it.kind == SourceKind.LOCAL } ?: sources.firstOrNull { it.kind == SourceKind.SERVER } ?: sources.firstOrNull()
+                }
                 val entry = location(requireNotNull(source) { "A playlist song has no source" })
                 require('\n' !in entry && '\r' !in entry) { "A file name contains a line break and cannot be exported to M3U" }
                 val description = listOf(track.metadata.artist, track.metadata.title).filter(String::isNotBlank)
