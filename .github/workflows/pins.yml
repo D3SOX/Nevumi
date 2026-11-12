@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
-      actions: write
       contents: write
       pull-requests: write
     strategy:
@@ -47,20 +46,25 @@ jobs:
           git switch --create "$branch"
           git commit --all --message "$title"
           open="$(gh pr list --head "$branch" --state open --json number --jq '.[].number')"
-          # Skip the push and test run when the open pull request already holds this update on the current base.
-          if git fetch --quiet origin "$branch" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
-            if [[ -n "$open" ]]; then
-              echo "$branch is current"
+          push=true
+          if git fetch --quiet origin "$branch" 2>/dev/null; then
+            # Never replace commits someone added to the pull request, such as an updated preset count.
+            authors="$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$branch" --jq '.commits[].commit.author.email')"
+            if [[ -n "$authors" ]] && grep -qvxF '41898282+github-actions[bot]@users.noreply.github.com' <<< "$authors"; then
+              echo "$branch has commits from someone else, so it is left as it is"
               exit 0
             fi
-          else
-            git push --force origin "$branch"
+            # The branch already holds this update on the current base.
+            if git diff --quiet FETCH_HEAD HEAD; then push=false; fi
           fi
+          if [[ "$push" == true ]]; then git push --force origin "$branch"; fi
           if [[ -z "$open" ]]; then
-            gh pr create --head "$branch" --title "$title" \
-              --body "Updates a pin that Dependabot cannot track. \`scripts/update-pins.py $PIN\` made this change."
-          else
+            # Pull requests and pushes from the workflow token start no workflows, and a dispatched run does not count
+            # as a required check, so reopening the pull request is what starts its tests.
+            gh pr create --head "$branch" --title "$title" --body "$(printf '%s\n\n%s' \
+              "Updates a pin that Dependabot cannot track. \`scripts/update-pins.py $PIN\` made this change." \
+              'GitHub Actions opened this pull request, so no checks start on their own. Close and reopen it to run them.')"
+          elif [[ "$push" == true ]]; then
             gh pr edit "$branch" --title "$title"
+            gh pr comment "$branch" --body 'The update changed. Close and reopen this pull request to run the checks again.'
           fi
-          # Pull requests from the workflow token start no workflows, so run the required tests on the branch directly.
-          gh workflow run tests.yml --ref "$branch"
