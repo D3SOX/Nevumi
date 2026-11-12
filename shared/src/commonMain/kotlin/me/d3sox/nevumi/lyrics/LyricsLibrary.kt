@@ -10,6 +10,9 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -55,7 +58,7 @@ interface LyricsFiles {
 }
 
 /**
- * Looks for lyrics in the file's tags, then a sidecar file, then the music server, then the [online] services in their order, and keeps
+ * Looks for lyrics in the file's tags, then a sidecar file, then the music server, then the [online] services, and keeps
  * what the server and the services returned under a key that finds the same song again on another device.
  */
 class LyricsSources(private val store: MusicStore?, private val files: LyricsFiles?,
@@ -82,16 +85,15 @@ class LyricsSources(private val store: MusicStore?, private val files: LyricsFil
         return found
     }
 
-    /** Asks the chosen services in order until one has synced lyrics, keeping the first plain text in case none has. */
-    private suspend fun onlineLyrics(metadata: TrackMetadata, chosen: Set<LyricsSource>): Lyrics? {
-        var plain: Lyrics? = null
-        for (service in online.filter { it.source in chosen }) {
-            // A slow service gives way to the next one instead of keeping the lyrics loading.
-            val found = attempt { withTimeoutOrNull(onlineTimeoutMillis) { service.lyrics(metadata) } } ?: continue
-            if (found.synced) return found
-            plain = plain ?: found
-        }
-        return plain
+    /**
+     * Asks the chosen services at once and keeps the most precisely timed lyrics: word by word, then line by line, then plain text.
+     * Among equally timed lyrics, the earlier service wins.
+     */
+    private suspend fun onlineLyrics(metadata: TrackMetadata, chosen: Set<LyricsSource>): Lyrics? = coroutineScope {
+        online.filter { it.source in chosen }.map { service ->
+            // A slow service gives way to the others instead of keeping the lyrics loading.
+            async { attempt { withTimeoutOrNull(onlineTimeoutMillis) { service.lyrics(metadata) } } }
+        }.awaitAll().filterNotNull().maxByOrNull { if (it.timedByWord) 2 else if (it.synced) 1 else 0 }
     }
 
     private suspend fun serverLyrics(track: Track): Lyrics? {
@@ -161,10 +163,12 @@ class NetEaseClient(private val http: HttpClient, version: String, private val b
         var plain: Lyrics? = null
         for (song in songs.filter { matches(it, metadata) }.take(3)) {
             val id = song["id"]?.jsonPrimitive?.longOrNull ?: continue
-            val body = request("song/lyric") { parameter("id", id); parameter("lv", 1) }
+            // The same request also returns the lyrics timed word by word, as yrc, when the catalogue has them.
+            val body = request("song/lyric") { parameter("id", id); parameter("lv", 1); parameter("yv", 1) }
             if (body["pureMusic"]?.jsonPrimitive?.booleanOrNull == true) return null
-            val found = body["lrc"]?.jsonObject?.get("lyric")?.jsonPrimitive?.contentOrNull
-                ?.let { LrcParser.parse(it, LyricsSource.NETEASE) }?.withoutCredits() ?: continue
+            fun lyric(key: String) = body[key]?.jsonObject?.get("lyric")?.jsonPrimitive?.contentOrNull
+            val found = lyric("yrc")?.let(YrcParser::parse)?.withoutCredits()
+                ?: lyric("lrc")?.let { LrcParser.parse(it, LyricsSource.NETEASE) }?.withoutCredits() ?: continue
             if (found.synced) return found
             plain = plain ?: found
         }
@@ -226,7 +230,8 @@ internal fun structuredLyrics(response: JsonObject): Lyrics? {
     val offset = entry["offset"]?.jsonPrimitive?.longOrNull ?: 0
     val synced = lines(entry).mapNotNull { line ->
         val start = line["start"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
-        LyricLine((start - offset).coerceAtLeast(0), text(line))
+        // Servers may pass on the word timestamps of enhanced LRC within a line.
+        LrcParser.line(start, text(line)).shifted(-offset)
     }.sortedBy { it.startMs }
     return if (synced.isEmpty()) null else Lyrics(LyricsSource.SERVER, synced)
 }

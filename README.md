@@ -161,7 +161,7 @@ Development APKs install separately as **Nevumi dev** and use the public develop
 
 ## Online lyrics
 
-Online lyrics lookups are off by default. Enable them in Settings to search LRCLIB, then separately enable NetEase Cloud Music to search it when LRCLIB has no synced result. NetEase receives the song's artist and title through undocumented web-player endpoints. These requests use no account, API key or paid subscription, but access can fail or require verification.
+Online lyrics lookups are off by default. Enable them in Settings to search LRCLIB. NetEase Cloud Music has its own setting. When it's on, Nevumi searches both services at once and uses NetEase's lyrics when they're timed more precisely than LRCLIB's, for example word by word. NetEase receives the song's artist and title through undocumented web-player endpoints. These requests use no account, API key or paid subscription, but access can fail or require verification.
 
 Each NetEase lookup makes one search request and up to three lyric requests, with a ten-second timeout for the whole lookup. No published quota or third-party lyrics API agreement has been confirmed. Nevumi caches successful results in its local library database and reuses them without another online lookup. NetEase results show "Lyrics from NetEase Cloud Music".
 
