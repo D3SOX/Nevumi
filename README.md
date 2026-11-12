@@ -36,32 +36,24 @@ I started it because I couldn't find a music player with all the features I want
 ## What it does
 
 - **Library.** Browse songs, albums, artists, genres and folders, and search everything. You choose the library tabs and Home sections.
-- **Playlists.** Create regular, smart and M3U playlists and sort them into nested folders. Nevumi syncs them with your music server, including covers on Navidrome 0.61 or newer.
-- **Queue.** Up next is a separate queue. Save queues with their history and position, switch between them, or export them as playlists.
-- **Offline.** Download music from your server. Nevumi shows local and server copies of the same song as one song.
-- **Discovery.** Artist pages show the biography, similar artists and top songs from your music server. Play similar songs from any server song or artist.
-- **New releases.** Follow an artist from their page, or import artists from your Last.fm top artists or a public MusicBrainz artist collection. Home lists their recent and upcoming releases from MusicBrainz, and Nevumi can notify you about new ones. It contacts MusicBrainz only after you follow an artist or start an import.
-- **SoundCloud.** Search and download songs through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server, to your music server or your device. Nevumi never contacts SoundCloud.
-- **Playback.** Nevumi has gapless playback, crossfade, speed and pitch, repeat counts, an equalizer with AutoEQ headphone profiles, mono audio and a sleep timer.
-- **Lyrics.** Nevumi shows synced and plain lyrics from embedded tags, `.lrc` files next to the song and your music server. You can turn on LRCLIB lookups in Settings, and add NetEase Cloud Music for songs LRCLIB has no synced lyrics for. Tap a line to jump to it.
-- **Waveforms.** Nevumi draws waveforms from the actual audio and caches them.
-- **Tag editing.** Edit local tags and artwork, or your Navidrome files over SFTP. Look up metadata on MusicBrainz.
-- **Tailscale.** The built-in client reaches your servers on a tailnet without the Tailscale app or a VPN. Headscale works too.
+- **Playlists.** Create regular, smart and M3U playlists, sort them into folders and sync them with your music server.
+- **Queue.** Up next is a separate queue. Save queues and switch between them.
+- **Playback.** Nevumi has gapless playback, crossfade, speed and pitch control, an equalizer with AutoEQ headphone profiles and a sleep timer.
+- **Lyrics.** Nevumi shows synced and plain lyrics from tags, `.lrc` files and your music server. It can also [look them up online](#online-lyrics).
+- **Waveforms.** Nevumi draws each song's waveform from its audio.
+- **Visualizer.** Nevumi plays MilkDrop visualizations through projectM and ships with over 10,000 presets.
+- **Offline.** Download music from your server. Local and server copies of the same song show up as one song.
+- **Discovery.** Artist pages show the biography, similar artists and top songs. Play similar songs from any server song or artist.
+- **New releases.** Follow artists, or import them from Last.fm or a MusicBrainz collection. Home lists their recent and upcoming releases, and Nevumi can notify you about new ones. It contacts MusicBrainz only after you follow or import an artist.
+- **SoundCloud.** Search and download songs through your own [sc-gate-dl](https://github.com/D3SOX/sc-gate-dl) server. Nevumi never contacts SoundCloud.
+- **Tag editing.** Edit tags and artwork of local files, or of your Navidrome files over SFTP. Look up metadata on MusicBrainz.
 - **Scrobbling.** Nevumi keeps a listening history and scrobbles to your music server, Last.fm or ListenBrainz.
+- **Tailscale.** The built-in client reaches servers on your tailnet without the Tailscale app or a VPN. Headscale works too.
 - **Device sync.** Pair devices with a QR code to sync playlists, favorites, ratings, history and saved queues.
-- **Backup.** Export settings, playlists, saved queues, history, favorites, ratings and connection profiles to one JSON file. Restore it on another device. The backup never includes passwords or keys.
-- **Themes.** Pick light, dark, system or artwork-based colors, or a custom palette.
-- **Desktop.** Linux has MPRIS media controls, right-click menus and a volume slider in the mini player. Space plays and pauses, Ctrl+←/→ change songs, Shift+←/→ seek and Ctrl+F searches. Drop folders on the window to add them to your library, or songs to play them. An optional tray icon and background playback keep music going after you close the window.
-- **Widget.** Android has a home screen widget and a quick settings tile for the current song.
-- **Visualizer.** Nevumi runs MilkDrop presets through projectM. Over 10,000 presets ship with the app. You can search them, mark favorites and switch presets automatically.
-
-## Online lyrics
-
-Online lyrics lookups are off by default. Enable them in Settings to search LRCLIB, then separately enable NetEase Cloud Music to search it when LRCLIB has no synced result. NetEase receives the song's artist and title through undocumented web-player endpoints. These requests use no account, API key or paid subscription, but access can fail or require verification.
-
-Each NetEase lookup makes one search request and up to three lyric requests, with a ten-second timeout for the whole lookup. No published quota or third-party lyrics API agreement has been confirmed. Nevumi caches successful results in its local library database and reuses them without another online lookup. NetEase results show "Lyrics from NetEase Cloud Music".
-
-NetEase's permission for third-party lyric display, caching and redistribution has not been confirmed. Anonymous access does not establish permission to reuse lyrics, and attribution does not grant those rights.
+- **Backup.** Export settings, playlists, favorites, history and connection profiles to one file and restore it on another device. Backups never include passwords or keys.
+- **Themes.** Pick light, dark or system mode, and system, artwork-based or custom colors.
+- **Linux.** Nevumi has MPRIS media controls and an optional tray icon that keeps music playing after you close the window.
+- **Android.** Nevumi has a home screen widget and a quick settings tile.
 
 ## Screenshots
 
@@ -167,61 +159,17 @@ On Linux, a Secret Service provider, such as KDE's wallet service, stores server
 
 Development APKs install separately as **Nevumi dev** and use the public development key in `packaging/development.keystore`. Linux development packages replace Nevumi and use the same local data directory.
 
-## Build and test
+## Online lyrics
 
-Install JDK 21, Go 1.27.1 or newer, Android SDK platform 37.0, build tools 37.0.0, NDK 28.2.13676358 and CMake 3.22.1. Linux also needs CMake, Ninja, SDL2 and OpenGL development files, mpv and its development library, FFmpeg, libsecret and PulseAudio client tools. Desktop distributions use JDK 25 for their bundled runtime.
+Online lyrics lookups are off by default. Enable them in Settings to search LRCLIB, then separately enable NetEase Cloud Music to search it when LRCLIB has no synced result. NetEase receives the song's artist and title through undocumented web-player endpoints. These requests use no account, API key or paid subscription, but access can fail or require verification.
 
-Set `JAVA_HOME` to JDK 21 and `ANDROID_HOME` to your Android SDK. Gradle detects installed toolchains or reads `JAVA_HOME_21_X64` and `JAVA_HOME_25_X64`.
+Each NetEase lookup makes one search request and up to three lyric requests, with a ten-second timeout for the whole lookup. No published quota or third-party lyrics API agreement has been confirmed. Nevumi caches successful results in its local library database and reuses them without another online lookup. NetEase results show "Lyrics from NetEase Cloud Music".
 
-```sh
-./gradlew :androidApp:assembleDebug
-./gradlew :androidApp:assembleDevelopment
-./gradlew :desktopApp:createDistributable
-```
+NetEase's permission for third-party lyric display, caching and redistribution has not been confirmed. Anonymous access does not establish permission to reuse lyrics, and attribution does not grant those rights.
 
-The first native build downloads checksum-verified projectM 4.1.8 and its evaluator. Subsequent builds reuse those sources. Native dependencies remain shared libraries. The Tailscale client in `native/tailscale` builds with Go modules pinned in its `go.sum`.
+## Development
 
-The acceptance suite uses disposable Navidrome, gonic, SFTP and scrobbling fixtures. CI runs desktop tests and Android instrumentation on API 31 and API 36 with 16 KB memory pages. Release checks also install the optimized APK and open MilkDrop. The fixture helpers under `scripts/` can start the same services locally. Use an emulator for instrumentation tests, which clear the app's test data.
-
-Pull requests run the app suites when app, build, fixture or app-packaging inputs change, including edits to the test workflow itself. Website-only PRs check JavaScript syntax and site packaging instead. CodeQL scans the languages affected by a change; scheduled and manual security scans cover every language. Release and manual acceptance runs always run both app suites.
-
-```sh
-./gradlew :shared:desktopTest
-./gradlew :androidApp:connectedDebugAndroidTest
-```
-
-Desktop UI tests need a display, such as `xvfb-run`, and the audio-monitor test needs a PulseAudio-compatible service. `scripts/ci-tests.sh` starts and stops the complete fixture set on an isolated CI runner.
-
-## Release setup
-
-`development.yml` builds a development prerelease when app or build inputs change on `master`, or on a manual workflow run. Each development run uses its own `development-<run ID>` tag. Assets upload to a draft before publication, so development releases work with GitHub release immutability. Dependency submission runs when Gradle manifests or configuration change. `release.yml` publishes tagged releases, including alphas, as regular GitHub releases after acceptance tests pass. It attaches the signed Arch and F-Droid repositories as `nevumi-repositories.tar.gz` and then runs `website.yml`. `website.yml` also runs on pushes to `master` that change the landing page. It deploys the page together with the repositories from the newest release, so a website change doesn't need a new release. A release tag such as `v0.1.0` must match both platform versions. Update Android's `versionCode` for each Android release.
-
-Configure these repository secrets and variables for signed releases:
-
-| Name | Kind | Purpose |
-| --- | --- | --- |
-| `MANIDA_ANDROID_KEYSTORE_BASE64` | Secret | Base64-encoded release keystore |
-| `MANIDA_ANDROID_KEYSTORE_PASSWORD` | Secret | Keystore password |
-| `MANIDA_ANDROID_KEY_PASSWORD` | Secret | Signing-key password |
-| `MANIDA_ANDROID_KEY_ALIAS` | Variable | Signing-key alias |
-| `MANIDA_ARCH_SIGNING_KEY` | Secret | Armored private key for Arch packages |
-| `MANIDA_ARCH_SIGNING_PASSPHRASE` | Secret | Arch signing-key passphrase |
-| `MANIDA_ARCH_SIGNING_FINGERPRINT` | Variable | Full Arch signing-key fingerprint |
-| `MANIDA_FDROID_KEYSTORE_BASE64` | Secret | Base64-encoded F-Droid repository keystore, alias `manida-fdroid` |
-| `MANIDA_FDROID_KEYSTORE_PASSWORD` | Secret | F-Droid repository keystore and key password |
-
-GitHub Pages uses GitHub Actions as its source, with `nevumi.app` as the custom domain. Configure its apex DNS records using GitHub Pages' custom-domain settings. Each deployment replaces the whole site, so the website workflow always includes the repositories from the newest release. F-Droid's landing page is `/fdroid`; its signed index and APKs are under `/fdroid/repo`. The `github-pages` environment must allow the `master` branch for website changes and release tags matching `v*`. Development builds do not require release signing secrets.
-
-### README badges
-
-The SVGs in `badges/public` are hosted by the `manida-badges` Cloudflare Worker. The README selects the light or dark variant to match the reader's theme. To publish badge changes, sign in to Cloudflare with Wrangler and run:
-
-```sh
-cd badges
-bun install --frozen-lockfile
-bun run check
-bun run deploy
-```
+Build, test and release instructions are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## License and credits
 
