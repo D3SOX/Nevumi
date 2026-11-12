@@ -181,6 +181,11 @@ class ScrobblingClientsTest {
             assertEquals(ScrobbleFailure.AUTHORIZATION, assertFailsWith<ScrobbleException> {
                 LastFmClient(denied, "fixture-key", "fixture-secret", "invalid").submit(listen)
             }.failure)
+            val forbidden = HttpClient(MockEngine { respond("""{"error":14,"message":"Unauthorized Token"}""", HttpStatusCode.Forbidden, jsonHeaders) })
+            val unauthorized = try { assertFailsWith<ScrobbleException> { LastFmClient(forbidden, "fixture-key", "fixture-secret").finishAuthorization("token") } }
+            finally { forbidden.close() }
+            assertEquals(ScrobbleFailure.AUTHORIZATION, unauthorized.failure)
+            assertEquals("Authorize Nevumi in Last.fm, then complete sign-in.", unauthorized.message)
             val error = assertFailsWith<ScrobbleException> { ListenBrainzClient(failed, "fixture-token").submit(listen) }
             assertEquals(ScrobbleFailure.UNCERTAIN, error.failure)
             assertFalse(error.toString().contains("fixture-secret"))
