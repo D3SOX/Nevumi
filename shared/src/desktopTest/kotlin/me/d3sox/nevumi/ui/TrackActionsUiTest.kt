@@ -16,6 +16,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import me.d3sox.nevumi.library.LibraryTab
 
 @OptIn(ExperimentalTestApi::class)
 class TrackActionsUiTest {
@@ -486,6 +491,32 @@ class TrackActionsUiTest {
             player.state.value.tracks.first { it.id == entry.trackId }.metadata.title
         })
         onNodeWithContentDescription("Nevumi logo").assertIsDisplayed()
+    }
+
+    @Test
+    fun playingAShuffledHomeEntryFromItsMenuSkipsSongsTheLibraryNoLongerHas() {
+        val directory = Files.createTempDirectory("nevumi-entry-play")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val assets = java.nio.file.Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets")
+        runBlocking { listOf("flac", "mp3").forEach { extension ->
+            library.importTrack(TrackMetadata("Song $extension", durationMs = 3_000), TrackSource(extension, SourceKind.LOCAL, assets.resolve("fixture.$extension").toString()))
+        } }
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
+        try { runComposeUiTest {
+            setContent {
+                val state by player.state.collectAsState()
+                // Linking two copies of a song can leave an entry naming an ID the library dropped.
+                val entry = CollectionItem("mix", "A mix", "", null, AppIcon.PLAY, trackIds = listOf("dropped") + state.tracks.map { it.id })
+                CollectionActionHost(entry, LibraryTab.HOME, state, player, {}) { openMenu -> Button(onClick = openMenu) { Text("Open menu") } }
+            }
+            waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+            onNodeWithText("Open menu").performClick()
+            onNode(hasText("Play") and hasAnyAncestor(isPopup())).performClick()
+            waitUntil(timeoutMillis = 3_000) { player.state.value.queue.entries.isNotEmpty() || player.state.value.error != null }
+            assertEquals(null, player.state.value.error)
+            assertEquals(player.state.value.tracks.map { it.id }.toSet(), player.state.value.queue.entries.map { it.trackId }.toSet())
+        } } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
     private fun withLibrary(showMoreButtons: Boolean = true, test: ComposeUiTest.(MusicController) -> Unit) {
