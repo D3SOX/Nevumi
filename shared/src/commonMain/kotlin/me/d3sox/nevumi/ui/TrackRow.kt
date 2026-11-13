@@ -184,8 +184,9 @@ internal fun SwipeActionRow(key: Any, swipeRight: TrackAction, swipeLeft: TrackA
         }
         Surface(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.fillMaxWidth()
             .horizontalSwipe(key, threshold, swipeRight, swipeLeft, enabled, onStart = { settling?.cancel() }, onDrag = { amount ->
-                val action = if (offset + amount >= 0) swipeRight else swipeLeft
-                if (enabled && actionAvailable(action)) offset += amount
+                val next = offset + amount
+                // A swipe can return to the middle, but not move on toward an action that is not available.
+                if (enabled) offset = if (actionAvailable(if (next >= 0) swipeRight else swipeLeft)) next else 0f
             }) { released ->
                 if (released && abs(offset) >= threshold) performAction(if (offset > 0) swipeRight else swipeLeft)
                 settle()
