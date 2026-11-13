@@ -47,8 +47,9 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
     private val networkAccess: suspend (String) -> Unit = {}) : PairedDevices {
     private val mutableState = MutableStateFlow(PairedDevicesState())
     override val state = mutableState.asStateFlow()
-    override val localAddresses: List<String> get() = java.net.NetworkInterface.getNetworkInterfaces().toList()
-        .filter { it.isUp && !it.isLoopback }.flatMap { it.inetAddresses.toList() }
+    // An interface such as a VPN can disappear while it is listed, which throws instead of leaving it out.
+    override val localAddresses: List<String> get() = runCatching { java.net.NetworkInterface.getNetworkInterfaces().toList() }
+        .getOrDefault(emptyList()).filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }.flatMap { it.inetAddresses.toList() }
         .filter { it is java.net.Inet4Address && !it.isLoopbackAddress && !it.isMulticastAddress }
         .sortedByDescending { it.isSiteLocalAddress }.map { it.hostAddress }.distinct()
     private val supervisor = SupervisorJob()
@@ -75,7 +76,11 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
     }
     override suspend fun returnPlayback(deviceId: String, transferId: String): PlaybackTransfer {
         val response = playbackRequest(deviceId, "return-playback", transferId = transferId)
-        library.merge(requireNotNull(response.snapshot))
+        // Forgetting the device meanwhile deleted what it shared, so its snapshot must not bring that back.
+        incoming.withLock {
+            require(state.value.peers.any { it.deviceId == deviceId }) { "This device is no longer paired" }
+            library.merge(requireNotNull(response.snapshot))
+        }
         return library.remapPlayback(deviceId, requireNotNull(response.playback))
     }
     override suspend fun cancelPlaybackTransfer(deviceId: String, transferId: String) {
@@ -329,6 +334,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
     override suspend fun forget(deviceId: String) = incoming.withLock {
         store.database.records().delete("sync:peer:$deviceId")
         reloadPeers()
+        library.forgetPeer(deviceId)
         lifecycle.withLock { if (state.value.peers.isEmpty() && offer.get() == null) stopListening() }
     }
 

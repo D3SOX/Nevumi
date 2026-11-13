@@ -121,6 +121,6 @@ class AndroidDownloadJobs(context: Context, private val preferences: MusicPrefer
         const val DOWNLOAD_JOB = 1001
         const val PLAYLIST_JOB = 1002
         const val SOUNDCLOUD_JOB = 1003
-        const val YOUTUBE_JOB = 1004
+        const val YOUTUBE_JOB = 1005 // ReleaseJobService uses 1004.
     }
 }

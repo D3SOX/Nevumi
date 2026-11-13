@@ -226,14 +226,19 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         val byRemoteId = linked.filter { it.server?.id != null }.associateBy { requireNotNull(it.server?.id) }
         val provisional = linked.filter { it.server?.id == null && it.pendingSync }.associateBy { "Nevumi pending ${it.id}" }
         for ((index, remote) in remotes.withIndex()) {
+            var incomplete = false
             val imported = store.transaction {
                 val id = (byRemoteId[remote.id] ?: provisional[remote.name]?.takeIf { remote.owner == connection.username })?.id
                     ?: "server-playlist:${connection.serverId}:${remote.id}"
                 if (store.read<PlaylistRemoval>("playlist-removal:$id") != null) return@transaction null
                 val previous = playlists.get(id)
                 if (previous?.pendingSync == true) return@transaction null
-                val ids = remote.songIds.map { mapping[it] ?: if (changedOnly) { waiting = true; return@transaction null }
-                    else throw IllegalArgumentException("Refresh the server library before importing its playlists") }
+                // A scan between reading the catalogue and this playlist can add songs. The playlist keeps its saved copy until a
+                // later refresh knows them, since dropping them would remove them from the server on the next local edit.
+                val ids = remote.songIds.map { mapping[it] ?: run {
+                    if (changedOnly) waiting = true else incomplete = true
+                    return@transaction null
+                } }
                 val link = PlaylistServer(connection.serverId, remote.id, remote.name, remote.songIds, remote.owner,
                     readOnly = remote.readOnly || remote.owner != connection.username, baselineDescription = remote.description, coverArt = remote.coverArt,
                     changed = remote.changed)
@@ -247,6 +252,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
                     createdAt = time(remote.created) ?: now, updatedAt = updatedAt))
                 id to (remote.changed.isEmpty() || previous?.server?.changed != remote.changed)
             }
+            if (incomplete) skipped.incomplete()
             if (artwork != null && imported != null) {
                 val (id, changed) = imported
                 val key = "server-playlist-cover:$id"
@@ -419,7 +425,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
     }
 
     private suspend fun pendingPlaylist(connection: NavidromeClient, id: String): ServerPlaylist? {
-        val candidates = connection.playlists().filter { it.name == "Nevumi pending $id" && it.owner == connection.username }
+        val candidates = connection.playlists("Nevumi pending $id").filter { it.name == "Nevumi pending $id" && it.owner == connection.username }
         require(candidates.size <= 1) { "Multiple pending copies of this playlist exist on your music server" }
         return candidates.singleOrNull()
     }

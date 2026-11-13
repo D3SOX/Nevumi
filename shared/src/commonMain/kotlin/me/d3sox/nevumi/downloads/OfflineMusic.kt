@@ -28,7 +28,7 @@ import kotlinx.coroutines.sync.withLock
 @Serializable
 internal data class OfflineRequest(val trackId: String)
 
-private data class ManualDownloadBefore(val pinned: Boolean, val download: DownloadRecord?, val requested: Boolean)
+private data class ManualDownloadBefore(val pinned: Boolean, val download: DownloadRecord?, val requested: Boolean, val excluded: Boolean)
 
 class OfflineMusic(private val store: MusicStore, private val library: MusicLibrary,
     private val client: suspend () -> NavidromeClient?, private val directory: String,
@@ -148,7 +148,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     suspend fun requestUndoable(trackIds: List<String>): suspend () -> Unit {
         val before = store.transaction { trackIds.distinct().associateWith { id ->
             ManualDownloadBefore(store.read<TrackPins>("pins:$id")?.owners?.contains("manual") == true,
-                store.read("download:$id"), store.read<OfflineRequest>("request:$id") != null)
+                store.read("download:$id"), store.read<OfflineRequest>("request:$id") != null,
+                store.read<OfflineRequest>("excluded:$id") != null)
         } }
         request(trackIds)
         return {
@@ -158,10 +159,11 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                     val remaining = pins.owners - "manual"
                     if (remaining.isEmpty()) store.database.records().delete("pins:$id")
                     else store.put("pins:$id", "pins", pins.copy(owners = remaining))
+                    // Requesting cleared an earlier exclusion, so only that one comes back, also if a playlist pinned the song since.
+                    if (previous.excluded && !previous.requested) store.put("excluded:$id", "offline-exclusions", OfflineRequest(id))
                     if (remaining.isEmpty() && !previous.requested) {
                         store.database.records().delete("request:$id")
                         if (previous.download == null) {
-                            store.put("excluded:$id", "offline-exclusions", OfflineRequest(id))
                             AudioDownloads(store, library, null, directory).remove(id)
                         } else if (previous.download.status == DownloadStatus.COMPLETE) {
                             store.put("download:$id", "downloads", previous.download)

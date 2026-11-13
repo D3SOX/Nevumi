@@ -151,6 +151,32 @@ class ScrobblingTest {
     }
 
     @Test
+    fun anUnavailableNavidromeConnectionDoesNotHoldBackOtherServices() = runBlocking {
+        val directory = Files.createTempDirectory("scrobbling-without-navidrome")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val vault = SecretServiceVault("me.d3sox.nevumi.tests.${Uuid.random()}")
+        var profileId: String? = null
+        val http = HttpClient(MockEngine { request ->
+            if (request.url.encodedPath.endsWith("validate-token")) respond("""{"valid":true,"user_name":"fixture"}""", headers = jsonHeaders)
+            else respond("""{"status":"ok"}""", headers = jsonHeaders)
+        })
+        var scrobbling: Scrobbling? = null
+        try {
+            val library = MusicLibrary(store)
+            val worker = Scrobbling(store, library, http, vault, network = MutableStateFlow(DownloadNetwork(connected = true)),
+                navidrome = { throw IOException("Sign in to Tailscale in Tunnel settings") }, now = { 1_000 }); scrobbling = worker
+            profileId = worker.connectListenBrainz("fixture-token").id
+            worker.start()
+            recordQualifiedListen(store, library, "one")
+            withTimeout(3_000) { while (worker.submissions().singleOrNull()?.state != ScrobbleState.CONFIRMED) delay(10) }
+            assertNull(worker.error.value)
+        } finally {
+            scrobbling?.closeAndJoin(); profileId?.let { vault.delete("scrobbling:$it") }
+            http.close(); store.close(); directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun disablingAServiceStopsDeliveryAndDiscardingPendingHistoryLeavesOnlyReceiptsThatPreventDuplicates() = runBlocking {
         val directory = Files.createTempDirectory("scrobbling-controls")
         val store = openMusicStore(directory.resolve("library.db").toString())

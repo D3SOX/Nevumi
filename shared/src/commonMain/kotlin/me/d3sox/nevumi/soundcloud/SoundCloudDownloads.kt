@@ -127,7 +127,8 @@ class DirectoryMusicFiles(override val folder: String) : DeviceMusicFiles {
         val root = folder.toPath()
         fs.createDirectories(root)
         val name = downloadFileName(fileName)
-        val partial = root / ".$name.${Uuid.random()}.part"
+        // Named without the song, so a name near the file system's length limit still fits.
+        val partial = root / ".${Uuid.random()}.part"
         try {
             val sink = fs.sink(partial).buffer()
             try { write(sink) } finally { sink.close() }

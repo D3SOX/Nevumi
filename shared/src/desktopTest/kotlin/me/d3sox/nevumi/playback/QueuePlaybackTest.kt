@@ -85,6 +85,27 @@ class QueuePlaybackTest {
     }
 
     @Test
+    fun skippingPastOnlyUnavailableSongsSaysWhyNothingPlays() = runBlocking {
+        val directory = Files.createTempDirectory("skip-unavailable-songs")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val music = Files.createDirectory(directory.resolve("music"))
+        Files.copy(Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac"), music.resolve("song.flac"))
+        val local = LocalFiles(library).scan(music.toString()).single()
+        // No server is connected, so its song cannot play.
+        val server = library.importTrack(TrackMetadata("Server song"), TrackSource("server:test:1", SourceKind.SERVER, "1"))
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        try {
+            withTimeout(3_000) { player.state.first { it.libraryReady } }
+            player.playTrack(local.id, listOf(local.id, server.id)).join(); player.pause().join()
+            kotlin.test.assertNull(player.state.value.error)
+            player.skip(1).join()
+            assertEquals("No upcoming song has an available audio source", player.state.value.error)
+            assertEquals(local.id, player.state.value.queue.currentTrackId)
+        } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun clearingTheQueueCanBeUndoneWithoutRewindingPlayback() = runBlocking {
         val directory = Files.createTempDirectory("undo-clear-queue")
         val store = openMusicStore(directory.resolve("music.db").toString())

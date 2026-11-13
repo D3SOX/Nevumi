@@ -434,6 +434,28 @@ class LibrarySyncTest {
     }
 
     @Test
+    fun forgettingAPeerDeletesItsUnmatchedSongsAndSharedLibrary() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-library-sync-forget")
+        val firstStore = openMusicStore(directory.resolve("phone.db").toString())
+        val secondStore = openMusicStore(directory.resolve("desktop.db").toString())
+        try {
+            val first = MusicLibrary(firstStore)
+            val phone = first.importTrack(TrackMetadata("Only on the phone", durationMs = 180_000),
+                TrackSource("local:phone", SourceKind.LOCAL, "/phone/song.mp3"))
+            first.setFavorite(phone.id, true)
+            val snapshot = LibrarySync(firstStore, first).snapshot()
+            val desktopSync = LibrarySync(secondStore, MusicLibrary(secondStore))
+            desktopSync.merge(snapshot)
+            assertEquals(1, desktopSync.unmatched().size)
+            desktopSync.forgetPeer(snapshot.deviceId)
+            assertEquals(emptyList(), desktopSync.unmatched())
+            assertEquals(null, secondStore.read<SyncSnapshot>("sync:received:${snapshot.deviceId}"))
+            kotlin.test.assertFails { desktopSync.mapTrack(snapshot.deviceId, phone.id, phone.id) }
+            Unit
+        } finally { firstStore.close(); secondStore.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun sharedListeningHistoryCountsEachPlayOnceAndNeverRescrobblesImportedEvents() = runBlocking {
         val directory = Files.createTempDirectory("nevumi-library-sync-history")
         val firstStore = openMusicStore(directory.resolve("phone.db").toString())

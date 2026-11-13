@@ -207,6 +207,35 @@ class NavidromeChangesTest {
     }
 
     @Test
+    fun aRefreshSkipsAPlaylistWithSongsTheCatalogueDoesNotKnowYetAndImportsTheRest() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-unknown-playlist-song")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        fun playlist(id: String, songs: List<String>) = """{"subsonic-response":{"status":"ok","playlist":{"id":"$id","name":"$id",""" +
+            """"owner":"fixture","changed":"t1","entry":[${songs.joinToString(",") { """{"id":"$it"}""" }}]}}}"""
+        val http = HttpClient(MockEngine { request ->
+            val parameters = request.url.parameters
+            when (request.url.encodedPath) {
+                "/rest/search3.view" -> respond(if (parameters["songOffset"] == "0")
+                    """{"subsonic-response":{"status":"ok","searchResult3":{"song":[{"id":"a","title":"A"}]}}}"""
+                    else """{"subsonic-response":{"status":"ok","searchResult3":{"song":[]}}}""")
+                "/rest/getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[""" +
+                    """{"id":"scanned","changed":"t1"},{"id":"known","changed":"t1"}]}}}""")
+                // Songs the server added after the catalogue was read.
+                "/rest/getPlaylist.view" -> respond(if (parameters["id"] == "scanned") playlist("scanned", listOf("a", "new")) else playlist("known", listOf("a")))
+                else -> error("Unexpected request: ${request.url.encodedPath}")
+            }
+        })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "test"), retryDelaysMillis = listOf(1, 1))
+            val changes = NavidromeChanges(store, MusicLibrary(store)) { client }
+            val skipped = SkippedItems()
+            assertEquals(1, changes.refreshLibrary(client, skipped = skipped).size)
+            assertEquals(1, skipped.playlists)
+            assertEquals(listOf("known"), Playlists(store).all().mapNotNull { it.server?.id })
+        } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun aRefreshStopsSkippingOnceTheServerIsGoneOrSeveralItemsInARowFail() = runBlocking {
         val slow = NavidromeRequestException("The music server took too long to respond. Try again later.", connectionFailure = true)
         val skipped = SkippedItems(limit = 3)

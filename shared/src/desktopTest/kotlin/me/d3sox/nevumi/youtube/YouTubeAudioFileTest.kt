@@ -81,5 +81,8 @@ class YouTubeAudioFileTest {
         assertEquals("Live in Paris" to "Some Channel", YouTubeTrack("a", "Live in Paris", "Some Channel").suggestedTags())
         assertEquals("Daft Punk - One More Time.m4a", youTubeFileName(ScGateTags("One More Time", "Daft Punk"), artistTitle = true))
         assertEquals("ACDC.m4a", youTubeFileName(ScGateTags("AC/DC", ""), artistTitle = false))
+        val long = youTubeFileName(ScGateTags("夜".repeat(100) + "🎵", "歌手"), artistTitle = true)
+        assertEquals(true, long.encodeToByteArray().size <= 255, "A name must fit the file system's 255-byte limit")
+        assertEquals("歌手 - " + "夜".repeat(63) + ".m4a", long)
     }
 }

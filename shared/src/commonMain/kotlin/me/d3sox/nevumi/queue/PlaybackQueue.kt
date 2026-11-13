@@ -307,8 +307,6 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
             unshuffledEntryIds = if (shuffle && current != null) (listOf(current) + remaining).map { it.id } else null), replacement = true)
     }
 
-    suspend fun clearUpcoming() = clear(QueueClear.ALL)
-
     suspend fun clear(scope: QueueClear) = store.transaction {
         val current = snapshot()
         val seen = mutableSetOf<String>().apply { current.currentTrackId?.let(::add) }

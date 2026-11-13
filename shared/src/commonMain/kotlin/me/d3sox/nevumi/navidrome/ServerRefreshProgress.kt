@@ -41,6 +41,8 @@ class SkippedItems(private val limit: Int = 10) {
     internal suspend fun delivered() = lock.withLock { inARow = 0 }
     internal suspend fun playlist(failure: NavidromeRequestException) = skip(failure) { playlists++ }
     internal suspend fun cover(failure: NavidromeRequestException) = skip(failure) { covers++ }
+    /** A playlist that names songs the catalogue does not know yet; the server delivered it, so it does not count towards [limit]. */
+    internal suspend fun incomplete() = lock.withLock { playlists++ }
 
     private suspend fun skip(failure: NavidromeRequestException, count: () -> Unit) {
         if (failure.stopsRefresh) throw failure
