@@ -84,6 +84,8 @@ class ActionUndoTest {
             withTimeout(3_000) { player.state.first { it.libraryReady } }
             assertNotNull(request().undo)().join()
             assertFalse(song.id in offline.state.value, "Undo must cancel a newly requested download")
+            assertNull(store.read<me.d3sox.nevumi.downloads.OfflineRequest>("excluded:${song.id}"),
+                "Undo must not keep the song from downloading with a playlist later")
             request()
             assertNotNull(request().undo)().join()
             assertTrue(song.id in offline.state.value, "Undo must keep a download that was already requested")

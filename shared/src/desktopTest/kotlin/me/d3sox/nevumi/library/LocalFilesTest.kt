@@ -226,6 +226,20 @@ class LocalFilesTest {
     }
 
     @Test
+    fun aLinkBackToAParentFolderIsScannedOnce() = runBlocking {
+        val directory = Files.createTempDirectory("local-folder-link-cycle")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val music = Files.createDirectory(directory.resolve("music"))
+        val link = music.resolve("again")
+        try {
+            Files.copy(Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac"),
+                music.resolve("song.flac"))
+            Files.createSymbolicLink(link, music)
+            assertEquals(1, LocalFiles(MusicLibrary(store)).scan(music.toString()).size)
+        } finally { Files.deleteIfExists(link); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun rescanningAFolderMarksDeletedAudioUnavailableAndKeepsItsFavorite() = runBlocking {
         val directory = Files.createTempDirectory("local-folder-reconcile")
         val store = openMusicStore(directory.resolve("library.db").toString())

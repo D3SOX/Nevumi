@@ -75,6 +75,38 @@ class NavidromePrivacyTest {
     }
 
     @Test
+    fun aSongWithoutAFileEntryStaysInTheCatalogueAndANamedPlaylistLookupFetchesOnlyThatPlaylist() = runBlocking {
+        val fetched = mutableListOf<String>()
+        val json = headersOf(HttpHeaders.ContentType, "application/json")
+        val http = HttpClient(MockEngine { request ->
+            val parameters = request.url.parameters
+            when {
+                request.url.encodedPath.endsWith("/rest/ping.view") -> respond("""{"subsonic-response":{"status":"ok","type":"navidrome"}}""", headers = json)
+                request.url.encodedPath.endsWith("/auth/login") -> respond("""{"token":"session"}""", headers = json)
+                // Song b was scanned after the file catalogue was read.
+                request.url.encodedPath.endsWith("/api/song") -> respond(if (parameters["_start"] == "0")
+                    """[{"id":"a","path":"A/a.flac","libraryId":1}]""" else "[]", headers = json)
+                request.url.encodedPath.endsWith("/rest/search3.view") -> respond(if (parameters["songOffset"] == "0")
+                    """{"subsonic-response":{"status":"ok","searchResult3":{"song":[{"id":"a","title":"A"},{"id":"b","title":"B"}]}}}"""
+                    else """{"subsonic-response":{"status":"ok","searchResult3":{"song":[]}}}""", headers = json)
+                request.url.encodedPath.endsWith("/rest/getPlaylists.view") -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[""" +
+                    """{"id":"1","name":"Mix"},{"id":"2","name":"Nevumi pending x"}]}}}""", headers = json)
+                request.url.encodedPath.endsWith("/rest/getPlaylist.view") -> {
+                    val id = requireNotNull(parameters["id"]).also { fetched += it }
+                    respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"$id","name":"Nevumi pending x","owner":"fixture","entry":[]}}}""", headers = json)
+                }
+                else -> error("Unexpected request: ${request.url.encodedPath}")
+            }
+        })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "private-password"))
+            assertEquals(listOf("A/a.flac", null), client.songs(includeFilePaths = true).sortedBy { it.id }.map { it.filePath })
+            assertEquals(listOf("2"), client.playlists("Nevumi pending x").map { it.id })
+            assertEquals(listOf("2"), fetched)
+        } finally { http.close() }
+    }
+
+    @Test
     fun repeatedNativeFileRefreshesReuseTheirAuthenticatedSession() = runBlocking {
         var logins = 0
         val http = HttpClient(MockEngine { request ->

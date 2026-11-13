@@ -58,7 +58,7 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         roots().filter { location ->
             if (location.startsWith("content:") || location == "device") return@filter false
             val root = File(location).canonicalFile
-            val files = root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter {
+            val files = root.walkMusicFolders().filter {
                 it.isFile && it.extension.lowercase() in localMusicExtensions && (it.canonicalPath in chosen ||
                     folders.allows(it.canonicalFile.parent.orEmpty(), it.canonicalFile.parentFile?.relativeToOrNull(root)?.path))
             }.associateBy { "local:${it.canonicalPath}" }
@@ -91,7 +91,7 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
             .minByOrNull { it.path.length } ?: root
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
-        val files = root.walkTopDown().onEnter { it.name != ".nevumi-edits" }.filter { it.isFile && it.extension.lowercase() in
+        val files = root.walkMusicFolders().filter { it.isFile && it.extension.lowercase() in
             localMusicExtensions && (!followRules || it.canonicalPath in chosen || folders.allows(it.canonicalFile.parent.orEmpty(),
                 it.canonicalFile.parentFile?.relativeToOrNull(base)?.path)) }.toList()
         onProgress(LocalScanProgress(0, files.size))
@@ -128,4 +128,10 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         library.setSourceAvailability(missing, false)
         imported
     }
+}
+
+// A symbolic link back to a parent folder would otherwise be walked again and again.
+private fun File.walkMusicFolders(): FileTreeWalk {
+    val entered = mutableSetOf<String>()
+    return walkTopDown().onEnter { it.name != ".nevumi-edits" && entered.add(it.canonicalPath) }
 }

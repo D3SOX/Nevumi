@@ -270,6 +270,15 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
 
     suspend fun merge(snapshot: SyncSnapshot) = work.withLock { mergeSnapshot(snapshot) }
 
+    /** Deletes what a removed device shared but this library has not merged. Song matches stay, so pairing it again reuses them. */
+    suspend fun forgetPeer(peerDeviceId: String) = work.withLock { store.transaction {
+        store.database.records().delete("sync:received:$peerDeviceId")
+        for (previous in unmatched().filter { it.peerDeviceId == peerDeviceId })
+            store.database.records().delete("sync:unmatched:$peerDeviceId:${previous.track.key}")
+        for (previous in pendingFolders().filter { it.peerDeviceId == peerDeviceId })
+            store.database.records().delete("sync:pending-folder:$peerDeviceId:${previous.playlistId}")
+    } }
+
     private suspend fun mergeSnapshot(incoming: SyncSnapshot) {
         require(incoming.version == 1) { "Unsupported sync protocol" }
         require(incoming.deviceId != deviceId()) { "Cannot synchronize this device with itself" }

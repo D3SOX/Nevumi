@@ -80,7 +80,21 @@ private fun fileNamePart(value: String) = whitespace.replace(unsafeFileCharacter
 /** The name a download is saved with. */
 internal fun youTubeFileName(tags: ScGateTags, artistTitle: Boolean): String {
     val title = fileNamePart(tags.title).ifEmpty { "Unknown Title" }
-    return (if (artistTitle) "${fileNamePart(tags.artist).ifEmpty { "Unknown Artist" }} - $title" else title).take(180) + ".m4a"
+    return (if (artistTitle) "${fileNamePart(tags.artist).ifEmpty { "Unknown Artist" }} - $title" else title).takeUtf8(200).trimEnd() + ".m4a"
+}
+
+// File systems such as ext4 limit names to 255 bytes, which non-Latin titles reach with far fewer characters.
+private fun String.takeUtf8(maxBytes: Int): String {
+    var bytes = 0
+    var end = 0
+    while (end < length) {
+        val pair = this[end].isHighSurrogate() && end + 1 < length && this[end + 1].isLowSurrogate()
+        val size = when { pair -> 4; this[end].code < 0x80 -> 1; this[end].code < 0x800 -> 2; else -> 3 }
+        if (bytes + size > maxBytes) break
+        bytes += size
+        end += if (pair) 2 else 1
+    }
+    return substring(0, end)
 }
 
 /** Converts the downloaded [source] into a plain M4A at [target] and writes [tags], [year] and [cover] into it. */

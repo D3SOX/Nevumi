@@ -108,7 +108,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         worker = scope.launch {
             while (isActive) {
                 try {
-                    val server = navidrome()
+                    val server = reachableNavidrome()
                     if (server != null && profiles().none { it.service == ScrobblingService.NAVIDROME && it.serverId == server.serverId })
                         configureNavidrome()
                     val reportError = reportNowPlaying()
@@ -120,6 +120,11 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
             }
         }
     }
+
+    // A signed-out tunnel or locked server password only holds back Navidrome; the other services still scrobble.
+    private suspend fun reachableNavidrome(): NavidromeClient? = try { navidrome() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { null }
 
     suspend fun connectListenBrainz(token: String, baseUrl: String = "https://api.listenbrainz.org"): ScrobblingProfile {
         val address = Url(baseUrl)
@@ -317,7 +322,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         var error: String? = null
         for (profile in profiles) {
             if (nowPlayingSent[profile.id] == playbackId || (nowPlayingRetryAt[profile.id] ?: 0) > now()) continue
-            val connected = if (profile.service == ScrobblingService.NAVIDROME) navidrome() else null
+            val connected = if (profile.service == ScrobblingService.NAVIDROME) reachableNavidrome() else null
             val songId = if (profile.service == ScrobblingService.NAVIDROME) track.sources.firstOrNull {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${profile.serverId}:")
             }?.location ?: continue else null
@@ -355,7 +360,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
             val profile = profiles[entry.profileId] ?: continue
             if (profile.id in unauthorized) continue
             val listen = entry.listen ?: continue
-            val connected = if (profile.service == ScrobblingService.NAVIDROME) navidrome() else null
+            val connected = if (profile.service == ScrobblingService.NAVIDROME) reachableNavidrome() else null
             if (profile.service == ScrobblingService.NAVIDROME && connected?.serverId != profile.serverId) continue
             val token = if (profile.service == ScrobblingService.NAVIDROME) "" else vault.read("scrobbling:${profile.id}") ?: continue
             save(entry.copy(state = ScrobbleState.IN_FLIGHT, attempts = entry.attempts + 1))

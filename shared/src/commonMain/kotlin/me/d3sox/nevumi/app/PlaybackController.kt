@@ -295,7 +295,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 loadSnapshot(selected, play = playing)
                 queueLoaded = true
                 context.update { it.copy(queue = selected) }
-            }
+            } else require(passed == 0) { "No upcoming song has an available audio source" }
         }
     }
     fun setSleepTimer(minutes: Int?) = context.action {

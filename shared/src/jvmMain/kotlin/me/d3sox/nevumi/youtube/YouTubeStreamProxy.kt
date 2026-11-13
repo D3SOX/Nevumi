@@ -57,13 +57,15 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
             client.soTimeout = 60_000
             val input = BufferedInputStream(client.getInputStream())
             val requestLine = input.line() ?: return
-            val headers = generateSequence { input.line()?.takeIf { it.isNotEmpty() } }
-                .mapNotNull { line -> line.indexOf(':').takeIf { it > 0 }?.let { line.substring(0, it).trim().lowercase() to line.substring(it + 1).trim() } }
-                .toMap()
             val (method, path) = requestLine.split(' ').let { (it.getOrNull(0) ?: "") to (it.getOrNull(1) ?: "") }
             val output = client.getOutputStream()
             val videoId = path.removePrefix("/$token/").takeIf { path.startsWith("/$token/") && '/' !in it }
             if (videoId == null || method !in setOf("GET", "HEAD")) return output.status(404, "Not Found")
+            // Players send a handful of headers; a limit keeps a misbehaving client from filling memory with them.
+            val headers = generateSequence { input.line()?.takeIf { it.isNotEmpty() } }
+                .onEachIndexed { index, _ -> if (index >= 100) throw IOException("Too many request headers") }
+                .mapNotNull { line -> line.indexOf(':').takeIf { it > 0 }?.let { line.substring(0, it).trim().lowercase() to line.substring(it + 1).trim() } }
+                .toMap()
             val range = headers["range"]?.let(::range)
             var audio = try { runBlocking { find(videoId, false) } } catch (_: Exception) { return output.status(502, "Bad Gateway") }
             val total = audio.contentLength.takeIf { it > 0 } ?: try { length(audio.url) }

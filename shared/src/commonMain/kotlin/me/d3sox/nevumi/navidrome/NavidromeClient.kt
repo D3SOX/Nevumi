@@ -230,9 +230,11 @@ class NavidromeClient(
     private suspend fun playlistSummaries(): List<JsonObject> = request("getPlaylists")["playlists"]
         ?.jsonObject?.get("playlist")?.jsonArray.orEmpty().map { it.jsonObject }
 
-    suspend fun playlists(): List<ServerPlaylist> = serverRequest {
+    /** Downloads every playlist, or with [name] only the playlists the server's list gives that name. */
+    suspend fun playlists(name: String? = null): List<ServerPlaylist> = serverRequest {
         val limit = Semaphore(CONCURRENT_REQUESTS)
-        coroutineScope { playlistSummaries().map { summary -> async { limit.withPermit { playlist(summary.getValue("id").jsonPrimitive.content) } } }.awaitAll() }
+        val summaries = playlistSummaries().filter { name == null || it["name"]?.jsonPrimitive?.content == name }
+        coroutineScope { summaries.map { summary -> async { limit.withPermit { playlist(summary.getValue("id").jsonPrimitive.content) } } }.awaitAll() }
     }
 
     /** Maps each playlist ID to its last change time with a single request. */
@@ -543,10 +545,8 @@ class NavidromeClient(
         }
         if (!includeFilePaths) songs else {
             val files = musicFiles(onProgress).associateBy { it.songId }
-            songs.map { song ->
-                val file = requireNotNull(files[song.id]) { "Navidrome did not provide this song's music file" }
-                song.copy(filePath = file.path, fileLibraryId = file.libraryId)
-            }
+            // A song scanned between both reads has no file entry yet; it stays playable and becomes editable on the next refresh.
+            songs.map { song -> files[song.id]?.let { song.copy(filePath = it.path, fileLibraryId = it.libraryId) } ?: song }
         }
     }
 
