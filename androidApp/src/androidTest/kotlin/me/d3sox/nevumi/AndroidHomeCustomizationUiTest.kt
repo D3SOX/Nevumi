@@ -15,7 +15,7 @@ class AndroidHomeCustomizationUiTest {
     @Test fun theHomeSectionOrderCanBeChangedAndSurvivesActivityRecreation() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+            compose.waitForLibrary(app.controller)
             compose.onNodeWithContentDescription("Home").performClick()
             compose.onNodeWithContentDescription("Customize Home").performClick()
             compose.onNodeWithContentDescription("Move Mixes down").performClick()

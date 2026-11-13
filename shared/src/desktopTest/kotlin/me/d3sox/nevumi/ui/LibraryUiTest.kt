@@ -37,7 +37,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Favorites, 1 of 2 songs").assertIsDisplayed()
                 onNodeWithText("Song 0").assertIsDisplayed()
                 onNodeWithText("Song 2").assertDoesNotExist()
@@ -70,7 +70,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithTag("library-pager").performTouchInput { swipeLeft() }
                 onNodeWithContentDescription("Recently added").assertIsSelected()
                 val pageBounds = onNodeWithTag("library-tab:RECENT").fetchSemanticsNode().boundsInRoot

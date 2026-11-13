@@ -31,7 +31,7 @@ class ArtworkMotionUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id).join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 onNodeWithTag("mini-player").performClick()

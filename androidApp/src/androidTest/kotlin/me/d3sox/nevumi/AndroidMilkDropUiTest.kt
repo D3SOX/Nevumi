@@ -31,7 +31,7 @@ class AndroidMilkDropUiTest {
         }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 runBlocking { app.controller.playTrack(track.id, listOf(track.id)).join(); app.controller.pause().join() }
                 compose.waitUntil(5_000) { app.controller.state.value.playback.durationMs > 0 }
                 compose.onNodeWithTag("mini-player").performClick()
@@ -133,7 +133,7 @@ class AndroidMilkDropUiTest {
             instrumentation.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 runBlocking {
                     app.controller.playTrack(track.id, listOf(track.id)).join()
                     app.controller.setQueueRepeat(me.d3sox.nevumi.playback.RepeatMode.ONE).join()

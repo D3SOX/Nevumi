@@ -25,7 +25,7 @@ class SavedQueuesUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(tracks[0].id, listOf(tracks[0].id)).join(); controller.pause().join() }
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Saved queues").performScrollTo().performClick()
@@ -74,7 +74,7 @@ class SavedQueuesUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id, listOf(track.id)).join(); controller.pause().join(); controller.saveQueue("Evening").join() }
                 fun selectFromDetailPage() {
                     onNode(hasText("Evening") and hasClickAction()).performClick()
@@ -108,7 +108,7 @@ class SavedQueuesUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(tracks[1].id, tracks.map { it.id }, 1, "Album").join(); controller.pause().join() }
                 val playing = controller.state.value.queue.currentEntryId
                 onNodeWithTag("mini-player").performClick()

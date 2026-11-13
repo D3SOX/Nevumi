@@ -50,7 +50,7 @@ class AndroidAdaptiveNavigationUiTest {
             scenario.onActivity { originalOrientation = it.requestedOrientation }
             scenario.rotate(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
             try {
-                compose.waitUntil(5_000) { controller.state.value.libraryReady }
+                compose.waitForLibrary(controller)
                 compose.onNodeWithText("More").assertIsSelected()
                 val items = hasClickAction() and hasAnyAncestor(hasTestTag("library-navigation"))
                 val portraitCount = compose.onAllNodes(items).fetchSemanticsNodes().size
@@ -79,7 +79,7 @@ class AndroidAdaptiveNavigationUiTest {
     @Test fun enteringACodeDirectlyDoesNotRequestOrOpenTheCameraAndRetainsInvalidInput() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
         ActivityScenario.launch(MainActivity::class.java).use {
-            compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+            compose.waitForLibrary(app.controller)
             compose.onNodeWithContentDescription("Settings").performClick()
             compose.onNodeWithText("Paired devices").performScrollTo().performClick()
             compose.onNodeWithText("Enter code").performScrollTo().performClick()

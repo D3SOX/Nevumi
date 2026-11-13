@@ -30,7 +30,7 @@ class AboutUiTest {
                         override fun openUri(uri: String) { opened = uri }
                     }) { MusicPlayerApp(controller) }
                 }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("About Nevumi").performScrollTo().performClick()
                 val logo = onNodeWithContentDescription("Nevumi logo").assertIsDisplayed().fetchSemanticsNode().boundsInRoot

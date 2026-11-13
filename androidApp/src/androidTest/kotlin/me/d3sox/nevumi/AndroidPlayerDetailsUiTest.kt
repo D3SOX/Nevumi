@@ -33,7 +33,7 @@ class AndroidPlayerDetailsUiTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val track = runBlocking {
                     app.controller.updatePreferences { it.copy(themeMode = ThemeMode.DARK, amoledBlack = true) }.join()
                     app.controller.library.importTrack(TrackMetadata("Glow track", "Glow artist"),
@@ -171,7 +171,7 @@ class AndroidPlayerDetailsUiTest {
         instrumentation.context.assets.open("fixture-cover.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val tracks = runBlocking { listOf("Playing cover", "Queued cover").map { title ->
                     app.controller.library.importTrack(TrackMetadata(title, "Cover artist", durationMs = 90_000),
                         TrackSource(title, SourceKind.LOCAL, audio.path))
@@ -253,7 +253,7 @@ class AndroidPlayerDetailsUiTest {
         }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 assertTrue(app.controller.state.value.preferences.showAudioInfo)
                 val tracks = runBlocking { files.mapIndexed { index, file ->
                     app.controller.library.importTrack(TrackMetadata("Audio details $index", durationMs = 3_000),
@@ -300,7 +300,7 @@ class AndroidPlayerDetailsUiTest {
         instrumentation.context.assets.open("fixture-cover.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val track = runBlocking { app.controller.library.importTrack(TrackMetadata("Menu fixture", "Menu artist", durationMs = 90_000),
                     TrackSource("menu-details", SourceKind.LOCAL, audio.path)) }
                 val cover = org.jaudiotagger.audio.AudioFileIO.read(audio).tag.firstArtwork.binaryData

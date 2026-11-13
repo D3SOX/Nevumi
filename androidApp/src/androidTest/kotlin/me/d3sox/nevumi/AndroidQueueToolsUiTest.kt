@@ -23,7 +23,7 @@ class AndroidQueueToolsUiTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                compose.waitUntil(5_000) { controller.state.value.libraryReady }
+                compose.waitForLibrary(controller)
                 val tracks = runBlocking { (1..3).map { controller.library.importTrack(TrackMetadata("Snapshot song $it", "Artist", durationMs = 3_000),
                     TrackSource("snapshot:$it", SourceKind.LOCAL, audio.path)) } }
                 runBlocking {

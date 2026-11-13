@@ -31,7 +31,7 @@ class WaveformPreparationUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, audioWaveforms = reader) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithTag("audio-waveform").assertIsDisplayed()
@@ -56,7 +56,7 @@ class WaveformPreparationUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Waveforms").assertDoesNotExist()
                 onNodeWithText("Playback").performScrollTo().performClick()
@@ -89,7 +89,7 @@ class WaveformPreparationUiTest {
             repeat(2) { restart ->
                 runComposeUiTest {
                     setContent { MusicPlayerApp(controller, audioWaveforms = reader()) }
-                    waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                    waitForLibrary(controller)
                     onNodeWithContentDescription("Settings").performClick()
                     onNodeWithText("Playback").performScrollTo().performClick()
                     onNodeWithText("Waveforms").performScrollTo().performClick()
@@ -122,7 +122,7 @@ class WaveformPreparationUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, audioWaveforms = reader) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(tracks[0].id, tracks.map { it.id }).join() }
                 waitUntil(timeoutMillis = 2_000) { controller.state.value.playback.playing }
                 waitUntil(timeoutMillis = 6_000) { decodes.get() == 3 }

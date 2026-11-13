@@ -180,7 +180,7 @@ class AndroidTrackInteractionUiTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val tracks = runBlocking { (0 until count).map { index ->
                     val title = "Song ${index.toString().padStart(2, '0')}"
                     app.controller.library.importTrack(TrackMetadata(title), TrackSource(title, SourceKind.LOCAL, audio.path))

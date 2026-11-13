@@ -32,7 +32,7 @@ class PlayingOriginUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.playTrack(songs[0].id, listOf(songs[0].id), contextName = "My album").join()
                     controller.pause().join()

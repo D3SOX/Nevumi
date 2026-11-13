@@ -25,7 +25,7 @@ class AndroidPlayerResumeUiTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use { input.copyTo(it) } }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { controller.state.value.libraryReady }
+                compose.waitForLibrary(controller)
                 runBlocking {
                     val track = controller.library.importTrack(TrackMetadata("Resume fixture", durationMs = 3_000),
                         TrackSource("resume-fixture", SourceKind.LOCAL, audio.path))

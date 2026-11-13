@@ -69,7 +69,7 @@ class AppShortcutsUiTest {
                 val spaceUp = key(KeyEvent.KEY_RELEASED, KeyEvent.VK_SPACE, ' ')
                 fun withModifier(modifier: Int, code: Int) = send(listOf(key(KeyEvent.KEY_PRESSED, code, modifiers = modifier),
                     key(KeyEvent.KEY_RELEASED, code, modifiers = modifier)))
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runOnIdle { controller.playTrack(first.id, listOf(first.id, second.id)) }
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.playback.playing }
                 runOnIdle { window.requestFocus() }

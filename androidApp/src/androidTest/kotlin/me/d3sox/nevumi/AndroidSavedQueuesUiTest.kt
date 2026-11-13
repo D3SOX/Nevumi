@@ -24,7 +24,7 @@ class AndroidSavedQueuesUiTest {
             TrackSource("source:$it", SourceKind.LOCAL, file.path)) } }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                compose.waitUntil(5_000) { controller.state.value.libraryReady }
+                compose.waitForLibrary(controller)
                 runBlocking { controller.playTrack(tracks[0].id, listOf(tracks[0].id)).join(); controller.pause().join(); controller.seek(600).join() }
                 compose.waitUntil(5_000) { controller.state.value.playback.positionMs in 550..650 }
                 compose.onNodeWithContentDescription("Settings").performClick()

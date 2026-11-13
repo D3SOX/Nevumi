@@ -49,7 +49,7 @@ class LibraryHeaderUiTest {
         try {
             runSkikoComposeUiTest(size = size) {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 fun header(description: String) = onNodeWithTag("library-header").assertContentDescriptionEquals(description)
                 header("Songs, 3 songs")
                 openLibraryPage("Favorites")

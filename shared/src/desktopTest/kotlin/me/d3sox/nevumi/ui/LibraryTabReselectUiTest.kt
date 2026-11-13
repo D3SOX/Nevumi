@@ -35,7 +35,7 @@ class LibraryTabReselectUiTest {
         try {
             runSkikoComposeUiTest(size = Size(390f, 844f)) {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 fun header(description: String) = onNodeWithTag("library-header").assertContentDescriptionEquals(description)
                 openLibraryPage("Playlists")
                 onNodeWithText("Night mixes").performClick()

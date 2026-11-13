@@ -13,6 +13,7 @@ cleanup() {
     python scripts/test-navidrome.py stop --sftp
     python scripts/test-navidrome.py stop
     python scripts/test-subsonic.py stop
+    if [[ "$mode" == android ]]; then bash scripts/stop-emulator.sh; fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM

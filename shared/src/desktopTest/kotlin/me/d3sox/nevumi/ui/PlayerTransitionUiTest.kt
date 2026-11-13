@@ -34,7 +34,7 @@ class PlayerTransitionUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.size(1000.dp, 740.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.updatePreferences { it.copy(quickAction = TrackAction.FAVORITE) }.join()
                     controller.playTrack(track.id).join(); controller.pause().join()

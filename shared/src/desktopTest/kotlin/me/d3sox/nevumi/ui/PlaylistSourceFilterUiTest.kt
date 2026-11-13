@@ -99,7 +99,7 @@ class PlaylistSourceFilterUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Music sources").performClick()
                 onNodeWithText("Downloads").performClick()
                 for ((tab, label) in listOf("Albums" to "album", "Artists" to "artist", "Album artists" to "album artist",

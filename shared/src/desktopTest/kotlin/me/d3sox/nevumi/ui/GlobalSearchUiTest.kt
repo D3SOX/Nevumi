@@ -34,7 +34,7 @@ class GlobalSearchUiTest {
         try {
             runSkikoComposeUiTest(size = Size(420f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onAllNodesWithContentDescription("Search").assertCountEquals(1)
                 onNodeWithContentDescription("Search").assert(hasAnyAncestor(hasTestTag("library-navigation"))).performClick()
                 onNodeWithContentDescription("Search").assertIsSelected()
@@ -73,7 +73,7 @@ class GlobalSearchUiTest {
                     val savedState = rememberSaveableStateHolder()
                     if (visible) savedState.SaveableStateProvider("app") { MusicPlayerApp(controller) }
                 }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Search").performClick()
                 onNodeWithText("Enter a search term").assertIsDisplayed()
                 onNodeWithContentDescription("Search your library").performTextInput("Signal")
@@ -103,7 +103,7 @@ class GlobalSearchUiTest {
         try {
             runSkikoComposeUiTest(size = Size(420f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Search").performClick()
                 onNodeWithContentDescription("Search your library").performTextInput("Signal")
                 onNodeWithTag("search-type:SONGS").performClick()
@@ -148,7 +148,7 @@ class GlobalSearchUiTest {
         try {
             runSkikoComposeUiTest(size = Size(1000f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithTag("home-page").assertIsDisplayed()
                 onNodeWithContentDescription("Search").performClick()
                 onNodeWithTag("library-search-page").assertIsDisplayed()
@@ -196,7 +196,7 @@ class GlobalSearchUiTest {
         try {
             runSkikoComposeUiTest(size = Size(420f, 900f)) {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Search").performClick()
                 // Sections that show every result offer no See all.
                 onNodeWithContentDescription("Search your library").performTextInput("01")

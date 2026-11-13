@@ -23,7 +23,7 @@ class AndroidQueueSeekTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { controller.state.value.libraryReady }
+                compose.waitForLibrary(controller)
                 val tracks = runBlocking { (1..3).map { controller.library.importTrack(TrackMetadata("Seek song $it", durationMs = 3_000),
                     TrackSource("seek:$it", SourceKind.LOCAL, audio.path)) } }
                 runBlocking {

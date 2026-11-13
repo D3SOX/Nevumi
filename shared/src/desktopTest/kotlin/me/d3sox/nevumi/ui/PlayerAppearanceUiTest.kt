@@ -50,7 +50,7 @@ class PlayerAppearanceUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.size(360.dp, 740.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
                 // Wait for the visible playback accent to confirm the artwork palette has arrived.
                 waitUntil(timeoutMillis = 3_000) {

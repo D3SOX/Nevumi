@@ -22,7 +22,7 @@ class CustomColorsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 assertFalse(LibraryTab.ALBUM_ARTISTS in controller.state.value.preferences.libraryTabs)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Appearance").performScrollTo().performClick()
