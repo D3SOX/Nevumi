@@ -301,9 +301,12 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                 (positionMs.coerceAtLeast(0) / 1_000.0).toString(), "absolute+exact")))
             if (result < 0) {
                 if (!loadingFile) drainEvents()
-                if (!loadingFile) checked(result)
-                seekAfterLoad = positionMs.coerceAtLeast(0)
-                mutableStatus.update { it.copy(positionMs = positionMs.coerceAtLeast(0)) }
+                // The next file may also have finished loading meanwhile, so it accepts the seek now.
+                if (!loadingFile) command("seek", (positionMs.coerceAtLeast(0) / 1_000.0).toString(), "absolute+exact")
+                else {
+                    seekAfterLoad = positionMs.coerceAtLeast(0)
+                    mutableStatus.update { it.copy(positionMs = positionMs.coerceAtLeast(0)) }
+                }
             }
         }
     }
