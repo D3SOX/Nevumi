@@ -39,14 +39,17 @@ class ArtworkLibrary(private val directory: String) {
         val indexed = withIndex { index -> trackIds.filterTo(HashSet()) { index[key(it)] != null } }
         val missing = withContext(Dispatchers.IO) {
             trackIds.toSet().filter { id -> id !in indexed || coverIdFile(id).let {
-                FileSystem.SYSTEM.metadataOrNull(it) == null || FileSystem.SYSTEM.read(it) { readUtf8() } != coverId
+                FileSystem.SYSTEM.metadataOrNull(it) == null || coverId !in FileSystem.SYSTEM.read(it) { readUtf8() }.lines()
             } }
         }
         if (missing.isEmpty()) return
-        val original = client.coverArt(coverId)
+        val (original, versionedId) = client.versionedCoverArt(coverId)
+        // Both IDs name this image: the server lists the versioned one once it has hashed the cover, and keeps listing the
+        // requested one for covers it never hashes, such as disc covers served from the album's image.
+        val ids = setOf(coverId, versionedId).joinToString("\n")
         storedPaths().writes.withLock { withContext(Dispatchers.IO) {
             val bytes = artworkPreview(original)
-            missing.forEach { store(it, bytes); FileSystem.SYSTEM.write(coverIdFile(it)) { writeUtf8(coverId) } }
+            missing.forEach { store(it, bytes); FileSystem.SYSTEM.write(coverIdFile(it)) { writeUtf8(ids) } }
         } }
     }
 

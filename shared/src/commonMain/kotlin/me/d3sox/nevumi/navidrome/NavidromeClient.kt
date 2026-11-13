@@ -142,6 +142,19 @@ private suspend fun downloadCallback(block: suspend () -> Unit) {
 
 internal const val CONCURRENT_REQUESTS = 6
 
+/**
+ * Navidrome adds an image's content hash to its cover ID (`mf-<song>_<hash>`) only once a client has requested that cover,
+ * so the ID a refresh downloads changes by the next one. The response's ETag starts with the same hash, followed by the
+ * scaled size and encoding, so it names the ID that refresh will list. Other IDs and ETags are kept as they are.
+ */
+internal fun versionedCoverId(coverId: String, etag: String?): String {
+    if ('_' in coverId) return coverId
+    val hash = etag?.removePrefix("W/")?.trim('"')?.substringBefore('.') ?: return coverId
+    return if (hash.matches(coverHash)) "${coverId}_$hash" else coverId
+}
+
+private val coverHash = Regex("[0-9a-f]{8,64}")
+
 // Navidrome draws covers for half as many requests as it has CPU cores, at least two, and queues the rest; on a small server more would wait out their timeout.
 internal const val CONCURRENT_COVERS = 2
 
@@ -361,7 +374,10 @@ class NavidromeClient(
     }
 
     /** Downloads a cover scaled to [size] pixels, or the original image when [size] is null. */
-    suspend fun coverArt(coverId: String, size: Int? = 1024): ByteArray = retried { serverRequest { timedRequest {
+    suspend fun coverArt(coverId: String, size: Int? = 1024): ByteArray = versionedCoverArt(coverId, size).first
+
+    /** Downloads a cover like [coverArt], along with the ID the server lists that image under; see [versionedCoverId]. */
+    internal suspend fun versionedCoverArt(coverId: String, size: Int? = 1024): Pair<ByteArray, String> = retried { serverRequest { timedRequest {
         val salt = Uuid.random().toString()
         client().use { it.prepareGet("${baseUrl.trimEnd('/')}/rest/getCoverArt.view") {
             parameter("u", credentials.username)
@@ -377,7 +393,7 @@ class NavidromeClient(
             check(response.headers[HttpHeaders.ContentType]?.startsWith("image/") == true) {
                 "Server returned no artwork"
             }
-            response.readArtwork("Server artwork is too large")
+            response.readArtwork("Server artwork is too large") to versionedCoverId(coverId, response.headers[HttpHeaders.ETag])
         } }
     } } }
 
