@@ -6,19 +6,22 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -31,17 +34,13 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.queue.QueueAction
+import me.d3sox.nevumi.settings.TrackAction
 import me.d3sox.nevumi.resources.Res
-import me.d3sox.nevumi.resources.add_to_queue
-import me.d3sox.nevumi.resources.play
-import me.d3sox.nevumi.resources.play_next
+import me.d3sox.nevumi.resources.player_song_menu_artwork
 import me.d3sox.nevumi.resources.retry
 import me.d3sox.nevumi.resources.search_type_albums
 import me.d3sox.nevumi.resources.search_type_artists
 import me.d3sox.nevumi.resources.search_type_songs
-import me.d3sox.nevumi.resources.sources_check_tags_after_download
-import me.d3sox.nevumi.resources.sources_check_tags_before_saving
-import me.d3sox.nevumi.resources.sources_close_youtube_options
 import me.d3sox.nevumi.resources.sources_in_library
 import me.d3sox.nevumi.resources.sources_no_youtube_results
 import me.d3sox.nevumi.resources.sources_open_on_youtube
@@ -50,9 +49,7 @@ import me.d3sox.nevumi.resources.sources_search_youtube_description
 import me.d3sox.nevumi.resources.sources_search_youtube_for
 import me.d3sox.nevumi.resources.sources_show_more
 import me.d3sox.nevumi.resources.sources_youtube_options_for
-import me.d3sox.nevumi.resources.sources_youtube_save_to_device_description
 import me.d3sox.nevumi.resources.sources_youtube_save_to_server
-import me.d3sox.nevumi.resources.sources_youtube_save_to_server_description
 import me.d3sox.nevumi.resources.sources_youtube_search_failed
 import me.d3sox.nevumi.resources.sources_youtube_song_description
 import me.d3sox.nevumi.resources.sources_youtube_video
@@ -84,7 +81,6 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
     // Trying again cannot bring back a private or removed video that a pasted link found.
     var permanent by remember(query, kind) { mutableStateOf(false) }
     var attempt by remember(query, kind) { mutableStateOf(0) }
-    var picked by remember { mutableStateOf<YouTubeTrack?>(null) }
     val scope = rememberCoroutineScope()
     val searchFailed = stringResource(Res.string.sources_youtube_search_failed)
     suspend fun load(continuation: YouTubeContinuation?) {
@@ -111,7 +107,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("youtube-results")) {
             items(results, key = { "youtube:${it.key}" }) { result ->
                 when (result) {
-                    is YouTubeTrack -> YouTubeTrackRow(result, owned, controller, onOptions = { picked = result }) { controller.playYouTube(result) }
+                    is YouTubeTrack -> YouTubeTrackRow(result, owned, state, controller) { controller.playYouTube(result) }
                     is YouTubeCollection -> YouTubeCollectionRow(result, controller)
                 }
             }
@@ -135,7 +131,6 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
             }
         }
     }
-    picked?.let { track -> YouTubeOptionsSheet(track, state, controller) { picked = null } }
 }
 
 /** The artist and title of every song in the library, which marks YouTube results the user already has. */
@@ -143,25 +138,58 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
 internal fun rememberOwnedSongs(state: AppState): Set<String> =
     remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
 
-/** A song or video; [play] runs on a tap, [onOptions] on a long press or its options button. */
+/** What a swipe on a YouTube song can do without adding it to the library: queue it, or save it to this device. */
+private fun MusicController.youTubeActionAvailable(action: TrackAction) = when (action) {
+    TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND -> true
+    TrackAction.DOWNLOAD -> youTubeDeviceDownloads
+    else -> false
+}
+
+private fun MusicController.performYouTubeAction(track: YouTubeTrack, action: TrackAction, state: AppState): Boolean {
+    if (!youTubeActionAvailable(action)) return false
+    when (action) {
+        TrackAction.PLAY_NEXT -> playYouTube(track, QueueAction.PLAY_NEXT)
+        TrackAction.PLAY_AFTER -> playYouTube(track, QueueAction.PLAY_AFTER)
+        TrackAction.APPEND -> playYouTube(track, QueueAction.APPEND)
+        TrackAction.DOWNLOAD -> downloadFromYouTube(track, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
+        else -> Unit
+    }
+    return true
+}
+
+/** A song or video; [play] runs on a tap. It swipes like a library song, and a long press, right click or its options button opens the song menu. */
 @Composable
-internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, controller: MusicController, onOptions: () -> Unit, play: () -> Unit) {
+internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, state: AppState, controller: MusicController, play: () -> Unit) {
     val inLibrary = songKey(track.artist, track.title) in owned
     val description = stringResource(Res.string.sources_youtube_song_description, track.title, track.artist)
-    ListItem(modifier = Modifier.combinedClickable(onClick = play, onLongClick = onOptions).semantics { contentDescription = description },
-        headlineContent = { Text(track.title, maxLines = 2) },
-        supportingContent = {
-            Text(listOfNotNull(track.artist.ifBlank { null }, track.durationMs.takeIf { it > 0 }?.let(::playbackTime),
-                if (track.song) null else stringResource(Res.string.sources_youtube_video)).joinToString(" · "), maxLines = 1)
-        },
-        leadingContent = { YouTubeImage(smallArtwork(track), controller, Modifier.size(48.dp)) },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (inLibrary) Text(stringResource(Res.string.sources_in_library), style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                AppIconButton(AppIcon.MORE, stringResource(Res.string.sources_youtube_options_for, track.title), onClick = onOptions)
-            }
-        })
+    var menu by remember { mutableStateOf(false) }
+    var artworkPlaced by remember { mutableStateOf(false) }
+    var artworkBounds by remember { mutableStateOf<Rect?>(null) }
+    var menuOrigin by remember { mutableStateOf<Rect?>(null) }
+    val openMenu = { menuOrigin = artworkBounds; artworkPlaced = false; menu = true }
+    val labels = listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND, TrackAction.DOWNLOAD).associateWith { it.displayLabel() }
+    SwipeActionRow(track.videoId, state.preferences.swipeRight, state.preferences.swipeLeft, true, controller::youTubeActionAvailable,
+        { controller.performYouTubeAction(track, it, state) }, { it.icon() }, { labels[it].orEmpty() }, Modifier.onSecondaryClick(openMenu)) {
+        ListItem(modifier = Modifier.combinedClickable(onClick = play, onLongClick = openMenu).semantics { contentDescription = description },
+            headlineContent = { Text(track.title, maxLines = 2) },
+            supportingContent = {
+                Text(listOfNotNull(track.artist.ifBlank { null }, track.durationMs.takeIf { it > 0 }?.let(::playbackTime),
+                    if (track.song) null else stringResource(Res.string.sources_youtube_video)).joinToString(" · "), maxLines = 1)
+            },
+            leadingContent = {
+                YouTubeImage(smallArtwork(track), controller, Modifier.size(48.dp).onGloballyPositioned {
+                    artworkBounds = Rect(it.positionOnScreen(), Size(it.size.width.toFloat(), it.size.height.toFloat()))
+                }.graphicsLayer { alpha = if (menu && artworkPlaced) 0f else 1f })
+            },
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (inLibrary) Text(stringResource(Res.string.sources_in_library), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AppIconButton(AppIcon.MORE, stringResource(Res.string.sources_youtube_options_for, track.title), onClick = openMenu)
+                }
+            })
+    }
+    if (menu) YouTubeSongMenu(track, state, controller, menuOrigin, { artworkPlaced = true }) { menu = false }
 }
 
 // Recently shown YouTube images, so scrolling back or returning to a page does not fetch them again.
@@ -209,44 +237,34 @@ internal fun SearchYouTubeRow(query: String, open: () -> Unit) {
         leadingContent = { Icon(AppIcon.YOUTUBE.vector, null) })
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** The song menu of a YouTube song: it queues the song, saves it to this device or the server, or opens it on YouTube. */
 @Composable
-internal fun YouTubeOptionsSheet(track: YouTubeTrack, state: AppState, controller: MusicController, dismiss: () -> Unit) {
+internal fun YouTubeSongMenu(track: YouTubeTrack, state: AppState, controller: MusicController, artworkOrigin: Rect? = null,
+    onArtworkPlaced: () -> Unit = {}, dismiss: () -> Unit) {
     val browser = LocalUriHandler.current
-    var reviewTags by remember { mutableStateOf(state.preferences.youTubeReviewTags) }
-    fun choose(action: () -> Unit) { action(); dismiss() }
-    AppBottomSheet(onDismissRequest = dismiss) {
-        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).padding(top = 12.dp)) {
-                Text(track.title, style = MaterialTheme.typography.titleLarge, maxLines = 2)
-                Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val reviewTags = state.preferences.youTubeReviewTags
+    val options = buildList {
+        // The menu closes before an option runs.
+        fun option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) = add(TrackOption(label, icon, detail) { dismiss(); click() })
+        listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND).forEach { action ->
+            option(action.displayLabel(), action.icon()) { controller.performYouTubeAction(track, action, state) }
+        }
+        if (controller.youTubeDeviceDownloads) option(stringResource(Res.string.sources_save_to_this_device), AppIcon.DEVICE) {
+            controller.downloadFromYouTube(track, YouTubeDestination.DEVICE, reviewTags)
+        }
+        val sftp = state.sftp
+        if (controller.youTubeDeviceDownloads && controller.youTubeServerUploads && sftp != null)
+            option(stringResource(Res.string.sources_youtube_save_to_server), AppIcon.SERVER, sftp.libraryName) {
+                controller.downloadFromYouTube(track, YouTubeDestination.SERVER, reviewTags)
             }
-            AppIconButton(AppIcon.CLOSE, stringResource(Res.string.sources_close_youtube_options), onClick = dismiss)
-        }
-        ListItem(headlineContent = { Text(stringResource(Res.string.play)) }, leadingContent = { Icon(AppIcon.PLAY.vector, null) },
-            modifier = Modifier.clickable { choose { controller.playYouTube(track) } })
-        ListItem(headlineContent = { Text(stringResource(Res.string.play_next)) }, leadingContent = { Icon(AppIcon.PLAY_NEXT.vector, null) },
-            modifier = Modifier.clickable { choose { controller.playYouTube(track, QueueAction.PLAY_NEXT) } })
-        ListItem(headlineContent = { Text(stringResource(Res.string.add_to_queue)) }, leadingContent = { Icon(AppIcon.QUEUE.vector, null) },
-            modifier = Modifier.clickable { choose { controller.playYouTube(track, QueueAction.APPEND) } })
-        if (controller.youTubeDeviceDownloads) {
-            HorizontalDivider(Modifier.padding(vertical = 4.dp))
-            ListItem(headlineContent = { Text(stringResource(Res.string.sources_check_tags_before_saving)) },
-                supportingContent = { Text(stringResource(Res.string.sources_check_tags_after_download)) },
-                leadingContent = { Icon(AppIcon.TAGS.vector, null) }, trailingContent = { Switch(reviewTags, null) },
-                modifier = Modifier.toggleable(reviewTags, role = Role.Switch) { reviewTags = it })
-            ListItem(headlineContent = { Text(stringResource(Res.string.sources_save_to_this_device)) },
-                supportingContent = { Text(stringResource(Res.string.sources_youtube_save_to_device_description)) },
-                leadingContent = { Icon(AppIcon.DEVICE.vector, null) },
-                modifier = Modifier.clickable { choose { controller.downloadFromYouTube(track, YouTubeDestination.DEVICE, reviewTags) } })
-            val sftp = state.sftp
-            if (controller.youTubeServerUploads && sftp != null) ListItem(headlineContent = { Text(stringResource(Res.string.sources_youtube_save_to_server)) },
-                supportingContent = { Text(stringResource(Res.string.sources_youtube_save_to_server_description, "${sftp.libraryName} · ${sftp.connection.host}")) },
-                leadingContent = { Icon(AppIcon.SERVER.vector, null) },
-                modifier = Modifier.clickable { choose { controller.downloadFromYouTube(track, YouTubeDestination.SERVER, reviewTags) } })
-        }
-        ListItem(headlineContent = { Text(stringResource(Res.string.sources_open_on_youtube)) }, leadingContent = { Icon(AppIcon.OPEN_EXTERNAL.vector, null) },
-            modifier = Modifier.clickable { choose { runCatching { browser.openUri(track.url) } } })
-        Spacer(Modifier.height(16.dp))
+        option(stringResource(Res.string.sources_open_on_youtube), AppIcon.OPEN_EXTERNAL) { runCatching { browser.openUri(track.url) } }
     }
+    val artworkDescription = stringResource(Res.string.player_song_menu_artwork, track.title)
+    TrackActionDialog(track.title, track.artist, { _ ->
+        val image = rememberYouTubeImage(smallArtwork(track), 160, controller)
+        image?.let { Image(it, artworkDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+            ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(AppIcon.YOUTUBE.vector, artworkDescription, Modifier.fillMaxSize(.45f), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+    }, options, dismiss, artworkOrigin, 12.dp, onArtworkPlaced)
 }

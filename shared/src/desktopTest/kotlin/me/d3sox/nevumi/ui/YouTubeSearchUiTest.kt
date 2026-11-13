@@ -12,6 +12,8 @@ import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.settings.TrackAction
+import androidx.compose.ui.geometry.Offset
 import me.d3sox.nevumi.storage.openMusicStore
 import me.d3sox.nevumi.youtube.*
 import java.nio.file.Files
@@ -74,7 +76,9 @@ class YouTubeSearchUiTest {
                 onAllNodesWithContentDescription("YouTube song: Night Drive by Artist").assertCountEquals(1)
                 snapshot("youtube-search")
 
+                // Its options open the song menu of library songs.
                 onNodeWithContentDescription("More options: Other - Night Swim (Official Video)").performClick()
+                onNodeWithTag("track-actions").assertIsDisplayed()
                 onNodeWithText("Play next").performClick()
                 // An uploaded video titled "Artist - Title" is queued under that artist and title.
                 waitUntil(timeoutMillis = 5_000) {
@@ -85,6 +89,29 @@ class YouTubeSearchUiTest {
                 assertEquals("Other", queued.metadata.artist)
                 assertEquals(listOf(SourceKind.YOUTUBE), queued.sources.map { it.kind })
                 assertEquals(false, queued.inLibrary)
+
+                // A result swipes like a library song: left adds it to the queue by default.
+                val queueLength = controller.state.value.queue.entries.size
+                onNodeWithContentDescription("YouTube song: Night Drive by Artist").performTouchInput {
+                    swipe(center.copy(x = width * .6f), center.copy(x = width * .1f), 200)
+                }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.queue.entries.size == queueLength + 1 }
+                val swiped = controller.state.value.queue.entries.last().trackId
+                assertEquals(listOf(SourceKind.YOUTUBE), controller.state.value.tracks.single { it.id == swiped }.sources.map { it.kind })
+
+                // Dragging back past the middle toward an action a YouTube song lacks cancels the swipe instead of keeping its offset.
+                controller.updatePreferences { it.copy(swipeLeft = TrackAction.FAVORITE) }.let { runBlocking { it.join() } }
+                val beforeReversal = controller.state.value.queue.entries.size
+                onNodeWithContentDescription("YouTube song: Night Drive by Artist").performTouchInput {
+                    down(center.copy(x = width * .3f)); moveBy(Offset(150f, 0f)); moveBy(Offset(-250f, 0f)); up()
+                }
+                // A later swipe on the other row finishes after the reversed one would have.
+                onNodeWithContentDescription("YouTube song: Other - Night Swim (Official Video) by OtherVEVO").performTouchInput {
+                    swipe(center.copy(x = width * .1f), center.copy(x = width * .6f), 200)
+                }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.queue.entries.count { it.trackId == queued.id } == 2 }
+                waitForIdle()
+                assertEquals(beforeReversal + 1, controller.state.value.queue.entries.size)
 
                 onNodeWithTag("youtube-kind:VIDEOS").performClick()
                 waitUntil(timeoutMillis = 5_000) { youTube.searches.lastOrNull() == "Night" to YouTubeSearchKind.VIDEOS }

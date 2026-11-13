@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
-import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -49,14 +48,14 @@ import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.file_actions
 import me.d3sox.nevumi.resources.player_back_to_song_actions
 import me.d3sox.nevumi.resources.player_close_song_actions
-import me.d3sox.nevumi.resources.player_song_menu_artwork
 import me.d3sox.nevumi.resources.unknown_artist
 import org.jetbrains.compose.resources.stringResource
 
 internal data class TrackOption(val label: String, val icon: AppIcon, val detail: String? = null, val click: () -> Unit)
 
 @Composable
-internal fun TrackActionDialog(track: Track, artwork: String?, options: List<TrackOption>, dismiss: () -> Unit,
+internal fun TrackActionDialog(title: String, artist: String, artwork: @Composable (maxDimension: Int) -> Unit, options: List<TrackOption>,
+    dismiss: () -> Unit,
     artworkOrigin: Rect? = null, artworkCornerRadius: Dp = 16.dp,
     onArtworkPlaced: () -> Unit = {},
     fileOptions: List<TrackOption>? = null, onFileActions: () -> Unit = {}) {
@@ -144,10 +143,11 @@ internal fun TrackActionDialog(track: Track, artwork: String?, options: List<Tra
                             targetArtwork = Rect(it.positionOnScreen() - Offset(0f, lift * (1f - progress.value)),
                                 Size(it.size.width.toFloat(), it.size.height.toFloat()))
                         })
-                        else CollectionArtwork(artwork, track.metadata.title, AppIcon.MUSIC, Modifier.size(48.dp).testTag("track-action-artwork"))
+                        else Surface(Modifier.size(48.dp).testTag("track-action-artwork"), shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer) { artwork(256) }
                         Column(Modifier.weight(1f)) {
-                            Text(track.metadata.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, style = MaterialTheme.typography.bodySmall,
+                            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(artist.ifBlank { stringResource(Res.string.unknown_artist) }, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         if (onFiles) AppIconButton(AppIcon.BACK, stringResource(Res.string.player_back_to_song_actions), enabled = !closing, onClick = { showPage(0f) })
@@ -193,8 +193,7 @@ internal fun TrackActionDialog(track: Track, artwork: String?, options: List<Tra
                     shape = RoundedCornerShape(((originCorner + (targetCorner - originCorner) * progress.value) / scaleX / density).dp)
                     clip = true
                 }.onGloballyPositioned { onArtworkPlaced() }.testTag("track-action-artwork"), shape = RectangleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                    MusicArtwork(artwork, track.metadata.title, stringResource(Res.string.player_song_menu_artwork, track.metadata.title),
-                        maxDimension = if (from.width > coverSize * 2) 1024 else 256)
+                    artwork(if (from.width > coverSize * 2) 1024 else 256)
                 }
             }
         }
