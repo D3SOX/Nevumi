@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.materialkolor.ktx.themeColor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -135,6 +136,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
     var attempt by remember(opened) { mutableIntStateOf(0) }
     var picked by remember { mutableStateOf<YouTubeTrack?>(null) }
     val scope = rememberCoroutineScope()
+    val playing = remember { mutableStateOf<Job?>(null) }
     val failed = stringResource(Res.string.sources_youtube_page_failed)
     suspend fun load(block: suspend () -> Unit) {
         loading = true; error = null
@@ -154,13 +156,17 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
      * Plays the list shelf at [index] from [track], or from its start. A list that continues, such as a long playlist, first loads
      * its remaining songs, up to 1,000, so playback goes on past the songs shown.
      */
-    fun playShelf(content: YouTubePageContent, index: Int, track: YouTubeTrack?, shuffle: Boolean = false) = scope.launch {
-        if (index == content.continued) load {
-            while (content.items(index).size < 1_000) appendNext(content, content.next ?: break)
+    fun playShelf(content: YouTubePageContent, index: Int, track: YouTubeTrack?, shuffle: Boolean = false) {
+        // A later tap wins over one still waiting for the list to load.
+        playing.value?.cancel()
+        playing.value = scope.launch {
+            if (index == content.continued) load {
+                while (content.items(index).size < 1_000) appendNext(content, content.next ?: break)
+            }
+            // A page that failed to load stops the list where it got to.
+            val tracks = content.items(index).filterIsInstance<YouTubeTrack>()
+            if (tracks.isNotEmpty()) controller.playYouTube(tracks, track?.let(tracks::indexOf)?.coerceAtLeast(0) ?: 0, content.page.title, shuffle)
         }
-        // A page that failed to load stops the list where it got to.
-        val tracks = content.items(index).filterIsInstance<YouTubeTrack>()
-        if (tracks.isNotEmpty()) controller.playYouTube(tracks, track?.let(tracks::indexOf)?.coerceAtLeast(0) ?: 0, content.page.title, shuffle)
     }
     LaunchedEffect(opened, attempt) {
         if (opened.page == null) load { opened.page = YouTubePageContent(controller.browseYouTube(opened.collection.link)) }

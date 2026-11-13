@@ -51,8 +51,16 @@ class YouTubeArtistPageUiTest {
             browsed += link.browseId
             return recorded(when { link.browseId.startsWith("UC") -> "artist"; link.browseId.startsWith("VL") -> "playlist"; else -> "album" })
         }
-        override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubeMusicPages.continued(Json.parseToJsonElement(
-            requireNotNull(javaClass.getResource("/youtube-music/continued.json")).readText()).jsonObject)
+        /** While set, each continuation waits for its own gate, so a test decides the order they finish in. */
+        var hold = false
+        val gates = Collections.synchronizedList(mutableListOf<kotlinx.coroutines.CompletableDeferred<Unit>>())
+        @Volatile var cancelled = 0
+        override suspend fun browseMore(continuation: YouTubeContinuation): YouTubePage {
+            if (hold) try { kotlinx.coroutines.CompletableDeferred<Unit>().also { gates += it }.await() }
+                catch (stopped: kotlinx.coroutines.CancellationException) { cancelled++; throw stopped }
+            return YouTubeMusicPages.continued(Json.parseToJsonElement(
+                requireNotNull(javaClass.getResource("/youtube-music/continued.json")).readText()).jsonObject)
+        }
         override suspend fun audio(videoId: String, fresh: Boolean) = YouTubeAudio("https://media.test/$videoId", "audio/mp4", 1, 128)
         override fun playbackLocation(videoId: String) = "http://127.0.0.1:9/$videoId"
         override suspend fun artwork(url: String) = ByteArray(0)
@@ -113,10 +121,27 @@ class YouTubeArtistPageUiTest {
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.queue.entries.size == 4 }
                 onNodeWithContentDescription("Back").performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("150 songs", substring = true).fetchSemanticsNodes().isEmpty() }
+
+                // A later tap stops an earlier one that still waits for the list, so the earlier one cannot replace it later.
+                youTube.hold = true
+                shelves.performScrollToNode(hasText("Top songs"))
+                onAllNodesWithText("See all")[0].performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("150 songs", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithContentDescription("YouTube song: The Fate of Ophelia by Taylor Swift").performClick()
+                waitUntil(timeoutMillis = 5_000) { youTube.gates.size == 1 }
+                onNodeWithContentDescription("YouTube song: Blank Space by Taylor Swift").performClick()
+                waitUntil(timeoutMillis = 5_000) { youTube.gates.size == 2 && youTube.cancelled == 1 }
+                youTube.gates[1].complete(Unit)
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.let { state ->
+                    state.tracks.firstOrNull { it.id == state.queue.currentTrackId }?.metadata?.title == "Blank Space" } }
+                youTube.hold = false
+                onNodeWithContentDescription("Back").performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("150 songs", substring = true).fetchSemanticsNodes().isEmpty() }
                 onNodeWithContentDescription("Back").performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("youtube-page").fetchSemanticsNodes().isEmpty() }
                 onNodeWithContentDescription("Open artist: Taylor Swift").assertIsDisplayed()
-                assertEquals(listOf("UCPC0L1d253x-KuMNwa05TpA", "MPREb_L64BnYDQpHZ", "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo"), youTube.browsed.toList())
+                assertEquals(listOf("UCPC0L1d253x-KuMNwa05TpA", "MPREb_L64BnYDQpHZ", "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo",
+                    "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo"), youTube.browsed.toList())
                 assertEquals(1, youTube.searches.count { it == YouTubeSearchKind.ARTISTS })
 
                 // An album found by a search opens its page too.
