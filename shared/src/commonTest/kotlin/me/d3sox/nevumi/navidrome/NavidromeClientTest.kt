@@ -94,4 +94,12 @@ class NavidromeClientTest {
             listOf("http://192.168.1.20:4533", " HTTP://music.lan ", "http://music.localhost", "https://192.168.1.20", "http://localhost:4533",
                 "http://127.0.0.1:4533", "http://[::1]:4533", "").map(::sendsPasswordInClearText))
     }
+
+    @Test
+    fun aCoverIdTakesTheContentHashFromTheServersETag() {
+        assertEquals(listOf("mf-1_3b72ac478f39111c", "mf-1_3b72ac478f39111c", "mf-1_3b72ac478f39111c", "mf-1_old", "mf-1", "mf-1", "mf-1"),
+            listOf("mf-1" to "\"3b72ac478f39111c.1024.false.q75\"", "mf-1" to "\"3b72ac478f39111c\"", "mf-1" to "W/\"3b72ac478f39111c\"",
+                "mf-1_old" to "\"3b72ac478f39111c\"", "mf-1" to "\"not-a-hash\"", "mf-1" to "\"\"", "mf-1" to null)
+                .map { (id, etag) -> versionedCoverId(id, etag) })
+    }
 }

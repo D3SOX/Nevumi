@@ -390,4 +390,27 @@ class ArtworkLibraryTest {
             assertEquals(listOf("al-1_a", "al-1_a", "al-1_b", "al-1_a"), requests)
         } finally { http.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun aCoverIdNavidromeVersionsAfterTheFirstDownloadIsNotDownloadedAgain() = runBlocking {
+        val directory = Files.createTempDirectory("versioned-artwork")
+        val png = ByteArrayOutputStream().also { ImageIO.write(BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB), "png", it) }.toByteArray()
+        val requests = mutableListOf<String>()
+        val http = HttpClient(MockEngine { request ->
+            requests += requireNotNull(request.url.parameters["id"])
+            respond(png, headers = headersOf(HttpHeaders.ContentType to listOf("image/png"),
+                HttpHeaders.ETag to listOf("\"3b72ac478f39111c.1024.false.q75\"")))
+        })
+        try {
+            val client = NavidromeClient(http, "https://music.example.test", ServerCredentials("fixture", "fixture-password"))
+            val artwork = ArtworkLibrary(directory.toString())
+            artwork.fetchChanged(listOf("one"), client, "mf-1")
+            artwork.fetchChanged(listOf("one"), client, "mf-1_3b72ac478f39111c")
+            assertEquals(listOf("mf-1"), requests, "The hash the server adds after the first download names the same image")
+            artwork.fetchChanged(listOf("one"), client, "mf-1")
+            assertEquals(listOf("mf-1"), requests, "A cover the server keeps listing without a hash must not download again")
+            artwork.fetchChanged(listOf("one"), client, "mf-1_0d4f00aa12345678")
+            assertEquals(listOf("mf-1", "mf-1_0d4f00aa12345678"), requests, "A different hash must download the changed image")
+        } finally { http.close(); directory.toFile().deleteRecursively() }
+    }
 }
