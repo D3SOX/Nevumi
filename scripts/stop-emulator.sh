@@ -4,7 +4,8 @@
 set -uo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true ]] || { echo 'Run this helper on an isolated GitHub Actions runner' >&2; exit 1; }
 processes="${ANDROID_HOME:?}/emulator/(emulator|qemu/)"
-adb -s "${ANDROID_SERIAL:-emulator-5554}" emu kill >/dev/null 2>&1
+# A frozen emulator can keep its console open, so bound the request and fall through to the kill below.
+timeout --kill-after=5 15 adb -s "${ANDROID_SERIAL:-emulator-5554}" emu kill >/dev/null 2>&1
 for _attempt in {1..60}; do
     pgrep -f "$processes" >/dev/null || exit 0
     sleep 1
