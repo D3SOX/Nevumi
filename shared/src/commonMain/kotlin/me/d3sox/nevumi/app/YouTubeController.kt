@@ -93,12 +93,15 @@ class YouTubeController internal constructor(private val context: ControllerCont
         }
     }
 
+    /** Numbers a play choice when it is made, for a play that starts only after its songs load; any later choice wins over it. */
+    fun reservePlayRequest(): Long = ++context.playRequests
+
     /**
      * Plays [tracks], such as an album, starting at [index], or shuffled from any of them. Only the first song's audio is looked up
      * before it plays; the others are looked up when the player reaches them.
      */
-    fun playYouTube(tracks: List<YouTubeTrack>, index: Int, name: String, shuffle: Boolean = false): kotlinx.coroutines.Job {
-        val request = ++context.playRequests
+    fun playYouTube(tracks: List<YouTubeTrack>, index: Int, name: String, shuffle: Boolean = false,
+        request: Long = reservePlayRequest()): kotlinx.coroutines.Job {
         return context.action(serialized = false) {
             requireEnabled()
             require(tracks.isNotEmpty()) { "There is nothing to play" }

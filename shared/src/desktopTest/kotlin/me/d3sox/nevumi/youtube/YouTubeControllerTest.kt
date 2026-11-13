@@ -60,6 +60,26 @@ class YouTubeControllerTest {
         } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test fun aListThatStartsPlayingAfterLoadingLosesToASongChosenMeanwhile() = runBlocking {
+        val directory = Files.createTempDirectory("youtube-controller")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val preferences = MusicPreferences(store)
+        preferences.update { it.copy(youTube = true) }
+        val chosen = library.importTrack(TrackMetadata("Night Drive", "Artist"), TrackSource("local", SourceKind.LOCAL, "/music/night-drive.flac"))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences, youTube = Source,
+            sourceAccessible = { true })
+        try {
+            withTimeout(5_000) { controller.state.first { it.libraryReady && it.preferences.youTube } }
+            // A playlist tapped first only starts once its remaining pages load, after another song was chosen.
+            val tapped = controller.reservePlayRequest()
+            controller.playTrack(chosen.id, listOf(chosen.id), 0).join()
+            controller.playYouTube(listOf(YouTubeTrack("aaaaaaaaaaa", "Song A", "Other"), YouTubeTrack("bbbbbbbbbbb", "Song B", "Other")), 0, "Playlist",
+                request = tapped).join()
+            assertEquals(listOf(chosen.id), controller.state.value.queue.entries.map { it.trackId })
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun queueingAVideoAgainKeepsTheTagsOfTheSongItIsLinkedTo() = runBlocking {
         val directory = Files.createTempDirectory("youtube-controller")
         val store = openMusicStore(directory.resolve("library.db").toString())

@@ -157,7 +157,8 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
      * its remaining songs, up to 1,000, so playback goes on past the songs shown.
      */
     fun playShelf(content: YouTubePageContent, index: Int, track: YouTubeTrack?, shuffle: Boolean = false) {
-        // A later tap wins over one still waiting for the list to load.
+        // The tap counts from now, so anything chosen while the list loads wins; a later tap here also stops this one's loading.
+        val request = controller.reservePlayRequest()
         playing.value?.cancel()
         playing.value = scope.launch {
             if (index == content.continued) load {
@@ -165,7 +166,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
             }
             // A page that failed to load stops the list where it got to.
             val tracks = content.items(index).filterIsInstance<YouTubeTrack>()
-            if (tracks.isNotEmpty()) controller.playYouTube(tracks, track?.let(tracks::indexOf)?.coerceAtLeast(0) ?: 0, content.page.title, shuffle)
+            if (tracks.isNotEmpty()) controller.playYouTube(tracks, track?.let(tracks::indexOf)?.coerceAtLeast(0) ?: 0, content.page.title, shuffle, request)
         }
     }
     LaunchedEffect(opened, attempt) {
