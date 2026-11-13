@@ -674,4 +674,21 @@ class OfflineMusicTest {
             assertEquals(DownloadStatus.FAILED, restored.getValue(downloaded.id).status)
         } finally { offline.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun undoingADownloadRestoresAnEarlierExclusionAlsoAfterAPlaylistPinnedTheSong() = runBlocking {
+        val directory = Files.createTempDirectory("download-undo-exclusion")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val track = library.importTrack(TrackMetadata("Removed song"), TrackSource("server:test:song", SourceKind.SERVER, "song"))
+        val offline = OfflineMusic(store, library, { null }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = { _, _ -> })
+        try {
+            store.put("excluded:${track.id}", "offline-exclusions", OfflineRequest(track.id))
+            val undo = offline.requestUndoable(listOf(track.id))
+            AudioDownloads(store, library, null, directory.resolve("audio").toString()).pin(track.id, "playlist:evening")
+            undo()
+            kotlin.test.assertNotNull(store.read<OfflineRequest>("excluded:${track.id}"), "Undo must keep the song the user removed out of downloads")
+            Unit
+        } finally { offline.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
 }

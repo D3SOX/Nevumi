@@ -76,7 +76,11 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
     }
     override suspend fun returnPlayback(deviceId: String, transferId: String): PlaybackTransfer {
         val response = playbackRequest(deviceId, "return-playback", transferId = transferId)
-        library.merge(requireNotNull(response.snapshot))
+        // Forgetting the device meanwhile deleted what it shared, so its snapshot must not bring that back.
+        incoming.withLock {
+            require(state.value.peers.any { it.deviceId == deviceId }) { "This device is no longer paired" }
+            library.merge(requireNotNull(response.snapshot))
+        }
         return library.remapPlayback(deviceId, requireNotNull(response.playback))
     }
     override suspend fun cancelPlaybackTransfer(deviceId: String, transferId: String) {
@@ -329,8 +333,8 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
 
     override suspend fun forget(deviceId: String) = incoming.withLock {
         store.database.records().delete("sync:peer:$deviceId")
-        library.forgetPeer(deviceId)
         reloadPeers()
+        library.forgetPeer(deviceId)
         lifecycle.withLock { if (state.value.peers.isEmpty() && offer.get() == null) stopListening() }
     }
 
