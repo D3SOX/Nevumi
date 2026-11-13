@@ -136,12 +136,15 @@ class YouTubeController internal constructor(private val context: ControllerCont
         tracks.zip(ids).forEach { (track, id) ->
             val url = track.artworkUrl ?: return@forEach
             if (context.state.value.artwork[id] != null) return@forEach
-            val bytes = fetched.getOrPut(url) {
-                try { source().artwork(largeArtwork(url)) }
-                catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { null /* The song plays without a cover. */ }
-            } ?: return@forEach
-            artwork.save(id, bytes)
+            try {
+                val bytes = fetched.getOrPut(url) {
+                    try { source().artwork(largeArtwork(url)) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null }
+                } ?: return@forEach
+                artwork.save(id, bytes)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* The song plays without a cover. */ }
         }
     }
 

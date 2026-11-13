@@ -172,6 +172,8 @@ private val youTubeImages = mutableMapOf<String, ImageBitmap>()
 internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: MusicController): ImageBitmap? {
     val key = url?.let { "$maxDimension:$it" }
     val image by produceState(key?.let(youTubeImages::get), key) {
+        // A reused row or card keeps the previous image until it learns this one's.
+        value = key?.let(youTubeImages::get)
         if (url == null || key == null || value != null) return@produceState
         value = try {
             val bytes = controller.youTubeArtwork(url)

@@ -49,9 +49,10 @@ class YouTubeArtistPageUiTest {
         }
         override suspend fun browse(link: YouTubeLink): YouTubeBrowsePage {
             browsed += link.browseId
-            return recorded(if (link.browseId.startsWith("UC")) "artist" else "album")
+            return recorded(when { link.browseId.startsWith("UC") -> "artist"; link.browseId.startsWith("VL") -> "playlist"; else -> "album" })
         }
-        override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
+        override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubeMusicPages.continued(Json.parseToJsonElement(
+            requireNotNull(javaClass.getResource("/youtube-music/continued.json")).readText()).jsonObject)
         override suspend fun audio(videoId: String, fresh: Boolean) = YouTubeAudio("https://media.test/$videoId", "audio/mp4", 1, 128)
         override fun playbackLocation(videoId: String) = "http://127.0.0.1:9/$videoId"
         override suspend fun artwork(url: String) = ByteArray(0)
@@ -103,10 +104,19 @@ class YouTubeArtistPageUiTest {
                 // Going back shows the pages and results that were open, without loading them again.
                 onAllNodesWithContentDescription("Back").filterToOne(hasAnyAncestor(hasTestTag("youtube-page"))).performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("12 songs", substring = true).fetchSemanticsNodes().isEmpty() }
+
+                // Playing a long playlist loads its remaining pages first, so the queue holds more than the songs shown.
+                shelves.performScrollToNode(hasText("Top songs"))
+                onAllNodesWithText("See all")[0].performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("150 songs", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithContentDescription("Play collection").performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.queue.entries.size == 4 }
+                onNodeWithContentDescription("Back").performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("150 songs", substring = true).fetchSemanticsNodes().isEmpty() }
                 onNodeWithContentDescription("Back").performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("youtube-page").fetchSemanticsNodes().isEmpty() }
                 onNodeWithContentDescription("Open artist: Taylor Swift").assertIsDisplayed()
-                assertEquals(listOf("UCPC0L1d253x-KuMNwa05TpA", "MPREb_L64BnYDQpHZ"), youTube.browsed.toList())
+                assertEquals(listOf("UCPC0L1d253x-KuMNwa05TpA", "MPREb_L64BnYDQpHZ", "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo"), youTube.browsed.toList())
                 assertEquals(1, youTube.searches.count { it == YouTubeSearchKind.ARTISTS })
 
                 // An album found by a search opens its page too.

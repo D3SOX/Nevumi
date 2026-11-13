@@ -130,6 +130,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     (it != SearchSource.SOUNDCLOUD || state.soundCloud != null) && (it != SearchSource.YOUTUBE || youTube)
                 }
                 val source = SearchSource.entries.firstOrNull { it.type == type } ?: SearchSource.LIBRARY
+                // A source turned off while chosen gives the search back to the library.
+                LaunchedEffect(source in sources) { if (source !in sources) type = libraryType }
                 SearchSourcePicker(sources, source) { picked ->
                     type = picked.type ?: libraryType; selection.clear(); stopTyping()
                 }

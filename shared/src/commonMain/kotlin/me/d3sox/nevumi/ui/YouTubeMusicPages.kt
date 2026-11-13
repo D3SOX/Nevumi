@@ -143,13 +143,24 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
         catch (failure: Exception) { error = failure.message ?: failed; permanent = (failure as? YouTubeException)?.retryable == false }
         finally { loading = false }
     }
-    fun continueList(content: YouTubePageContent, continuation: YouTubeContinuation) = scope.launch {
-        load {
-            val page = controller.browseYouTubeMore(continuation)
-            val shown = content.items(content.continued).map { it.key }.toSet()
-            content.more += page.results.filter { it.key !in shown }
-            content.next = page.next
+    suspend fun appendNext(content: YouTubePageContent, continuation: YouTubeContinuation) {
+        val page = controller.browseYouTubeMore(continuation)
+        val shown = content.items(content.continued).map { it.key }.toSet()
+        content.more += page.results.filter { it.key !in shown }
+        content.next = page.next
+    }
+    fun continueList(content: YouTubePageContent, continuation: YouTubeContinuation) = scope.launch { load { appendNext(content, continuation) } }
+    /**
+     * Plays the list shelf at [index] from [track], or from its start. A list that continues, such as a long playlist, first loads
+     * its remaining songs, up to 1,000, so playback goes on past the songs shown.
+     */
+    fun playShelf(content: YouTubePageContent, index: Int, track: YouTubeTrack?, shuffle: Boolean = false) = scope.launch {
+        if (index == content.continued) load {
+            while (content.items(index).size < 1_000) appendNext(content, content.next ?: break)
         }
+        // A page that failed to load stops the list where it got to.
+        val tracks = content.items(index).filterIsInstance<YouTubeTrack>()
+        if (tracks.isNotEmpty()) controller.playYouTube(tracks, track?.let(tracks::indexOf)?.coerceAtLeast(0) ?: 0, content.page.title, shuffle)
     }
     LaunchedEffect(opened, attempt) {
         if (opened.page == null) load { opened.page = YouTubePageContent(controller.browseYouTube(opened.collection.link)) }
@@ -175,19 +186,21 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
             LazyColumn(Modifier.fillMaxSize().testTag("youtube-page-shelves"), opened.list, contentPadding = PaddingValues(bottom = 16.dp + bottomSpace)) {
                 if (content != null) {
                     val page = content.page
-                    val playable = page.shelves.indices.firstOrNull { page.shelves[it].layout == YouTubeShelfLayout.ROWS }
-                        ?.let { index -> content.items(index).filterIsInstance<YouTubeTrack>() }.orEmpty()
-                    item(key = "header") { YouTubePageHeader(opened.collection, page, playable, maxWidth, controller) }
+                    val playable = page.shelves.indices.firstOrNull { index ->
+                        page.shelves[index].layout == YouTubeShelfLayout.ROWS && content.items(index).any { it is YouTubeTrack }
+                    }
+                    item(key = "header") {
+                        YouTubePageHeader(opened.collection, page, maxWidth, controller, playable?.let { index -> { shuffle -> playShelf(content, index, null, shuffle) } })
+                    }
                     page.shelves.forEachIndexed { index, shelf ->
                         val items = content.items(index)
                         if (shelf.title.isNotEmpty() || shelf.more != null) item(key = "heading:$index") { ShelfHeading(shelf) }
                         when (shelf.layout) {
                             YouTubeShelfLayout.ROWS -> {
-                                val tracks = items.filterIsInstance<YouTubeTrack>()
                                 items(items, key = { "$index:${it.key}" }) { item ->
                                     when (item) {
                                         is YouTubeTrack -> YouTubeTrackRow(item, owned, controller, onOptions = { picked = item }) {
-                                            controller.playYouTube(tracks, tracks.indexOf(item), page.title)
+                                            playShelf(content, index, item)
                                         }
                                         is YouTubeCollection -> YouTubeCollectionRow(item, controller)
                                     }
@@ -234,8 +247,8 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
 }
 
 @Composable
-private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowsePage, tracks: List<YouTubeTrack>, width: Dp,
-    controller: MusicController) {
+private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowsePage, width: Dp, controller: MusicController,
+    play: ((shuffle: Boolean) -> Unit)?) {
     val open = LocalOpenYouTubePage.current
     val image = page.artworkUrl?.let { url -> rememberYouTubeImage(sizedArtwork(url, if (page.banner) 1440 else 544), if (page.banner) 1440 else 400, controller) }
     val fallback = MaterialTheme.colorScheme.primary
@@ -275,7 +288,7 @@ private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowse
                 Text(stringResource(if (expanded) Res.string.discovery_show_less else Res.string.discovery_show_more),
                     Modifier.clickable { expanded = !expanded }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
-            if (tracks.isNotEmpty()) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (play != null) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 var shuffle by remember { mutableStateOf(false) }
                 val shuffleDescription = stringResource(Res.string.library_shuffle_collection)
                 Spacer(Modifier.weight(1f))
@@ -283,7 +296,7 @@ private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowse
                     colors = IconButtonDefaults.iconToggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer)) { Icon(AppIcon.SHUFFLE.vector, null) }
                 Spacer(Modifier.width(8.dp))
-                FilledIconButton(onClick = { controller.playYouTube(tracks, 0, title, shuffle) }, Modifier.size(56.dp)) {
+                FilledIconButton(onClick = { play(shuffle) }, Modifier.size(56.dp)) {
                     Icon(AppIcon.PLAY.vector, stringResource(Res.string.library_play_collection), Modifier.size(32.dp))
                 }
             }
