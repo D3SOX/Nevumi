@@ -47,9 +47,11 @@ class Tailscale(private val directory: File, private val hostname: String = "nev
             "Enter the control server's full URL"
         }
         TailscaleNative.requireLoaded()
+        // A failed attempt to switch or re-authenticate keeps the node that was signed in before, so it can resume.
+        val created = !directory.exists()
         directory.mkdirs()
         try { TailscaleNative.start(directory.path, hostname, controlUrl, authKey.orEmpty()) }
-        catch (failure: IOException) { directory.deleteRecursively(); throw failure }
+        catch (failure: IOException) { if (created) directory.deleteRecursively(); throw failure }
         controlUrlFile.writeText(controlUrl)
         return status()
     }

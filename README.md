@@ -3,26 +3,26 @@
 <p>
   <a href="https://github.com/D3SOX/Nevumi/releases">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://manida-badges.withered-flower-f0f2.workers.dev/github-dark.svg">
-      <img src="https://manida-badges.withered-flower-f0f2.workers.dev/github-light.svg" alt="Download Nevumi from GitHub Releases" width="158" height="52">
+      <source media="(prefers-color-scheme: dark)" srcset="https://nevumi.app/badges/github-dark.svg">
+      <img src="https://nevumi.app/badges/github-light.svg" alt="Download Nevumi from GitHub Releases" width="158" height="52">
     </picture>
   </a>&nbsp;
   <a href="https://fdroid.link/#https://nevumi.app/fdroid/repo?fingerprint=FDEBFCB9DD790730FE607ACB8340588A839C44D9EA5BA6671AB3FAB83952F94B">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://manida-badges.withered-flower-f0f2.workers.dev/fdroid-dark.svg">
-      <img src="https://manida-badges.withered-flower-f0f2.workers.dev/fdroid-light.svg" alt="Add Nevumi&#x27;s F-Droid repository" width="158" height="52">
+      <source media="(prefers-color-scheme: dark)" srcset="https://nevumi.app/badges/fdroid-dark.svg">
+      <img src="https://nevumi.app/badges/fdroid-light.svg" alt="Add Nevumi&#x27;s F-Droid repository" width="158" height="52">
     </picture>
   </a>&nbsp;
   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22me.d3sox.nevumi%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FD3SOX%2FNevumi%22%2C%22author%22%3A%22D3SOX%22%2C%22name%22%3A%22Nevumi%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%7D%22%7D">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://manida-badges.withered-flower-f0f2.workers.dev/obtainium-dark.svg">
-      <img src="https://manida-badges.withered-flower-f0f2.workers.dev/obtainium-light.svg" alt="Install Nevumi with Obtainium" width="158" height="52">
+      <source media="(prefers-color-scheme: dark)" srcset="https://nevumi.app/badges/obtainium-dark.svg">
+      <img src="https://nevumi.app/badges/obtainium-light.svg" alt="Install Nevumi with Obtainium" width="158" height="52">
     </picture>
   </a>&nbsp;
   <a href="#arch-linux">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://manida-badges.withered-flower-f0f2.workers.dev/archlinux-dark.svg">
-      <img src="https://manida-badges.withered-flower-f0f2.workers.dev/archlinux-light.svg" alt="Add Nevumi&#x27;s Arch Linux repository" width="158" height="52">
+      <source media="(prefers-color-scheme: dark)" srcset="https://nevumi.app/badges/archlinux-dark.svg">
+      <img src="https://nevumi.app/badges/archlinux-light.svg" alt="Add Nevumi&#x27;s Arch Linux repository" width="158" height="52">
     </picture>
   </a>
 </p>

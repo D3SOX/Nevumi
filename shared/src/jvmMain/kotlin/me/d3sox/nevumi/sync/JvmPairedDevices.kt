@@ -242,6 +242,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
                 listeningPort = requireNotNull(server).localPort, snapshot = snapshot))
             val response = read<SyncResponse>(socket)
             validate(response)
+            if (response.error == TRANSFER_LIMIT) throw SyncTransferTooLarge()
             require(response.deviceId == peer.deviceId && response.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
             incoming.withLock {
                 require(state.value.peers.any { it.deviceId == peer.deviceId && it.certificateSha256 == peer.certificateSha256 }) {
@@ -289,8 +290,15 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
                     }
                     require(request.snapshot?.deviceId == peer.deviceId) { "Device identity does not match" }
                     library.merge(requireNotNull(request.snapshot))
-                    write(socket, SyncResponse(deviceId = requireNotNull(ownId), name = name, listeningPort = requireNotNull(server).localPort,
-                        snapshot = library.snapshot(peer.deviceId, listensSince = listensSince(peer))))
+                    try {
+                        write(socket, SyncResponse(deviceId = requireNotNull(ownId), name = name, listeningPort = requireNotNull(server).localPort,
+                            snapshot = library.snapshot(peer.deviceId, listensSince = listensSince(peer))))
+                    } catch (tooLarge: SyncTransferTooLarge) {
+                        // Without an answer the other device could only report a failed connection.
+                        write(socket, SyncResponse(deviceId = requireNotNull(ownId), name = name, listeningPort = requireNotNull(server).localPort,
+                            error = TRANSFER_LIMIT))
+                        throw tooLarge
+                    }
                     awaitingMerge = peer.copy(host = socket.inetAddress.hostAddress, port = request.listeningPort, name = request.name)
                 }
                 "prepare-playback", "activate-playback", "return-playback", "cancel-playback" -> {
@@ -361,7 +369,7 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         try { withContext(Dispatchers.IO) { block() } }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {
-            mutableState.update { it.copy(error = "Device connection failed. Check the pairing and local network.") }
+            mutableState.update { it.copy(error = (error as? SyncTransferTooLarge)?.message ?: "Device connection failed. Check the pairing and local network.") }
             throw error
         } finally { mutableState.update { it.copy(busy = false) } }
     }
@@ -387,7 +395,8 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
     private fun validId(value: String) = value.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"))
     private inline fun <reified T> write(socket: SSLSocket, value: T) {
         val bytes = wire.encodeToString(value).toByteArray(Charsets.UTF_8)
-        require(bytes.size in 1..MAX_FRAME) { "The shared library exceeds the transfer limit" }
+        if (bytes.size > MAX_FRAME) throw SyncTransferTooLarge()
+        require(bytes.isNotEmpty()) { "Empty device message" }
         DataOutputStream(socket.outputStream).apply { writeInt(bytes.size); write(bytes); flush() }
     }
     private inline fun <reified T> read(socket: SSLSocket, limit: Int = MAX_FRAME): T {
@@ -407,6 +416,8 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
 
     companion object {
         private const val MAX_FRAME = 32 * 1024 * 1024
+        /** The error a device answers with when its part of the sync exceeds [MAX_FRAME]. */
+        private const val TRANSFER_LIMIT = "transfer-limit"
         /** A pairing request carries only identifiers, a name and the secret. */
         private const val MAX_PAIRING_FRAME = 16 * 1024
         private const val AUTHORIZATION_TIMEOUT_MS = 30_000L
@@ -415,3 +426,6 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         private const val SYNC_MERGED = 0x06
     }
 }
+
+/** A library, mostly its listening history, too large for one sync message. */
+private class SyncTransferTooLarge : IllegalArgumentException("This library is too large to sync with the other device")

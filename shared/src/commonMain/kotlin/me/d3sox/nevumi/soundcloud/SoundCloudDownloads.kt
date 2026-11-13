@@ -88,6 +88,8 @@ data class SoundCloudJob(
     val trackId: String? = null,
     /** The music server's song for the downloaded file, saved as soon as an import finds it. */
     val serverSongId: String? = null,
+    /** The library's server songs as of this revision were there before the file, so a retry can still tell the new one apart. */
+    val knownSongsRevision: Long? = null,
     /** The device folder the song was saved to while the local folder rules leave it out of the library. */
     val excludedFolder: String? = null,
     val createdAt: Long = 0,
@@ -122,6 +124,7 @@ internal fun downloadFileName(name: String): String {
 
 /** Saves downloads into a folder, without replacing a file that already has the same name. */
 class DirectoryMusicFiles(override val folder: String) : DeviceMusicFiles {
+    private companion object { val publishing = Mutex() }
     override suspend fun save(fileName: String, write: suspend (BufferedSink) -> Unit): String = withContext(Dispatchers.IO) {
         val fs = FileSystem.SYSTEM
         val root = folder.toPath()
@@ -134,10 +137,13 @@ class DirectoryMusicFiles(override val folder: String) : DeviceMusicFiles {
             try { write(sink) } finally { sink.close() }
             val base = name.substringBeforeLast('.')
             val extension = name.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
-            val target = generateSequence(1) { it + 1 }.map { if (it == 1) root / name else root / "$base ($it)$extension" }
-                .first { !fs.exists(it) }
-            fs.atomicMove(partial, target)
-            target.toString()
+            // Choosing a free name and moving there are one step, so two downloads with the same name cannot replace each other.
+            publishing.withLock {
+                val target = generateSequence(1) { it + 1 }.map { if (it == 1) root / name else root / "$base ($it)$extension" }
+                    .first { !fs.exists(it) }
+                fs.atomicMove(partial, target)
+                target.toString()
+            }
         } finally { fs.delete(partial, mustExist = false) }
     }
 }
@@ -500,6 +506,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             "cancelled" -> job.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled on sc-gate-dl", attention = false, browser = false)
             "ready" -> if (job.destination == ScGateDestination.LIBRARY)
                 job.copy(state = SoundCloudJobState.IMPORTING, message = "Adding to your music server", percent = 100, attention = false, browser = false,
+                    knownSongsRevision = job.knownSongsRevision ?: store.revision("source-owners"),
                     fileName = downloadFileName(requireNotNull(status.libraryFilename) { "sc-gate-dl did not report where it saved the song" }))
             else job.copy(state = SoundCloudJobState.TRANSFERRING, message = "Saving to this device", percent = 100, attention = false, browser = false,
                 fileName = downloadFileName(requireNotNull(status.outputFilename) { "sc-gate-dl did not report the finished file" }))
@@ -532,7 +539,14 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             // The library already knows these server songs, so only a match outside them is the new file. An older file elsewhere
             // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder.
             val owners = "source-owner:server:${client.serverId}:"
-            val known = store.database.records().list("source-owners").mapNotNullTo(HashSet()) { it.key.takeIf { key -> key.startsWith(owners) } }
+            // Taken before the first attempt and kept, since a refresh may index the new file first or an attempt may stop after
+            // importing it; either would make the library know the song on the next attempt.
+            val baseline = job.knownSongsRevision ?: store.revision("source-owners").also { revision ->
+                job.copy(knownSongsRevision = revision).let { if (replace(job, it)) job = it }
+            }
+            val known = store.database.records().list("source-owners").mapNotNullTo(HashSet()) { record ->
+                record.key.takeIf { key -> key.startsWith(owners) && record.changed <= baseline }
+            }
             fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> "$owners${song.id}" !in known }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
