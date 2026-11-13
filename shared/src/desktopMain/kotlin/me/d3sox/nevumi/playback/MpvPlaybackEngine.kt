@@ -294,12 +294,17 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
             pausedSeekPosition = positionMs.coerceAtLeast(0)
             if (mutableStatus.value.ended) playWhenReady = false
             mutableStatus.update { it.copy(positionMs = positionMs.coerceAtLeast(0), ended = false, playWhenReady = playWhenReady) }
-        } else if (loadingFile) {
-            seekAfterLoad = positionMs.coerceAtLeast(0)
-            mutableStatus.update { it.copy(positionMs = positionMs.coerceAtLeast(0)) }
         } else {
             explicitSeek = true
-            command("seek", (positionMs.coerceAtLeast(0) / 1_000.0).toString(), "absolute+exact")
+            // mpv may start the next file between the event check and the command; then the seek waits for it as well.
+            val result = if (loadingFile) -1 else native.mpv_command(handle, StringArray(arrayOf("seek",
+                (positionMs.coerceAtLeast(0) / 1_000.0).toString(), "absolute+exact")))
+            if (result < 0) {
+                if (!loadingFile) drainEvents()
+                if (!loadingFile) checked(result)
+                seekAfterLoad = positionMs.coerceAtLeast(0)
+                mutableStatus.update { it.copy(positionMs = positionMs.coerceAtLeast(0)) }
+            }
         }
     }
     override fun setVolume(volume: Double) = synchronized(lock) {
