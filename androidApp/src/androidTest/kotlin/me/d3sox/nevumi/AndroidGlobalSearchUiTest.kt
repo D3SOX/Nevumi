@@ -124,7 +124,10 @@ class AndroidGlobalSearchUiTest {
                 compose.onNodeWithContentDescription("Open album: Signal album").performTouchInput { longClick() }
                 compose.onNodeWithText("Add to queue").performClick()
                 compose.waitUntil(5_000) { controller.state.value.queue.entries.size == 2 }
-                compose.onNodeWithTag("search-type:PLAYLISTS").performScrollTo().performClick()
+                // Categories that don't fit beside the others wait behind More.
+                if (compose.onAllNodesWithTag("search-type:PLAYLISTS").fetchSemanticsNodes().isEmpty())
+                    compose.onNodeWithTag("search-filters-more").performClick()
+                compose.onNodeWithTag("search-type:PLAYLISTS").performClick()
                 compose.onNodeWithContentDescription("Playlist options: Signal playlist").performClick()
                 compose.onNodeWithText("Edit playlist").assertIsDisplayed()
                 // Slow emulators sometimes drop an injected Back while the menu's window is opening, so repeat it
