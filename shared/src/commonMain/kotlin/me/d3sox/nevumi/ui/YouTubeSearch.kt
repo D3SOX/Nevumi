@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -35,6 +36,8 @@ import me.d3sox.nevumi.resources.add_to_queue
 import me.d3sox.nevumi.resources.play
 import me.d3sox.nevumi.resources.play_next
 import me.d3sox.nevumi.resources.retry
+import me.d3sox.nevumi.resources.search_type_albums
+import me.d3sox.nevumi.resources.search_type_artists
 import me.d3sox.nevumi.resources.search_type_songs
 import me.d3sox.nevumi.resources.sources_check_tags_after_download
 import me.d3sox.nevumi.resources.sources_check_tags_before_saving
@@ -54,9 +57,11 @@ import me.d3sox.nevumi.resources.sources_youtube_search_failed
 import me.d3sox.nevumi.resources.sources_youtube_song_description
 import me.d3sox.nevumi.resources.sources_youtube_video
 import me.d3sox.nevumi.resources.sources_youtube_videos
+import me.d3sox.nevumi.youtube.YouTubeCollection
 import me.d3sox.nevumi.youtube.YouTubeContinuation
 import me.d3sox.nevumi.youtube.YouTubeDestination
 import me.d3sox.nevumi.youtube.YouTubeException
+import me.d3sox.nevumi.youtube.YouTubeItem
 import me.d3sox.nevumi.youtube.YouTubeSearchKind
 import me.d3sox.nevumi.youtube.YouTubeTrack
 import me.d3sox.nevumi.youtube.smallArtwork
@@ -66,13 +71,13 @@ private fun songKey(artist: String, title: String) = "${artist.trim().lowercase(
 
 /**
  * Searches YouTube once [query] stops changing, preferring songs from YouTube Music. A pasted video link finds that video.
- * Tapping a result plays it; its options add it to the queue or download it, so another source's query only leads to a
- * recording the user picked.
+ * Tapping a result plays it, or opens an artist's or album's YouTube Music page; its options add it to the queue or download it, so another
+ * source's query only leads to a recording the user picked.
  */
 @Composable
 internal fun YouTubeSearchResults(query: String, state: AppState, controller: MusicController) {
     var kind by rememberSaveable { mutableStateOf(YouTubeSearchKind.SONGS) }
-    val results = remember(query, kind) { mutableStateListOf<YouTubeTrack>() }
+    val results = remember(query, kind) { mutableStateListOf<YouTubeItem>() }
     var next by remember(query, kind) { mutableStateOf<YouTubeContinuation?>(null) }
     var loading by remember(query, kind) { mutableStateOf(true) }
     var error by remember(query, kind) { mutableStateOf<String?>(null) }
@@ -87,7 +92,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
         try {
             val page = controller.searchYouTube(query, kind, continuation)
             if (continuation == null) results.clear()
-            results += page.results.distinctBy { it.videoId }.filter { result -> results.none { it.videoId == result.videoId } }
+            results += page.results.distinctBy { it.key }.filter { result -> results.none { it.key == result.key } }
             next = page.next
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: searchFailed; permanent = (failure as? YouTubeException)?.retryable == false }
@@ -97,32 +102,18 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
         if (attempt == 0) delay(500)
         load(null)
     }
-    val owned = remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
+    val owned = rememberOwnedSongs(state)
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(YouTubeSearchKind.SONGS to Res.string.search_type_songs, YouTubeSearchKind.VIDEOS to Res.string.sources_youtube_videos).forEach { (option, label) ->
-                FilterChip(kind == option, { kind = option }, label = { Text(stringResource(label)) }, modifier = Modifier.testTag("youtube-kind:${option.name}"))
-            }
-        }
+        val labels = mapOf(YouTubeSearchKind.SONGS to Res.string.search_type_songs, YouTubeSearchKind.ARTISTS to Res.string.search_type_artists,
+            YouTubeSearchKind.ALBUMS to Res.string.search_type_albums, YouTubeSearchKind.VIDEOS to Res.string.sources_youtube_videos)
+        OverflowChipRow(YouTubeSearchKind.entries, kind, { stringResource(labels.getValue(it)) }, { "youtube-kind:${it.name}" },
+            Modifier.padding(horizontal = 16.dp)) { kind = it }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("youtube-results")) {
-            items(results, key = { "youtube:${it.videoId}" }) { track ->
-                val inLibrary = songKey(track.artist, track.title) in owned
-                val description = stringResource(Res.string.sources_youtube_song_description, track.title, track.artist)
-                ListItem(modifier = Modifier.combinedClickable(onClick = { controller.playYouTube(track) }, onLongClick = { picked = track })
-                    .semantics { contentDescription = description },
-                    headlineContent = { Text(track.title, maxLines = 2) },
-                    supportingContent = {
-                        Text(listOfNotNull(track.artist.ifBlank { null }, track.durationMs.takeIf { it > 0 }?.let(::playbackTime),
-                            if (track.song) null else stringResource(Res.string.sources_youtube_video)).joinToString(" · "), maxLines = 1)
-                    },
-                    leadingContent = { YouTubeArtwork(track, controller) },
-                    trailingContent = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (inLibrary) Text(stringResource(Res.string.sources_in_library), style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            AppIconButton(AppIcon.MORE, stringResource(Res.string.sources_youtube_options_for, track.title)) { picked = track }
-                        }
-                    })
+            items(results, key = { "youtube:${it.key}" }) { result ->
+                when (result) {
+                    is YouTubeTrack -> YouTubeTrackRow(result, owned, controller, onOptions = { picked = result }) { controller.playYouTube(result) }
+                    is YouTubeCollection -> YouTubeCollectionRow(result, controller)
+                }
             }
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp)) }
             error?.let { message ->
@@ -147,28 +138,64 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
     picked?.let { track -> YouTubeOptionsSheet(track, state, controller) { picked = null } }
 }
 
-// Artwork of recent results, so scrolling back does not fetch it again.
-private val youTubeArtwork = mutableMapOf<String, ImageBitmap>()
-
+/** The artist and title of every song in the library, which marks YouTube results the user already has. */
 @Composable
-private fun YouTubeArtwork(track: YouTubeTrack, controller: MusicController) {
-    val url = smallArtwork(track)
-    val image by produceState(url?.let(youTubeArtwork::get), url) {
-        if (url == null || value != null) return@produceState
+internal fun rememberOwnedSongs(state: AppState): Set<String> =
+    remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
+
+/** A song or video; [play] runs on a tap, [onOptions] on a long press or its options button. */
+@Composable
+internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, controller: MusicController, onOptions: () -> Unit, play: () -> Unit) {
+    val inLibrary = songKey(track.artist, track.title) in owned
+    val description = stringResource(Res.string.sources_youtube_song_description, track.title, track.artist)
+    ListItem(modifier = Modifier.combinedClickable(onClick = play, onLongClick = onOptions).semantics { contentDescription = description },
+        headlineContent = { Text(track.title, maxLines = 2) },
+        supportingContent = {
+            Text(listOfNotNull(track.artist.ifBlank { null }, track.durationMs.takeIf { it > 0 }?.let(::playbackTime),
+                if (track.song) null else stringResource(Res.string.sources_youtube_video)).joinToString(" · "), maxLines = 1)
+        },
+        leadingContent = { YouTubeImage(smallArtwork(track), controller, Modifier.size(48.dp)) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (inLibrary) Text(stringResource(Res.string.sources_in_library), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AppIconButton(AppIcon.MORE, stringResource(Res.string.sources_youtube_options_for, track.title), onClick = onOptions)
+            }
+        })
+}
+
+// Recently shown YouTube images, so scrolling back or returning to a page does not fetch them again.
+private val youTubeImages = mutableMapOf<String, ImageBitmap>()
+
+/** An image from YouTube's image servers, at most [maxDimension] pixels wide or high once decoded. */
+@Composable
+internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: MusicController): ImageBitmap? {
+    val key = url?.let { "$maxDimension:$it" }
+    val image by produceState(key?.let(youTubeImages::get), key) {
+        // A reused row or card keeps the previous image until it learns this one's.
+        value = key?.let(youTubeImages::get)
+        if (url == null || key == null || value != null) return@produceState
         value = try {
             val bytes = controller.youTubeArtwork(url)
-            withContext(Dispatchers.Default) { decodeArtwork(bytes, 160) }
+            withContext(Dispatchers.Default) { decodeArtwork(bytes, maxDimension) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { null }
-        value?.let { cover ->
-            youTubeArtwork[url] = cover
-            if (youTubeArtwork.size > 120) youTubeArtwork.remove(youTubeArtwork.keys.first())
+        value?.let { image ->
+            youTubeImages[key] = image
+            if (youTubeImages.size > 200) youTubeImages.remove(youTubeImages.keys.first())
         }
     }
-    Surface(Modifier.size(48.dp), color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
+    return image
+}
+
+@Composable
+internal fun YouTubeImage(url: String?, controller: MusicController, modifier: Modifier, shape: Shape = RoundedCornerShape(12.dp),
+    icon: AppIcon = AppIcon.YOUTUBE, maxDimension: Int = 160) {
+    val image = rememberYouTubeImage(url, maxDimension, controller)
+    Surface(modifier, color = MaterialTheme.colorScheme.secondaryContainer, shape = shape) {
         image?.let { Image(it, null, Modifier.fillMaxSize().testTag("youtube-artwork"), contentScale = ContentScale.Crop) }
             ?: Box(contentAlignment = Alignment.Center) {
-                Icon(AppIcon.YOUTUBE.vector, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Icon(icon.vector, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
             }
     }
 }

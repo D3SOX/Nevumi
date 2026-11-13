@@ -1,0 +1,322 @@
+{
+  "contents": {
+    "tabbedSearchResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "YT Music",
+            "selected": true,
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "itemSectionRenderer": {
+                      "contents": [
+                        {
+                          "messageRenderer": {
+                            "button": {
+                              "buttonRenderer": {
+                                "style": "STYLE_TEXT",
+                                "isDisabled": false,
+                                "text": {
+                                  "simpleText": "About these results"
+                                },
+                                "icon": {
+                                  "iconType": "INFO_OUTLINE"
+                                },
+                                "navigationEndpoint": {
+                                  "urlEndpoint": {
+                                    "url": "https://www.youtube.com/howyoutubeworks/product-features/search/",
+                                    "target": "TARGET_NEW_WINDOW"
+                                  }
+                                },
+                                "iconPosition": "BUTTON_ICON_POSITION_TYPE_RIGHT_OF_TEXT"
+                              }
+                            },
+                            "style": {
+                              "value": "RENDER_STYLE_PANEL"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicShelfRenderer": {
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Artists"
+                          }
+                        ]
+                      },
+                      "contents": [
+                        {
+                          "musicResponsiveListItemRenderer": {
+                            "thumbnail": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/-5H0o74htg3vQrWCrlKvcQF6bKiE4bYHvATo-Npsw3-57bxyHFeN2KOQrFgkuXf8TvisXbO-SWguSDA=w120-h120-p-l90-rj",
+                                      "width": 120,
+                                      "height": 120
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "flexColumns": [
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "john"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Artist"
+                                      },
+                                      {
+                                        "text": " • "
+                                      },
+                                      {
+                                        "text": "2.26m monthly audience"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "UCLI_vItz-HMYnbh1OmKCD6w",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicResponsiveListItemRenderer": {
+                            "thumbnail": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://lh3.googleusercontent.com/vhLfKB1C7qY3P4_oX1QelsfWmcHM1FD2sPzyzUZdi2uFsrwufod4XXLPkcQ_BZZWy6wAAgHpSTQvNBHY=w120-h120-p-l90-rj",
+                                      "width": 120,
+                                      "height": 120
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "flexColumns": [
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "John Maus"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Artist"
+                                      },
+                                      {
+                                        "text": " • "
+                                      },
+                                      {
+                                        "text": "97.2k monthly audience"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "UC6HgSXIpoZkKW3avUQB0HrA",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "continuations": [
+                        {
+                          "nextContinuationData": {
+                            "continuation": "EokGEgRqb2huGoAGRWctS0FRd0lBQkFBR0FBZ0FTZ0FNQUJJRkdvS0VBUVFCUkFERUFvUUNZSUJHRlZEVEVsZmRrbDBlaTFJVFZsdVltZ3hUMjFMUTBRMmQ0SUJHRlZETmtoblUxaEpjRzlhYTB0WE0yRjJWVkZDTUVoeVFZSUJHRlZEVldwRVZUVkxWRFJhVlc1WFQxTmFWVUZqUTFOM1FZSUJHRlZEV210VFp6SXpaa0Z6WVVocmNXZGlRMFZCTFdZelo0SUJHRlZEWTNwYVJVWlBVVk5sVm1wbFZqUnVTMmsxYTJSb2Q0SUJHRlZETjNkWlFXazFiRzloUWtkRllrOVJlamRXUWtZeWQ0SUJHRlZEWTFOTU1tNVpVMHB3WDBsblpIcElNSGhDUW1Salo0SUJHRlZEWkhGZmJHbzFTVlJpZWpZM1ZUUnpOVEpyWVZKUWQ0SUJHRlZEVkZsRGIwTjBlVzlFYjJKeGRYQlROM0J1UmpaWmQ0SUJHRlZEYmpscE5HTmtUR1V4TkVOaWMwOTVZMVJpUzAxdlFZSUJHRlZEVTNKdGRXUnhiMUk0TTNOUU0wcGpURk4yVkVsaWQ0SUJHRlZEYkRGRmFFbGllbFZ4Tm1ReGNESkNZakYzTWpKR1FZSUJHRlZEYjFCUVZ6aEpObVZtVEc1emJ6Tk5ZMFZoUXpkUGQ0SUJHRlZETWxSV1duWm5VM2RZWXpaU2RWUTRTMjlDUWpGS1FZSUJHRlZEYld4bGJGTTFWVkZXZVdkbk5HMU1kVXBUWmpad2Q0SUJHRlZEYkVsalRVOXRZa0ZKTTNCMVNqQnFZak0zVldKSWQ0SUJHRlZEVWtsdFZFOXllSEZuT1VSVk5FSkdWbE5hYVcxV1VZSUJHRlZEWWt0c09FcFhXRW93T0daWWREUmtWekl5Y0hkd1FZSUJHRlZEY1hGSmJrWkNkWEUxVjFSYWRHaDVXV2R5YUZGalVZSUJHRlZEV1VsTlZVbHhXbU4xU25jNWJWaHRhMDR6ZUZsemR3JTNEJTNEGPHq0C4%3D"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "header": {
+                  "chipCloudRenderer": {
+                    "chips": [
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_SECONDARY"
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "john"
+                            }
+                          },
+                          "icon": {
+                            "iconType": "CLOSE"
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Clear filters"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Videos"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "john",
+                              "params": "EgWKAQIQAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Videos"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_PRIMARY"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Artists"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "john",
+                              "params": "EgWKAQIgAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": true,
+                          "uniqueId": "Artists"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Songs"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "john",
+                              "params": "EgWKAQIIAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Songs"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Community playlists"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "john",
+                              "params": "EgeKAQQoAEABagoQBBAFEAMQChAJ"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Community playlists"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Albums"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "john",
+                              "params": "EgWKAQIYAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Albums"
+                        }
+                      }
+                    ],
+                    "collapsedRowCount": 1,
+                    "horizontalScrollable": true
+                  }
+                }
+              }
+            },
+            "tabIdentifier": "music_search_catalog"
+          }
+        }
+      ]
+    }
+  }
+}

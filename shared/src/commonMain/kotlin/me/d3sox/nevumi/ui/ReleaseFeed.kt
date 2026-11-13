@@ -356,6 +356,7 @@ internal fun ReleaseOptions(release: ArtistRelease, album: String?, state: AppSt
 @Composable
 internal fun ReleaseSearch(release: ArtistRelease, youTube: Boolean, state: AppState, controller: MusicController, back: () -> Unit) {
     if (!LocalPageBackHandled.current) PlatformBackHandler(back)
+    YouTubePageHost(state, controller) {
     Column(Modifier.fillMaxSize().testTag(if (youTube) "release-youtube-search" else "release-soundcloud-search")) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(AppIcon.BACK, stringResource(Res.string.back), onClick = back)
@@ -366,5 +367,6 @@ internal fun ReleaseSearch(release: ArtistRelease, youTube: Boolean, state: AppS
         }
         val query = "${release.artist} ${release.title}"
         if (youTube) YouTubeSearchResults(query, state, controller) else SoundCloudSearchResults(query, state, controller)
+    }
     }
 }

@@ -409,6 +409,13 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
 /** A version of YouTube artwork that is large enough for a cover. YouTube Music scales its square artwork to the size in the address. */
 internal fun largeArtwork(url: String): String = url.replace(Regex("""=w\d+-h\d+"""), "=w1200-h1200")
 
+/** A version of YouTube Music artwork [width] pixels wide in its own aspect ratio; other YouTube images come in fixed sizes. */
+fun sizedArtwork(url: String, width: Int): String {
+    val size = Regex("""=w(\d+)-h(\d+)""").find(url)?.takeIf { "googleusercontent.com" in url } ?: return url
+    val (originalWidth, originalHeight) = size.destructured.toList().map { it.toLong() }
+    return url.replaceRange(size.range, "=w$width-h${width * originalHeight / originalWidth.coerceAtLeast(1)}")
+}
+
 /** A version of YouTube artwork that is large enough for a list row. */
 fun smallArtwork(track: YouTubeTrack): String? = track.artworkUrl?.let { url ->
     if ("googleusercontent.com" in url) url.replace(Regex("""=w\d+-h\d+"""), "=w226-h226") else "https://i.ytimg.com/vi/${track.videoId}/mqdefault.jpg"

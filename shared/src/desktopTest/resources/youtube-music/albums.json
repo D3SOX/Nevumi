@@ -1,0 +1,359 @@
+{
+  "contents": {
+    "tabbedSearchResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "YT Music",
+            "selected": true,
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "itemSectionRenderer": {
+                      "contents": [
+                        {
+                          "messageRenderer": {
+                            "button": {
+                              "buttonRenderer": {
+                                "style": "STYLE_TEXT",
+                                "isDisabled": false,
+                                "text": {
+                                  "simpleText": "About these results"
+                                },
+                                "icon": {
+                                  "iconType": "INFO_OUTLINE"
+                                },
+                                "navigationEndpoint": {
+                                  "urlEndpoint": {
+                                    "url": "https://www.youtube.com/howyoutubeworks/product-features/search/",
+                                    "target": "TARGET_NEW_WINDOW"
+                                  }
+                                },
+                                "iconPosition": "BUTTON_ICON_POSITION_TYPE_RIGHT_OF_TEXT"
+                              }
+                            },
+                            "style": {
+                              "value": "RENDER_STYLE_PANEL"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicShelfRenderer": {
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Albums"
+                          }
+                        ]
+                      },
+                      "contents": [
+                        {
+                          "musicResponsiveListItemRenderer": {
+                            "thumbnail": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/SPHeXqlEhzw-pPbAx3AQU4HSD-XuSMlPtLsptfvHOjOTd6F_1ZbELaOYn1d8-jGZ5HW8O1R0pLqausuVZw=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "flexColumns": [
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "OK Computer"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Album"
+                                      },
+                                      {
+                                        "text": " • "
+                                      },
+                                      {
+                                        "text": "Radiohead",
+                                        "navigationEndpoint": {
+                                          "browseEndpoint": {
+                                            "browseId": "UCr_iyUANcn9OX_yy9piYoLw",
+                                            "browseEndpointContextSupportedConfigs": {
+                                              "browseEndpointContextMusicConfig": {
+                                                "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "text": " • "
+                                      },
+                                      {
+                                        "text": "1997"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_yXhSI4FCUo6",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicResponsiveListItemRenderer": {
+                            "thumbnail": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/BAl1FqoDaFrpWSSrr95Yjii4fJSeitdRcVt7f-uOVrhxQfmo5ActMNysFErQfI-CiOZR4GH2fePoVQtd=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "flexColumns": [
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "In Rainbows"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Album"
+                                      },
+                                      {
+                                        "text": " • "
+                                      },
+                                      {
+                                        "text": "Radiohead",
+                                        "navigationEndpoint": {
+                                          "browseEndpoint": {
+                                            "browseId": "UCr_iyUANcn9OX_yy9piYoLw",
+                                            "browseEndpointContextSupportedConfigs": {
+                                              "browseEndpointContextMusicConfig": {
+                                                "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "text": " • "
+                                      },
+                                      {
+                                        "text": "2007"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_R6C9lU4QEg2",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "continuations": [
+                        {
+                          "nextContinuationData": {
+                            "continuation": "Eo4GEglyYWRpb2hlYWQagAZFZy1LQVF3SUFCQUFHQUVnQUNnQU1BQklGR29LRUFRUUJSQURFQW9RQ1lJQkdGVkRYMTl3V0d3MFMwWmtXRkJNVjJFMGVtSnZkakl5ZDRJQkdGVkRVQzE0ZW1wSmVHNUljbFpmWDFaQ2JVUnBkRE0xZDRJQkdGVkRjRFpHY25VeVNWRlpVWGhXV1hBeFR6SktaRTlpZDRJQkdGVkRVV2M0T0ZOMVVtZzBXamxPVWxOMlZub3hVVFkyUVlJQkdGVkRUMWRpTFhKa1VFbHpRekYzZG1vMlVYWlpjRWw0WjRJQkdGVkRWMlUyTkd4cE1rbGxSVjk2TVVkdVVqVkhRVE0wZDRJQkdGVkROM1ZoU1RSeFgyRnRhSEEzVDBjNGJERkVSRGROVVlJQkdGVkRZVjh5T0hsSFRrRlZiREpvVG1OVFZGWmlhRzR6VVlJQkdGVkRaalE1YjBsWVkwSktjbEZSWmpscmMwUjJZalp3UVlJQkdGVkROVE4wTFhkeVdsbHRTMnRvZGpORmFsTm1hRTFWUVlJQkdGVkRaMEp3VERGZlFqRmFVWGt4UTFOemNuRnFVVE5CWjRJQkdGVkRUVTlNUlc0M1EyUjZZMVZWUjNnemQySm1OR1ZDWjRJQkdGVkRSWGxwTXpSQ1FWVTNNVzVIWTBJemFHRkhNbWxKWjRJQkdGVkRla3RzYnkxR1lrWkZVbTlVTkVwTE1ucDBWVWRWZDRJQkdGVkRVMXAzTjFobFVESk5NbWQzWTJoTmRYVTViVXBwZDRJQkdGVkRVbGRUTFRkNVRYTmZNbVZaV21KQ2JtMUdUME10WjRJQkdGVkRSVXBxTjJZMFQxaHlaelZrU3psT1QzVnVYekJWZDRJQkdGVkRORkYxTW5sd1lVZElTSEJwV0ZneVRFRkdkV3hVUVlJQkdGVkRNblpKWTB4MFZsVlVVWE16YjA1SVdVeG9YM0IzUVlJQkdGVkRZVXhEVTNORVpuVk1aSHBFVUZWbVVqQTJjWGRDUVElM0QlM0QY8erQLg%3D%3D"
+                          }
+                        }
+                      ],
+                      "shelfDivider": {
+                        "musicShelfDividerRenderer": {
+                          "hidden": true
+                        }
+                      }
+                    }
+                  }
+                ],
+                "header": {
+                  "chipCloudRenderer": {
+                    "chips": [
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_SECONDARY"
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "radiohead"
+                            }
+                          },
+                          "icon": {
+                            "iconType": "CLOSE"
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Clear filters"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Videos"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "radiohead",
+                              "params": "EgWKAQIQAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Videos"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Artists"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "radiohead",
+                              "params": "EgWKAQIgAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Artists"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Songs"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "radiohead",
+                              "params": "EgWKAQIIAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Songs"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_DEFAULT"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Community playlists"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "radiohead",
+                              "params": "EgeKAQQoAEABagoQBBAFEAMQChAJ"
+                            }
+                          },
+                          "isSelected": false,
+                          "uniqueId": "Community playlists"
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "style": {
+                            "styleType": "STYLE_PRIMARY"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Albums"
+                              }
+                            ]
+                          },
+                          "navigationEndpoint": {
+                            "searchEndpoint": {
+                              "query": "radiohead",
+                              "params": "EgWKAQIYAWoKEAQQBRADEAoQCQ%3D%3D"
+                            }
+                          },
+                          "isSelected": true,
+                          "uniqueId": "Albums"
+                        }
+                      }
+                    ],
+                    "collapsedRowCount": 1,
+                    "horizontalScrollable": true
+                  }
+                }
+              }
+            },
+            "tabIdentifier": "music_search_catalog"
+          }
+        }
+      ]
+    }
+  }
+}

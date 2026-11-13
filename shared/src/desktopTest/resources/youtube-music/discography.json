@@ -1,0 +1,306 @@
+{
+  "contents": {
+    "singleColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "gridRenderer": {
+                      "items": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/DNFuGZeuZ7vGTxa49zFs3YNAwA-TOTVXYRFqPt3RQGmq0vK2zbLyTxJHxc88dShIoQrfQUiIugawXoK_=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "The Life of a Showgirl: The Encore",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_L64BnYDQpHZ",
+                                      "params": "ggMrGilPTEFLNXV5X2t5anZHRHU0MW5oX05PY2dJRDRLM0lYQzJUSU5Wem95cw%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Album"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "2026"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_L64BnYDQpHZ",
+                                "params": "ggMrGilPTEFLNXV5X2t5anZHRHU0MW5oX05PY2dJRDRLM0lYQzJUSU5Wem95cw%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/hBT4c_S7oWorOd-roVA5sqOYlPREGZ6DR8shvjtCFAEEBgTXdiNVBua7uUMCauzRyD6sw6o6NmLKvQOVpw=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "The Life of a Showgirl + Acoustic Collection",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_PLKWyYmLQZS",
+                                      "params": "ggMrGilPTEFLNXV5X2xqR1FuVEdCYndhV0JJcHpzNWJFNi1IOFRERGtPZDZmYw%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Album"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "2025"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_PLKWyYmLQZS",
+                                "params": "ggMrGilPTEFLNXV5X2xqR1FuVEdCYndhV0JJcHpzNWJFNi1IOFRERGtPZDZmYw%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/ZpWD37EEQE_LVuQ_O03cRmz5mZA7jG0gKGLt-49uHNDX6DycysijGGSOX9woU-OfQR5jyahz3aEdmBmm3A=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "The Life of a Showgirl",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_p6BGcsuOpGt",
+                                      "params": "ggMrGilPTEFLNXV5X2t0c05xX2FzUXRobDF4T21fdFh3cEQ5dFphNTQxM1lGYw%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Album"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "2025"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_p6BGcsuOpGt",
+                                "params": "ggMrGilPTEFLNXV5X2t0c05xX2FzUXRobDF4T21fdFh3cEQ5dFphNTQxM1lGYw%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "header": {
+                  "musicSideAlignedItemRenderer": {
+                    "startItems": [
+                      {
+                        "chipCloudRenderer": {
+                          "chips": [
+                            {
+                              "chipCloudChipRenderer": {
+                                "text": {
+                                  "runs": [
+                                    {
+                                      "text": "Albums"
+                                    }
+                                  ]
+                                },
+                                "navigationEndpoint": {
+                                  "browseSectionListReloadEndpoint": {
+                                    "continuation": {
+                                      "reloadContinuationData": {
+                                        "continuation": "4qmFsgI2EhxNUEFEVUNQQzBMMWQyNTN4LUt1TU53YTA1VHBBGhZnZ01JZWdZSUFSb0NBUUtnQmdFJTNE",
+                                        "showSpinnerOverlay": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "isSelected": true,
+                                "onDeselectedCommand": {
+                                  "browseSectionListReloadEndpoint": {
+                                    "continuation": {
+                                      "reloadContinuationData": {
+                                        "continuation": "4qmFsgIwEhxNUEFEVUNQQzBMMWQyNTN4LUt1TU53YTA1VHBBGhBnZ01HZWdRYUFnRUNvQVlC",
+                                        "showSpinnerOverlay": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "uniqueId": "Albums"
+                              }
+                            },
+                            {
+                              "chipCloudChipRenderer": {
+                                "text": {
+                                  "runs": [
+                                    {
+                                      "text": "Singles and EPs"
+                                    }
+                                  ]
+                                },
+                                "navigationEndpoint": {
+                                  "browseSectionListReloadEndpoint": {
+                                    "continuation": {
+                                      "reloadContinuationData": {
+                                        "continuation": "4qmFsgI2EhxNUEFEVUNQQzBMMWQyNTN4LUt1TU53YTA1VHBBGhZnZ01JZWdZSUFob0NBUUtnQmdFJTNE",
+                                        "showSpinnerOverlay": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "isSelected": false,
+                                "onDeselectedCommand": {
+                                  "browseSectionListReloadEndpoint": {
+                                    "continuation": {
+                                      "reloadContinuationData": {
+                                        "continuation": "4qmFsgIwEhxNUEFEVUNQQzBMMWQyNTN4LUt1TU53YTA1VHBBGhBnZ01HZWdRYUFnRUNvQVlC",
+                                        "showSpinnerOverlay": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "uniqueId": "Singles and EPs"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "endItems": [
+                      {
+                        "musicSortFilterButtonRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Default"
+                              }
+                            ]
+                          },
+                          "icon": {
+                            "iconType": "CHEVRON_DOWN"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "header": {
+    "musicHeaderRenderer": {
+      "title": {
+        "runs": [
+          {
+            "text": "Taylor Swift"
+          }
+        ]
+      }
+    }
+  }
+}

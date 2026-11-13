@@ -83,6 +83,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     val query = search.text
     val youTube = controller.youTubeAvailable && state.preferences.youTube
     var type by rememberSaveable { mutableStateOf(SearchType.ALL) }
+    // The library category to return to after searching another source.
+    var libraryType by rememberSaveable { mutableStateOf(SearchType.ALL) }
     var openedType by rememberSaveable { mutableStateOf<SearchType?>(null) }
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
     val selection = remember { SongSelection() }
@@ -109,6 +111,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     }
     CompositionLocalProvider(LocalSongSelection provides selection, LocalLibraryOrigin provides QueueOrigin(LibraryTab.SONGS),
         LocalLibraryScrollKey provides "global-search:${type.name}") {
+        YouTubePageHost(state, controller, bottomSpace) {
         Column(Modifier.fillMaxSize().imePadding().testTag("library-search-page")) {
             val searchLabel = stringResource(Res.string.sources_search_your_library)
             if (selection.active) SongSelectionHeader(selection, controller)
@@ -122,10 +125,19 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 // Each new request, such as Ctrl+F while search is open, puts the cursor back in the field.
                 LaunchedEffect(focusRequest) { focus.requestFocus() }
             }
-            if (opened == null) LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(SearchType.entries.filter { (it != SearchType.SOUNDCLOUD || state.soundCloud != null) && (it != SearchType.YOUTUBE || youTube) }, key = { it }) { category ->
-                    FilterChip(type == category, { type = category; selection.clear(); stopTyping() }, label = { Text(stringResource(category.label)) },
-                        modifier = Modifier.testTag("search-type:${category.name}"))
+            if (opened == null) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val sources = SearchSource.entries.filter {
+                    (it != SearchSource.SOUNDCLOUD || state.soundCloud != null) && (it != SearchSource.YOUTUBE || youTube)
+                }
+                val source = SearchSource.entries.firstOrNull { it.type == type } ?: SearchSource.LIBRARY
+                // A source turned off while chosen gives the search back to the library.
+                LaunchedEffect(source in sources) { if (source !in sources) type = libraryType }
+                SearchSourcePicker(sources, source) { picked ->
+                    type = picked.type ?: libraryType; selection.clear(); stopTyping()
+                }
+                if (source == SearchSource.LIBRARY) OverflowChipRow(SearchType.entries.filter { it.tab != null || it == SearchType.ALL }, type,
+                    { stringResource(it.label) }, { "search-type:${it.name}" }) { category ->
+                    type = category; libraryType = category; selection.clear(); stopTyping()
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -151,7 +163,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                             val collections = results.collections[category].orEmpty()
                             val total = if (category == SearchType.SONGS) results.songs.size else collections.size
                             val limit = if (type != SearchType.ALL) total else if (category == SearchType.SONGS) 20 else 10
-                            val seeAll = { type = category; stopTyping() }
+                            val seeAll = { type = category; libraryType = category; stopTyping() }
                             // The heading stays pinned while its section scrolls by, so its See all button is always within reach.
                             if (total > 0) stickyHeader(key = "heading:${category.name}") {
                                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).heightIn(min = 48.dp).padding(horizontal = 16.dp),
@@ -197,6 +209,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 }
             }
             Spacer(Modifier.height(bottomSpace))
+        }
         }
     }
 }

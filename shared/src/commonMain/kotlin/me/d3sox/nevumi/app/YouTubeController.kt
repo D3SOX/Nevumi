@@ -68,40 +68,87 @@ class YouTubeController internal constructor(private val context: ControllerCont
 
     suspend fun youTubeArtwork(url: String): ByteArray = source().artwork(url)
 
+    suspend fun browseYouTube(link: YouTubeLink): YouTubeBrowsePage {
+        requireEnabled()
+        return source().browse(link)
+    }
+
+    suspend fun browseYouTubeMore(continuation: YouTubeContinuation): YouTubePage {
+        requireEnabled()
+        return source().browseMore(continuation)
+    }
+
     /** Plays [track] on its own, or with [action] adds it to the queue. Its audio is looked up first, so an unavailable video says why. */
     fun playYouTube(track: YouTubeTrack, action: QueueAction? = null): kotlinx.coroutines.Job {
         // Numbered when tapped, so the order of the taps decides, not the order the lookups finish in.
         val request = if (action == null) ++context.playRequests else 0
-        return playYouTube(track, action, request)
+        return context.action(serialized = false) {
+            requireEnabled()
+            source().audio(track.videoId)
+            val trackId = libraryTracks(listOf(track)).single()
+            saveArtwork(listOf(track), listOf(trackId))
+            // Looking a video up takes a moment. The queue checks the request when it plays, so anything chosen before then wins.
+            if (action == null) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube", request = request).join()
+            else queueController.enqueue(trackId, action).join()
+        }
     }
 
-    private fun playYouTube(track: YouTubeTrack, action: QueueAction?, request: Long) = context.action(serialized = false) {
-        requireEnabled()
-        source().audio(track.videoId)
-        val trackId = libraryTrack(track)
-        // Looking a video up takes a moment. The queue checks the request when it plays, so anything chosen before then wins.
-        if (action == null) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube", request = request).join()
-        else queueController.enqueue(trackId, action).join()
+    /** Numbers a play choice when it is made, for a play that starts only after its songs load; any later choice wins over it. */
+    fun reservePlayRequest(): Long = ++context.playRequests
+
+    /**
+     * Plays [tracks], such as an album, starting at [index], or shuffled from any of them. Only the first song's audio is looked up
+     * before it plays; the others are looked up when the player reaches them.
+     */
+    fun playYouTube(tracks: List<YouTubeTrack>, index: Int, name: String, shuffle: Boolean = false,
+        request: Long = reservePlayRequest()): kotlinx.coroutines.Job {
+        return context.action(serialized = false) {
+            requireEnabled()
+            require(tracks.isNotEmpty()) { "There is nothing to play" }
+            val ids = libraryTracks(tracks)
+            val start = if (shuffle) queueController.shuffleStart(ids) else index.coerceIn(tracks.indices)
+            source().audio(tracks[start].videoId)
+            saveArtwork(listOf(tracks[start]), listOf(ids[start]))
+            queueController.playTrack(ids[start], ids, start, name, shuffleContext = shuffle, request = request).join()
+            // The other covers follow while the first song plays.
+            saveArtwork(tracks, ids)
+        }
     }
 
-    /** The library song that streams [track], kept out of the library views; the same video always maps to the same song. */
-    private suspend fun libraryTrack(track: YouTubeTrack): String {
-        val (title, artist) = track.suggestedTags()
-        val sourceId = "youtube:${track.videoId}"
-        // A video played before keeps its song, whose tags may be richer, such as after linking it to a local copy.
-        val song = library.trackForSource(sourceId) ?: library.importTrack(TrackMetadata(title, artist, durationMs = track.durationMs),
-            TrackSource(sourceId, SourceKind.YOUTUBE, track.videoId))
-        if (artwork != null && context.state.value.artwork[song.id] == null) track.artworkUrl?.let { url ->
-            try { artwork.save(song.id, source().artwork(largeArtwork(url))) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { /* The song plays without a cover. */ }
+    /** The library songs that stream [tracks], kept out of the library views; the same video always maps to the same song. */
+    private suspend fun libraryTracks(tracks: List<YouTubeTrack>): List<String> {
+        val ids = tracks.map { track ->
+            val (title, artist) = track.suggestedTags()
+            val sourceId = "youtube:${track.videoId}"
+            // A video played before keeps its song, whose tags may be richer, such as after linking it to a local copy.
+            (library.trackForSource(sourceId) ?: library.importTrack(TrackMetadata(title, artist, durationMs = track.durationMs),
+                TrackSource(sourceId, SourceKind.YOUTUBE, track.videoId))).id
         }
         // The queue looks songs up in the app state, which the library's own update reaches only a moment later.
         context.operations.withLock {
-            val tracks = library.tracks()
-            context.update { it.copy(tracks = tracks) }
+            val all = library.tracks()
+            context.update { it.copy(tracks = all) }
         }
-        return song.id
+        return ids
+    }
+
+    /** Saves the covers of songs that have none yet; songs of one album share a cover, which is fetched once. */
+    private suspend fun saveArtwork(tracks: List<YouTubeTrack>, ids: List<String>) {
+        if (artwork == null) return
+        val fetched = mutableMapOf<String, ByteArray?>()
+        tracks.zip(ids).forEach { (track, id) ->
+            val url = track.artworkUrl ?: return@forEach
+            if (context.state.value.artwork[id] != null) return@forEach
+            try {
+                val bytes = fetched.getOrPut(url) {
+                    try { source().artwork(largeArtwork(url)) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null }
+                } ?: return@forEach
+                artwork.save(id, bytes)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* The song plays without a cover. */ }
+        }
     }
 
     fun downloadFromYouTube(track: YouTubeTrack, destination: YouTubeDestination, reviewTags: Boolean) = context.action(serialized = false) {
