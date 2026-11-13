@@ -28,7 +28,7 @@ internal fun FileRename(track: Track, controller: MusicController, target: FileE
     var name by remember(track.id) { mutableStateOf("") }
     var loadError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
-    val state by controller.state.collectAsState()
+    val state by (LocalSteadyState.current ?: controller.state).collectAsState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(track.id) {
         try { original = controller.musicFileName(track.id, target); name = original }

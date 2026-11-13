@@ -208,15 +208,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         pausedSeekPosition = null
         checked(native.mpv_set_property_string(handle, "pause", "yes"))
         checked(native.mpv_set_property_string(handle, "playlist-start", startIndex.toString()))
-        val playlist = tracks.joinToString("\n", prefix = "memory://#EXTM3U\n", postfix = "\n") { track ->
-            val location = when {
-                track.location.startsWith("file:") -> "file://${URI(track.location).rawPath}"
-                "://" in track.location -> track.location
-                else -> "file://${File(track.location).toURI().rawPath}"
-            }
-            require('\n' !in location && '\r' !in location) { "Invalid audio location" }
-            location
-        }
+        val playlist = tracks.joinToString("\n", prefix = "memory://#EXTM3U\n", postfix = "\n") { mpvLocation(it.location) }
         command("loadlist", playlist, "replace")
         pendingLoad = PendingLoad(longProperty("playlist/$startIndex/id"), positionMs.coerceAtLeast(0), play, tracks[startIndex].entryId)
         if (repeatPlays != null) repeatedEntryId = selected.entryId
@@ -251,7 +243,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
             // Entries before the destination are already in their final order.
             var origin = (destination until working.size).firstOrNull { working[it].entryId == track.entryId } ?: -1
             if (origin < 0) {
-                command("loadfile", track.location, "append")
+                command("loadfile", mpvLocation(track.location), "append")
                 working += track
                 origin = working.lastIndex
             }
@@ -368,6 +360,12 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         checked(native.mpv_set_property_string(handle, "loop-playlist", if (mode == RepeatMode.ALL) "inf" else "no"))
         mutableStatus.update { it.copy(repeatMode = mode, repeatPlays = playCount) }
     }
+
+    private fun mpvLocation(location: String): String = when {
+        location.startsWith("file:") -> "file://${URI(location).rawPath}"
+        "://" in location -> location
+        else -> "file://${File(location).toURI().rawPath}"
+    }.also { require('\n' !in it && '\r' !in it) { "Invalid audio location" } }
 
     private fun command(vararg arguments: String) = checked(native.mpv_command(handle, StringArray(arguments)))
     private fun resumeAt(positionMs: Long) {

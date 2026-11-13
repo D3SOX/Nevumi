@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
+import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.ListeningHistory
 import me.d3sox.nevumi.history.Scrobbling
 import me.d3sox.nevumi.history.ScrobblingService
@@ -21,11 +22,14 @@ import me.d3sox.nevumi.settings.HomeSectionId
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.playback.AutoEqProfiles
+import me.d3sox.nevumi.playlists.Playlist
 import me.d3sox.nevumi.playlists.PlaylistSort
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.queue.PlaybackQueue
+import me.d3sox.nevumi.queue.SavedQueue
 import me.d3sox.nevumi.queue.SavedQueueKind
 import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.settings.MusicSettings
 import me.d3sox.nevumi.sftp.SftpConfiguration
 import me.d3sox.nevumi.soundcloud.SoundCloudDownloads
 import me.d3sox.nevumi.soundcloud.SoundCloudProfile
@@ -56,7 +60,11 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 
     suspend fun export(appVersion: String = "", sections: Set<BackupSection> = BackupSection.entries.toSet()): String {
         require(sections.isNotEmpty()) { "Choose at least one backup section" }
-        val tracks = library.tracks().associateBy { it.id }
+        // One transaction, so a server import or device sync cannot add a playlist whose songs are missing from the song list read before it.
+        val read = store.transaction { ExportRead(library.tracks(), playlists.all(), preferences.load(),
+            if (BackupSection.LISTENING_HISTORY in sections) history.all() else emptyList(),
+            if (BackupSection.SAVED_QUEUES in sections) queue.saved() else emptyList()) }
+        val tracks = read.tracks.associateBy { it.id }
         // Android names local folders relative to its storage, like "Music/Sky", which looks like a server folder; a folder that
         // holds a song from this device is local however it is written.
         // A folder that also holds server songs is the server's, and stays valid on another device connected to it.
@@ -64,10 +72,10 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             .mapNotNullTo(HashSet()) { it.metadata.folder.ifBlank { null } }
         val localFolders = folders(SourceKind.LOCAL) - folders(SourceKind.SERVER)
         fun isDeviceFolder(folder: String) = isDevicePath(folder) || folder in localFolders
-        val storedPlaylists = playlists.all()
+        val storedPlaylists = read.playlists
         // Playlist IDs differ on every device, so a custom Playlists order names each playlist by its place in the backup.
         val playlistPositions = storedPlaylists.withIndex().associate { it.value.id to "$BACKUP_PLAYLIST${it.index}" }
-        val storedSettings = preferences.load()
+        val storedSettings = read.settings
         val playlistOrder = if (BackupSection.PLAYLISTS in sections) storedSettings.collectionLayout(LibraryTab.PLAYLISTS).order
             .filterNot(::isDeviceFolder).map { playlistPositions[it] ?: it } else null
         // Folder rules name paths and permissions on this device, and scroll positions are transient.
@@ -79,7 +87,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 layout.copy(order = order)
             }) }
             else null
-        val listened = if (BackupSection.LISTENING_HISTORY in sections) history.all() else emptyList()
+        val listened = read.listens
         val playlists = if (BackupSection.PLAYLISTS in sections) storedPlaylists.map { playlist ->
             val rule = playlist.rule
             // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
@@ -88,7 +96,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             else BackupPlaylist(playlist.name, if (rule == null) playlist.trackIds else emptyList(), rule,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
         } else emptyList()
-        val savedQueues = if (BackupSection.SAVED_QUEUES in sections) queue.saved().filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
+        val savedQueues = if (BackupSection.SAVED_QUEUES in sections) read.savedQueues.filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
             // A queue played from a local folder is named after its path, which device sync also replaces.
             val folder = saved.snapshot.origin?.tab == LibraryTab.FOLDERS || isDeviceFolder(saved.snapshot.contextName)
             BackupSavedQueue(saved.name, saved.snapshot.copy(selectedSavedQueueId = null, origin = null,
@@ -277,6 +285,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 }
 
 /** Prefixes a playlist's place in the backup inside a backed-up custom Playlists order. */
+private class ExportRead(val tracks: List<Track>, val playlists: List<Playlist>, val settings: MusicSettings, val listens: List<Listen>,
+    val savedQueues: List<SavedQueue>)
+
 private const val BACKUP_PLAYLIST = "backup-playlist:"
 
 /** The origin of listens restored from a backup, which were already scrobbled where they were played. */

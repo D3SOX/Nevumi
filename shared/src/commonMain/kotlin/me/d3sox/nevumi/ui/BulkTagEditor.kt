@@ -55,7 +55,7 @@ internal fun BulkTagEditor(tracks: List<Track>, controller: MusicController, tar
     val values = remember { mutableStateMapOf<BulkTagField, String>().apply { fields.forEach { put(it, "") } } }
     var changed by remember { mutableStateOf(emptySet<BulkTagField>()) }
     var saving by remember { mutableStateOf(false) }
-    val state by controller.state.collectAsState()
+    val state by (LocalSteadyState.current ?: controller.state).collectAsState()
     val scope = rememberCoroutineScope()
     fun value(field: BulkTagField): String? = if (field in changed) values.getValue(field).trim() else null
     val valid = changed.isNotEmpty() && (value(BulkTagField.TITLE)?.isNotBlank() != false) &&

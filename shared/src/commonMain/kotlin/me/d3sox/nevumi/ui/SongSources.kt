@@ -34,7 +34,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun SongSources(track: Track, controller: MusicController, dismiss: () -> Unit) {
-    val state by controller.state.collectAsState()
+    val state by (LocalSteadyState.current ?: controller.state).collectAsState()
     var choosing by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     var candidate by remember { mutableStateOf<Track?>(null) }
@@ -68,7 +68,7 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
             if (choosing) {
                 Text(stringResource(Res.string.player_link_choose_text))
                 OutlinedTextField(search, { search = it }, label = { Text(stringResource(Res.string.player_search_songs)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                val candidates = filterTracks(state.tracks.filter { it.id != track.id && it.inLibrary }, LibraryQuery(text = search))
+                val candidates = remember(state.tracks, track.id, search) { filterTracks(state.tracks.filter { it.id != track.id && it.inLibrary }, LibraryQuery(text = search)) }
                 LazyColumn(Modifier.fillMaxWidth().height(280.dp)) {
                     items(candidates, key = { it.id }) { copy ->
                         val linkDescription = stringResource(Res.string.player_link_copy, copy.metadata.title)

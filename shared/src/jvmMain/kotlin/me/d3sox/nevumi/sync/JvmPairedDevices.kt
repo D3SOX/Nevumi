@@ -208,14 +208,21 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
             parsed.certificateSha256.matches(Regex("[0-9a-f]{64}")) && parsed.port in 1..65535) { "The pairing invitation is invalid or expired" }
         networkAccess("")
         lifecycle.withLock { listen() }
-        require(parsed.deviceId != ownId) { "Choose a different device" }
-        connect(parsed.host, parsed.port, parsed.certificateSha256) { socket ->
-            write(socket, SyncRequest(action = "pair", deviceId = requireNotNull(ownId), name = name,
-                listeningPort = requireNotNull(server).localPort, secret = parsed.secret))
-            val response = read<SyncResponse>(socket)
-            validate(response)
-            require(response.deviceId == parsed.deviceId) { "The invitation belongs to a different device" }
-            savePeer(SyncPeer(response.deviceId, response.name, parsed.host, response.listeningPort, parsed.certificateSha256))
+        try {
+            require(parsed.deviceId != ownId) { "Choose a different device" }
+            connect(parsed.host, parsed.port, parsed.certificateSha256) { socket ->
+                write(socket, SyncRequest(action = "pair", deviceId = requireNotNull(ownId), name = name,
+                    listeningPort = requireNotNull(server).localPort, secret = parsed.secret))
+                val response = read<SyncResponse>(socket)
+                validate(response)
+                require(response.deviceId == parsed.deviceId) { "The invitation belongs to a different device" }
+                savePeer(SyncPeer(response.deviceId, response.name, parsed.host, response.listeningPort, parsed.certificateSha256))
+            }
+        } finally {
+            // A failed pairing leaves nothing to listen for on a device without other pairings.
+            withContext(NonCancellable) {
+                incoming.withLock { lifecycle.withLock { if (state.value.peers.isEmpty() && offer.get() == null) stopListening() } }
+            }
         }
     }
 
