@@ -506,5 +506,9 @@
     <string name="sources_youtube_job_needs_tags">Downloaded. Nevumi saves it once you check its tags.</string>
     <string name="sources_youtube_tags_intro">Nevumi downloaded “%1$s”. It saves the song with these tags.</string>
     <string name="sources_to_device_and_server">To this device and music server</string>
+    <string name="sources_youtube_page_failed">Could not open this YouTube Music page</string>
+    <string name="sources_youtube_page_empty">YouTube Music shows nothing on this page</string>
+    <string name="sources_open_youtube_list">Open %1$s</string>
+    <string name="sources_open_on_youtube_music">Open on YouTube Music</string>
     <string name="sources_youtube_disabled">Turn on YouTube in Settings to search it</string>
 </resources>

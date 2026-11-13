@@ -1,0 +1,1534 @@
+{
+  "contents": {
+    "singleColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "endpoint": {
+              "browseEndpoint": {
+                "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                "params": "EghmZWF0dXJlZA%3D%3D"
+              }
+            },
+            "title": "Music",
+            "selected": true,
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "musicShelfRenderer": {
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Top songs",
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo",
+                                "params": "ggMCCAI%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "contents": [
+                        {
+                          "musicResponsiveListItemRenderer": {
+                            "thumbnail": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/ZpWD37EEQE_LVuQ_O03cRmz5mZA7jG0gKGLt-49uHNDX6DycysijGGSOX9woU-OfQR5jyahz3aEdmBmm3A=w120-h120-l90-rj",
+                                      "width": 120,
+                                      "height": 120
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "overlay": {
+                              "musicItemThumbnailOverlayRenderer": {
+                                "content": {
+                                  "musicPlayButtonRenderer": {
+                                    "playNavigationEndpoint": {
+                                      "watchEndpoint": {
+                                        "videoId": "7nVctvQVz0U",
+                                        "index": 0,
+                                        "playerParams": "0gcJCQkB-iE-y48-",
+                                        "watchEndpointMusicSupportedConfigs": {
+                                          "watchEndpointMusicConfig": {
+                                            "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "playIcon": {
+                                      "iconType": "PLAY_ARROW"
+                                    },
+                                    "pauseIcon": {
+                                      "iconType": "PAUSE"
+                                    },
+                                    "iconColor": 4294967295,
+                                    "backgroundColor": 0,
+                                    "activeBackgroundColor": 0,
+                                    "loadingIndicatorColor": 14745645,
+                                    "playingIcon": {
+                                      "iconType": "VOLUME_UP"
+                                    },
+                                    "iconLoadingColor": 0,
+                                    "activeScaleFactor": 1,
+                                    "buttonSize": "MUSIC_PLAY_BUTTON_SIZE_SMALL",
+                                    "rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+                                    "accessibilityPlayData": {},
+                                    "accessibilityPauseData": {}
+                                  }
+                                },
+                                "contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_CENTERED",
+                                "displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_PERSISTENT"
+                              }
+                            },
+                            "flexColumns": [
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "The Fate of Ophelia",
+                                        "navigationEndpoint": {
+                                          "watchEndpoint": {
+                                            "videoId": "7nVctvQVz0U",
+                                            "watchEndpointMusicSupportedConfigs": {
+                                              "watchEndpointMusicConfig": {
+                                                "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Taylor Swift",
+                                        "navigationEndpoint": {
+                                          "browseEndpoint": {
+                                            "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                            "browseEndpointContextSupportedConfigs": {
+                                              "browseEndpointContextMusicConfig": {
+                                                "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "883m plays"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "The Life of a Showgirl",
+                                        "navigationEndpoint": {
+                                          "browseEndpoint": {
+                                            "browseId": "MPREb_p6BGcsuOpGt",
+                                            "browseEndpointContextSupportedConfigs": {
+                                              "browseEndpointContextMusicConfig": {
+                                                "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "playlistItemData": {
+                              "videoId": "7nVctvQVz0U"
+                            }
+                          }
+                        },
+                        {
+                          "musicResponsiveListItemRenderer": {
+                            "thumbnail": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/GcrDhHXqrPm4BjS-4L1c0OHC9iz0ZxmFeRur2A6Aqo9Vm7OfFCBOSVbRzp1M1D1s_3rsvKaC7w6kku0=w120-h120-l90-rj",
+                                      "width": 120,
+                                      "height": 120
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "overlay": {
+                              "musicItemThumbnailOverlayRenderer": {
+                                "content": {
+                                  "musicPlayButtonRenderer": {
+                                    "playNavigationEndpoint": {
+                                      "watchEndpoint": {
+                                        "videoId": "dC9QIUKviJU",
+                                        "index": 1,
+                                        "watchEndpointMusicSupportedConfigs": {
+                                          "watchEndpointMusicConfig": {
+                                            "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "playIcon": {
+                                      "iconType": "PLAY_ARROW"
+                                    },
+                                    "pauseIcon": {
+                                      "iconType": "PAUSE"
+                                    },
+                                    "iconColor": 4294967295,
+                                    "backgroundColor": 0,
+                                    "activeBackgroundColor": 0,
+                                    "loadingIndicatorColor": 14745645,
+                                    "playingIcon": {
+                                      "iconType": "VOLUME_UP"
+                                    },
+                                    "iconLoadingColor": 0,
+                                    "activeScaleFactor": 1,
+                                    "buttonSize": "MUSIC_PLAY_BUTTON_SIZE_SMALL",
+                                    "rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+                                    "accessibilityPlayData": {},
+                                    "accessibilityPauseData": {}
+                                  }
+                                },
+                                "contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_CENTERED",
+                                "displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_PERSISTENT"
+                              }
+                            },
+                            "flexColumns": [
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Blank Space",
+                                        "navigationEndpoint": {
+                                          "watchEndpoint": {
+                                            "videoId": "dC9QIUKviJU",
+                                            "watchEndpointMusicSupportedConfigs": {
+                                              "watchEndpointMusicConfig": {
+                                                "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "Taylor Swift",
+                                        "navigationEndpoint": {
+                                          "browseEndpoint": {
+                                            "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                            "browseEndpointContextSupportedConfigs": {
+                                              "browseEndpointContextMusicConfig": {
+                                                "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "4.5bn plays"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                  "text": {
+                                    "runs": [
+                                      {
+                                        "text": "1989 (Deluxe)",
+                                        "navigationEndpoint": {
+                                          "browseEndpoint": {
+                                            "browseId": "MPREb_JiAQrbUtBdP",
+                                            "browseEndpointContextSupportedConfigs": {
+                                              "browseEndpointContextMusicConfig": {
+                                                "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "playlistItemData": {
+                              "videoId": "dC9QIUKviJU"
+                            }
+                          }
+                        }
+                      ],
+                      "bottomText": {
+                        "runs": [
+                          {
+                            "text": "Show all"
+                          }
+                        ]
+                      },
+                      "bottomEndpoint": {
+                        "browseEndpoint": {
+                          "browseId": "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo",
+                          "params": "ggMCCAI%3D",
+                          "browseEndpointContextSupportedConfigs": {
+                            "browseEndpointContextMusicConfig": {
+                              "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "musicCarouselShelfRenderer": {
+                      "header": {
+                        "musicCarouselShelfBasicHeaderRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Albums",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "MPADUCPC0L1d253x-KuMNwa05TpA",
+                                    "params": "ggMIegYIARoCAQI%3D",
+                                    "browseEndpointContextSupportedConfigs": {
+                                      "browseEndpointContextMusicConfig": {
+                                        "pageType": "MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO",
+                          "moreContentButton": {
+                            "buttonRenderer": {
+                              "style": "STYLE_TEXT",
+                              "text": {
+                                "runs": [
+                                  {
+                                    "text": "More"
+                                  }
+                                ]
+                              },
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "MPADUCPC0L1d253x-KuMNwa05TpA",
+                                  "params": "ggMIegYIARoCAQI%3D",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "contents": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/DNFuGZeuZ7vGTxa49zFs3YNAwA-TOTVXYRFqPt3RQGmq0vK2zbLyTxJHxc88dShIoQrfQUiIugawXoK_=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "The Life of a Showgirl: The Encore",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_L64BnYDQpHZ",
+                                      "params": "ggMrGilPTEFLNXV5X2t5anZHRHU0MW5oX05PY2dJRDRLM0lYQzJUSU5Wem95cw%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "2026"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_L64BnYDQpHZ",
+                                "params": "ggMrGilPTEFLNXV5X2t5anZHRHU0MW5oX05PY2dJRDRLM0lYQzJUSU5Wem95cw%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/hBT4c_S7oWorOd-roVA5sqOYlPREGZ6DR8shvjtCFAEEBgTXdiNVBua7uUMCauzRyD6sw6o6NmLKvQOVpw=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "The Life of a Showgirl + Acoustic Collection",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_PLKWyYmLQZS",
+                                      "params": "ggMrGilPTEFLNXV5X2xqR1FuVEdCYndhV0JJcHpzNWJFNi1IOFRERGtPZDZmYw%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "2025"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_PLKWyYmLQZS",
+                                "params": "ggMrGilPTEFLNXV5X2xqR1FuVEdCYndhV0JJcHpzNWJFNi1IOFRERGtPZDZmYw%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicCarouselShelfRenderer": {
+                      "header": {
+                        "musicCarouselShelfBasicHeaderRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Singles and EPs",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "MPADUCPC0L1d253x-KuMNwa05TpA",
+                                    "params": "ggMIegYIAhoCAQI%3D",
+                                    "browseEndpointContextSupportedConfigs": {
+                                      "browseEndpointContextMusicConfig": {
+                                        "pageType": "MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO",
+                          "moreContentButton": {
+                            "buttonRenderer": {
+                              "style": "STYLE_TEXT",
+                              "text": {
+                                "runs": [
+                                  {
+                                    "text": "More"
+                                  }
+                                ]
+                              },
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "MPADUCPC0L1d253x-KuMNwa05TpA",
+                                  "params": "ggMIegYIAhoCAQI%3D",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "contents": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/IT2xx4NkUsyXmVKu5hEiBw3uYXHFQbRdX0vQHffrcfozbTZ31eNFZmu3CLEwtkVrNvcyGtaUkAfS-eon=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Patient Zero",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_FBl7fyYLoov",
+                                      "params": "ggMrGilPTEFLNXV5X25BQmdGWW4yRnZKQTRFSDg4U0VDeDh4aFR0TVJ4R2MzNA%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Single"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "2026"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_FBl7fyYLoov",
+                                "params": "ggMrGilPTEFLNXV5X25BQmdGWW4yRnZKQTRFSDg4U0VDeDh4aFR0TVJ4R2MzNA%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/gugx1oABoi0MrNgzaLtUJib6Xm44OC8aoAYx66zxLM_N1kG6xT_BUH7IO-0eaFAyQzxk43srK4gW7hip=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "I Knew It, I Knew You (From \"Toy Story 5\")",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_jvZRj1p6hYp",
+                                      "params": "ggMrGilPTEFLNXV5X2syS1dKNnZXaHVTSXdVVWt0VmVDOTQxbElsM1FXaHlyTQ%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Single"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "2026"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_jvZRj1p6hYp",
+                                "params": "ggMrGilPTEFLNXV5X2syS1dKNnZXaHVTSXdVVWt0VmVDOTQxbElsM1FXaHlyTQ%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicCarouselShelfRenderer": {
+                      "header": {
+                        "musicCarouselShelfBasicHeaderRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Videos",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "VLOLAK5uy_loEjsMw6hRHXqBnM7tPvxZodwPc4BN3RY",
+                                    "params": "ggMCCAI%3D",
+                                    "browseEndpointContextSupportedConfigs": {
+                                      "browseEndpointContextMusicConfig": {
+                                        "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO",
+                          "moreContentButton": {
+                            "buttonRenderer": {
+                              "style": "STYLE_TEXT",
+                              "text": {
+                                "runs": [
+                                  {
+                                    "text": "More"
+                                  }
+                                ]
+                              },
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "VLOLAK5uy_loEjsMw6hRHXqBnM7tPvxZodwPc4BN3RY",
+                                  "params": "ggMCCAI%3D",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "contents": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://i.ytimg.com/vi/j8pR1tyoRFc/hq720.jpg?sqp=-oaymwEKCKAGEMIDIABIWg&rs=AMzJL3mlqmO3gYe3JqyldymFkxTSwkgzHQ",
+                                      "width": 800,
+                                      "height": 450
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Patient Zero"
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Taylor Swift",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "5.4m views"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "watchEndpoint": {
+                                "videoId": "j8pR1tyoRFc",
+                                "index": 0,
+                                "watchEndpointMusicSupportedConfigs": {
+                                  "watchEndpointMusicConfig": {
+                                    "musicVideoType": "MUSIC_VIDEO_TYPE_OMV"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://i.ytimg.com/vi/mw3kSNIxjqo/hq720.jpg?sqp=-oaymwEKCKAGEMIDIABIWg&rs=AMzJL3nTKuktBWCLN_c9OcoSepSvj85MRg",
+                                      "width": 800,
+                                      "height": 450
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Patient Zero"
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Taylor Swift",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "29m views"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "watchEndpoint": {
+                                "videoId": "mw3kSNIxjqo",
+                                "index": 1,
+                                "watchEndpointMusicSupportedConfigs": {
+                                  "watchEndpointMusicConfig": {
+                                    "musicVideoType": "MUSIC_VIDEO_TYPE_OMV"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicCarouselShelfRenderer": {
+                      "header": {
+                        "musicCarouselShelfBasicHeaderRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Live performances",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                    "params": "6gPkAUdxZ0JXcGtCQ3BZQkNpUjVkRjl3WVdkbFgzTnVZWEJ6YUc5MFgyMTFjMmxqWDNCaFoyVmZjbVZuYVc5dVlXd1NIMEV4ZUROWVRYaDFMV052Vm5kTFEzcEJiVU5RYzNKa2FrSXRRbEJJVW04YVRRQUFaVzR0UjBJQUFVUkZBQUZFUlFBQkFFWkZiWFZ6YVdOZlpHVjBZV2xzWDJGeWRHbHpkQUFCQVVNQUFBRUFBQUVCQUZWRFVFTXdUREZrTWpVemVDMUxkVTFPZDJFd05WUndRUUFCOHRxenFnb0dRQVZJQUZBaA%3D%3D",
+                                    "browseEndpointContextSupportedConfigs": {
+                                      "browseEndpointContextMusicConfig": {
+                                        "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO",
+                          "moreContentButton": {
+                            "buttonRenderer": {
+                              "style": "STYLE_TEXT",
+                              "text": {
+                                "runs": [
+                                  {
+                                    "text": "More"
+                                  }
+                                ]
+                              },
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                  "params": "6gPkAUdxZ0JXcGtCQ3BZQkNpUjVkRjl3WVdkbFgzTnVZWEJ6YUc5MFgyMTFjMmxqWDNCaFoyVmZjbVZuYVc5dVlXd1NIMEV4ZUROWVRYaDFMV052Vm5kTFEzcEJiVU5RYzNKa2FrSXRRbEJJVW04YVRRQUFaVzR0UjBJQUFVUkZBQUZFUlFBQkFFWkZiWFZ6YVdOZlpHVjBZV2xzWDJGeWRHbHpkQUFCQVVNQUFBRUFBQUVCQUZWRFVFTXdUREZrTWpVemVDMUxkVTFPZDJFd05WUndRUUFCOHRxenFnb0dRQVZJQUZBaA%3D%3D",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "contents": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://i.ytimg.com/vi/_9jaJtmraXA/hq720.jpg?sqp=-oaymwEKCKAGEMIDIABIWg&rs=AMzJL3k9tbpHpiZL1nT6trN5hK4CEVD4_A",
+                                      "width": 800,
+                                      "height": 450
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Taylor Swift Performance - The Icon Sessions at the Grammy Museum"
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Taylor Swift",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "6.5m views"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "watchEndpoint": {
+                                "videoId": "_9jaJtmraXA",
+                                "watchEndpointMusicSupportedConfigs": {
+                                  "watchEndpointMusicConfig": {
+                                    "musicVideoType": "MUSIC_VIDEO_TYPE_OMV"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://i.ytimg.com/vi/SVY8I46dkb0/hq720.jpg?sqp=-oaymwEKCKAGEMIDIABIWg&rs=AMzJL3lEVy5WpcKnC1Tb7rhvPVCaqjAxQA",
+                                      "width": 800,
+                                      "height": 450
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Live at the 2019 American Music Awards"
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Taylor Swift",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "120m views"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "watchEndpoint": {
+                                "videoId": "SVY8I46dkb0",
+                                "watchEndpointMusicSupportedConfigs": {
+                                  "watchEndpointMusicConfig": {
+                                    "musicVideoType": "MUSIC_VIDEO_TYPE_OMV"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicCarouselShelfRenderer": {
+                      "header": {
+                        "musicCarouselShelfBasicHeaderRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Featured on"
+                              }
+                            ]
+                          },
+                          "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO"
+                        }
+                      },
+                      "contents": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/jvshZlSlG9Kc5RRuzl-dT4RWigZeKhyg1pA1wE-zNOy5Wm2Du-ILxI-dbH-Fu-zA-fwqk-FtK5a_09w=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Presenting Taylor Swift",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "VLRDCLAK5uy_k1272v-yXtLJm7gmMiAxjOl-vh5aEC11A",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Playlist"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "YouTube Music"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "VLRDCLAK5uy_k1272v-yXtLJm7gmMiAxjOl-vh5aEC11A",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/TijfthwmRUgth5WZjZ624Fj_-71GewvsIq_JvzEEhpyLurskmIrBylfue0-d0OUZAnDyvE6N4b4704T8=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Sweetheart Pop",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "VLRDCLAK5uy_l1oO11DBO4FD8U7bOrqUKK5Y_PkISUMQM",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Playlist"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "YouTube Music"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "VLRDCLAK5uy_l1oO11DBO4FD8U7bOrqUKK5Y_PkISUMQM",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicCarouselShelfRenderer": {
+                      "header": {
+                        "musicCarouselShelfBasicHeaderRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Playlists by Taylor Swift",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                    "params": "6gPkAUdxZ0JXcGtCQ3BZQkNpUjVkRjl3WVdkbFgzTnVZWEJ6YUc5MFgyMTFjMmxqWDNCaFoyVmZjbVZuYVc5dVlXd1NIMEV4ZUROWVRYaDFMV052Vm5kTFEzcEJiVU5RYzNKa2FrSXRRbEJJVW04YVRRQUFaVzR0UjBJQUFVUkZBQUZFUlFBQkFFWkZiWFZ6YVdOZlpHVjBZV2xzWDJGeWRHbHpkQUFCQVVNQUFBRUFBQUVCQUZWRFVFTXdUREZrTWpVemVDMUxkVTFPZDJFd05WUndRUUFCOHRxenFnb0dRQWRJQUZBUg%3D%3D",
+                                    "browseEndpointContextSupportedConfigs": {
+                                      "browseEndpointContextMusicConfig": {
+                                        "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO",
+                          "moreContentButton": {
+                            "buttonRenderer": {
+                              "style": "STYLE_TEXT",
+                              "text": {
+                                "runs": [
+                                  {
+                                    "text": "More"
+                                  }
+                                ]
+                              },
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "UCPC0L1d253x-KuMNwa05TpA",
+                                  "params": "6gPkAUdxZ0JXcGtCQ3BZQkNpUjVkRjl3WVdkbFgzTnVZWEJ6YUc5MFgyMTFjMmxqWDNCaFoyVmZjbVZuYVc5dVlXd1NIMEV4ZUROWVRYaDFMV052Vm5kTFEzcEJiVU5RYzNKa2FrSXRRbEJJVW04YVRRQUFaVzR0UjBJQUFVUkZBQUZFUlFBQkFFWkZiWFZ6YVdOZlpHVjBZV2xzWDJGeWRHbHpkQUFCQVVNQUFBRUFBQUVCQUZWRFVFTXdUREZrTWpVemVDMUxkVTFPZDJFd05WUndRUUFCOHRxenFnb0dRQWRJQUZBUg%3D%3D",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "contents": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://i.ytimg.com/pl_c/PLINj2JJM1jxMKUSiMcZPYvORDFh5sa8XH/studio_square_thumbnail.jpg?sqp=CLqT3NcG-oaymwEKCLAGEMsDIABIWqLzl_8DBgjG1PzGBg&rs=AMzJL3mByQyoFTvTvio-idaRZtK8MqUhYw",
+                                      "width": 816,
+                                      "height": 459
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Taylor Swift - The Life of a Showgirl",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "VLPLINj2JJM1jxMKUSiMcZPYvORDFh5sa8XH",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Playlist"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "Taylor Swift",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UCqECaJ8Gagnn7YCbPEzWH6g",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "59m views"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "VLPLINj2JJM1jxMKUSiMcZPYvORDFh5sa8XH",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/zHwpbGSDcX75pd3vXHFUaN0zeu9eZXAEC-WMJYK8fW9FlSVvSNZnVx55ZTDSA9qAkk77DOJubcf_=s576",
+                                      "width": 576,
+                                      "height": 576
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Taylor Swift - THE TORTURED POETS DEPARTMENT",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "VLPLINj2JJM1jxOxE-4mVaEJCEzO1CiR0Cwm",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Playlist"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "Taylor Swift",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UCqECaJ8Gagnn7YCbPEzWH6g",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "55m views"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "VLPLINj2JJM1jxOxE-4mVaEJCEzO1CiR0Cwm",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicCarouselShelfRenderer": {
+                      "header": {
+                        "musicCarouselShelfBasicHeaderRenderer": {
+                          "title": {
+                            "runs": [
+                              {
+                                "text": "Fans might also like"
+                              }
+                            ]
+                          },
+                          "headerStyle": "MUSIC_CAROUSEL_SHELF_BASIC_HEADER_STYLE_DISPLAY_TWO"
+                        }
+                      },
+                      "contents": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/VVGOJpxGFBbbUJHurZq_U1F_BjIhaMBAY1sDhOT3a2kE2DnidfYT8L_hY7WoJOusysvzn1msCoinvtma=w544-h544-p-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Shawn Mendes",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UC6ZjlLJhqP79nqGr3Ic6Adg",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "149m monthly audience"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "UC6ZjlLJhqP79nqGr3Ic6Adg",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://lh3.googleusercontent.com/EVT9GyIuRZT8lY2LaZSZ29ZJ2BUMlBnNLtFOLcijFP4RMW0cgyaBbbq6hELkaWXdyrsa8Su_GV-oBA=w544-h544-p-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Kacey Musgraves",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "UC87QNTF9qgTwe8KKN1V8NGw",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "2.62m monthly audience"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "UC87QNTF9qgTwe8KKN1V8NGw",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "musicDescriptionShelfRenderer": {
+                      "header": {
+                        "runs": [
+                          {
+                            "text": "About"
+                          }
+                        ]
+                      },
+                      "subheader": {
+                        "runs": [
+                          {
+                            "text": "46,864,371,906 views"
+                          }
+                        ]
+                      },
+                      "description": {
+                        "runs": [
+                          {
+                            "text": "And, baby, that’s show business for you. New album The Life of a Showgirl. Out October 3  ❤️‍🔥\n"
+                          },
+                          {
+                            "text": "https://Taylor.lnk.to/TSTheLifeofaSho...",
+                            "navigationEndpoint": {
+                              "urlEndpoint": {
+                                "url": "https://Taylor.lnk.to/TSTheLifeofaShowgirl",
+                                "target": "TARGET_NEW_WINDOW"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "header": {
+    "musicImmersiveHeaderRenderer": {
+      "title": {
+        "runs": [
+          {
+            "text": "Taylor Swift"
+          }
+        ]
+      },
+      "description": {
+        "runs": [
+          {
+            "text": "And, baby, that’s show business for you. New album The Life of a Showgirl. Out October 3  ❤️‍🔥\n"
+          },
+          {
+            "text": "https://Taylor.lnk.to/TSTheLifeofaSho...",
+            "navigationEndpoint": {
+              "urlEndpoint": {
+                "url": "https://Taylor.lnk.to/TSTheLifeofaShowgirl",
+                "target": "TARGET_NEW_WINDOW"
+              }
+            }
+          }
+        ]
+      },
+      "thumbnail": {
+        "musicThumbnailRenderer": {
+          "thumbnail": {
+            "thumbnails": [
+              {
+                "url": "https://yt3.googleusercontent.com/RCpTA6EXJQyjVFDosWOKa2SMmqkua_lA9mHPDWWciLwgqpZLz-k8rXWRF_367trrQ7up9BUwCbk6kRk=w2880-h1200-p-l90-rj",
+                "width": 2880,
+                "height": 1200
+              }
+            ]
+          }
+        }
+      },
+      "monthlyListenerCount": {
+        "runs": [
+          {
+            "text": "408m monthly audience"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "responseContext": {
+    "visitorData": "CgtaZGZVZkFKUm9WSSjVr9zXBjIKCgJERRIEEgAgEQ%3D%3D"
+  },
+  "contents": {
+    "singleColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "gridRenderer": {
+                      "items": [
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/YNBWXposuP5fm-jp6GvnYw4omXtwd6vv701KVe3HFAzvyZYN-3NCWhZhznalGJ4dE7Witc0UdsjvYhT1=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                },
+                                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+                                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+                              }
+                            },
+                            "aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Metal Health",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_6bPc0A9DwcT",
+                                      "params": "ggMrGilPTEFLNXV5X214dGVzdHJyQkZ6ekM3YUhFQWhnYk55OU0teExraEFMTQ%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Album"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "2026"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_6bPc0A9DwcT",
+                                "params": "ggMrGilPTEFLNXV5X214dGVzdHJyQkZ6ekM3YUhFQWhnYk55OU0teExraEFMTQ%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "musicTwoRowItemRenderer": {
+                            "thumbnailRenderer": {
+                              "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "https://yt3.googleusercontent.com/pr_figqOohx1RWh8QSr296bOlS1UEQiwOSJSJqnggNuPGLTen4WQiXgHM0XFi39vd_p0P8pwo5y98o28=w544-h544-l90-rj",
+                                      "width": 544,
+                                      "height": 544
+                                    }
+                                  ]
+                                },
+                                "thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+                                "thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+                              }
+                            },
+                            "aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+                            "title": {
+                              "runs": [
+                                {
+                                  "text": "Smelting of Ores",
+                                  "navigationEndpoint": {
+                                    "browseEndpoint": {
+                                      "browseId": "MPREb_oow7pUme6EY",
+                                      "params": "ggMrGilPTEFLNXV5X2xCcWRFVjNJaHJwLW9Gc3p4Q3psOUpOTnlIay1DVEEzRQ%3D%3D",
+                                      "browseEndpointContextSupportedConfigs": {
+                                        "browseEndpointContextMusicConfig": {
+                                          "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "subtitle": {
+                              "runs": [
+                                {
+                                  "text": "Album"
+                                },
+                                {
+                                  "text": " • "
+                                },
+                                {
+                                  "text": "2025"
+                                }
+                              ]
+                            },
+                            "navigationEndpoint": {
+                              "browseEndpoint": {
+                                "browseId": "MPREb_oow7pUme6EY",
+                                "params": "ggMrGilPTEFLNXV5X2xCcWRFVjNJaHJwLW9Gc3p4Q3psOUpOTnlIay1DVEEzRQ%3D%3D",
+                                "browseEndpointContextSupportedConfigs": {
+                                  "browseEndpointContextMusicConfig": {
+                                    "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "continuations": [
+                        {
+                          "nextContinuationData": {
+                            "continuation": "4qmFsgKBAxIcTVBBRFVDdUEzSWJMdGQtbU1WUEg1Z20xNnRXURrgAjZnUF9BVWR5ZDBKWGNUQkNRM0Z2UWtOcFVqVmtSamwzV1Zka2JGZ3pUblZaV0VKNllVYzVNRmd5TVRGak1teHFXRE5DYUZveVZtWmpiVlp1WVZjNWRWbFhkMU5JTW1RMVZVVndibFV5Wkd4aVJsWkdXbFJvVFZOR1dUVlNNVm8xVGtWM01tRXlWbk5TYkZKSlZXMDRZVmxWTVRGak1teHFVa2RXTUZsWGJITlZSMFp1V2xaT2JHTnVXbkJaTWxWMFVqSldNRkZZU2pCaFdFNHdVa2RzZWxreU9XNWpiVVozWVVoc1VWbFhaR3hCUVVWQldsYzBkRkl3U1VGQlZWSkdRVUZHUlZKUlFVSkJVVTVXVVROV1FrMHdiR2xVU0ZKclRGY3hUbFpzUWtsT1YyUjBUVlJhTUZZeFJVRkJVVVZDUVVGRWVUSnlUM0ZEWjFwQlFWVm9hMVZIVVElM0QlM0Q%3D",
+                            "autoloadEnabled": true,
+                            "autoloadImmediately": true
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "header": {
+    "musicHeaderRenderer": {
+      "title": {
+        "runs": [
+          {
+            "text": "Buckethead"
+          }
+        ]
+      }
+    }
+  }
+}

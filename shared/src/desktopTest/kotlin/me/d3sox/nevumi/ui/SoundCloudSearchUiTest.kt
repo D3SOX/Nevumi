@@ -3,7 +3,6 @@ package me.d3sox.nevumi.ui
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runSkikoComposeUiTest
 import io.ktor.client.HttpClient
@@ -85,12 +84,19 @@ class SoundCloudSearchUiTest {
                 setContent { MusicPlayerApp(controller) }
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady && controller.state.value.soundCloud != null }
                 onNodeWithContentDescription("Search").performClick()
-                val chips = onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
-                chips.performScrollToNode(hasTestTag("search-type:SOUNDCLOUD"))
-                onNodeWithTag("search-type:SOUNDCLOUD").performClick()
+                // Library categories that do not fit wait behind More; a picked one takes the row's last place.
+                onNodeWithTag("search-type:FOLDERS").assertDoesNotExist()
+                onNodeWithTag("search-filters-more").performClick()
+                onNodeWithTag("search-type:FOLDERS").performClick()
+                onNodeWithTag("search-type:FOLDERS").assertIsDisplayed().assertIsSelected()
+                snapshot("search-filters")
+                onNodeWithTag("search-source:SOUNDCLOUD").performClick()
+                onNodeWithTag("search-type:FOLDERS").assertDoesNotExist()
                 onNodeWithText("Search SoundCloud for songs to download").assertIsDisplayed()
                 snapshot("soundcloud-search-empty")
-                chips.performScrollToNode(hasTestTag("search-type:ALL"))
+                // Back in the library, the category picked before is still chosen.
+                onNodeWithTag("search-source:LIBRARY").performClick()
+                onNodeWithTag("search-type:FOLDERS").assertIsSelected()
                 onNodeWithTag("search-type:ALL").performClick()
                 onNodeWithContentDescription("Search your library").performTextInput("Night")
                 onNodeWithTag("search-soundcloud").performScrollTo().performClick()

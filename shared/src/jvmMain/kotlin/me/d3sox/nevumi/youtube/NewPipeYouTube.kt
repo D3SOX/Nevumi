@@ -91,16 +91,24 @@ class NewPipeYouTube : YouTubeSource, AutoCloseable {
     }
 
     override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?): YouTubePage = extract {
-        val previous = continuation?.value as? Continued
-        if (previous != null) return@extract page(previous.extractor, previous.extractor.getPage(previous.page))
+        if (continuation != null) {
+            val previous = continuation.value as? Continued ?: return@extract YouTubeMusicPages.more(continuation)
+            return@extract page(previous.extractor, previous.extractor.getPage(previous.page))
+        }
         val text = query.trim()
         require(text.isNotEmpty()) { "Enter something to search for" }
         if (accepts(text)) return@extract YouTubePage(listOf(track(StreamInfo.getInfo(service, text))), null)
+        // NewPipe Extractor finds artists and albums but cannot open their YouTube Music pages, so they come from those pages' own search.
+        if (kind == YouTubeSearchKind.ARTISTS || kind == YouTubeSearchKind.ALBUMS) return@extract YouTubeMusicPages.search(text, kind)
         val filter = if (kind == YouTubeSearchKind.SONGS) YoutubeSearchQueryHandlerFactory.MUSIC_SONGS else YoutubeSearchQueryHandlerFactory.VIDEOS
         val extractor = service.getSearchExtractor(service.searchQHFactory.fromQuery(text, listOf(filter), ""))
         extractor.fetchPage()
         page(extractor, extractor.initialPage)
     }
+
+    override suspend fun browse(link: YouTubeLink): YouTubeBrowsePage = extract { YouTubeMusicPages.browse(link) }
+
+    override suspend fun browseMore(continuation: YouTubeContinuation): YouTubePage = extract { YouTubeMusicPages.more(continuation) }
 
     override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {
         require(videoId.matches(VIDEO_ID)) { "This is not a YouTube video" }

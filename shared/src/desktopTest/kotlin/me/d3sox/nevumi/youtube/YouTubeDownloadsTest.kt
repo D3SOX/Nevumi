@@ -38,6 +38,8 @@ class YouTubeDownloadsTest {
     private class FakeYouTube(val audio: ByteArray, val failure: Exception? = null, val mimeType: String = "audio/mp4") : YouTubeSource {
         val lookups = Collections.synchronizedList(mutableListOf<Boolean>())
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?) = YouTubePage(emptyList(), null)
+        override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
+        override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
         override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {
             lookups += fresh
             failure?.let { throw it }

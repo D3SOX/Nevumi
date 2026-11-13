@@ -280,6 +280,10 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
         continuation: me.d3sox.nevumi.youtube.YouTubeContinuation? = null) = youTubeController.searchYouTube(query, kind, continuation)
     suspend fun youTubeArtwork(url: String): ByteArray = youTubeController.youTubeArtwork(url)
     fun playYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, action: QueueAction? = null) = youTubeController.playYouTube(track, action)
+    fun playYouTube(tracks: List<me.d3sox.nevumi.youtube.YouTubeTrack>, index: Int, name: String, shuffle: Boolean = false) =
+        youTubeController.playYouTube(tracks, index, name, shuffle)
+    suspend fun browseYouTube(link: me.d3sox.nevumi.youtube.YouTubeLink) = youTubeController.browseYouTube(link)
+    suspend fun browseYouTubeMore(continuation: me.d3sox.nevumi.youtube.YouTubeContinuation) = youTubeController.browseYouTubeMore(continuation)
     fun downloadFromYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, destination: me.d3sox.nevumi.youtube.YouTubeDestination, reviewTags: Boolean) =
         youTubeController.downloadFromYouTube(track, destination, reviewTags)
     suspend fun youTubeCover(id: String): ByteArray? = youTubeController.youTubeCover(id)
