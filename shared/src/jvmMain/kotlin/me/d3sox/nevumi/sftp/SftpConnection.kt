@@ -136,13 +136,8 @@ class SftpConnection(private val store: MusicStore, private val library: MusicLi
         try {
             readLocal(source.location).use { input -> Files.newOutputStream(staged).use { input.copyTo(it) } }
             AudioFileIO.read(staged.toFile())
-            val hash = MessageDigest.getInstance("SHA-256")
-            Files.newInputStream(staged).use { input ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) { val size = input.read(buffer); if (size < 0) break; hash.update(buffer, 0, size) }
-            }
             val record = PendingServerUpload(UUID.randomUUID().toString(), configuration.id, trackId, relativePath, staged.toString(),
-                hash.digest().joinToString("") { "%02x".format(it) })
+                fileHash(staged.toFile()))
             store.put("server-upload:${record.id}", "server-uploads", record)
             return record
         } catch (failure: Exception) { Files.deleteIfExists(staged); throw failure }

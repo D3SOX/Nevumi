@@ -7,6 +7,7 @@ import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.AudioContentId
 import me.d3sox.nevumi.library.FileAudioAccess
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.musicBrainzId
 import me.d3sox.nevumi.playlists.Playlist
 import me.d3sox.nevumi.queue.SavedQueue
 import me.d3sox.nevumi.queue.QueueEntry
@@ -492,8 +493,7 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
     internal companion object {
         /** A song's identity across devices from its MusicBrainz tags, or null when they are incomplete. */
         fun identity(metadata: TrackMetadata): String? {
-            val identifier = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-            if (!metadata.recordingId.matches(identifier) || !metadata.releaseId.matches(identifier) || metadata.trackNumber <= 0 ||
+            if (!metadata.recordingId.matches(musicBrainzId) || !metadata.releaseId.matches(musicBrainzId) || metadata.trackNumber <= 0 ||
                 metadata.discNumber <= 0 || metadata.durationMs <= 0) return null
             return listOf(metadata.recordingId.lowercase(), metadata.releaseId.lowercase(), metadata.discNumber, metadata.trackNumber).joinToString(":")
         }

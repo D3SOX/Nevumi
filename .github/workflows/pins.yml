@@ -1,0 +1,74 @@
+name: Pins
+# Opens a pull request for each version pin that Dependabot cannot track. See scripts/update-pins.py.
+on:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pin: [projectm, mpv, appimagetool, milkdrop-presets, android-build-tools, android-ndk, android-cmake]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: startsWith(matrix.pin, 'android-')
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - if: startsWith(matrix.pin, 'android-')
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          log-accepted-android-sdk-licenses: false
+      - name: Open or refresh the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN: ${{ matrix.pin }}
+        run: |
+          set -euo pipefail
+          summary="$(python3 scripts/update-pins.py "$PIN")"
+          if [[ -z "$summary" ]]; then
+            echo "$PIN is up to date"
+            exit 0
+          fi
+          branch="pins/$PIN"
+          title="chore(deps): update $summary"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --create "$branch"
+          git commit --all --message "$title"
+          open="$(gh pr list --head "$branch" --state open --json number --jq '.[].number')"
+          push=true
+          # An unreachable remote fails here instead of looking like a missing branch.
+          remote="$(git ls-remote origin "refs/heads/$branch" | cut -f1)"
+          if [[ -n "$remote" ]]; then
+            # Never replace commits someone added to the pull request, such as an updated preset count.
+            authors="$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$remote" --jq '.commits[].commit.author.email')"
+            if [[ -n "$authors" ]] && grep -qvxF '41898282+github-actions[bot]@users.noreply.github.com' <<< "$authors"; then
+              echo "$branch has commits from someone else, so it is left as it is"
+              exit 0
+            fi
+            # The branch already holds this update on the current base.
+            git fetch --quiet origin "$remote"
+            if git diff --quiet "$remote" HEAD; then push=false; fi
+          fi
+          # The lease fails the push if someone pushed to the branch after the check above.
+          if [[ "$push" == true ]]; then git push --force-with-lease="refs/heads/$branch:$remote" origin "HEAD:refs/heads/$branch"; fi
+          if [[ -z "$open" ]]; then
+            # Pull requests and pushes from the workflow token start no workflows, and a dispatched run does not count
+            # as a required check, so reopening the pull request is what starts its tests.
+            gh pr create --head "$branch" --title "$title" --body "$(printf '%s\n\n%s' \
+              "Updates a pin that Dependabot cannot track. \`scripts/update-pins.py $PIN\` made this change." \
+              'GitHub Actions opened this pull request, so no checks start on their own. Approve its workflows if GitHub offers that, or close and reopen it to run them.')"
+          elif [[ "$push" == true ]]; then
+            gh pr edit "$branch" --title "$title"
+            gh pr comment "$branch" --body 'The update changed. Approve the workflows or close and reopen this pull request to run the checks again.'
+          fi

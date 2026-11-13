@@ -263,9 +263,10 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
                 "pair" -> {
                     val invitation = offer.get()
                     require(invitation != null && invitation.expiresAt > clock() && request.secret != null &&
-                        MessageDigest.isEqual(invitation.secret.toByteArray(Charsets.UTF_8), request.secret.toByteArray(Charsets.UTF_8)) &&
-                        offer.compareAndSet(invitation, null)) { "Pairing was not authorized" }
+                        MessageDigest.isEqual(invitation.secret.toByteArray(Charsets.UTF_8), request.secret.toByteArray(Charsets.UTF_8))) { "Pairing was not authorized" }
+                    // A rejected attempt must not use up the invitation, or its expiry could no longer clear it from the screen.
                     require(state.value.peers.none { it.deviceId == request.deviceId && it.certificateSha256 != pin }) { "Remove the previous pairing first" }
+                    require(offer.compareAndSet(invitation, null)) { "Pairing was not authorized" }
                     savePeer(SyncPeer(request.deviceId, request.name, socket.inetAddress.hostAddress, request.listeningPort, pin))
                     mutableState.update { it.copy(invitation = null, invitationExpiresAt = null) }
                     write(socket, SyncResponse(deviceId = requireNotNull(ownId), name = name, listeningPort = requireNotNull(server).localPort))

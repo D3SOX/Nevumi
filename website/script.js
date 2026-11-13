@@ -86,7 +86,7 @@
       col = mix(col, col.brg, 0.004) * decay - 1.5 / 255.0;
 
       float d = waveDist(q, r, a);
-      float line = smoothstep(0.012, 0.0, d);
+      float line = 1.0 - smoothstep(0.0, 0.012, d);
       vec3 wc = mix(c1, c2, 0.5 + 0.5 * sin(a * 2.0 + t * 0.8));
       wc = mix(wc, c3, beat * 0.6);
       col += line * wc * 0.5;
@@ -103,7 +103,7 @@
       float lum = dot(col, vec3(0.299, 0.587, 0.114));
       col = clamp(mix(vec3(lum), col, 1.6), 0.0, 1.0);
       vec3 ink = vec3(0.09, 0.07, 0.12);
-      float v = smoothstep(1.1, 0.3, length(uv - 0.5));
+      float v = 1.0 - smoothstep(0.3, 1.1, length(uv - 0.5));
       gl_FragColor = vec4(mix(ink, ink + col * (1.0 - ink), v * 0.85 + 0.15), 1.0);
     }`;
 

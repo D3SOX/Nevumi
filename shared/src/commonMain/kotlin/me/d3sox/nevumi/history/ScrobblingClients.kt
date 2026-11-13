@@ -7,6 +7,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.CancellationException
 import me.d3sox.nevumi.navidrome.isUnreachableHost
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.uuid.Uuid
@@ -167,9 +168,13 @@ class LastFmClient(private val http: HttpClient, private val apiKey: String, pri
             parameters.forEach { (key, value) -> append(key, value) }
             append("api_sig", signature); append("format", "json")
         })
-        checkStatus(response)
-        val result = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-        result["error"]?.jsonPrimitive?.intOrNull?.let { code ->
+        // A body that cannot be read still leaves the status to classify the failure.
+        val body = try { response.bodyAsText() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { checkStatus(response); throw error }
+        val result = try { Json.parseToJsonElement(body) as? JsonObject } catch (_: SerializationException) { null }
+        // Last.fm also sends its error codes with non-2xx statuses, so the code decides before the status does.
+        (result?.get("error") as? JsonPrimitive)?.intOrNull?.let { code ->
             val failure = when (code) {
                 4, 9, 10, 14, 15, 26 -> ScrobbleFailure.AUTHORIZATION
                 11, 16, 29 -> ScrobbleFailure.RETRYABLE
@@ -183,6 +188,7 @@ class LastFmClient(private val http: HttpClient, private val apiKey: String, pri
                 else -> "Last.fm request failed: code $code"
             })
         }
-        result
+        checkStatus(response)
+        result ?: throw ScrobbleException(ScrobbleFailure.UNCERTAIN, "The scrobbling service did not confirm the request")
     }
 }

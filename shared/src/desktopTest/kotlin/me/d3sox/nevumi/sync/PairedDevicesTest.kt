@@ -152,6 +152,30 @@ class PairedDevicesTest {
     }
 
     @Test
+    fun aRejectedRepairingDoesNotUseUpTheInvitation() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-pairing-conflict")
+        val stores = (1..3).map { openMusicStore(directory.resolve("device-$it.db").toString()) }
+        fun device(index: Int) = JvmPairedDevices(stores[index], LibrarySync(stores[index], MusicLibrary(stores[index])), vault(), "Device ${index + 1}")
+        val phone = device(0)
+        val open = mutableListOf(phone)
+        try {
+            val desktop = device(1).also { open += it }
+            desktop.pair(phone.createInvitation("127.0.0.1"))
+            desktop.closeAndJoin(); open -= desktop
+            // A device that lost its keyring keeps its ID but presents a new certificate, which the phone must refuse.
+            val reinstalled = device(1).also { open += it }
+            val invitation = phone.createInvitation("127.0.0.1")
+            kotlin.test.assertFails { reinstalled.pair(invitation) }
+            assertNotNull(phone.state.value.invitation)
+            device(2).also { open += it }.pair(invitation)
+            assertEquals(2, phone.state.value.peers.size)
+            assertEquals(null, phone.state.value.invitation)
+        } finally {
+            open.forEach { it.closeAndJoin() }; stores.forEach { it.close() }; directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun invitationsRejectAlterationAndReuseAndRemovingAPeerRevokesItsAccess() = runBlocking {
         val directory = Files.createTempDirectory("nevumi-pairing-authorization")
         val stores = (1..3).map { openMusicStore(directory.resolve("device-$it.db").toString()) }

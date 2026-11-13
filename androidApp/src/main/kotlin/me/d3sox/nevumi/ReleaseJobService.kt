@@ -31,8 +31,10 @@ class ReleaseJobService : JobService() {
             try {
                 withContext(Dispatchers.IO) {
                     val state = controller.state.first { it.libraryReady }
-                    // Turning notifications off leaves the job to cancel itself instead of racing the settings as they load.
-                    if (!state.preferences.notifyNewReleases) getSystemService(JobScheduler::class.java).cancel(JOB)
+                    // Turning notifications off or unfollowing every artist leaves the job to cancel itself instead of racing the
+                    // stores as they load. Following an artist again schedules it anew.
+                    if (!state.preferences.notifyNewReleases || !controller.releasesController.followsArtists())
+                        getSystemService(JobScheduler::class.java).cancel(JOB)
                     else {
                         controller.releasesController.refreshIfStale(ReleasesController.REFRESH_INTERVAL_MS / 2)
                         retry = controller.state.value.releaseRefresh.error != null
@@ -40,6 +42,9 @@ class ReleaseJobService : JobService() {
                 }
             } catch (_: CancellationException) {
                 // The next run checks again.
+            } catch (_: Exception) {
+                // A store that cannot be read now may be readable on the retry.
+                retry = true
             } finally { if (isActive) jobFinished(params, retry) }
         }
         return true

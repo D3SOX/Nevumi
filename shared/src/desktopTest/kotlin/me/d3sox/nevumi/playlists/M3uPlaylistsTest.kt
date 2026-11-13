@@ -47,6 +47,23 @@ class M3uPlaylistsTest {
     }
 
     @Test
+    fun exportingPrefersAnAvailableCopyOverAMissingLocalFile() = runBlocking {
+        val directory = Files.createTempDirectory("available-m3u")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val song = library.importTrack(TrackMetadata("Moved"), TrackSource("local:moved", SourceKind.LOCAL, "/music/moved.flac", available = false))
+            library.importTrack(song.metadata, TrackSource("download:moved", SourceKind.DOWNLOAD, "/downloads/moved.flac"), linkTo = song.id)
+            val missing = library.importTrack(TrackMetadata("Gone"), TrackSource("local:gone", SourceKind.LOCAL, "/music/gone.flac", available = false))
+            val exported = M3uPlaylists(library, Playlists(store)).exportTracks(listOf(song.id, missing.id)).lines()
+            assertTrue("/downloads/moved.flac" in exported)
+            assertTrue("/music/moved.flac" !in exported)
+            // With no available copy, the export still names the song's file so the playlist keeps its entry.
+            assertTrue("/music/gone.flac" in exported)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun importingAndExportingAMixedM3uPreservesOrderRepeatsAndReportsMissingSongs() = runBlocking {
         val directory = Files.createTempDirectory("m3u-playlist")
         val store = openMusicStore(directory.resolve("library.db").toString())

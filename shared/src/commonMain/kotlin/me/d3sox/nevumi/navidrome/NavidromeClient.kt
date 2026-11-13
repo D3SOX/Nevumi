@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.navidrome
 
+import me.d3sox.nevumi.artwork.readArtwork
 import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.lyrics.Lyrics
 import me.d3sox.nevumi.lyrics.classicLyrics
@@ -374,16 +375,7 @@ class NavidromeClient(
             check(response.headers[HttpHeaders.ContentType]?.startsWith("image/") == true) {
                 "Server returned no artwork"
             }
-            val bytes = okio.Buffer()
-            val channel = response.bodyAsChannel()
-            val buffer = ByteArray(32 * 1024)
-            while (true) {
-                val count = channel.readAvailable(buffer)
-                if (count < 0) break
-                check(bytes.size + count <= 10 * 1024 * 1024) { "Server artwork is too large" }
-                if (count > 0) bytes.write(buffer, 0, count)
-            }
-            bytes.readByteArray()
+            response.readArtwork("Server artwork is too large")
         } }
     } } }
 
@@ -433,14 +425,14 @@ class NavidromeClient(
 
     suspend fun playlistImageUploaded(id: String): Boolean = serverRequest {
         val playlist = Json.parseToJsonElement(nativeRequest { token ->
-            get("$baseUrl/api/playlist/$id") { header("x-nd-authorization", "Bearer $token") }
+            get("$baseUrl/api/playlist/${id.encodeURLPathPart()}") { header("x-nd-authorization", "Bearer $token") }
         }.bodyAsText()).jsonObject
         playlist["uploadedImage"]?.jsonPrimitive?.content.orEmpty().isNotBlank()
     }
 
     suspend fun setPlaylistImage(id: String, image: ByteArray) = serverRequest {
         nativeRequest { token ->
-            post("$baseUrl/api/playlist/$id/image") {
+            post("$baseUrl/api/playlist/${id.encodeURLPathPart()}/image") {
                 header("x-nd-authorization", "Bearer $token")
                 setBody(MultiPartFormDataContent(formData {
                     append("image", image, Headers.build { append(HttpHeaders.ContentDisposition, "filename=\"cover\"") })
@@ -451,7 +443,7 @@ class NavidromeClient(
     }
 
     suspend fun removePlaylistImage(id: String) = serverRequest {
-        nativeRequest { token -> delete("$baseUrl/api/playlist/$id/image") { header("x-nd-authorization", "Bearer $token") } }.bodyAsText()
+        nativeRequest { token -> delete("$baseUrl/api/playlist/${id.encodeURLPathPart()}/image") { header("x-nd-authorization", "Bearer $token") } }.bodyAsText()
         Unit
     }
 
@@ -533,7 +525,7 @@ class NavidromeClient(
         val releases = mutableMapOf<String, String>()
         var offset = 0
         while (true) {
-            val envelope = optionalCatalogueRequest("search3", listOf("query" to "", "artistCount" to "0", "albumCount" to "0",
+            val envelope = catalogueRequest(offset, "search3", listOf("query" to "", "artistCount" to "0", "albumCount" to "0",
                 "songCount" to "500", "songOffset" to offset.toString()))
             val result = envelope?.get("searchResult3")?.jsonObject.orEmpty()
             val entries = result["song"]?.jsonArray.orEmpty().map { it.jsonObject }
@@ -613,12 +605,17 @@ class NavidromeClient(
         catch (error: NavidromeException) { if (error.code in setOf(0, 10, 70)) null else throw error }
         catch (error: NavidromeRequestException) { if (error.httpStatus in setOf(404, 501)) null else throw error }
 
+    // Only the first page can show that an endpoint is unsupported. A later failure must not end the catalogue early, or the
+    // songs after it would be marked unavailable.
+    private suspend fun catalogueRequest(offset: Int, endpoint: String, parameters: List<Pair<String, String>>): JsonObject? =
+        if (offset == 0) optionalCatalogueRequest(endpoint, parameters) else request(endpoint, parameters)
+
     private suspend fun catalogueFallback(releases: MutableMap<String, String>, onProgress: (ServerRefreshProgress) -> Unit): List<ServerSong> {
         val songs = linkedMapOf<String, ServerSong>()
         val albums = mutableSetOf<String>()
         var offset = 0
         while (true) {
-            val page = optionalCatalogueRequest("getAlbumList2", listOf("type" to "alphabeticalByName",
+            val page = catalogueRequest(offset, "getAlbumList2", listOf("type" to "alphabeticalByName",
                 "size" to "500", "offset" to offset.toString()))
                 ?.get("albumList2")?.jsonObject?.get("album")?.jsonArray.orEmpty()
             if (page.isEmpty()) break

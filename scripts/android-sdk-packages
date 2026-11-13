@@ -1,0 +1,4 @@
+platforms;android-37.0
+build-tools;37.0.0
+ndk;28.2.13676358
+cmake;3.22.1

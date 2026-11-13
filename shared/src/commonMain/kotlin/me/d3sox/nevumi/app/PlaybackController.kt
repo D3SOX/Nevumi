@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.history.ListeningHistory
 import me.d3sox.nevumi.history.Scrobbling
@@ -109,7 +109,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
                     queue.snapshot().copy(positionMs = incoming.preparedQueue.positionMs) == incoming.preparedQueue &&
                     transportIntent.value.revision == incoming.revision) { "Playback changed on the receiving device" }
                 engine.seek(positionMs)
-                withTimeout(5_000) { engine.status.first { it.entryId == incoming.preparedQueue.currentEntryId && abs(it.positionMs - positionMs) < 250 } }
+                // A timeout must fail like any other error, so the sender is told why instead of seeing a closed connection.
+                withTimeoutOrNull(5_000) { engine.status.first { it.entryId == incoming.preparedQueue.currentEntryId && abs(it.positionMs - positionMs) < 250 } }
+                    ?: error("Playback did not reach the transferred position in time")
                 queue.setPosition(positionMs)
                 // This holds the operation lock, so a reload for an errored or ended player runs here instead of waiting for it.
                 if (applyTransport(playWhenReady) && transportIntent.value.play) resumePlayback()
@@ -368,7 +370,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
         engine.setSpeed(playback.speed); engine.setPitch(playback.pitch)
         queue.restore(playback.queue)
         loadSnapshot(playback.queue, playback.playWhenReady)
-        val ready = withTimeout(10_000) { engine.status.first { it.entryId == playback.queue.currentEntryId && (it.durationMs > 0 || it.error != null) } }
+        val ready = withTimeoutOrNull(10_000) { engine.status.first { it.entryId == playback.queue.currentEntryId && (it.durationMs > 0 || it.error != null) } }
+            ?: error("Playback did not start in time")
         require(ready.error == null) { ready.error ?: "Playback could not start" }
         preferences?.update { it.copy(speed = playback.speed, pitch = playback.pitch) }?.let { settings ->
             context.update { it.copy(preferences = settings) }

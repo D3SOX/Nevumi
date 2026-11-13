@@ -27,6 +27,7 @@ glance = "1.2.0"
 # JitPack builds this from a movable tag, so gradle/verification-metadata.xml pins its checksums. After a bump, regenerate them with
 # ./gradlew --write-verification-metadata sha256 :shared:dependencies --configuration desktopRuntimeClasspath
 newpipeExtractor = "v0.27.1"
+reorderable = "3.1.0"
 
 [libraries]
 coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -67,6 +68,7 @@ android-test-orchestrator = { module = "androidx.test:orchestrator", version.ref
 startup-runtime = { module = "androidx.startup:startup-runtime", version = "1.2.0" }
 glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
 work-runtime = { module = "androidx.work:work-runtime", version = "2.12.0" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

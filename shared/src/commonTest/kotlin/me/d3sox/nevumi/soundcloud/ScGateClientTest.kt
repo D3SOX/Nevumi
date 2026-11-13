@@ -73,6 +73,15 @@ class ScGateClientTest {
     }
 
     @Test
+    fun oversizedArtworkIsRejected() = runBlocking {
+        val http = HttpClient(MockEngine { respond(ByteArray(10 * 1024 * 1024 + 1), headers = headersOf(HttpHeaders.ContentType, "image/jpeg")) })
+        try {
+            val error = assertFailsWith<ScGateException> { ScGateClient(http, "http://homelan:3000").artwork("https://i1.sndcdn.com/a-t300x300.jpg") }
+            assertTrue("10 MiB" in error.message.orEmpty())
+        } finally { http.close() }
+    }
+
+    @Test
     fun creatingAJobSendsTheFormatAndDestinationAndReportsAMissingGate() = runBlocking {
         val http = HttpClient(MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)

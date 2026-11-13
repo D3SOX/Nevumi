@@ -206,6 +206,7 @@ class ArtworkLibraryTest {
                     headers = headersOf(HttpHeaders.ContentType, "image/png"))
                 path == "/rest/getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"mix"}]}}}""")
                 path == "/rest/getPlaylist.view" -> respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"mix","name":"Mix","owner":"fixture","coverArt":"pl-mix","entry":[{"id":"song-a"}]}}}""")
+                path == "/rest/ping.view" -> respond("""{"subsonic-response":{"status":"ok","type":"navidrome"}}""")
                 path == "/auth/login" -> respond("""{"token":"native-token"}""")
                 path == "/api/playlist/mix" -> respond("""{"id":"mix","uploadedImage":""}""")
                 path == "/api/playlist/mix/image" -> {
@@ -253,6 +254,43 @@ class ArtworkLibraryTest {
             controller.editPlaylist(playlist.id, "Mix", "", removeCover = true).join()
             assertEquals(1, deletions)
             assertContentEquals(artworkPreview(generated), artwork.read(key))
+        } finally { controller.closeAndJoin(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aGenericSubsonicPlaylistKeepsItsCustomCoverInTheApp() = runBlocking {
+        val directory = Files.createTempDirectory("subsonic-playlist-artwork")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val native = mutableListOf<String>()
+        val cover = ByteArrayOutputStream().also { ImageIO.write(BufferedImage(32, 32, BufferedImage.TYPE_INT_RGB), "png", it) }.toByteArray()
+        val http = HttpClient(MockEngine { request ->
+            val path = request.url.encodedPath
+            when {
+                !path.startsWith("/rest/") -> { native += path; respond("", io.ktor.http.HttpStatusCode.NotFound) }
+                path == "/rest/ping.view" -> respond("""{"subsonic-response":{"status":"ok","type":"gonic"}}""")
+                path == "/rest/getPlaylists.view" -> respond("""{"subsonic-response":{"status":"ok","playlists":{"playlist":[{"id":"mix"}]}}}""")
+                path == "/rest/getPlaylist.view" -> respond("""{"subsonic-response":{"status":"ok","playlist":{"id":"mix","name":"Mix","owner":"fixture","entry":[{"id":"song-a"}]}}}""")
+                else -> {
+                    val songs = if (request.url.parameters["songOffset"] == "0") """[{"id":"song-a","title":"Server song"}]""" else "[]"
+                    respond("""{"subsonic-response":{"status":"ok","searchResult3":{"song":$songs}}}""")
+                }
+            }
+        })
+        val vault = SecretServiceVault("me.d3sox.nevumi.tests.${Uuid.random()}")
+        val library = MusicLibrary(store)
+        val artwork = ArtworkLibrary(directory.resolve("artwork").toString())
+        val connection = NavidromeConnection(store, http, vault)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), connection, artwork = artwork,
+            playlists = me.d3sox.nevumi.playlists.Playlists(store),
+            serverChanges = me.d3sox.nevumi.navidrome.NavidromeChanges(store, library, artwork, savedConnection = true, client = connection::client))
+        try {
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.connectServer("https://music.example.test", "fixture", "fixture-password").join()
+            val playlist = controller.state.value.playlists.single()
+            controller.editPlaylist(playlist.id, "Mix", "", cover = cover).join()
+            assertEquals(null, controller.state.value.error)
+            assertContentEquals(artworkPreview(cover), artwork.read("playlist:${playlist.id}"))
+            assertEquals(emptyList(), native)
         } finally { controller.closeAndJoin(); vault.delete("navidrome"); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 

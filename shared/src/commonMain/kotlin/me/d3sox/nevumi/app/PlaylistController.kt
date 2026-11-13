@@ -124,8 +124,9 @@ class PlaylistController internal constructor(private val context: ControllerCon
         val previous = requireNotNull(collections.get(playlistId)) { "Playlist is missing" }
         require(previous.server?.canEditMetadata(context.state.value.server) != false) { "Only the owner can edit this playlist" }
         val link = previous.server
-        if (link != null && (cover != null || removeCover)) {
-            val client = serverPlaylistClient(link)
+        // Uploading a cover needs Navidrome's native API; other Subsonic servers keep the cover in the app instead.
+        val client = if (link != null && (cover != null || removeCover)) serverPlaylistClient(link).takeIf { it.isNavidrome() } else null
+        if (link != null && client != null) {
             val oldCover = if (client.playlistImageUploaded(requireNotNull(link.id))) link.coverArt?.let { client.coverArt(it, size = null) } else null
             val oldLocalCover = artwork?.read("playlist:$playlistId")
             setServerPlaylistCover(playlistId, link, client, cover)
