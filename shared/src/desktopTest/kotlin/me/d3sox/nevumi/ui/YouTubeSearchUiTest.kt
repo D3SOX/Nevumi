@@ -74,7 +74,9 @@ class YouTubeSearchUiTest {
                 onAllNodesWithContentDescription("YouTube song: Night Drive by Artist").assertCountEquals(1)
                 snapshot("youtube-search")
 
+                // Its options open the song menu of library songs.
                 onNodeWithContentDescription("More options: Other - Night Swim (Official Video)").performClick()
+                onNodeWithTag("track-actions").assertIsDisplayed()
                 onNodeWithText("Play next").performClick()
                 // An uploaded video titled "Artist - Title" is queued under that artist and title.
                 waitUntil(timeoutMillis = 5_000) {
@@ -85,6 +87,15 @@ class YouTubeSearchUiTest {
                 assertEquals("Other", queued.metadata.artist)
                 assertEquals(listOf(SourceKind.YOUTUBE), queued.sources.map { it.kind })
                 assertEquals(false, queued.inLibrary)
+
+                // A result swipes like a library song: left adds it to the queue by default.
+                val queueLength = controller.state.value.queue.entries.size
+                onNodeWithContentDescription("YouTube song: Night Drive by Artist").performTouchInput {
+                    swipe(center.copy(x = width * .6f), center.copy(x = width * .1f), 200)
+                }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.queue.entries.size == queueLength + 1 }
+                val swiped = controller.state.value.queue.entries.last().trackId
+                assertEquals(listOf(SourceKind.YOUTUBE), controller.state.value.tracks.single { it.id == swiped }.sources.map { it.kind })
 
                 onNodeWithTag("youtube-kind:VIDEOS").performClick()
                 waitUntil(timeoutMillis = 5_000) { youTube.searches.lastOrNull() == "Night" to YouTubeSearchKind.VIDEOS }

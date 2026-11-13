@@ -29,9 +29,27 @@ import me.d3sox.nevumi.resources.player_rename_file
 import me.d3sox.nevumi.resources.player_rename_server_file
 import me.d3sox.nevumi.resources.player_replace_artwork
 import me.d3sox.nevumi.resources.player_replace_server_artwork
+import me.d3sox.nevumi.resources.player_song_menu_artwork
 import me.d3sox.nevumi.resources.player_undo_file_edit
 import me.d3sox.nevumi.resources.player_upload_to_server
 import org.jetbrains.compose.resources.stringResource
+
+/** Runs [action] on a right click that nothing inside has handled, such as to open a song's menu. */
+@Composable
+internal fun Modifier.onSecondaryClick(action: () -> Unit): Modifier {
+    val latest by rememberUpdatedState(action)
+    return pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed && event.changes.none { it.isConsumed }) {
+                    event.changes.forEach { it.consume() }
+                    latest()
+                }
+            }
+        }
+    }
+}
 
 @Composable
 internal fun SongActionHost(track: Track, state: AppState, controller: MusicController,
@@ -97,19 +115,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
         return true
     }
     val openMenu = { openingArtwork = artworkOrigin(); artworkPlaced = false; menu = true }
-    val latestOpenMenu by rememberUpdatedState(openMenu)
-    val contextMenu = if (!rightClickMenu) Modifier else Modifier.pointerInput(Unit) {
-        awaitPointerEventScope {
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
-                if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed && event.changes.none { it.isConsumed }) {
-                    event.changes.forEach { it.consume() }
-                    latestOpenMenu()
-                }
-            }
-        }
-    }
-    Box(contextMenu) {
+    Box(if (rightClickMenu) Modifier.onSecondaryClick(openMenu) else Modifier) {
         content(::available, ::perform, openMenu, menu && artworkPlaced)
     }
     if (menu) {
@@ -172,7 +178,10 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
                 option(stringResource(Res.string.player_upload_to_server), AppIcon.CLOUD) { uploading = true }
             lastEdit?.let { edit -> option(stringResource(Res.string.player_undo_file_edit), AppIcon.UNDO) { controller.undoFileEdit(edit.id) } }
         }
-        TrackActionDialog(track, state.artwork[track.id], options, { menu = false },
+        val artworkDescription = stringResource(Res.string.player_song_menu_artwork, track.metadata.title)
+        TrackActionDialog(track.metadata.title, track.metadata.artist, { maxDimension ->
+            MusicArtwork(state.artwork[track.id], track.metadata.title, artworkDescription, maxDimension)
+        }, options, { menu = false },
             artworkOrigin = openingArtwork,
             onArtworkPlaced = { artworkPlaced = true },
             artworkCornerRadius = artworkCornerRadius,

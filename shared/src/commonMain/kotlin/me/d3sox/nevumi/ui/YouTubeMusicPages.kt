@@ -206,7 +206,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
                             YouTubeShelfLayout.ROWS -> {
                                 items(items, key = { "$index:${it.key}" }) { item ->
                                     when (item) {
-                                        is YouTubeTrack -> YouTubeTrackRow(item, owned, controller, onOptions = { picked = item }) {
+                                        is YouTubeTrack -> YouTubeTrackRow(item, owned, state, controller) {
                                             playShelf(content, index, item)
                                         }
                                         is YouTubeCollection -> YouTubeCollectionRow(item, controller)
@@ -250,7 +250,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
             }
         }
     }
-    picked?.let { track -> YouTubeOptionsSheet(track, state, controller) { picked = null } }
+    picked?.let { track -> YouTubeSongMenu(track, state, controller) { picked = null } }
 }
 
 @Composable

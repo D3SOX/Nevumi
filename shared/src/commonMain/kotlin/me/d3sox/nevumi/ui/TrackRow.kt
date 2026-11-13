@@ -54,53 +54,17 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
     }
     val state by rowState.collectAsState(appState.value)
     val origin = LocalLibraryOrigin.current
-    var offset by remember(track.id) { mutableFloatStateOf(0f) }
-    var settling by remember { mutableStateOf<Job?>(null) }
     var artworkBounds by remember(track.id) { mutableStateOf<Rect?>(null) }
-    val scope = rememberCoroutineScope()
-    val threshold = with(LocalDensity.current) { 56.dp.toPx() }
     val availableOffline = track.sources.any { it.kind == SourceKind.LOCAL && it.available }
     val lastEdit = state.fileEdits.lastOrNull { it.trackId == track.id && it.applied && !it.undone }
-    fun settle() {
-        settling = scope.launch { animate(offset, 0f, animationSpec = spring()) { value, _ -> offset = value } }
-    }
-    // Entering selection mode restarts the gesture handler; a swipe in progress must not leave the row displaced.
-    LaunchedEffect(selectionMode) { if (selectionMode && offset != 0f) settle() }
     SongActionHost(track, state, controller, contextTrackIds, contextIndex, playlistId, onSelect, contextName = contextName,
         playlistPosition = playlistPosition, shuffleContext = shuffleContext, artworkOrigin = { artworkBounds },
         hiddenAction = if (selectionMode) TrackAction.NONE else state.preferences.quickAction) { available, perform, openMenu, menuOpen ->
-    val performAction by rememberUpdatedState(perform)
-    val actionAvailable by rememberUpdatedState(available)
     val strings = LocalTrackRowStrings.current ?: trackRowStrings()
     fun label(action: TrackAction) = strings.actionLabel(action, track.favorite, availableOffline)
-    Box(Modifier.fillMaxWidth().testTag("track-row:${track.id}").semantics { this.selected = selected }.clipToBounds()) {
-        Surface(Modifier.matchParentSize(), color = MaterialTheme.colorScheme.primaryContainer) {
-            Box(Modifier.padding(horizontal = 24.dp), contentAlignment = if (offset >= 0) Alignment.CenterStart else Alignment.CenterEnd) {
-                if (offset != 0f) {
-                    val action = if (offset > 0) state.preferences.swipeRight else state.preferences.swipeLeft
-                    Column(Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(action.icon(track.favorite, track.rating, track.id in state.playlistTrackIds, availableOffline).vector, null, Modifier.size(24.dp))
-                        Text(label(action), style = MaterialTheme.typography.labelSmall,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    }
-                }
-            }
-        }
-        Surface(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.fillMaxWidth()
-            .horizontalSwipe(track.id, threshold, state.preferences.swipeRight, state.preferences.swipeLeft, selectionMode,
-                onStart = { settling?.cancel() }, onDrag = { amount ->
-                    val action = if (offset + amount >= 0) state.preferences.swipeRight else state.preferences.swipeLeft
-                    if (!selectionMode && actionAvailable(action)) offset += amount
-                }) { released ->
-                if (released && abs(offset) >= threshold)
-                    performAction(if (offset > 0) state.preferences.swipeRight else state.preferences.swipeLeft)
-                settle()
-            }.semantics {
-                customActions = TrackAction.entries.filter { available(it) }.map { action ->
-                    CustomAccessibilityAction(label(action)) { perform(action) }
-                }
-            }, color = MaterialTheme.colorScheme.surface) {
+    SwipeActionRow(track.id, state.preferences.swipeRight, state.preferences.swipeLeft, !selectionMode, available, perform,
+        icon = { it.icon(track.favorite, track.rating, track.id in state.playlistTrackIds, availableOffline) }, label = ::label,
+        modifier = Modifier.testTag("track-row:${track.id}").semantics { this.selected = selected }) {
             Row(Modifier.combinedClickable(onClick = {
                 if (selectionMode) onSelect?.invoke() else controller.playTrack(track.id, contextTrackIds, contextIndex, contextName,
                     shuffleContext = shuffleContext, origin = origin, preserveManualQueue = true)
@@ -161,7 +125,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                         val member = track.id in state.playlistTrackIds
                         val active = action == TrackAction.FAVORITE && track.favorite || action == TrackAction.RATE && track.rating > 0 ||
                             action == TrackAction.ADD_TO_PLAYLIST && member || action == TrackAction.DOWNLOAD && availableOffline
-                        IconButton(onClick = { performAction(action) }, Modifier.size(48.dp).semantics {
+                        IconButton(onClick = { perform(action) }, Modifier.size(48.dp).semantics {
                             contentDescription = strings.quickActionTemplate.withArgs(label(action), track.metadata.title)
                             if (action == TrackAction.FAVORITE || action == TrackAction.ADD_TO_PLAYLIST || action == TrackAction.DOWNLOAD) this.selected = active
                         }) {
@@ -180,7 +144,55 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                 }
                 }
             }
-        }
     }
+    }
+}
+
+/**
+ * A song row that runs the user's swipe actions: [content] follows the finger over the action a swipe past 56 dp runs. A swipe
+ * toward an action that is not [available] leaves the row in place, and [enabled] false, such as in selection mode, stops swipes.
+ * Accessibility services offer every available action.
+ */
+@Composable
+internal fun SwipeActionRow(key: Any, swipeRight: TrackAction, swipeLeft: TrackAction, enabled: Boolean, available: (TrackAction) -> Boolean,
+    perform: (TrackAction) -> Boolean, icon: (TrackAction) -> AppIcon, label: (TrackAction) -> String, modifier: Modifier = Modifier,
+    content: @Composable () -> Unit) {
+    var offset by remember(key) { mutableFloatStateOf(0f) }
+    var settling by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
+    val threshold = with(LocalDensity.current) { 56.dp.toPx() }
+    val performAction by rememberUpdatedState(perform)
+    val actionAvailable by rememberUpdatedState(available)
+    fun settle() {
+        settling = scope.launch { animate(offset, 0f, animationSpec = spring()) { value, _ -> offset = value } }
+    }
+    // Turning swipes off restarts the gesture handler; a swipe in progress must not leave the row displaced.
+    LaunchedEffect(enabled) { if (!enabled && offset != 0f) settle() }
+    Box(modifier.fillMaxWidth().clipToBounds()) {
+        Surface(Modifier.matchParentSize(), color = MaterialTheme.colorScheme.primaryContainer) {
+            Box(Modifier.padding(horizontal = 24.dp), contentAlignment = if (offset >= 0) Alignment.CenterStart else Alignment.CenterEnd) {
+                if (offset != 0f) {
+                    val action = if (offset > 0) swipeRight else swipeLeft
+                    Column(Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(icon(action).vector, null, Modifier.size(24.dp))
+                        Text(label(action), style = MaterialTheme.typography.labelSmall,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
+                }
+            }
+        }
+        Surface(Modifier.offset { IntOffset(offset.roundToInt(), 0) }.fillMaxWidth()
+            .horizontalSwipe(key, threshold, swipeRight, swipeLeft, enabled, onStart = { settling?.cancel() }, onDrag = { amount ->
+                val action = if (offset + amount >= 0) swipeRight else swipeLeft
+                if (enabled && actionAvailable(action)) offset += amount
+            }) { released ->
+                if (released && abs(offset) >= threshold) performAction(if (offset > 0) swipeRight else swipeLeft)
+                settle()
+            }.semantics {
+                customActions = TrackAction.entries.filter { available(it) }.map { action ->
+                    CustomAccessibilityAction(label(action)) { perform(action) }
+                }
+            }, color = MaterialTheme.colorScheme.surface, content = content)
     }
 }
