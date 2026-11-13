@@ -29,7 +29,7 @@ class CollectionSortingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Songs, 1 song").assertIsDisplayed()
                 openLibraryPage("Albums")
                 onNodeWithText("1 album").assertIsDisplayed()
@@ -62,7 +62,7 @@ class CollectionSortingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Song order").assertIsDisplayed()
                 mainClock.autoAdvance = false
                 onNode(hasText("Playlists") and hasAnyAncestor(hasTestTag("library-navigation"))).performClick()
@@ -85,7 +85,7 @@ class CollectionSortingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 openLibraryPage("Albums"); onNodeWithText("Fixture Album").performClick()
                 onNodeWithContentDescription("Play collection").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.queue.contextName == "Fixture Album" }
@@ -120,7 +120,7 @@ class CollectionSortingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 openLibraryPage("Albums"); onNodeWithText("Fixture Album").performClick()
                 onNodeWithContentDescription("Collection artwork: Fixture Album", useUnmergedTree = true).assertIsDisplayed()
                 onNodeWithContentDescription("Shuffle collection").performClick().assertIsSelected()
@@ -146,7 +146,7 @@ class CollectionSortingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 openLibraryPage("Playlists")
                 onNodeWithContentDescription("Collection view").performClick()
                 onNodeWithText("List").performClick()

@@ -35,7 +35,7 @@ class AndroidWaveformSettingsUiTest {
         }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { activity ->
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 compose.onNodeWithContentDescription("Settings").performClick()
                 compose.onNodeWithText("Waveforms").assertDoesNotExist()
                 compose.onNodeWithText("Playback").performScrollTo().performClick()

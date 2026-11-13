@@ -39,7 +39,7 @@ class QueueSnapshotBrowserUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, playlistFiles = files) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.playTrack(tracks[1].id, listOf(tracks[0].id, tracks[1].id, tracks[1].id), 2).join(); controller.pause().join()
                     controller.enqueue(listOf(tracks[2].id, tracks[2].id), QueueAction.APPEND).join(); controller.seek(1_000).join()

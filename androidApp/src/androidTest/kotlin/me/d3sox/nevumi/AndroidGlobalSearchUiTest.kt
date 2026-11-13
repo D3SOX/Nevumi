@@ -20,7 +20,7 @@ class AndroidGlobalSearchUiTest {
     @Test fun closingSearchWithKeyboardOpenKeepsNavigationBoundsStable() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+            compose.waitForLibrary(app.controller)
             compose.openLibraryPage("Home")
             val bounds = compose.onNodeWithTag("app-navigation").fetchSemanticsNode().boundsInRoot
             compose.onNodeWithContentDescription("Search").performClick()
@@ -50,7 +50,7 @@ class AndroidGlobalSearchUiTest {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
         val controller = app.controller
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            compose.waitUntil(5_000) { controller.state.value.libraryReady }
+            compose.waitForLibrary(controller)
             val original = controller.state.value.preferences
             try {
                 runBlocking { controller.updatePreferences { it.copy(libraryTabs = listOf(LibraryTab.HOME, LibraryTab.SEARCH, LibraryTab.SONGS)) }.join() }
@@ -69,7 +69,7 @@ class AndroidGlobalSearchUiTest {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
         val controller = app.controller
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            compose.waitUntil(5_000) { controller.state.value.libraryReady }
+            compose.waitForLibrary(controller)
             val original = controller.state.value.preferences
             try {
                 val song = runBlocking { controller.library.importTrack(TrackMetadata("Search selection fixture"),
@@ -101,7 +101,7 @@ class AndroidGlobalSearchUiTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use { input.copyTo(it) } }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { controller.state.value.libraryReady }
+                compose.waitForLibrary(controller)
                 val songs = runBlocking { (1..2).map { index -> controller.library.importTrack(
                     TrackMetadata("Signal song $index", "Signal artist", album = "Signal album", trackNumber = index),
                     TrackSource("search:$index", SourceKind.LOCAL, audio.path)) } }

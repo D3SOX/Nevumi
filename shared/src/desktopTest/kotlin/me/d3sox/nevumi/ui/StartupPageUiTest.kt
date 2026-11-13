@@ -40,7 +40,7 @@ class StartupPageUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 openLibraryPage("Albums")
                 fun open(artist: String) { onNode(hasText(artist, substring = true) and hasClickAction()).performClick() }
                 fun scroll(index: Int) { onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(index) }
@@ -57,7 +57,7 @@ class StartupPageUiTest {
             store = openMusicStore(path); player = controller()
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 onNodeWithText("Albums").assertIsSelected()
                 onNode(hasText("Artist A", substring = true) and hasClickAction()).performClick()
                 onNodeWithText("Artist A 24").assertIsDisplayed()
@@ -84,7 +84,7 @@ class StartupPageUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(24)
                 onNodeWithText("Song 24").assertIsDisplayed()
                 onNodeWithContentDescription("Search").performClick()
@@ -101,7 +101,7 @@ class StartupPageUiTest {
             store = openMusicStore(path); player = controller()
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 onNodeWithText("Albums").assertIsSelected()
                 onNodeWithText("Album 16").assertIsDisplayed()
                 onNodeWithText("Album 00").assertDoesNotExist()

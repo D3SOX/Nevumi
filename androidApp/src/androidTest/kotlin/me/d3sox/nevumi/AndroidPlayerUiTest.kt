@@ -101,7 +101,7 @@ class AndroidPlayerUiTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use { input.copyTo(it) } }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val tracks = runBlocking { (0..2).map { index ->
                     app.controller.library.importTrack(TrackMetadata("Axis fixture $index", durationMs = 3_000),
                         TrackSource("axis-$index-${UUID.randomUUID()}", SourceKind.LOCAL, audio.path))
@@ -162,7 +162,7 @@ class AndroidPlayerUiTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use { input.copyTo(it) } }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val track = runBlocking {
                     app.controller.library.importTrack(TrackMetadata("Reversible gesture fixture"),
                         TrackSource("reversible-gesture-${UUID.randomUUID()}", SourceKind.LOCAL, audio.path))

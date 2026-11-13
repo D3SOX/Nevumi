@@ -27,7 +27,7 @@ class ActionFeedbackUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 runBlocking { player.playTrack(songs[0].id, songs.map { it.id }).join(); player.pause().join() }
                 val before = player.state.value.queue.entries
                 runBlocking { player.enqueue(songs[2].id, QueueAction.APPEND).join() }

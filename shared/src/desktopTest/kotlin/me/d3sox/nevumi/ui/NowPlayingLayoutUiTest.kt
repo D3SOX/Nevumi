@@ -27,7 +27,7 @@ class NowPlayingLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 runBlocking { player.playTrack(songs[0].id).join(); player.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("audio-waveform").fetchSemanticsNodes().isNotEmpty() }
@@ -50,7 +50,7 @@ class NowPlayingLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 runBlocking {
                     player.playTrack(songs[0].id, songs.map { it.id }).join(); player.pause().join()
                     player.enqueue(listOf(songs[0].id, songs[1].id), me.d3sox.nevumi.queue.QueueAction.APPEND).join()
@@ -85,7 +85,7 @@ class NowPlayingLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 runBlocking { player.playTrack(songs[0].id, songs.map { it.id }, contextName = "My album").join(); player.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithText("Playing from").assertIsDisplayed()

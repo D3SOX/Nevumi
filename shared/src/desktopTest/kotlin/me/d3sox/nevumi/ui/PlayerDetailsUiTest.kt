@@ -38,7 +38,7 @@ class PlayerDetailsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join(); controller.seek(1_000).join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.positionMs == 1_000L }
                 onNodeWithTag("mini-player").performClick()
@@ -72,7 +72,7 @@ class PlayerDetailsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 mainClock.advanceTimeBy(1_000)
@@ -132,7 +132,7 @@ class PlayerDetailsUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.size(360.dp, 660.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.audioInfo != null }
@@ -222,7 +222,7 @@ class PlayerDetailsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(tracks[1].id, tracks.map { it.id }, 1).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 mainClock.advanceTimeBy(1_000)

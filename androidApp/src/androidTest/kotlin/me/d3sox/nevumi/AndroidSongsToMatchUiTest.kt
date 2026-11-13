@@ -15,7 +15,7 @@ class AndroidSongsToMatchUiTest {
     @Test fun sharedSongsHaveTheirOwnPageAndCanBeMatchedFromLocalSongCards() {
         val controller = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication).controller
         ActivityScenario.launch(MainActivity::class.java).use {
-            compose.waitUntil(5_000) { controller.state.value.libraryReady }
+            compose.waitForLibrary(controller)
             val devices = requireNotNull(controller.pairedDevices)
             val local = runBlocking { controller.library.importTrack(TrackMetadata("My copy", "Local artist", "Local album", folder = "/music"),
                 TrackSource("local:matching-fixture", SourceKind.LOCAL, "/music/copy.flac")) }

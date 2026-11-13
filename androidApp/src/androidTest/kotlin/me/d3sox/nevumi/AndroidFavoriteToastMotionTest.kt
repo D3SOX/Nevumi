@@ -24,7 +24,7 @@ class AndroidFavoriteToastMotionTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
-                compose.waitUntil(5_000) { controller.state.value.libraryReady }
+                compose.waitForLibrary(controller)
                 val track = runBlocking { controller.library.importTrack(TrackMetadata("Toast motion", durationMs = 3_000),
                     TrackSource("toast-motion", SourceKind.LOCAL, audio.path)) }
                 runBlocking {

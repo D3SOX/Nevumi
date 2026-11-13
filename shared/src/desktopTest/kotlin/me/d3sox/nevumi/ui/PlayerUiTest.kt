@@ -184,7 +184,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.width(360.dp).height(740.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(controller.state.value.tracks.first().id).join(); controller.pause().join() }
                 fun circleAndControlWidths(): Pair<Int, Int> {
                     val pixels = onNode(hasContentDescription("Play") and hasClickAction()).captureToImage().toPixelMap()
@@ -227,7 +227,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 val songs = controller.state.value.tracks.sortedBy { it.metadata.title }
                 runBlocking { controller.playTrack(songs[1].id, songs.map { it.id }, 1).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
@@ -260,7 +260,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(controller.state.value.tracks.first().id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 mainClock.advanceTimeBy(1_000)
@@ -292,7 +292,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 val track = controller.state.value.tracks.first()
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
                 val mini = onNodeWithTag("mini-player")
@@ -323,7 +323,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 val songs = controller.state.value.tracks.sortedBy { it.metadata.title }
                 runBlocking { controller.playTrack(songs[1].id, songs.map { it.id }, 1).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()

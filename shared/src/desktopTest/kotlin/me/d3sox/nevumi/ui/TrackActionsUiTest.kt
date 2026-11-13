@@ -27,7 +27,7 @@ class TrackActionsUiTest {
     @Test
     fun swipeAndQuickActionChoicesUseTrackActionsInsteadOfDuplicatingThePlayTap() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         onNodeWithContentDescription("Settings").performClick()
         onNodeWithText("Library & gestures").performClick()
         for (label in listOf("Swipe left", "Swipe right", "Quick action")) {
@@ -41,7 +41,7 @@ class TrackActionsUiTest {
     @Test
     fun downloadQuickActionsAndSwipesExplainThatLocalSongsAreAlreadyOffline() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         runBlocking { player.updatePreferences { it.copy(quickAction = me.d3sox.nevumi.settings.TrackAction.DOWNLOAD,
             swipeLeft = me.d3sox.nevumi.settings.TrackAction.DOWNLOAD) }.join() }
         onNodeWithContentDescription("Quick action: Available offline: First song").assertIsSelected().performClick()
@@ -57,7 +57,7 @@ class TrackActionsUiTest {
     @Test
     fun aVisibleQuickActionIsOmittedOnlyFromTheSongListMenu() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         runBlocking { player.updatePreferences { it.copy(quickAction = me.d3sox.nevumi.settings.TrackAction.FAVORITE) }.join() }
         onNodeWithContentDescription("Quick action: Favorite: First song").assertIsDisplayed()
         onNodeWithContentDescription("Track options: First song").performClick()
@@ -86,7 +86,7 @@ class TrackActionsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 val vertical = SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)
                 onNode(hasScrollAction() and vertical and hasAnyDescendant(hasTestTag("track-row:${songs[0].id}"))).performScrollToIndex(12)
                 val row = onNodeWithTag("track-row:${songs[12].id}", useUnmergedTree = true)
@@ -124,7 +124,7 @@ class TrackActionsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 runBlocking { player.playTrack(songs[0].id).join(); player.pause().join() }
                 val vertical = SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)
                 onNode(hasScrollAction() and vertical and hasAnyDescendant(hasTestTag("track-row:${songs[0].id}"))).performScrollToIndex(12)
@@ -158,7 +158,7 @@ class TrackActionsUiTest {
     @Test
     fun ratingStarsKeepTheHeldBackgroundAndOnlySaveAfterConfirmation() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         val id = player.state.value.tracks.first { it.metadata.title == "First song" }.id
         fun openRating() {
             onNodeWithContentDescription("Track options: First song").performClick()
@@ -204,7 +204,7 @@ class TrackActionsUiTest {
     @Test
     fun closingTrackActionsReturnsTheCoverBeforeRemovingTheMenu() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         fun center(node: SemanticsNodeInteraction): Offset {
             val semantics = node.fetchSemanticsNode()
             return semantics.positionOnScreen - semantics.positionInRoot + semantics.boundsInRoot.center
@@ -230,7 +230,7 @@ class TrackActionsUiTest {
     @Test
     fun favoriteQuickActionsToggleBothWaysWithoutDuplicatingTheSongIndicator() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         runBlocking { player.updatePreferences { it.copy(quickAction = me.d3sox.nevumi.settings.TrackAction.FAVORITE) }.join() }
         val id = player.state.value.tracks.first { it.metadata.title == "First song" }.id
         onNodeWithContentDescription("Quick action: Favorite: First song").performTouchInput { click(center) }
@@ -247,7 +247,7 @@ class TrackActionsUiTest {
     @Test
     fun optionsButtonsAreHiddenByDefaultAndLongPressMenusRemainAvailable() = withLibrary(showMoreButtons = false) { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         onNodeWithContentDescription("Track options: First song").assertDoesNotExist()
         runBlocking { player.updatePreferences { it.copy(showMoreButtons = true) }.join() }
         onNodeWithContentDescription("Track options: First song").assertIsDisplayed()
@@ -261,7 +261,7 @@ class TrackActionsUiTest {
     @Test
     fun openingTrackActionsMovesTheCoverFromItsRowAsTheMenuSlidesUp() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         fun center(node: SemanticsNodeInteraction): Offset {
             val semantics = node.fetchSemanticsNode()
             return semantics.positionOnScreen - semantics.positionInRoot + semantics.boundsInRoot.center
@@ -292,7 +292,7 @@ class TrackActionsUiTest {
     @Test
     fun aConfigurableQuickActionSitsBelowTheDurationAndBeforeTheTrackMenu() = withLibrary { player ->
         setContent { MusicPlayerApp(player) }
-        waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+        waitForLibrary(player)
         fun configure(action: String) {
             onNodeWithContentDescription("Settings").performClick()
             onNodeWithText("Library & gestures").performScrollTo().performClick()

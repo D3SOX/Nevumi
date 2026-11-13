@@ -52,8 +52,8 @@ jobs:
           disable-linux-hw-accel: false
           profile: pixel_2
           avd-name: nevumi_release_ci
-          emulator-options: -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
-          script: NEVUMI_TEST_SERIAL=emulator-5554 /usr/bin/python3 scripts/test-android-package.py
+          emulator-options: -no-window -no-snapshot -gpu swangle -noaudio -no-boot-anim -camera-back none
+          script: NEVUMI_TEST_SERIAL=emulator-5554 /usr/bin/python3 scripts/test-android-package.py; status=$?; bash scripts/stop-emulator.sh; exit $status
       - name: Sign the Android release
         env:
           NEVUMI_ANDROID_KEYSTORE_BASE64: ${{ secrets.MANIDA_ANDROID_KEYSTORE_BASE64 }}

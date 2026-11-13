@@ -37,7 +37,7 @@ class QueueDesktopUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.size(1000.dp, 740.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.updatePreferences { it.copy(showPreviousQueueTracks = true, previousQueueTrackLimit = 5) }.join(); controller.playTrack(tracks[1].id, tracks.map { it.id }, 1).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick(); onNodeWithContentDescription("Queue").performClick()
                 test(controller, tracks)

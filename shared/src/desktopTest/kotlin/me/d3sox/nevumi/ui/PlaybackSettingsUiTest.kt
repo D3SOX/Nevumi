@@ -64,7 +64,7 @@ class PlaybackSettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Playback").performScrollTo().performClick()
                 onNodeWithContentDescription("Decrease Previous track limit").performScrollTo().performClick()
@@ -82,7 +82,7 @@ class PlaybackSettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 assertFalse(controller.state.value.preferences.keepPlayingInBackground)
                 assertFalse(controller.state.value.preferences.trayIcon)
                 onNodeWithContentDescription("Settings").performClick()

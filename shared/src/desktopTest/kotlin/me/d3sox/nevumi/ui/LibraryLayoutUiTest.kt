@@ -36,7 +36,7 @@ class LibraryLayoutUiTest {
                 setContent { Box(Modifier.size(width.dp, 740.dp)) {
                     MusicPlayerApp(controller)
                 } }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithText("Albums").performClick()
                 fun top(label: String) = onNodeWithText(label).fetchSemanticsNode().boundsInRoot.top
                 assertTrue(kotlin.math.abs(top("Album A") - top("Album B")) < 2)

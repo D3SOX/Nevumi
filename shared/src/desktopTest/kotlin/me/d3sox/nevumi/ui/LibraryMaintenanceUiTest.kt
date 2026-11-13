@@ -33,7 +33,7 @@ class LibraryMaintenanceUiTest {
         runBlocking { controller.updatePreferences { it.copy(libraryFilter = LibraryQuery(genre = "Ambient")) }.join() }
         runComposeUiTest {
             setContent { MusicPlayerApp(controller) }
-            waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+            waitForLibrary(controller)
             onNodeWithContentDescription("Settings").performClick()
             onNodeWithText("Library & gestures").performClick()
             onNodeWithText("Clear ratings").performScrollTo().performClick()
@@ -110,7 +110,7 @@ class LibraryMaintenanceUiTest {
         runBlocking { controller.updatePreferences { it.copy(libraryTabs = custom, bottomNavigationTabs = bottomTabs) }.join() }
         runComposeUiTest {
             setContent { MusicPlayerApp(controller) }
-            waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+            waitForLibrary(controller)
             onNodeWithContentDescription("Settings").performClick()
             onNodeWithText("Library & gestures").performClick()
             onNodeWithText("Library tabs").performScrollTo().performClick()

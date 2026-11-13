@@ -40,7 +40,7 @@ class AndroidKeyboardPlayerMotionTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val track = runBlocking { app.controller.library.importTrack(TrackMetadata("Keyboard drag", durationMs = 3_000),
                     TrackSource("keyboard-held-drag", SourceKind.LOCAL, audio.path)) }
                 runBlocking { app.controller.reload().join(); app.controller.playTrack(track.id).join(); app.controller.pause().join() }
@@ -95,7 +95,7 @@ class AndroidKeyboardPlayerMotionTest {
         instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                compose.waitUntil(5_000) { app.controller.state.value.libraryReady }
+                compose.waitForLibrary(app.controller)
                 val track = runBlocking { app.controller.library.importTrack(TrackMetadata("Keyboard expansion", durationMs = 3_000),
                     TrackSource("keyboard-expand", SourceKind.LOCAL, audio.path)) }
                 runBlocking { app.controller.reload().join(); app.controller.playTrack(track.id).join(); app.controller.pause().join() }

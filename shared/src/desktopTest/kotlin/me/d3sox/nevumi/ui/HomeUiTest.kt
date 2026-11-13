@@ -77,7 +77,7 @@ class HomeUiTest {
             val initial = controller
             runComposeUiTest {
                 setContent { MusicPlayerApp(initial) }
-                waitUntil(timeoutMillis = 5_000) { initial.state.value.libraryReady }
+                waitForLibrary(initial)
                 onNodeWithContentDescription("Home").performClick()
                 onNodeWithContentDescription("Customize Home").performClick()
                 captureUiSnapshot("home-customization")
@@ -105,7 +105,7 @@ class HomeUiTest {
             val restored = controller
             runComposeUiTest {
                 setContent { MusicPlayerApp(restored) }
-                waitUntil(timeoutMillis = 5_000) { restored.state.value.libraryReady }
+                waitForLibrary(restored)
                 assertEquals(HomeSectionId.ADDED, restored.state.value.preferences.homeSections.first())
                 assertEquals(setOf(HomeSectionId.RECENT), restored.state.value.preferences.disabledHomeSections)
                 onNodeWithTag("home-section:Recent listens").assertDoesNotExist()
@@ -135,7 +135,7 @@ class HomeUiTest {
             val initial = controller
             runComposeUiTest {
                 setContent { MusicPlayerApp(initial) }
-                waitUntil(timeoutMillis = 5_000) { initial.state.value.libraryReady }
+                waitForLibrary(initial)
                 onNodeWithContentDescription("Songs").assertIsSelected()
                 assertNull(initial.state.value.preferences.startupTab)
                 onNodeWithContentDescription("Home").performClick()
@@ -172,7 +172,7 @@ class HomeUiTest {
             val restored = controller
             runComposeUiTest {
                 setContent { MusicPlayerApp(restored) }
-                waitUntil(timeoutMillis = 5_000) { restored.state.value.libraryReady }
+                waitForLibrary(restored)
                 onNode(hasContentDescription("Home") and hasAnyAncestor(hasTestTag("library-navigation"))).assertIsSelected()
                 onNodeWithTag("home-page").assertIsDisplayed()
                 assertNull(restored.state.value.preferences.startupTab)
@@ -187,7 +187,7 @@ class HomeUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 onNodeWithContentDescription("Home").performClick()
                 onNodeWithText("No music yet").assertIsDisplayed()
                 onNodeWithText("Music settings").performClick()

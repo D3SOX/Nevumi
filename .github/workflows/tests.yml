@@ -169,7 +169,7 @@ jobs:
           # API 36 can kill androidx.test.services under the device profile's default memory limit, and at 4 GB its
           # Google apps still push the low memory killer into perceptible processes and crash the instrumentation.
           ram-size: 6144M
-          emulator-options: -no-window -gpu swangle -noaudio -no-boot-anim -camera-back virtualscene -camera-front emulated
+          emulator-options: -no-window -no-snapshot -gpu swangle -noaudio -no-boot-anim -camera-back virtualscene -camera-front emulated
           script: NEVUMI_ANDROID_SHARD=${{ matrix.shard.index }}/${{ matrix.shard.total }} bash scripts/ci-tests.sh android
       # Hosted emulators occasionally freeze and exit mid-suite: memory is to spare, and neither the host nor the guest
       # kernel logs a cause. Some fresh API 36 emulators also never route keys or the keyboard to the app. The suite

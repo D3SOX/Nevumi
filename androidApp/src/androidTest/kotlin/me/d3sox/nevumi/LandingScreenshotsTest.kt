@@ -33,7 +33,7 @@ class LandingScreenshotsTest {
         instrumentation.context.assets.open("waveform-four-minutes.mp3").use { input -> audio.outputStream().use(input::copyTo) }
         val artwork = ArtworkLibrary(File(app.filesDir, "artwork").path)
         ActivityScenario.launch(MainActivity::class.java).use {
-            compose.waitUntil(10_000) { controller.state.value.libraryReady }
+            compose.waitForLibrary(controller, 10_000)
             val store = openMusicStore(app)
             val tracks = try { runBlocking {
                 controller.updatePreferences { it.copy(themeMode = ThemeMode.DARK, colors = ColorMode.CUSTOM,

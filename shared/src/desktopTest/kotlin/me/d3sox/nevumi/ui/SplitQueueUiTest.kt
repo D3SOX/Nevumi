@@ -30,7 +30,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.updatePreferences { it.copy(previousQueueTrackLimit = 2) }.join()
                     controller.playTrack(tracks[8].id, tracks.map { it.id }, 8).join(); controller.pause().join()
@@ -61,7 +61,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.playTrack(tracks[0].id, tracks.map { it.id }).join(); controller.pause().join()
                     controller.enqueue(listOf(tracks[1].id, tracks[1].id), QueueAction.APPEND).join()
@@ -108,7 +108,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.updatePreferences { it.copy(showPreviousQueueTracks = true, previousQueueTrackLimit = 10) }.join()
                     controller.playTrack(tracks[1].id, tracks.map { it.id }, 1).join(); controller.pause().join()
@@ -134,7 +134,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.enqueue(requested.id, QueueAction.APPEND).join()
                     controller.selectQueueEntry(controller.state.value.queue.currentEntryId!!).join(); controller.pause().join()
@@ -162,7 +162,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.playTrack(tracks[0].id, tracks.map { it.id }).join(); controller.pause().join()
                     controller.clearQueue().join()
@@ -191,7 +191,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking {
                     controller.playTrack(tracks[0].id, tracks.map { it.id }).join(); controller.pause().join()
                     controller.clearQueue().join()
@@ -227,7 +227,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(tracks[0].id, tracks.map { it.id }).join(); controller.pause().join() }
                 val current = controller.state.value.queue.currentEntryId
                 onNodeWithTag("mini-player").performClick(); onNodeWithContentDescription("Queue").performClick()
@@ -255,7 +255,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 runBlocking { player.playTrack(tracks[0].id, tracks.map { it.id }).join(); player.pause().join() }
                 val entries = player.state.value.queue.entries
                 onNodeWithTag("mini-player").performClick()
@@ -299,7 +299,7 @@ class SplitQueueUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(player) }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.libraryReady }
+                waitForLibrary(player)
                 runBlocking { player.playTrack(songs[0].id, songs.map { it.id }).join(); player.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithContentDescription("Queue").performClick()
@@ -451,7 +451,7 @@ class SplitQueueUiTest {
             runComposeUiTest {
                 runBlocking { controller.updatePreferences { it.copy(showPreviousQueueTracks = true, previousQueueTrackLimit = 20) }.join() }
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(tracks[20].id, tracks.map { it.id }).join(); controller.pause().join() }
                 val current = controller.state.value.queue.currentEntryId
                 onNodeWithTag("mini-player").performClick(); onNodeWithContentDescription("Queue").performClick()

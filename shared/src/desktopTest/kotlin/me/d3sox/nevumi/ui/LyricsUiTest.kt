@@ -41,7 +41,7 @@ class LyricsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { controller.state.value.libraryReady }
+                waitForLibrary(controller)
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join(); controller.seek(2_500).join() }
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithContentDescription("Lyrics").performClick()
