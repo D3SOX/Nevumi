@@ -5,7 +5,13 @@ import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.storage.openMusicStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.nio.file.Files
@@ -171,6 +177,48 @@ class LinuxMediaSessionTest {
             assertEquals(false, controller.state.value.playback.playWhenReady)
         } finally {
             session?.close(); controller.closeAndJoin(); store.close()
+            daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bufferingPlaybackReportsPlayingToDesktopControls() = runBlocking {
+        val directory = Files.createTempDirectory("music-mpris-buffering")
+        val address = "unix:path=${directory.resolve("bus")}"
+        val daemon = ProcessBuilder("dbus-daemon", "--session", "--nofork", "--print-address=1", "--address=$address")
+            .redirectError(directory.resolve("bus.log").toFile()).start()
+        assertTrue(daemon.inputStream.bufferedReader().readLine().startsWith("unix:path="))
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac")
+        val track = library.importTrack(TrackMetadata("Buffering song"), TrackSource("buffering", SourceKind.LOCAL, audio.toString()))
+        val decoder = MpvPlaybackEngine("null")
+        val scope = CoroutineScope(Dispatchers.Default)
+        // Audio never starts, as while a stream is still opening.
+        val engine = object : PlaybackEngine by decoder {
+            override val status = decoder.status.map { it.copy(playing = false) }.stateIn(scope, SharingStarted.Eagerly, PlaybackStatus())
+        }
+        val controller = MusicController(library, PlaybackQueue(store), engine)
+        var session: LinuxMediaSession? = null
+        fun status(): String {
+            val process = ProcessBuilder("gdbus", "call", "--address", address, "--dest", "org.mpris.MediaPlayer2.nevumi",
+                "--object-path", "/org/mpris/MediaPlayer2", "--method", "org.freedesktop.DBus.Properties.Get",
+                "org.mpris.MediaPlayer2.Player", "PlaybackStatus").redirectErrorStream(true).start()
+            try {
+                assertTrue(process.waitFor(5, TimeUnit.SECONDS), "D-Bus client timed out")
+                return process.inputStream.bufferedReader().readText()
+            } finally { process.destroyForcibly() }
+        }
+        try {
+            session = LinuxMediaSession(controller, address)
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            controller.playTrack(track.id, listOf(track.id)).join()
+            withTimeout(3_000) { controller.state.first { it.playback.playWhenReady && it.playback.trackId == track.id } }
+            withTimeout(3_000) { while (!status().contains("Playing")) delay(50) }
+            assertEquals(false, controller.state.value.playback.playing)
+        } finally {
+            session?.close(); controller.closeAndJoin(); store.close(); scope.cancel()
             daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
             directory.toFile().deleteRecursively()
         }

@@ -74,8 +74,6 @@ import me.d3sox.nevumi.resources.move_down
 import me.d3sox.nevumi.resources.move_up
 import me.d3sox.nevumi.resources.next
 import me.d3sox.nevumi.resources.next_track
-import me.d3sox.nevumi.resources.pause
-import me.d3sox.nevumi.resources.play
 import me.d3sox.nevumi.resources.player_album_artwork
 import me.d3sox.nevumi.resources.player_audio_output
 import me.d3sox.nevumi.resources.player_clear_all_text
@@ -99,6 +97,7 @@ import me.d3sox.nevumi.resources.player_mini_player_artwork
 import me.d3sox.nevumi.resources.player_mini_player_position
 import me.d3sox.nevumi.resources.player_new_empty_queue
 import me.d3sox.nevumi.resources.player_now_playing
+import me.d3sox.nevumi.resources.player_buffering
 import me.d3sox.nevumi.resources.player_paused
 import me.d3sox.nevumi.resources.player_play_now
 import me.d3sox.nevumi.resources.player_play_song_now_title
@@ -176,6 +175,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     onPairedDevices: () -> Unit = {}, onAudioEffects: () -> Unit = {}, savedQueues: () -> Unit) {
     val current = state.tracks.firstOrNull { it.id == (state.playback.trackId ?: state.queue.currentTrackId) } ?: return
     val requested = state.playback.playWhenReady && !state.playback.ended && state.playback.error == null
+    val buffering = rememberBuffering(state.playback)
     val scope = rememberCoroutineScope()
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -425,11 +425,11 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             if (maxWidth > maxHeight) Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                                 PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxHeight(), motion)
-                                PlayerControls(state, controller, current, requested, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
+                                PlayerControls(state, controller, current, requested, buffering, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
                             } else Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(24.dp)) {
                                 PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxWidth(), motion)
-                                PlayerControls(state, controller, current, requested,
+                                PlayerControls(state, controller, current, requested, buffering,
                                     Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
                             }
                         }
@@ -440,7 +440,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             .graphicsLayer { alpha = (offset / miniAnchor).coerceIn(0f, 1f) },
                         shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                         Box {
-                            MiniPlayerCarousel(state, controller, current, motion, collapsed) { show(PlayerPanel.PLAYING) }
+                            MiniPlayerCarousel(state, controller, current, buffering, motion, collapsed) { show(PlayerPanel.PLAYING) }
                             MiniPlayerSeekBar(controller, Modifier.align(Alignment.BottomCenter).offset(y = 6.dp))
                         }
                     }
@@ -465,12 +465,12 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                 marqueeState = motion.marquee(PlayerElement.ARTIST, current.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }), active = queueProgress >= .999f)
                         }
                         AppVolume(controller, Modifier.width(240.dp))
-                        val playState = stringResource(if (requested) Res.string.player_playing else Res.string.player_paused)
+                        val playState = stringResource(if (buffering) Res.string.player_buffering else if (requested) Res.string.player_playing else Res.string.player_paused)
                         FilledIconButton(onClick = { controller.togglePlayback() },
                             modifier = Modifier.size(48.dp).then(motion.anchor(PlayerPanel.QUEUE, PlayerElement.PLAY, queueProgress >= .999f))
                                 .semantics { stateDescription = playState },
                             colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-                            Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, stringResource(Res.string.player_queue_play_pause))
+                            PlayPauseIcon(requested, buffering, 24.dp, stringResource(Res.string.player_queue_play_pause))
                         }
                     }
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("queue-header").padding(horizontal = 16.dp),
@@ -637,7 +637,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
         }
         Box(Modifier.fillMaxSize().offset { IntOffset(0, -offset.roundToInt()) }) {
             if (!collapsed && queueProgress < .999f) {
-                PlayerMotionElements(motion, state, controller, current, expansion, queueProgress, Modifier, artworkSwipe,
+                PlayerMotionElements(motion, state, controller, current, buffering, expansion, queueProgress, Modifier, artworkSwipe,
                     artworkModifier = Modifier.onGloballyPositioned { playingArtworkBounds = Rect(it.positionOnScreen(), it.size.toSize()) }
                         .graphicsLayer { alpha = if (playingMenuOpen) 0f else 1f })
             }
@@ -718,7 +718,7 @@ private fun PlayerCover(state: AppState, controller: MusicController, track: Tra
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlayerControls(state: AppState, controller: MusicController, current: Track, requested: Boolean,
+private fun PlayerControls(state: AppState, controller: MusicController, current: Track, requested: Boolean, buffering: Boolean,
     modifier: Modifier, motion: PlayerMotion, visible: Boolean, artworkSwipe: PlayingArtworkSwipe,
     onRepeatCount: () -> Unit, onQueue: () -> Unit, onOutput: () -> Unit, onVisualizer: () -> Unit, onAudioEffects: () -> Unit, onPlaybackSettings: () -> Unit) {
     var seeking by remember(state.playback.entryId) { mutableStateOf<Float?>(null) }
@@ -800,7 +800,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
             AppIconButton(AppIcon.PREVIOUS, stringResource(Res.string.previous_track), Modifier.size(48.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.PREVIOUS, visible))) { controller.skip(-1) }
             FilledIconButton(onClick = { controller.togglePlayback() }, modifier = Modifier.size(72.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.PLAY, visible)),
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-                Icon(if (requested) AppIcon.PAUSE.vector else AppIcon.PLAY.vector, stringResource(if (requested) Res.string.pause else Res.string.play), Modifier.size(36.dp))
+                PlayPauseIcon(requested, buffering, 36.dp)
             }
             AppIconButton(AppIcon.NEXT, stringResource(Res.string.next_track), Modifier.size(48.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.NEXT, visible))) { controller.skip(1) }
             PlayerRepeatControl(state.queue, controller, onRepeatCount, Modifier.size(48.dp))

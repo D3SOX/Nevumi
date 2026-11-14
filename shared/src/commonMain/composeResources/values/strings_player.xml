@@ -176,6 +176,7 @@
     <string name="player_queue_mini_player_artwork">Queue mini-player artwork: %1$s</string>
     <string name="player_playing">Playing</string>
     <string name="player_paused">Paused</string>
+    <string name="player_buffering">Buffering</string>
     <string name="player_queue_play_pause">Queue play/pause</string>
     <string name="player_new_empty_queue">New empty queue</string>
     <string name="player_manage_saved_queues">Manage saved queues</string>

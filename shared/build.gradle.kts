@@ -48,6 +48,7 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(compose.components.resources)
             implementation(libs.material3)
+            implementation(libs.graphics.shapes)
             implementation(compose.materialIconsExtended)
             implementation(libs.reorderable)
             implementation(libs.material.kolor.get().copy()) {

@@ -27,8 +27,6 @@ import kotlin.math.roundToInt
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.next
 import me.d3sox.nevumi.resources.next_track
-import me.d3sox.nevumi.resources.pause
-import me.d3sox.nevumi.resources.play
 import me.d3sox.nevumi.resources.previous
 import me.d3sox.nevumi.resources.previous_track
 import org.jetbrains.compose.resources.stringResource
@@ -37,7 +35,7 @@ private data class PreviewTrack(val entryId: String, val track: Track)
 private data class Preview(val current: Track, val previous: PreviewTrack?, val next: PreviewTrack?)
 
 @Composable
-internal fun MiniPlayerCarousel(state: AppState, controller: MusicController, current: Track, motion: PlayerMotion,
+internal fun MiniPlayerCarousel(state: AppState, controller: MusicController, current: Track, buffering: Boolean, motion: PlayerMotion,
     visible: Boolean, expand: () -> Unit) {
     var offset by remember { mutableFloatStateOf(0f) }
     var width by remember { mutableFloatStateOf(1f) }
@@ -97,7 +95,7 @@ internal fun MiniPlayerCarousel(state: AppState, controller: MusicController, cu
         AppIconButton(AppIcon.PREVIOUS, stringResource(Res.string.previous_track), motion.anchor(PlayerPanel.MINI, PlayerElement.PREVIOUS, visible)) { controller.skip(-1) }
         FilledIconButton(onClick = { controller.togglePlayback() }, modifier = Modifier.size(48.dp).then(motion.anchor(PlayerPanel.MINI, PlayerElement.PLAY, visible)), shape = CircleShape,
             colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-            Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, stringResource(if (requested) Res.string.pause else Res.string.play))
+            PlayPauseIcon(requested, buffering, 24.dp)
         }
         AppIconButton(AppIcon.NEXT, stringResource(Res.string.next_track), motion.anchor(PlayerPanel.MINI, PlayerElement.NEXT, visible)) { controller.skip(1) }
     }

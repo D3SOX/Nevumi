@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.app.playRequested
 import me.d3sox.nevumi.library.localMusicExtensions
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.drop_music
@@ -38,7 +39,7 @@ internal actual val desktopWindowSettings = true
  * the tray icon or background playback for music that is playing.
  */
 fun AppState.closeHidesWindow(trayAvailable: Boolean, mediaControlsAvailable: Boolean) =
-    (trayAvailable || mediaControlsAvailable) && (preferences.trayIcon || preferences.keepPlayingInBackground && playback.playing)
+    (trayAvailable || mediaControlsAvailable) && (preferences.trayIcon || preferences.keepPlayingInBackground && playback.playRequested)
 
 /** Sorts dropped file URIs into music folders and songs, as canonical paths; other files are left out. */
 internal fun droppedMusic(uris: List<String>): Pair<List<String>, List<String>> {

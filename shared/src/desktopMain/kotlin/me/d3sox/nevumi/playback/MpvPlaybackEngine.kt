@@ -170,7 +170,9 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                             if (decibels?.isFinite() == true) 10.0.pow(decibels / 20).toFloat().coerceIn(0f, 1f) else 0f
                         } else 0f
                         mutableStatus.value = PlaybackStatus(currentTrack?.id,
-                            playing = failure == null && !idle && !paused && !atEnd,
+                            // mpv stays unpaused while it opens a stream, starts or seeks it, or refills its cache. Like ExoPlayer's isPlaying, that is not playing.
+                            playing = failure == null && !idle && !paused && !atEnd && !loadingFile &&
+                                !flagProperty("seeking") && !flagProperty("paused-for-cache"),
                             positionMs = failure?.positionMs ?: pausedSeekPosition ?: (position * 1_000).toLong().coerceAtLeast(0),
                             durationMs = failure?.durationMs ?: (duration * 1_000).toLong(),
                             ended = failure == null && atEnd, entryId = currentTrack?.entryId, error = failure?.error,

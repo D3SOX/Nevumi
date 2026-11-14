@@ -2,6 +2,7 @@ package me.d3sox.nevumi.playback
 
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.app.playRequested
 import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -84,7 +85,7 @@ class LinuxMediaSession(private val controller: MusicController, address: String
         } catch (error: Exception) { connection.close(); throw error }
         scope.launch {
             var previous = GetAll("org.mpris.MediaPlayer2.Player").filterKeys { it != "Position" }
-            var wasPlaying = controller.state.value.playback.playing
+            var wasPlaying = controller.state.value.playback.playRequested
             // The library can hold many thousands of songs, so the current one is looked up again only when either changes.
             var lookedUp: Pair<List<Track>, String?>? = null
             var currentTrack: Track? = null
@@ -97,15 +98,15 @@ class LinuxMediaSession(private val controller: MusicController, address: String
             }
             // Playback status arrives many times per second; only the published values decide whether anything is sent.
             combine(controller.state, stopped) { state, stopped -> state.playback.let { playback ->
-                listOf(playback.trackId, playback.entryId, playback.playing, playback.ended, playback.error, playback.durationMs,
+                listOf(playback.trackId, playback.entryId, playback.playRequested, playback.ended, playback.error, playback.durationMs,
                     playback.volume, playback.speed, state.queue.unshuffledEntryIds != null, state.queue.repeatMode,
                     state.queue.currentIndex, state.queue.entries.size, state.artwork[playback.trackId], stopped,
                     // Tag edits change only the track, and Metadata is built from it.
                     currentTrack(state))
             } }.distinctUntilChanged().collect {
                 val state = controller.state.value
-                if (state.playback.playing && !wasPlaying) stopped.value = false
-                wasPlaying = state.playback.playing
+                if (state.playback.playRequested && !wasPlaying) stopped.value = false
+                wasPlaying = state.playback.playRequested
                 val current = GetAll("org.mpris.MediaPlayer2.Player")
                 val changed = current.filter { (key, value) -> key != "Position" && previous[key] != value }
                 previous = current.filterKeys { it != "Position" }
@@ -172,7 +173,7 @@ class LinuxMediaSession(private val controller: MusicController, address: String
         }.orEmpty()
         return mapOf(
             "Metadata" to Variant(metadata, "a{sv}"),
-            "PlaybackStatus" to Variant(if (stopped.value || state.playback.ended || state.playback.error != null) "Stopped" else if (state.playback.playing) "Playing" else if (track != null) "Paused" else "Stopped"),
+            "PlaybackStatus" to Variant(if (stopped.value || state.playback.ended || state.playback.error != null) "Stopped" else if (state.playback.playRequested) "Playing" else if (track != null) "Paused" else "Stopped"),
             "Position" to Variant(state.playback.positionMs * 1_000),
             "Volume" to Variant(state.playback.volume),
             "Rate" to Variant(state.playback.speed),
