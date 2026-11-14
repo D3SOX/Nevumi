@@ -559,6 +559,9 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             val known = store.database.records().list("source-owners").mapNotNullTo(matches.toHashSet()) { record ->
                 record.key.takeIf { key -> key.startsWith(owners) && record.changed <= baseline }?.removePrefix(owners)
             }
+            // Another download with the same tags may have found its song first; that song is not this one.
+            store.list<SoundCloudJob>("soundcloud-jobs").filter { it.id != job.id && it.musicServerId == client.serverId }
+                .mapNotNullTo(known) { it.serverSongId }
             fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> song.id !in known }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
