@@ -41,6 +41,8 @@ import kotlin.uuid.Uuid
 import okio.ByteString.Companion.encodeUtf8
 import io.ktor.http.URLBuilder
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.coroutines.CancellationException
@@ -224,13 +226,23 @@ class NavidromeClient(
      * [folder], a library ID and path, limits the scan to that folder where the server supports it, which is much faster.
      */
     suspend fun rescan(fullScan: Boolean = false, folder: Pair<Long, String>? = null) {
-        request("startScan", buildList {
+        val started = request("startScan", buildList {
             if (fullScan) add("fullScan" to "true")
             folder?.let { (library, path) -> add("target" to "$library:$path") }
-        })
+        })["scanStatus"]?.jsonObject
+        fun JsonObject.scanning() = get("scanning")?.jsonPrimitive?.booleanOrNull == true
+        fun JsonObject.lastScan() = get("lastScan")?.jsonPrimitive?.contentOrNull
+        // Navidrome starts the scan in the background, so its answer can still say it is not scanning. Until the scan shows up,
+        // or a newer last scan shows it already finished, a status without a scan proves nothing.
+        var seen = started == null || started.scanning()
         val finished = kotlinx.coroutines.withTimeoutOrNull(120_000) {
-            while (request("getScanStatus")["scanStatus"]?.jsonObject?.get("scanning")?.jsonPrimitive?.booleanOrNull == true)
+            val waitingSince = kotlin.time.TimeSource.Monotonic.markNow()
+            while (true) {
+                val status = request("getScanStatus")["scanStatus"]?.jsonObject
+                if (status?.scanning() == true) seen = true
+                else if (seen || status == null || status.lastScan() != started?.lastScan() || waitingSince.elapsedNow().inWholeSeconds >= 10) break
                 kotlinx.coroutines.delay(250)
+            }
         }
         if (finished == null) throw NavidromeRequestException("The music server scan did not finish in time. Refresh the library later.")
     }
@@ -487,6 +499,28 @@ class NavidromeClient(
         }
     }
 
+    /** Finds the song of the music file at [path] in [libraryId] without downloading the file catalogue; null when none matches. */
+    suspend fun musicFileAt(libraryId: Long, path: String): NavidromeMusicFile? = serverRequest {
+        nativeAccess.withLock {
+            client(followRedirects = false).use { nativeHttp ->
+                val body = timedRequest {
+                    // Navidrome matches the path as a prefix, so the exact file is picked from the results.
+                    val response = nativeGet(nativeHttp, "$baseUrl/api/song") {
+                        parameter("path", path); parameter("_start", 0); parameter("_end", 100)
+                    }
+                    // Without the lookup the caller refreshes the library instead.
+                    if (response.status.value == 404) return@timedRequest ""
+                    if (response.status.value !in 200..299) throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}",
+                        response.status.value)
+                    response.bodyAsText()
+                }.ifEmpty { return@withLock null }
+                Json.parseToJsonElement(body).jsonArray.map { it.jsonObject }
+                    .filter { it["missing"]?.jsonPrimitive?.booleanOrNull != true }
+                    .map(::parseMusicFile).singleOrNull { it.path == path && it.libraryId == libraryId }
+            }
+        }
+    }
+
     private fun parseMusicFile(song: JsonObject) = NavidromeMusicFile(song.getValue("id").jsonPrimitive.content,
         song.getValue("path").jsonPrimitive.content, requireNotNull(song["libraryId"]?.jsonPrimitive?.longOrNull),
         song["libraryName"]?.jsonPrimitive?.content.orEmpty())
@@ -541,12 +575,14 @@ class NavidromeClient(
         val songs = mutableListOf<ServerSong>()
         val seen = mutableSetOf<String>()
         val releases = mutableMapOf<String, String>()
+        var albumListRead = false
         var offset = 0
         while (true) {
             val envelope = catalogueRequest(offset, "search3", listOf("query" to "", "artistCount" to "0", "albumCount" to "0",
                 "songCount" to "500", "songOffset" to offset.toString()))
             val result = envelope?.get("searchResult3")?.jsonObject.orEmpty()
             val entries = result["song"]?.jsonArray.orEmpty().map { it.jsonObject }
+            if (!albumListRead && missingReleases(entries, releases).isNotEmpty()) { albumListReleases(releases); albumListRead = true }
             loadReleases(entries, releases)
             val page = entries.map { parseSong(it, releases) }
             if (page.isEmpty()) {
@@ -574,10 +610,40 @@ class NavidromeClient(
     private suspend fun albumRelease(albumId: String) =
         request("getAlbum", listOf("id" to albumId)).getValue("album").jsonObject["musicBrainzId"]?.jsonPrimitive?.content.orEmpty()
 
+    private fun missingReleases(songs: List<JsonObject>, releases: Map<String, String>) = songs.filter { recordingId(it).isNotBlank() }
+        .mapNotNull { it["albumId"]?.jsonPrimitive?.content?.takeIf { id -> id.isNotBlank() && id !in releases } }.distinct()
+
+    /**
+     * Reads the release ids of all albums from album list pages of 500, so a tagged library needs a handful of requests instead
+     * of one per album. Albums the list leaves without a release field, as on servers that omit it, are looked up one at a time.
+     */
+    private suspend fun albumListReleases(releases: MutableMap<String, String>) {
+        val seen = mutableSetOf<String>()
+        var offset = 0
+        while (true) {
+            val page = try {
+                optionalCatalogueRequest("getAlbumList2", listOf("type" to "alphabeticalByName", "size" to "500", "offset" to offset.toString()))
+                    ?.get("albumList2")?.jsonObject?.get("album")?.jsonArray.orEmpty()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { return }
+            var fresh = false
+            for (entry in page) {
+                val album = entry as? JsonObject ?: continue
+                val id = album["id"]?.jsonPrimitive?.contentOrNull ?: continue
+                if (seen.add(id)) fresh = true
+                // A blank id may only be missing from the list, so the album is looked up on its own.
+                val release = (album["musicBrainzId"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: continue
+                releases.getOrPut(id) { release }
+            }
+            // A server that ignores the offset repeats its first page; the albums still missing are looked up one at a time.
+            if (page.size < 500 || !fresh) return
+            offset += page.size
+        }
+    }
+
     /** Fetches the release ids of a page's albums a few at a time instead of one album per song in sequence. */
     private suspend fun loadReleases(songs: List<JsonObject>, releases: MutableMap<String, String>) {
-        val albumIds = songs.filter { recordingId(it).isNotBlank() }
-            .mapNotNull { it["albumId"]?.jsonPrimitive?.content?.takeIf { id -> id.isNotBlank() && id !in releases } }.distinct()
+        val albumIds = missingReleases(songs, releases)
         if (albumIds.isEmpty()) return
         val limit = Semaphore(CONCURRENT_REQUESTS)
         coroutineScope { albumIds.map { id -> async { limit.withPermit { id to albumRelease(id) } } }.awaitAll() }

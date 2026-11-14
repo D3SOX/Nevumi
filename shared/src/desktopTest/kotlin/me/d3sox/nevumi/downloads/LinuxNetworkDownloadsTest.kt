@@ -79,4 +79,38 @@ class LinuxNetworkDownloadsTest {
             directory.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun theMonitorFollowsNetworkManagerAfterItRestarts(): Unit = runBlocking {
+        val directory = Files.createTempDirectory("linux-network-restart")
+        val address = "unix:path=${directory.resolve("bus")}"
+        val daemon = ProcessBuilder("dbus-daemon", "--session", "--nofork", "--print-address=1", "--address=$address")
+            .redirectError(directory.resolve("bus.log").toFile()).start()
+        assertTrue(daemon.inputStream.bufferedReader().readLine().startsWith("unix:path="))
+        fun networkManager(metered: Long) = DBusConnectionBuilder.forAddress(address).withShared(false).build().also { bus ->
+            val properties = NetworkManagerPropertiesFixture().apply { this.metered = metered }
+            bus.exportObject(properties.objectPath, properties)
+            bus.requestBusName("org.freedesktop.NetworkManager")
+        }
+        val first = networkManager(metered = 1)
+        var restarted: org.freedesktop.dbus.connections.impl.DBusConnection? = null
+        var monitor: LinuxDownloadNetwork? = null
+        try {
+            monitor = LinuxDownloadNetwork(address)
+            assertEquals(DownloadNetwork(connected = true, metered = true), monitor.state.value)
+            first.close()
+            // While NetworkManager is gone nothing is known about the network, so downloads are not held back.
+            withTimeout(3_000) { monitor.state.first { !it.metered } }
+            // The restarted service has a new unique name; the monitor reads it again and receives its changes.
+            val second = networkManager(metered = 1).also { restarted = it }
+            withTimeout(3_000) { monitor.state.first { it.metered } }
+            second.sendMessage(Properties.PropertiesChanged("/org/freedesktop/NetworkManager", "org.freedesktop.NetworkManager",
+                mapOf("Metered" to Variant(UInt32(4))), emptyList()))
+            withTimeout(3_000) { monitor.state.first { !it.metered } }
+        } finally {
+            monitor?.close(); restarted?.close(); first.close()
+            daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
+            directory.toFile().deleteRecursively()
+        }
+    }
 }

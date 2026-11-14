@@ -47,11 +47,4 @@ GitHub Pages uses GitHub Actions as its source, with `nevumi.app` as the custom 
 
 ### README badges
 
-The SVGs in `badges/public` are hosted by the `manida-badges` Cloudflare Worker. The README selects the light or dark variant to match the reader's theme. To publish badge changes, sign in to Cloudflare with Wrangler and run:
-
-```sh
-cd badges
-bun install --frozen-lockfile
-bun run check
-bun run deploy
-```
+The SVGs in `website/badges` are published with the website at `nevumi.app/badges`, so a change goes live with the next website deployment. The README selects the light or dark variant to match the reader's theme.

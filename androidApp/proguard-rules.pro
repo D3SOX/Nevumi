@@ -26,3 +26,6 @@
 -keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
     <fields>;
 }
+# NavidromeClient tells connection failures and timeouts apart by exception class name.
+-keepnames class io.ktor.** extends java.lang.Throwable
+-keepnames class okhttp3.** extends java.lang.Throwable

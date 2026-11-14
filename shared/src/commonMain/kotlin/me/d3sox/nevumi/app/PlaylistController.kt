@@ -31,6 +31,8 @@ class PlaylistController internal constructor(private val context: ControllerCon
     private val library: MusicLibrary, private val playlists: Playlists?, private val artwork: ArtworkLibrary?,
     private val navidrome: NavidromeConnection?, private val serverChanges: NavidromeChanges?, private val offline: OfflineMusic?) {
     val serverPlaylistPublishingAvailable: Boolean get() = serverChanges != null
+    // Edits wait for a cover upload outside the operation lock, so a second edit of the playlist must not overtake the first.
+    private val playlistEdits = kotlinx.coroutines.sync.Mutex()
 
     init {
         playlists?.let { collections -> context.scope.launch {
@@ -118,49 +120,67 @@ class PlaylistController internal constructor(private val context: ControllerCon
         requireNotNull(playlists) { "Playlists are unavailable" }.setSort(playlistId, sort, descending)
         refreshPlaylists()
     }
-    fun editPlaylist(playlistId: String, name: String, description: String, cover: ByteArray? = null, removeCover: Boolean = false) = context.action {
+    fun editPlaylist(playlistId: String, name: String, description: String, cover: ByteArray? = null, removeCover: Boolean = false) =
+        context.action(serialized = false) { playlistEdits.withLock { editPlaylistNow(playlistId, name, description, cover, removeCover) } }
+    private suspend fun editPlaylistNow(playlistId: String, name: String, description: String, cover: ByteArray?, removeCover: Boolean) {
         require(name.isNotBlank()) { "Name the playlist" }
         val collections = requireNotNull(playlists) { "Playlists are unavailable" }
-        val previous = requireNotNull(collections.get(playlistId)) { "Playlist is missing" }
-        require(previous.server?.canEditMetadata(context.state.value.server) != false) { "Only the owner can edit this playlist" }
+        val previous = context.operations.withLock {
+            requireNotNull(collections.get(playlistId)) { "Playlist is missing" }.also { previous ->
+                require(previous.server?.canEditMetadata(context.state.value.server) != false) { "Only the owner can edit this playlist" }
+            }
+        }
         val link = previous.server
         // Uploading a cover needs Navidrome's native API; other Subsonic servers keep the cover in the app instead.
         val client = if (link != null && (cover != null || removeCover)) serverPlaylistClient(link).takeIf { it.isNavidrome() } else null
         if (link != null && client != null) {
+            // The server requests run outside the operation lock, which playback status updates also wait for.
             val oldCover = if (client.playlistImageUploaded(requireNotNull(link.id))) link.coverArt?.let { client.coverArt(it, size = null) } else null
             val oldLocalCover = artwork?.read("playlist:$playlistId")
             setServerPlaylistCover(playlistId, link, client, cover)
-            collections.edit(playlistId, name, description)
-            refreshPlaylists()
-            context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, undo = {
-                collections.edit(playlistId, previous.name, previous.description)
-                setServerPlaylistCover(playlistId, link, serverPlaylistClient(link), oldCover)
-                oldLocalCover?.let { artwork?.save("playlist:$playlistId", it) }
-                refreshPlaylists()
-            }, redo = {
+            context.operations.withLock {
                 collections.edit(playlistId, name, description)
-                setServerPlaylistCover(playlistId, link, serverPlaylistClient(link), cover)
                 refreshPlaylists()
-            })
-            return@action
-        }
-        val key = "playlist:$playlistId"
-        val oldCover = if (cover != null || removeCover) artwork?.read(key) else null
-        if (cover != null) requireNotNull(artwork) { "Artwork editing is unavailable" }.save(key, cover)
-        else if (removeCover) artwork?.remove(key)
-        collections.edit(playlistId, name, description)
-        refreshPlaylists()
-        context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, undo = {
-            collections.edit(playlistId, previous.name, previous.description)
-            if (cover != null || removeCover) {
-                if (oldCover == null) artwork?.remove(key) else artwork?.save(key, oldCover)
             }
-            refreshPlaylists()
-        }, redo = {
+            context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, serializedUndo = false, undo = { playlistEdits.withLock {
+                setServerPlaylistCover(playlistId, link, serverPlaylistClient(link), oldCover)
+                context.operations.withLock {
+                    collections.edit(playlistId, previous.name, previous.description)
+                    oldLocalCover?.let { artwork?.save("playlist:$playlistId", it) }
+                    refreshPlaylists()
+                }
+            } }, redo = { playlistEdits.withLock {
+                setServerPlaylistCover(playlistId, link, serverPlaylistClient(link), cover)
+                context.operations.withLock {
+                    collections.edit(playlistId, name, description)
+                    refreshPlaylists()
+                }
+            } })
+            return
+        }
+        context.operations.withLock {
+            val key = "playlist:$playlistId"
+            val oldCover = if (cover != null || removeCover) artwork?.read(key) else null
+            if (cover != null) requireNotNull(artwork) { "Artwork editing is unavailable" }.save(key, cover)
+            else if (removeCover) artwork?.remove(key)
             collections.edit(playlistId, name, description)
-            if (cover != null) artwork?.save(key, cover) else if (removeCover) artwork?.remove(key)
             refreshPlaylists()
-        })
+            context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, serializedUndo = false, undo = {
+                playlistEdits.withLock { context.operations.withLock {
+                    collections.edit(playlistId, previous.name, previous.description)
+                    if (cover != null || removeCover) {
+                        if (oldCover == null) artwork?.remove(key) else artwork?.save(key, oldCover)
+                    }
+                    refreshPlaylists()
+                } }
+            }, redo = {
+                playlistEdits.withLock { context.operations.withLock {
+                    collections.edit(playlistId, name, description)
+                    if (cover != null) artwork?.save(key, cover) else if (removeCover) artwork?.remove(key)
+                    refreshPlaylists()
+                } }
+            })
+        }
     }
     private suspend fun serverPlaylistClient(link: PlaylistServer): NavidromeClient {
         requireNotNull(link.id) { "Wait for this playlist to sync before changing its cover" }

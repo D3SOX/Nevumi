@@ -57,7 +57,7 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
     private suspend fun load(): List<Listen> = decoding.withLock {
         val revision = store.revision("listens")
         if (loaded && revision == loadedRevision) return@withLock sorted
-        sorted = decoded.update(store.database.records().list("listens")).all.newestFirst()
+        sorted = decoded.read(store, "listens").all.newestFirst()
         loadedRevision = revision
         // A transaction may roll back after this read, so its result is checked against the store again outside it.
         loaded = !store.inTransaction()

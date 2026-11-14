@@ -92,6 +92,9 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
     private data class PendingLoad(val nativeEntryId: Long, val positionMs: Long, val play: Boolean, val entryId: String)
     private data class FailedLoad(val track: PlayableTrack, val error: String, val positionMs: Long, val durationMs: Long)
     private var pendingLoad: PendingLoad? = null
+    /** mpv started the current file but has not loaded it yet, so it rejects seeks; [seekAfterLoad] holds one until it has. */
+    private var loadingFile = false
+    private var seekAfterLoad: Long? = null
     private var failedLoad: FailedLoad? = null
     private var startedNativeEntryId: Long? = null
     private var playWhenReady = false
@@ -111,6 +114,8 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                 "idle" to "yes", "keep-open" to "yes", "hr-seek" to "yes").forEach { (name, value) ->
                 checked(native.mpv_set_option_string(handle, name, value))
             }
+            // A system libmpv with Lua would hand a failing stream URL, with its server credentials, to yt-dlp. Builds without Lua lack the option.
+            native.mpv_set_option_string(handle, "ytdl", "no")
             if (pcmOutputFile != null) checked(native.mpv_set_option_string(handle, "ao-pcm-file", pcmOutputFile))
             if (audioDevice != null) checked(native.mpv_set_option_string(handle, "audio-device", audioDevice))
             checked(native.mpv_initialize(handle))
@@ -206,17 +211,10 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         failedLoad = null
         bufferedRepeatId = null
         pausedSeekPosition = null
+        seekAfterLoad = null
         checked(native.mpv_set_property_string(handle, "pause", "yes"))
         checked(native.mpv_set_property_string(handle, "playlist-start", startIndex.toString()))
-        val playlist = tracks.joinToString("\n", prefix = "memory://#EXTM3U\n", postfix = "\n") { track ->
-            val location = when {
-                track.location.startsWith("file:") -> "file://${URI(track.location).rawPath}"
-                "://" in track.location -> track.location
-                else -> "file://${File(track.location).toURI().rawPath}"
-            }
-            require('\n' !in location && '\r' !in location) { "Invalid audio location" }
-            location
-        }
+        val playlist = tracks.joinToString("\n", prefix = "memory://#EXTM3U\n", postfix = "\n") { mpvLocation(it.location) }
         command("loadlist", playlist, "replace")
         pendingLoad = PendingLoad(longProperty("playlist/$startIndex/id"), positionMs.coerceAtLeast(0), play, tracks[startIndex].entryId)
         if (repeatPlays != null) repeatedEntryId = selected.entryId
@@ -251,7 +249,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
             // Entries before the destination are already in their final order.
             var origin = (destination until working.size).firstOrNull { working[it].entryId == track.entryId } ?: -1
             if (origin < 0) {
-                command("loadfile", track.location, "append")
+                command("loadfile", mpvLocation(track.location), "append")
                 working += track
                 origin = working.lastIndex
             }
@@ -285,6 +283,8 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
     override fun seek(positionMs: Long) = synchronized(lock) {
         commanded()
         check(!closed)
+        // The status may already show the next song while mpv is still opening it.
+        drainEvents()
         bufferedRepeatId = null
         if (pendingLoad != null) {
             pendingLoad = pendingLoad?.copy(positionMs = positionMs.coerceAtLeast(0))
@@ -296,7 +296,18 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
             mutableStatus.update { it.copy(positionMs = positionMs.coerceAtLeast(0), ended = false, playWhenReady = playWhenReady) }
         } else {
             explicitSeek = true
-            command("seek", (positionMs.coerceAtLeast(0) / 1_000.0).toString(), "absolute+exact")
+            // mpv may start the next file between the event check and the command; then the seek waits for it as well.
+            val result = if (loadingFile) -1 else native.mpv_command(handle, StringArray(arrayOf("seek",
+                (positionMs.coerceAtLeast(0) / 1_000.0).toString(), "absolute+exact")))
+            if (result < 0) {
+                if (!loadingFile) drainEvents()
+                // The next file may also have finished loading meanwhile, so it accepts the seek now.
+                if (!loadingFile) command("seek", (positionMs.coerceAtLeast(0) / 1_000.0).toString(), "absolute+exact")
+                else {
+                    seekAfterLoad = positionMs.coerceAtLeast(0)
+                    mutableStatus.update { it.copy(positionMs = positionMs.coerceAtLeast(0)) }
+                }
+            }
         }
     }
     override fun setVolume(volume: Double) = synchronized(lock) {
@@ -369,6 +380,12 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         mutableStatus.update { it.copy(repeatMode = mode, repeatPlays = playCount) }
     }
 
+    private fun mpvLocation(location: String): String = when {
+        location.startsWith("file:") -> "file://${URI(location).rawPath}"
+        "://" in location -> location
+        else -> "file://${File(location).toURI().rawPath}"
+    }.also { require('\n' !in it && '\r' !in it) { "Invalid audio location" } }
+
     private fun command(vararg arguments: String) = checked(native.mpv_command(handle, StringArray(arguments)))
     private fun resumeAt(positionMs: Long) {
         explicitSeek = true
@@ -383,10 +400,12 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
             when (event.eventId) {
                 0 -> return
                 6 -> {
+                    loadingFile = true
+                    seekAfterLoad = null
                     startedNativeEntryId = event.data?.let { MpvStartFile(it).playlistEntryId }
                     if (pendingLoad == null) playbackId = Uuid.random().toString()
                 }
-                7 -> event.data?.let(::MpvEndFile)?.let { end ->
+                7 -> event.data?.let(::MpvEndFile)?.also { loadingFile = false; seekAfterLoad = null }?.let { end ->
                     if (end.reason == 4) {
                         val pending = pendingLoad
                         val track = if (pending?.nativeEntryId == end.playlistEntryId)
@@ -401,8 +420,13 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                         }
                     }
                 }
-                8 -> pendingLoad?.let { pending ->
-                    if (pending.nativeEntryId == startedNativeEntryId) {
+                8 -> {
+                    loadingFile = false
+                    seekAfterLoad?.let { position ->
+                        seekAfterLoad = null
+                        if (pendingLoad == null) { explicitSeek = true; command("seek", (position / 1_000.0).toString(), "absolute+exact") }
+                    }
+                    pendingLoad?.let { pending -> if (pending.nativeEntryId == startedNativeEntryId) {
                         if (pending.play) {
                             if (pending.positionMs > 0) resumeAt(pending.positionMs)
                             else checked(native.mpv_set_property_string(handle, "pause", "no"))
@@ -411,7 +435,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                             checked(native.mpv_set_property_string(handle, "pause", "yes"))
                         }
                         pendingLoad = null
-                    }
+                    } }
                 }
                 21 -> if (!flagProperty("seeking")) explicitSeek = false
             }

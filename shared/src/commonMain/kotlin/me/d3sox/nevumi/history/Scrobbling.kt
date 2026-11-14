@@ -272,7 +272,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
             if (unlinked.isEmpty()) null else store.database.records().revision("tracks"))
         if (pass == examined && rules == eligibilityRules) return@withLock
         examined = null
-        val update = decoding.withLock { listens.update(store.database.records().list("listens")) }
+        val update = decoding.withLock { listens.read(store, "listens") }
         // Deferred listens are taken from the current records, so a cleared or edited listen is not scrobbled as it was.
         val stored = if (unlinked.isEmpty()) emptyMap() else update.all.associateBy { it.id }
         val candidates = ((if (rules != eligibilityRules) update.all else update.changed) + unlinked.mapNotNull { stored[it.id] })

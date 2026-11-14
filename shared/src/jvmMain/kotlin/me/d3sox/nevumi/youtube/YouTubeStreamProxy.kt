@@ -26,11 +26,13 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
     private val token = Uuid.random().toHexString()
     private val workers = Executors.newCachedThreadPool { task -> Thread(task, "youtube-stream").apply { isDaemon = true } }
     @Volatile private var server: ServerSocket? = null
+    private var closed = false
     private val clients = java.util.concurrent.Semaphore(16)
 
     fun location(videoId: String): String = "http://127.0.0.1:${listening().localPort}/$token/$videoId"
 
     @Synchronized private fun listening(): ServerSocket = server ?: ServerSocket(0, 16, LOOPBACK).also { socket ->
+        if (closed) { socket.close(); throw IOException("The YouTube stream proxy is closed") }
         server = socket
         workers.execute {
             while (!socket.isClosed) {
@@ -43,11 +45,12 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
     }
 
     override fun close() {
-        synchronized(this) { server?.close(); server = null }
+        synchronized(this) { closed = true; server?.close(); server = null }
         workers.shutdownNow()
     }
 
-    private class Range(val start: Long, val end: Long?)
+    /** A null [start] asks for the last [end] bytes. */
+    private class Range(val start: Long?, val end: Long?)
 
     // Android's InetAddress.getLoopbackAddress() is ::1, which the IPv4 address in [location] does not reach.
     private companion object { val LOOPBACK: InetAddress = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)) }
@@ -70,9 +73,12 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
             var audio = try { runBlocking { find(videoId, false) } } catch (_: Exception) { return output.status(502, "Bad Gateway") }
             val total = audio.contentLength.takeIf { it > 0 } ?: try { length(audio.url) }
                 catch (_: IOException) { audio = runBlocking { find(videoId, true) }; length(audio.url) }
-            val start = range?.start ?: 0
-            if (start >= total) return output.write("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */$total\r\nConnection: close\r\n\r\n")
-            val end = (range?.end ?: (total - 1)).coerceAtMost(total - 1)
+            val (start, end) = when {
+                range == null -> 0L to total - 1
+                range.start == null -> (total - range.end!!).coerceAtLeast(0) to total - 1
+                else -> range.start to (range.end ?: (total - 1)).coerceAtMost(total - 1)
+            }
+            if (start >= total || end < start) return output.write("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */$total\r\nConnection: close\r\n\r\n")
             output.write(buildString {
                 append(if (range != null) "HTTP/1.1 206 Partial Content\r\n" else "HTTP/1.1 200 OK\r\n")
                 append("Content-Type: ${audio.mimeType}\r\nAccept-Ranges: bytes\r\nContent-Length: ${end - start + 1}\r\n")
@@ -125,6 +131,7 @@ internal class YouTubeStreamProxy(private val chunkBytes: Long = 1L shl 20,
 
     private fun range(value: String): Range? {
         val bytes = value.removePrefix("bytes=").takeIf { value.startsWith("bytes=") && ',' !in it } ?: return null
+        if (bytes.startsWith('-')) return bytes.drop(1).toLongOrNull()?.let { Range(null, it) }
         val start = bytes.substringBefore('-').toLongOrNull() ?: return null
         return Range(start, bytes.substringAfter('-').takeIf { it.isNotEmpty() }?.toLongOrNull())
     }

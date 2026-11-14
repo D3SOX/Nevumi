@@ -17,6 +17,8 @@ import kotlinx.serialization.Serializable
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.library.LocalSources
+import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.navidrome.NavidromeClient
@@ -88,6 +90,12 @@ data class SoundCloudJob(
     val trackId: String? = null,
     /** The music server's song for the downloaded file, saved as soon as an import finds it. */
     val serverSongId: String? = null,
+    /**
+     * What the library knew when the download started, so an import can tell the new song apart: the revision of its server songs,
+     * which covers songs whose tags changed later, and the songs that matched then, which covers ones relinked since.
+     */
+    val knownSongsRevision: Long? = null,
+    val knownSongIds: List<String>? = null,
     /** The device folder the song was saved to while the local folder rules leave it out of the library. */
     val excludedFolder: String? = null,
     val createdAt: Long = 0,
@@ -122,6 +130,7 @@ internal fun downloadFileName(name: String): String {
 
 /** Saves downloads into a folder, without replacing a file that already has the same name. */
 class DirectoryMusicFiles(override val folder: String) : DeviceMusicFiles {
+    private companion object { val publishing = Mutex() }
     override suspend fun save(fileName: String, write: suspend (BufferedSink) -> Unit): String = withContext(Dispatchers.IO) {
         val fs = FileSystem.SYSTEM
         val root = folder.toPath()
@@ -134,10 +143,13 @@ class DirectoryMusicFiles(override val folder: String) : DeviceMusicFiles {
             try { write(sink) } finally { sink.close() }
             val base = name.substringBeforeLast('.')
             val extension = name.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
-            val target = generateSequence(1) { it + 1 }.map { if (it == 1) root / name else root / "$base ($it)$extension" }
-                .first { !fs.exists(it) }
-            fs.atomicMove(partial, target)
-            target.toString()
+            // Choosing a free name and moving there are one step, so two downloads with the same name cannot replace each other.
+            publishing.withLock {
+                val target = generateSequence(1) { it + 1 }.map { if (it == 1) root / name else root / "$base ($it)$extension" }
+                    .first { !fs.exists(it) }
+                fs.atomicMove(partial, target)
+                target.toString()
+            }
         } finally { fs.delete(partial, mustExist = false) }
     }
 }
@@ -300,7 +312,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
                 ?.let { running -> if (keepOffline && !running.keepOffline) running.copy(keepOffline = true).also { save(it) } else running }
                 ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, musicServerId, SoundCloudJobState.STARTING, keepOffline,
                     message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds(),
-                    reviewTags = reviewTags ?: profile.reviewTags).also {
+                    reviewTags = reviewTags ?: profile.reviewTags).let { withBaseline(it) }.also {
                     creating.update { ids -> ids + it.id }
                     save(it)
                     started = true
@@ -317,12 +329,16 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             requireNotNull(server()) { "Connect to your music server first" }.serverId
         }
 
+    /** Records what the library knows before sc-gate-dl can save the file, so no refresh can have added this download's own song yet. */
+    private suspend fun withBaseline(job: SoundCloudJob): SoundCloudJob = if (job.destination != ScGateDestination.LIBRARY) job
+        else job.copy(knownSongsRevision = store.revision("source-owners"), knownSongIds = knownMatches(job, null))
+
     /** Restarts [job] as a new server job when nobody changed it meanwhile. */
     private suspend fun restart(job: SoundCloudJob) {
         // A new server job goes to the server configured now, which may differ from the one that lost or canceled it.
         val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads in Settings first" }
-        val restarted = job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null, baseUrl = profile.baseUrl,
-            musicServerId = musicServerFor(profile, job.destination))
+        val restarted = withBaseline(job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null,
+            baseUrl = profile.baseUrl, musicServerId = musicServerFor(profile, job.destination)))
         creating.update { it + job.id }
         if (replace(job, restarted)) create(restarted) else creating.update { it - job.id }
     }
@@ -498,9 +514,12 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             "error" -> job.copy(state = SoundCloudJobState.FAILED, message = status.error ?: status.message.ifBlank { "sc-gate-dl could not download this song" },
                 attention = false, browser = false)
             "cancelled" -> job.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled on sc-gate-dl", attention = false, browser = false)
-            "ready" -> if (job.destination == ScGateDestination.LIBRARY)
+            "ready" -> if (job.destination == ScGateDestination.LIBRARY) {
+                val name = downloadFileName(requireNotNull(status.libraryFilename) { "sc-gate-dl did not report where it saved the song" })
                 job.copy(state = SoundCloudJobState.IMPORTING, message = "Adding to your music server", percent = 100, attention = false, browser = false,
-                    fileName = downloadFileName(requireNotNull(status.libraryFilename) { "sc-gate-dl did not report where it saved the song" }))
+                    knownSongsRevision = job.knownSongsRevision ?: store.revision("source-owners"),
+                    knownSongIds = job.knownSongIds ?: knownMatches(job, name), fileName = name)
+            }
             else job.copy(state = SoundCloudJobState.TRANSFERRING, message = "Saving to this device", percent = 100, attention = false, browser = false,
                 fileName = downloadFileName(requireNotNull(status.outputFilename) { "sc-gate-dl did not report the finished file" }))
             // Only a visible browser can be watched. Some progress reports leave out that it is open, and it closes once the file downloads.
@@ -529,11 +548,21 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             val name = requireNotNull(job.fileName)
             // Only Navidrome's own API lists real file paths. Other Subsonic servers are matched by the tags below.
             val navidrome = client.isNavidrome()
-            // The library already knows these server songs, so only a match outside them is the new file. An older file elsewhere
-            // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder.
+            // The library already knew these server songs, so only a match outside them is the new file. An older file elsewhere
+            // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder. A download
+            // that an earlier version started records them here, before its first attempt, and keeps them for its retries.
+            val baseline = job.knownSongsRevision ?: store.revision("source-owners")
+            val matches = job.knownSongIds ?: knownMatches(job, name)
+            if (job.knownSongsRevision == null || job.knownSongIds == null)
+                job.copy(knownSongsRevision = baseline, knownSongIds = matches).let { if (replace(job, it)) job = it }
             val owners = "source-owner:server:${client.serverId}:"
-            val known = store.database.records().list("source-owners").mapNotNullTo(HashSet()) { it.key.takeIf { key -> key.startsWith(owners) } }
-            fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> "$owners${song.id}" !in known }
+            val known = store.database.records().list("source-owners").mapNotNullTo(matches.toHashSet()) { record ->
+                record.key.takeIf { key -> key.startsWith(owners) && record.changed <= baseline }?.removePrefix(owners)
+            }
+            // Another download with the same tags may have found its song first; that song is not this one.
+            store.list<SoundCloudJob>("soundcloud-jobs").filter { it.id != job.id && it.musicServerId == client.serverId }
+                .mapNotNullTo(known) { it.serverSongId }
+            fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> song.id !in known }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
             // sc-gate-dl tags the file with the same title and artist the search showed, unless they were checked.
@@ -555,6 +584,19 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             job.copy(state = SoundCloudJobState.COMPLETE, message = "Added to your music server", trackId = track.id)
         } else importLocal(job)
         if (replace(job, next)) mutableCompleted.tryEmit(next)
+    }
+
+    /** The music server songs the library knows with the download's tags or, once known, its file name. */
+    private suspend fun knownMatches(job: SoundCloudJob, fileName: String?): List<String> {
+        val prefix = "server:${job.musicServerId}:"
+        val title = job.tags?.title ?: job.track.title
+        val artist = job.tags?.artist ?: job.track.artist
+        return MusicLibrary(store).tracks().flatMap { track ->
+            val tagged = track.metadata.title.equals(title, ignoreCase = true) && track.metadata.artist.equals(artist, ignoreCase = true)
+            track.sources.filter { source -> source.kind == SourceKind.SERVER && source.id.startsWith(prefix) &&
+                (tagged || fileName != null && source.filePath?.let { it == fileName || it.endsWith("/$fileName") } == true) }
+                .map { it.id.removePrefix(prefix) }
+        }.distinct()
     }
 
     private suspend fun importLocal(job: SoundCloudJob): SoundCloudJob {

@@ -26,7 +26,7 @@ internal fun FileDelete(track: Track, controller: MusicController, target: FileE
     var name by remember(track.id) { mutableStateOf<String?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
-    val state by controller.state.collectAsState()
+    val state by (LocalSteadyState.current ?: controller.state).collectAsState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(track.id) {
         try { name = controller.musicFileName(track.id, target) }

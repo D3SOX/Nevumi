@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.youtube
 
+import me.d3sox.nevumi.artwork.MAX_ARTWORK_BYTES
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
@@ -86,7 +87,17 @@ class NewPipeYouTube : YouTubeSource, AutoCloseable {
             connection.readTimeout = 30_000
             connection.setRequestProperty("User-Agent", YOUTUBE_USER_AGENT)
             if (connection.responseCode !in 200..299) throw IOException("YouTube sent no artwork (HTTP ${connection.responseCode})")
-            connection.inputStream.use { it.readBytes() }
+            connection.inputStream.use { input ->
+                val bytes = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(32 * 1024)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    check(bytes.size() + count <= MAX_ARTWORK_BYTES) { "YouTube artwork is too large" }
+                    bytes.write(buffer, 0, count)
+                }
+                bytes.toByteArray()
+            }
         } finally { connection.disconnect() }
     }
 

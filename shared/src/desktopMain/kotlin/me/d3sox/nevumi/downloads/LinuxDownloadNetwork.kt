@@ -3,6 +3,7 @@ package me.d3sox.nevumi.downloads
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.freedesktop.dbus.connections.impl.DBusConnectionBuilder
+import org.freedesktop.dbus.interfaces.DBus
 import org.freedesktop.dbus.interfaces.Properties
 import org.freedesktop.dbus.types.Variant
 
@@ -12,23 +13,38 @@ class LinuxDownloadNetwork(address: String? = null) : AutoCloseable {
     private val connection = (address?.let(DBusConnectionBuilder::forAddress)
         ?: DBusConnectionBuilder.forSystemBus()).withShared(false).build()
     private val values = mutableMapOf<String, Variant<*>>()
+    private var changes: AutoCloseable? = null
 
     init {
         try {
-            val properties = connection.getRemoteObject("org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager", Properties::class.java)
-            val owner = connection.getDBusOwnerName("org.freedesktop.NetworkManager")
-            connection.addSigHandler(Properties.PropertiesChanged::class.java, owner, properties) { signal ->
-                if (signal.interfaceName == "org.freedesktop.NetworkManager") synchronized(values) {
+            // Signals come from NetworkManager's unique bus name, which changes when it restarts; follow the new one. Only the bus
+            // itself reports owner changes, so another program cannot pretend that NetworkManager stopped.
+            connection.addSigHandler(DBus.NameOwnerChanged::class.java) { signal ->
+                if (signal.source == "org.freedesktop.DBus" && signal.name == NETWORK_MANAGER) try { subscribe(signal.newOwner.takeIf { it.isNotEmpty() }) }
+                catch (error: Exception) { System.err.println("NetworkManager monitoring failed: ${error.message}") }
+            }
+            // Held across the lookup, so an owner change reported meanwhile cannot be replaced by the owner read before it.
+            synchronized(values) { subscribe(requireNotNull(connection.getDBusOwnerName(NETWORK_MANAGER)) { "NetworkManager is not running" }) }
+        } catch (error: Exception) { connection.close(); throw error }
+    }
+
+    /** Without an [owner], NetworkManager stopped, so nothing holds downloads back until it returns. */
+    private fun subscribe(owner: String?) = synchronized(values) {
+        changes?.close()
+        changes = null
+        values.clear()
+        if (owner != null) {
+            val properties = connection.getRemoteObject(NETWORK_MANAGER, "/org/freedesktop/NetworkManager", Properties::class.java)
+            changes = connection.addSigHandler(Properties.PropertiesChanged::class.java, owner, properties) { signal ->
+                if (signal.interfaceName == NETWORK_MANAGER) synchronized(values) {
                     values.putAll(signal.propertiesChanged)
                     signal.propertiesRemoved.forEach(values::remove)
                     publish()
                 }
             }
-            synchronized(values) {
-                values.putAll(properties.GetAll("org.freedesktop.NetworkManager"))
-                publish()
-            }
-        } catch (error: Exception) { connection.close(); throw error }
+            values.putAll(properties.GetAll(NETWORK_MANAGER))
+        }
+        publish()
     }
 
     private fun publish() {
@@ -39,4 +55,6 @@ class LinuxDownloadNetwork(address: String? = null) : AutoCloseable {
     }
 
     override fun close() { connection.close() }
+
+    private companion object { const val NETWORK_MANAGER = "org.freedesktop.NetworkManager" }
 }

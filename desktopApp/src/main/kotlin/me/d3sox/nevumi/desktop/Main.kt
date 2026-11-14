@@ -74,6 +74,10 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
         fun option(name: String) = arguments.firstOrNull { it.startsWith("$name=") }?.substringAfter('=')
         val base = System.getenv("XDG_DATA_HOME") ?: File(System.getProperty("user.home"), ".local/share").path
         val directory = File(option("--data-dir") ?: "$base/me.d3sox.nevumi").apply { mkdirs() }
+        // A second instance, such as one launched to import a folder, would write the same database and downloads.
+        val lockChannel = java.nio.channels.FileChannel.open(File(directory, "nevumi.lock").toPath(),
+            java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE).also { resources += { it.close() } }
+        checkNotNull(lockChannel.tryLock()) { "Nevumi is already running with this library. Close it and try again." }
         val store = openMusicStore(File(directory, "music-player.db").path).also { resources += { it.close() } }
         val library = MusicLibrary(store)
         val http = HttpClient(OkHttp).also { resources += { it.close() } }

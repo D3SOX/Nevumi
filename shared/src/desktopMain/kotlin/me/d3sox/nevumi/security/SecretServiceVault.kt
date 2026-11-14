@@ -4,14 +4,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.sync.withLock
 
 class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
-    private val cacheFor: kotlin.time.Duration = 15.seconds) : CredentialVault {
+    private val cacheFor: kotlin.time.Duration = 15.seconds, private val keepFoundFor: kotlin.time.Duration = 10.minutes) : CredentialVault {
     private data class Cached(val secret: String?, val readAt: kotlin.time.TimeMark)
-    // Each lookup spawns secret-tool; background workers read the same key every few seconds.
+    // Each lookup spawns secret-tool; background workers read the same key every few seconds. Saves and deletes through this vault
+    // update it at once, so a found secret is read again only after [keepFoundFor], for changes made in another keyring app. A missing
+    // one is looked up again after [cacheFor], in case the keyring was locked.
     private val recent = mutableMapOf<String, Cached>()
     private val recentLock = kotlinx.coroutines.sync.Mutex()
     // Bumped by every save or delete so a lookup that overlapped a change cannot cache the stale secret.
@@ -27,7 +30,7 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
     }
     override suspend fun read(key: String): String? {
         val started = recentLock.withLock {
-            recent[key]?.takeIf { it.readAt.elapsedNow() < cacheFor }?.let { return it.secret }
+            recent[key]?.takeIf { it.readAt.elapsedNow() < if (it.secret != null) keepFoundFor else cacheFor }?.let { return it.secret }
             generation
         }
         val (code, output) = execute(listOf("lookup", "application", applicationId, "profile", key))

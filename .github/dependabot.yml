@@ -32,7 +32,3 @@ updates:
     directory: /scripts
     schedule:
       interval: weekly
-  - package-ecosystem: bun
-    directory: /badges
-    schedule:
-      interval: weekly
