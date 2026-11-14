@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -32,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.settings.TrackAction
@@ -42,6 +44,8 @@ import me.d3sox.nevumi.resources.search_type_albums
 import me.d3sox.nevumi.resources.search_type_artists
 import me.d3sox.nevumi.resources.search_type_songs
 import me.d3sox.nevumi.resources.sources_in_library
+import me.d3sox.nevumi.resources.sources_go_to_youtube_music_album
+import me.d3sox.nevumi.resources.sources_go_to_youtube_music_artist
 import me.d3sox.nevumi.resources.sources_no_youtube_results
 import me.d3sox.nevumi.resources.sources_open_on_youtube
 import me.d3sox.nevumi.resources.sources_save_to_this_device
@@ -55,9 +59,12 @@ import me.d3sox.nevumi.resources.sources_youtube_song_description
 import me.d3sox.nevumi.resources.sources_youtube_video
 import me.d3sox.nevumi.resources.sources_youtube_videos
 import me.d3sox.nevumi.youtube.YouTubeCollection
+import me.d3sox.nevumi.youtube.YouTubeCollectionKind
 import me.d3sox.nevumi.youtube.YouTubeContinuation
+import me.d3sox.nevumi.youtube.YouTubeLink
 import me.d3sox.nevumi.youtube.YouTubeDestination
 import me.d3sox.nevumi.youtube.YouTubeException
+import me.d3sox.nevumi.youtube.suggestedTags
 import me.d3sox.nevumi.youtube.YouTubeItem
 import me.d3sox.nevumi.youtube.YouTubeSearchKind
 import me.d3sox.nevumi.youtube.YouTubeTrack
@@ -99,16 +106,20 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
         load(null)
     }
     val owned = rememberOwnedSongs(state)
-    Column(Modifier.fillMaxSize()) {
+    val selection = remember(query, kind) { YouTubeSelection() }
+    val tracks by remember(results) { derivedStateOf { results.filterIsInstance<YouTubeTrack>() } }
+    CompositionLocalProvider(LocalYouTubeSelection provides selection) { Column(Modifier.fillMaxSize()) {
         val labels = mapOf(YouTubeSearchKind.SONGS to Res.string.search_type_songs, YouTubeSearchKind.ARTISTS to Res.string.search_type_artists,
             YouTubeSearchKind.ALBUMS to Res.string.search_type_albums, YouTubeSearchKind.VIDEOS to Res.string.sources_youtube_videos)
-        OverflowChipRow(YouTubeSearchKind.entries, kind, { stringResource(labels.getValue(it)) }, { "youtube-kind:${it.name}" },
+        // Picking songs replaces the kinds, so another kind cannot drop the picked songs from view.
+        if (selection.active) YouTubeSelectionHeader(selection, state, controller)
+        else OverflowChipRow(YouTubeSearchKind.entries, kind, { stringResource(labels.getValue(it)) }, { "youtube-kind:${it.name}" },
             Modifier.padding(horizontal = 16.dp)) { kind = it }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("youtube-results")) {
             items(results, key = { "youtube:${it.key}" }) { result ->
                 when (result) {
-                    is YouTubeTrack -> YouTubeTrackRow(result, owned, state, controller) { controller.playYouTube(result) }
-                    is YouTubeCollection -> YouTubeCollectionRow(result, controller)
+                    is YouTubeTrack -> YouTubeTrackRow(result, owned, state, controller, { tracks }) { controller.playYouTube(result) }
+                    is YouTubeCollection -> YouTubeCollectionRow(result, state, controller)
                 }
             }
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp)) }
@@ -130,7 +141,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
                 }
             }
         }
-    }
+    } }
 }
 
 /** The artist and title of every song in the library, which marks YouTube results the user already has. */
@@ -138,28 +149,53 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
 internal fun rememberOwnedSongs(state: AppState): Set<String> =
     remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
 
-/** What a swipe on a YouTube song can do without adding it to the library: queue it, or save it to this device. */
-private fun MusicController.youTubeActionAvailable(action: TrackAction) = when (action) {
-    TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND -> true
-    TrackAction.DOWNLOAD -> youTubeDeviceDownloads
-    else -> false
-}
+/** The YouTube Music page that is open, whose own album a song's menu does not offer to open again. */
+internal val LocalYouTubePageLink = compositionLocalOf<YouTubeLink?> { null }
 
-private fun MusicController.performYouTubeAction(track: YouTubeTrack, action: TrackAction, state: AppState): Boolean {
-    if (!youTubeActionAvailable(action)) return false
-    when (action) {
-        TrackAction.PLAY_NEXT -> playYouTube(track, QueueAction.PLAY_NEXT)
-        TrackAction.PLAY_AFTER -> playYouTube(track, QueueAction.PLAY_AFTER)
-        TrackAction.APPEND -> playYouTube(track, QueueAction.APPEND)
-        TrackAction.DOWNLOAD -> downloadFromYouTube(track, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
-        else -> Unit
+/**
+ * What a swipe or the menu of a YouTube song can do without adding it to the library: queue it, save it to this device, go to its
+ * artist in the library with [navigate] when the library has songs by them, or start a selection with [select].
+ */
+private class YouTubeTrackActions(val track: YouTubeTrack, val controller: MusicController, val state: AppState, val libraryArtist: String?,
+    val navigate: (LibraryTab, String?) -> Unit, val select: (() -> Unit)?) {
+    fun available(action: TrackAction) = when (action) {
+        TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND -> true
+        TrackAction.DOWNLOAD -> controller.youTubeDeviceDownloads
+        TrackAction.GO_ARTIST -> libraryArtist != null
+        TrackAction.SELECT -> select != null
+        else -> false
     }
-    return true
+    fun perform(action: TrackAction): Boolean {
+        if (!available(action)) return false
+        when (action) {
+            TrackAction.PLAY_NEXT -> controller.playYouTube(track, QueueAction.PLAY_NEXT)
+            TrackAction.PLAY_AFTER -> controller.playYouTube(track, QueueAction.PLAY_AFTER)
+            TrackAction.APPEND -> controller.playYouTube(track, QueueAction.APPEND)
+            TrackAction.DOWNLOAD -> controller.downloadFromYouTube(track, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
+            TrackAction.GO_ARTIST -> navigate(LibraryTab.ARTISTS, libraryArtist)
+            TrackAction.SELECT -> select?.invoke()
+            else -> Unit
+        }
+        return true
+    }
 }
 
-/** A song or video; [play] runs on a tap. It swipes like a library song, and a long press, right click or its options button opens the song menu. */
 @Composable
-internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, state: AppState, controller: MusicController, play: () -> Unit) {
+private fun rememberYouTubeTrackActions(track: YouTubeTrack, controller: MusicController, state: AppState, select: (() -> Unit)?) =
+    YouTubeTrackActions(track, controller, state, libraryArtist(track.suggestedTags().second, state), LocalLibraryNavigate.current, select)
+
+/**
+ * A song or video of [list]; [play] runs on a tap. It swipes like a library song, and a long press, right click or its options button
+ * opens the song menu. While songs of the list are selected, a tap selects it instead.
+ */
+@Composable
+internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, state: AppState, controller: MusicController,
+    list: () -> List<YouTubeTrack> = { listOf(track) }, play: () -> Unit) {
+    val selection = LocalYouTubeSelection.current
+    val select = selection?.let { { it.toggle(track, list) } }
+    val selecting = selection?.active == true
+    val selected = selection?.contains(track) == true
+    val actions = rememberYouTubeTrackActions(track, controller, state, select)
     val inLibrary = songKey(track.artist, track.title) in owned
     val description = stringResource(Res.string.sources_youtube_song_description, track.title, track.artist)
     var menu by remember { mutableStateOf(false) }
@@ -167,19 +203,24 @@ internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, state: App
     var artworkBounds by remember { mutableStateOf<Rect?>(null) }
     var menuOrigin by remember { mutableStateOf<Rect?>(null) }
     val openMenu = { menuOrigin = artworkBounds; artworkPlaced = false; menu = true }
-    val labels = listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND, TrackAction.DOWNLOAD).associateWith { it.displayLabel() }
-    SwipeActionRow(track.videoId, state.preferences.swipeRight, state.preferences.swipeLeft, true, controller::youTubeActionAvailable,
-        { controller.performYouTubeAction(track, it, state) }, { it.icon() }, { labels[it].orEmpty() }, Modifier.onSecondaryClick(openMenu)) {
-        ListItem(modifier = Modifier.combinedClickable(onClick = play, onLongClick = openMenu).semantics { contentDescription = description },
+    val labels = listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND, TrackAction.DOWNLOAD, TrackAction.GO_ARTIST,
+        TrackAction.SELECT).associateWith { it.displayLabel() }
+    SwipeActionRow(track.videoId, state.preferences.swipeRight, state.preferences.swipeLeft, !selecting, actions::available,
+        actions::perform, { it.icon() }, { labels[it].orEmpty() }, Modifier.onSecondaryClick(openMenu).semantics { this.selected = selected }) {
+        ListItem(modifier = Modifier.combinedClickable(onClick = { if (selecting) select?.invoke() else play() }, onLongClick = openMenu)
+            .semantics { contentDescription = description },
             headlineContent = { Text(track.title, maxLines = 2) },
             supportingContent = {
                 Text(listOfNotNull(track.artist.ifBlank { null }, track.durationMs.takeIf { it > 0 }?.let(::playbackTime),
                     if (track.song) null else stringResource(Res.string.sources_youtube_video)).joinToString(" · "), maxLines = 1)
             },
             leadingContent = {
-                YouTubeImage(smallArtwork(track), controller, Modifier.size(48.dp).onGloballyPositioned {
-                    artworkBounds = Rect(it.positionOnScreen(), Size(it.size.width.toFloat(), it.size.height.toFloat()))
-                }.graphicsLayer { alpha = if (menu && artworkPlaced) 0f else 1f })
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (selecting) Checkbox(selected, onCheckedChange = { select?.invoke() })
+                    YouTubeImage(smallArtwork(track), controller, Modifier.size(48.dp).onGloballyPositioned {
+                        artworkBounds = Rect(it.positionOnScreen(), Size(it.size.width.toFloat(), it.size.height.toFloat()))
+                    }.graphicsLayer { alpha = if (menu && artworkPlaced) 0f else 1f })
+                }
             },
             trailingContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -189,7 +230,7 @@ internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, state: App
                 }
             })
     }
-    if (menu) YouTubeSongMenu(track, state, controller, menuOrigin, { artworkPlaced = true }) { menu = false }
+    if (menu) YouTubeSongMenu(track, state, controller, menuOrigin, { artworkPlaced = true }, select) { menu = false }
 }
 
 // Recently shown YouTube images, so scrolling back or returning to a page does not fetch them again.
@@ -237,18 +278,35 @@ internal fun SearchYouTubeRow(query: String, open: () -> Unit) {
         leadingContent = { Icon(AppIcon.YOUTUBE.vector, null) })
 }
 
-/** The song menu of a YouTube song: it queues the song, saves it to this device or the server, or opens it on YouTube. */
+/** [artist] when the library has songs by them, so going to the artist opens their library page. */
+@Composable
+internal fun libraryArtist(artist: String, state: AppState): String? = remember(artist, state.tracks) {
+    artist.takeIf { name -> name.isNotBlank() && state.tracks.any { it.inLibrary && it.metadata.artist == name } }
+}
+
+/**
+ * The song menu of a YouTube song: it queues the song, goes to its artist in the library or on YouTube Music or to its album on
+ * YouTube Music, selects it with [select], saves it to this device or the server, or opens it on YouTube.
+ */
 @Composable
 internal fun YouTubeSongMenu(track: YouTubeTrack, state: AppState, controller: MusicController, artworkOrigin: Rect? = null,
-    onArtworkPlaced: () -> Unit = {}, dismiss: () -> Unit) {
+    onArtworkPlaced: () -> Unit = {}, select: (() -> Unit)? = null, dismiss: () -> Unit) {
     val browser = LocalUriHandler.current
+    val navigate = LocalLibraryNavigate.current
+    val openPage = LocalOpenYouTubeLinkedPage.current
     val reviewTags = state.preferences.youTubeReviewTags
+    val actions = rememberYouTubeTrackActions(track, controller, state, select)
+    val currentPage = LocalYouTubePageLink.current
     val options = buildList {
         // The menu closes before an option runs.
         fun option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) = add(TrackOption(label, icon, detail) { dismiss(); click() })
-        listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND).forEach { action ->
-            option(action.displayLabel(), action.icon()) { controller.performYouTubeAction(track, action, state) }
-        }
+        listOf(TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND, TrackAction.GO_ARTIST)
+            .filter(actions::available).forEach { action -> option(action.displayLabel(), action.icon()) { actions.perform(action) } }
+        option(stringResource(Res.string.sources_go_to_youtube_music_artist), AppIcon.YOUTUBE) { openPage(track.videoId, YouTubeCollectionKind.ARTIST) }
+        // Only songs belong to an album; on an album's own page, its songs would only open it again.
+        if (track.song && currentPage?.browseId?.startsWith("MPRE") != true) option(stringResource(Res.string.sources_go_to_youtube_music_album),
+            AppIcon.ALBUM) { openPage(track.videoId, YouTubeCollectionKind.ALBUM) }
+        if (actions.available(TrackAction.SELECT)) option(TrackAction.SELECT.displayLabel(), TrackAction.SELECT.icon()) { actions.perform(TrackAction.SELECT) }
         if (controller.youTubeDeviceDownloads) option(stringResource(Res.string.sources_save_to_this_device), AppIcon.DEVICE) {
             controller.downloadFromYouTube(track, YouTubeDestination.DEVICE, reviewTags)
         }

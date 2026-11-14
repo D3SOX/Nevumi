@@ -43,6 +43,7 @@ class YouTubeSearchUiTest {
                 YouTubeTrack("bbbbbbbbbbb", "Other - Night Swim (Official Video)", "OtherVEVO", 180_000)), null)
         }
         override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
+        override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? = null
         override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
         override suspend fun audio(videoId: String, fresh: Boolean) = YouTubeAudio("https://media.test/$videoId", "audio/mp4", 1, 128)
         override fun playbackLocation(videoId: String) = "http://127.0.0.1:9/$videoId"

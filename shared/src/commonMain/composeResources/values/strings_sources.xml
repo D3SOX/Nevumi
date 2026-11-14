@@ -497,6 +497,8 @@
     <string name="sources_search_youtube_description">Find songs to stream or download</string>
     <string name="sources_search_youtube_prompt">Search YouTube or paste a video link</string>
     <string name="sources_open_on_youtube">Open on YouTube</string>
+    <string name="sources_go_to_youtube_music_artist">Go to artist on YouTube Music</string>
+    <string name="sources_go_to_youtube_music_album">Go to album on YouTube Music</string>
     <string name="sources_youtube_save_to_server">Save to device and server</string>
     <string name="sources_youtube_download_description">YouTube download: %1$s</string>
     <string name="sources_youtube_video">Video</string>

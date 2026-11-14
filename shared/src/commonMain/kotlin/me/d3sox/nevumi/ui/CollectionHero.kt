@@ -87,14 +87,18 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
 }
 
 @Composable
-internal fun QueueActionMenuItems(trackIds: List<String>, controller: MusicController, dismiss: () -> Unit) {
+internal fun QueueActionMenuItems(trackIds: List<String>, controller: MusicController, dismiss: () -> Unit) =
+    QueueActionMenuItems(trackIds.isNotEmpty(), dismiss) { controller.enqueue(trackIds, it) }
+
+@Composable
+internal fun QueueActionMenuItems(enabled: Boolean, dismiss: () -> Unit, enqueue: (QueueAction) -> Unit) {
     QueueAction.entries.forEach { action ->
         val label = stringResource(when (action) {
             QueueAction.PLAY_NEXT -> Res.string.play_next
             QueueAction.PLAY_AFTER -> Res.string.play_after
             QueueAction.APPEND -> Res.string.add_to_queue
         })
-        AppMenuItem({ Text(label) }, { dismiss(); controller.enqueue(trackIds, action) },
-            enabled = trackIds.isNotEmpty(), leadingIcon = { Icon(action.icon().vector, null) })
+        AppMenuItem({ Text(label) }, { dismiss(); enqueue(action) },
+            enabled = enabled, leadingIcon = { Icon(action.icon().vector, null) })
     }
 }

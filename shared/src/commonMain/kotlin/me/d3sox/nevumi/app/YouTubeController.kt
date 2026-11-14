@@ -1,6 +1,10 @@
 package me.d3sox.nevumi.app
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okio.FileSystem
+import okio.Path.Companion.toPath
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import me.d3sox.nevumi.artwork.ArtworkLibrary
@@ -9,6 +13,7 @@ import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.library.TrackSource
+import me.d3sox.nevumi.library.youTubeVideoId
 import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.notice_soundcloud_added
@@ -16,6 +21,7 @@ import me.d3sox.nevumi.resources.notice_soundcloud_check_tags
 import me.d3sox.nevumi.resources.notice_soundcloud_downloading
 import me.d3sox.nevumi.resources.notice_soundcloud_failed
 import me.d3sox.nevumi.resources.notice_soundcloud_saved_outside
+import me.d3sox.nevumi.resources.notice_youtube_downloading_songs
 import me.d3sox.nevumi.soundcloud.ScGateTagChoice
 import me.d3sox.nevumi.youtube.*
 
@@ -68,6 +74,19 @@ class YouTubeController internal constructor(private val context: ControllerCont
 
     suspend fun youTubeArtwork(url: String): ByteArray = source().artwork(url)
 
+    /** The YouTube Music page of [videoId]'s artist or album, by [kind], or null after showing why it could not be found. */
+    suspend fun youTubePage(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? {
+        val name = if (kind == YouTubeCollectionKind.ALBUM) "album" else "artist"
+        return try {
+            requireEnabled()
+            source().page(videoId, kind) ?: throw YouTubeException("YouTube names no $name for this video", retryable = false)
+        } catch (error: Exception) {
+            rethrowCancellation(error)
+            context.update { it.copy(error = error.message ?: "YouTube could not find the $name") }
+            null
+        }
+    }
+
     suspend fun browseYouTube(link: YouTubeLink): YouTubeBrowsePage {
         requireEnabled()
         return source().browse(link)
@@ -115,6 +134,59 @@ class YouTubeController internal constructor(private val context: ControllerCont
         }
     }
 
+    /** Adds [tracks], such as an album, to the queue with [action]; their audio is looked up when the player reaches them. */
+    fun enqueueYouTube(tracks: List<YouTubeTrack>, action: QueueAction) = context.action(serialized = false) {
+        requireEnabled()
+        require(tracks.isNotEmpty()) { "There is nothing to add" }
+        val ids = libraryTracks(tracks)
+        queueController.enqueue(ids, action).join()
+        saveArtwork(tracks, ids)
+    }
+
+    /**
+     * The songs of the page at [link] that its play button plays, and the page's name. A list that continues, such as a long playlist,
+     * gives up to 1,000 songs.
+     */
+    private suspend fun collectionTracks(collection: YouTubeCollection): Pair<String, List<YouTubeTrack>> {
+        val page = source().browse(collection.link)
+        val index = page.shelves.indexOfFirst { shelf -> shelf.layout == YouTubeShelfLayout.ROWS && shelf.items.any { it is YouTubeTrack } }
+        require(index >= 0) { "There is nothing to play" }
+        val items = page.shelves[index].items.toMutableList()
+        // Only the last list or grid continues.
+        if (index == page.shelves.indexOfLast { it.layout != YouTubeShelfLayout.CAROUSEL }) {
+            var next = page.next
+            while (next != null && items.size < 1_000) {
+                val more = source().browseMore(next)
+                val shown = items.map { it.key }.toSet()
+                items += more.results.filter { it.key !in shown }
+                next = more.next
+            }
+        }
+        val name = if (collection.kind == YouTubeCollectionKind.LIST) collection.title else page.title.ifEmpty { collection.title }
+        return name to items.filterIsInstance<YouTubeTrack>()
+    }
+
+    /** Plays the songs of [collection], such as an album shown as a card, loading its page first. */
+    fun playYouTube(collection: YouTubeCollection, shuffle: Boolean = false): kotlinx.coroutines.Job {
+        val request = reservePlayRequest()
+        return context.action(serialized = false) {
+            requireEnabled()
+            val (name, tracks) = collectionTracks(collection)
+            playYouTube(tracks, 0, name, shuffle, request).join()
+        }
+    }
+
+    fun enqueueYouTube(collection: YouTubeCollection, action: QueueAction) = context.action(serialized = false) {
+        requireEnabled()
+        enqueueYouTube(collectionTracks(collection).second, action).join()
+    }
+
+    fun downloadFromYouTube(collection: YouTubeCollection, destination: YouTubeDestination, reviewTags: Boolean) = context.action(serialized = false) {
+        requireEnabled()
+        val (name, tracks) = collectionTracks(collection)
+        downloadFromYouTube(tracks, name, destination, reviewTags).join()
+    }
+
     /** The library songs that stream [tracks], kept out of the library views; the same video always maps to the same song. */
     private suspend fun libraryTracks(tracks: List<YouTubeTrack>): List<String> {
         val ids = tracks.map { track ->
@@ -151,10 +223,30 @@ class YouTubeController internal constructor(private val context: ControllerCont
         }
     }
 
-    fun downloadFromYouTube(track: YouTubeTrack, destination: YouTubeDestination, reviewTags: Boolean) = context.action(serialized = false) {
+    fun downloadFromYouTube(track: YouTubeTrack, destination: YouTubeDestination, reviewTags: Boolean) =
+        downloadFromYouTube(listOf(track), null, destination, reviewTags)
+    /** Downloads each of [tracks], such as an album called [name] or songs picked from a list, with one notice for all of them. */
+    fun downloadFromYouTube(tracks: List<YouTubeTrack>, name: String?, destination: YouTubeDestination, reviewTags: Boolean) =
+        context.action(serialized = false) {
+            requireEnabled()
+            require(tracks.isNotEmpty()) { "There is nothing to download" }
+            val title = name ?: tracks.singleOrNull()?.suggestedTags()?.first
+            if (title != null) context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.DOWNLOADS, arguments = listOf(title))
+            else context.confirm(Res.string.notice_youtube_downloading_songs, ActionDestination.DOWNLOADS, arguments = listOf(tracks.size))
+            tracks.forEach { downloads().download(it, destination, reviewTags) }
+        }
+    /** Saves a song streamed from YouTube, such as the one playing, with the tags and cover it plays with. */
+    fun downloadFromYouTube(trackId: String, destination: YouTubeDestination, reviewTags: Boolean) = context.action(serialized = false) {
         requireEnabled()
-        context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.DOWNLOADS, arguments = listOf(track.suggestedTags().first))
-        downloads().download(track, destination, reviewTags)
+        val track = requireNotNull(context.state.value.tracks.firstOrNull { it.id == trackId }) { "The song is no longer in the library" }
+        val videoId = requireNotNull(track.youTubeVideoId) { "This song does not stream from YouTube" }
+        val cover = artwork?.path(trackId)?.let { path ->
+            withContext(Dispatchers.IO) { runCatching { FileSystem.SYSTEM.read(path.toPath()) { readByteArray() } }.getOrNull() }
+        }
+        // The song already carries the suggested tags, or the user's own edits, so they are kept as they are.
+        val video = YouTubeTrack(videoId, track.metadata.title, track.metadata.artist, track.metadata.durationMs, song = true)
+        context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.DOWNLOADS, arguments = listOf(video.title))
+        downloads().download(video, destination, reviewTags, cover)
     }
     suspend fun youTubeCover(id: String): ByteArray? = downloads().cover(id)
     suspend fun finishYouTubeTags(id: String, choice: ScGateTagChoice) = downloads().finishTags(id, choice)

@@ -119,6 +119,11 @@ class NewPipeYouTube : YouTubeSource, AutoCloseable {
 
     override suspend fun browse(link: YouTubeLink): YouTubeBrowsePage = extract { YouTubeMusicPages.browse(link) }
 
+    override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? {
+        require(videoId.matches(VIDEO_ID)) { "This is not a YouTube video" }
+        return extract { YouTubeMusicPages.page(videoId, kind) }
+    }
+
     override suspend fun browseMore(continuation: YouTubeContinuation): YouTubePage = extract { YouTubeMusicPages.more(continuation) }
 
     override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {

@@ -7,6 +7,8 @@ import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.TrackMetadata
 
 internal data class LibraryDestination(val tab: LibraryTab, val collectionId: String? = null, val revision: Int = 0, val trackId: String? = null)
+/** Opens the app's settings, such as from a YouTube Music page's header; null where the settings cannot open. */
+internal val LocalOpenSettings = compositionLocalOf<(() -> Unit)?> { null }
 internal val LocalLibraryNavigate = compositionLocalOf<(LibraryTab, String?) -> Unit> { { _, _ -> } }
 internal val LocalLibraryOrigin = compositionLocalOf { me.d3sox.nevumi.queue.QueueOrigin() }
 internal val LocalLibraryFocus = compositionLocalOf<LibraryDestination?> { null }

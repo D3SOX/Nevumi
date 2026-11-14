@@ -168,16 +168,24 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
         if (scheduleWork == null) wake.trySend(Unit) else scheduleWork.invoke(true)
     }
 
-    /** Starts a download, or returns the one already running for the same video and destination. */
-    suspend fun download(track: YouTubeTrack, destination: YouTubeDestination, reviewTags: Boolean): YouTubeJob {
+    /**
+     * Starts a download, or returns the one already running for the same video and destination. A [cover], such as the one a
+     * streamed song plays with, is used instead of the video's artwork.
+     */
+    suspend fun download(track: YouTubeTrack, destination: YouTubeDestination, reviewTags: Boolean, cover: ByteArray? = null): YouTubeJob {
         check(deviceDownloads) { "Downloads to this device are unavailable" }
         if (destination == YouTubeDestination.SERVER) checkNotNull(upload) { "Set up server file access in Settings to upload songs" }
         val job = edits.withLock {
             store.list<YouTubeJob>(COLLECTION).firstOrNull { it.track.videoId == track.videoId && it.destination == destination && !it.finished }
                 ?: run {
                     val (title, artist) = track.suggestedTags()
-                    YouTubeJob(Uuid.random().toString(), track, destination, YouTubeJobState.DOWNLOADING, Clock.System.now().toEpochMilliseconds(),
-                        reviewTags, "Starting", tags = ScGateTags(title, artist)).also { save(it) }
+                    val id = Uuid.random().toString()
+                    cover?.let { bytes -> withContext(Dispatchers.IO) {
+                        FileSystem.SYSTEM.createDirectories(directory)
+                        FileSystem.SYSTEM.write(coverFile(id)) { write(bytes) }
+                    } }
+                    YouTubeJob(id, track, destination, YouTubeJobState.DOWNLOADING, Clock.System.now().toEpochMilliseconds(),
+                        reviewTags, "Starting", tags = ScGateTags(title, artist), chosenCover = cover != null).also { save(it) }
                 }
         }
         if (job.active) schedule()

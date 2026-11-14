@@ -111,6 +111,13 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         page = AppPage.LIBRARY
         scope.launch { playerSheet.animateTo(PlayerPanel.MINI, spring()) }
     }
+    // A YouTube Music page picked outside search, such as the playing song's artist or album, opens above the search page.
+    var youTubePage by remember { mutableStateOf<me.d3sox.nevumi.youtube.YouTubeCollection?>(null) }
+    val openYouTubeLinkedPage = rememberYouTubeLinkedPageOpener(controller) { linked ->
+        youTubePage = linked
+        page = AppPage.SEARCH
+        scope.launch { playerSheet.animateTo(PlayerPanel.MINI, spring()) }
+    }
     val cover = if (state.preferences.colors == ColorMode.ARTWORK) rememberArtwork(state.artwork[state.playback.trackId]) else null
     val artworkColor by produceState<Color?>(null, cover) {
         value = if (cover == null) null else withContext(Dispatchers.Default) { cover.themeColor(Color(0xFF6750A4)) }
@@ -119,6 +126,8 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         LocalBackupFiles provides backups,
         LocalMarqueeSpeed provides state.preferences.marqueeSpeed.toFloat(),
         LocalLibraryNavigate provides { tab, id -> openLibrary(tab, id) },
+        LocalOpenYouTubeLinkedPage provides openYouTubeLinkedPage,
+        LocalOpenSettings provides { page = AppPage.SETTINGS },
         LocalLibraryFocusHandled provides { libraryDestination = libraryDestination?.copy(trackId = null) },
         LocalPlayingContextNavigate provides { origin, track -> openLibrary(origin.tab, origin.collectionId, track) }) {
     MusicTheme(state.preferences, artworkColor) {
@@ -172,7 +181,8 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                 when (destination) {
                     AppPage.SEARCH -> Box(Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize().then(if (hasPlayer && playerSheet.targetValue != PlayerPanel.MINI) Modifier.clearAndSetSemantics {} else Modifier)) {
-                            LibrarySearchScreen(libraryState, controller, if (hasPlayer) 96.dp else 0.dp, ::closePage, focusRequest = searchFocus)
+                            LibrarySearchScreen(libraryState, controller, if (hasPlayer) 96.dp else 0.dp, ::closePage, focusRequest = searchFocus,
+                                youTubePage = youTubePage, onYouTubePageShown = { youTubePage = null })
                         }
                     }
                     AppPage.SERVER -> ServerSettings(state, controller, ::closePage)
