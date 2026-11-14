@@ -342,6 +342,7 @@ class PlaylistMembershipUiTest {
             override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
             override suspend fun audio(videoId: String, fresh: Boolean) = YouTubeAudio("https://media.test/$videoId", "audio/mp4", audio.size.toLong(), 48)
             override fun playbackLocation(videoId: String) = stream.toString()
+            override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? = null
             override suspend fun artwork(url: String) = ByteArray(0)
         }
         val http = HttpClient(MockEngine { request ->
@@ -363,7 +364,9 @@ class PlaylistMembershipUiTest {
                 runBlocking { player.playYouTube(video).join(); player.pause().join() }
                 runBlocking { player.downloadFromYouTube(video, YouTubeDestination.SERVER, reviewTags = false).join() }
                 waitUntil(timeoutMillis = 10_000) { player.state.value.youTubeJobs.singleOrNull()?.state == YouTubeJobState.COMPLETE }
-                waitUntil(timeoutMillis = 3_000) { player.state.value.queue.entries.single().trackId == player.state.value.youTubeJobs.single().trackId }
+                // The player panel shows the song the player reports, which follows the queue at its next status update.
+                waitUntil(timeoutMillis = 5_000) { player.state.value.let { state -> val saved = state.youTubeJobs.single().trackId
+                    state.queue.entries.single().trackId == saved && state.playback.trackId == saved } }
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithContentDescription("Manage playlists").performClick()
                 onNodeWithText("Only songs from this server").assertDoesNotExist()
