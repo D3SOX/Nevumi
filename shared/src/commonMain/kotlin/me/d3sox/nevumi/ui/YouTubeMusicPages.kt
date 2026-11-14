@@ -93,7 +93,11 @@ internal val LocalOpenYouTubeLinkedPage = compositionLocalOf<(String, YouTubeCol
 internal fun rememberYouTubeLinkedPageOpener(controller: MusicController, open: (YouTubeCollection) -> Unit): (String, YouTubeCollectionKind) -> Unit {
     val scope = rememberCoroutineScope()
     val latest by rememberUpdatedState(open)
-    return remember(controller, scope) { { videoId, kind -> scope.launch { controller.youTubePage(videoId, kind)?.let { latest(it) } } } }
+    return remember(controller, scope) {
+        // Only the last pick opens, even when an earlier lookup answers after it.
+        var lookup: Job? = null
+        { videoId, kind -> lookup?.cancel(); lookup = scope.launch { controller.youTubePage(videoId, kind)?.let { latest(it) } } }
+    }
 }
 
 /** An open YouTube Music page; it keeps what it loaded and its scroll position while pages opened from it are on top. */
@@ -185,7 +189,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
             while (content.items(index).size < 1_000) appendNext(content, content.next ?: break)
         }
         // A page that failed to load stops the list where it got to.
-        return content.items(index).filterIsInstance<YouTubeTrack>()
+        return content.items(index).filterIsInstance<YouTubeTrack>().take(1_000)
     }
     /** Plays the list shelf at [index] from [track], or from its start. */
     fun playShelf(content: YouTubePageContent, index: Int, track: YouTubeTrack?, shuffle: Boolean = false) {
@@ -250,7 +254,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
                         when (shelf.layout) {
                             YouTubeShelfLayout.ROWS -> {
                                 // Read when picked, so selecting all also covers songs loaded since.
-                                val tracks = { content.items(index).filterIsInstance<YouTubeTrack>() }
+                                val tracks = YouTubeTrackList(index) { content.items(index).filterIsInstance<YouTubeTrack>() }
                                 items(items, key = { "$index:${it.key}" }) { item ->
                                     when (item) {
                                         is YouTubeTrack -> YouTubeTrackRow(item, owned, state, controller, tracks) {

@@ -113,6 +113,11 @@ class YouTubeDownloadsTest {
             assertTrue(job.chosenCover)
             fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.NEEDS_TAGS }
             assertTrue(cover.contentEquals(fixture.downloads.cover(job.id)))
+            // A canceled download that is tried again keeps the cover.
+            fixture.downloads.cancel(job.id)
+            fixture.downloads.retry(job.id)
+            fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.NEEDS_TAGS }
+            assertTrue(cover.contentEquals(fixture.downloads.cover(job.id)))
         } finally { fixture.close() }
     }
 

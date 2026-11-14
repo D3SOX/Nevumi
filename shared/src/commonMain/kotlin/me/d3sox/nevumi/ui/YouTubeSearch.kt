@@ -118,7 +118,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("youtube-results")) {
             items(results, key = { "youtube:${it.key}" }) { result ->
                 when (result) {
-                    is YouTubeTrack -> YouTubeTrackRow(result, owned, state, controller, { tracks }) { controller.playYouTube(result) }
+                    is YouTubeTrack -> YouTubeTrackRow(result, owned, state, controller, YouTubeTrackList("results") { tracks }) { controller.playYouTube(result) }
                     is YouTubeCollection -> YouTubeCollectionRow(result, state, controller)
                 }
             }
@@ -190,7 +190,7 @@ private fun rememberYouTubeTrackActions(track: YouTubeTrack, controller: MusicCo
  */
 @Composable
 internal fun YouTubeTrackRow(track: YouTubeTrack, owned: Set<String>, state: AppState, controller: MusicController,
-    list: () -> List<YouTubeTrack> = { listOf(track) }, play: () -> Unit) {
+    list: YouTubeTrackList = YouTubeTrackList(track.videoId) { listOf(track) }, play: () -> Unit) {
     val selection = LocalYouTubeSelection.current
     val select = selection?.let { { it.toggle(track, list) } }
     val selecting = selection?.active == true

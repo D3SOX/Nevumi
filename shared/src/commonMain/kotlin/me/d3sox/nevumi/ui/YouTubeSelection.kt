@@ -26,18 +26,22 @@ import me.d3sox.nevumi.youtube.YouTubeTrack
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** Songs picked from a YouTube list, kept in the order the list shows them, to queue or save together. */
+/** The songs of one YouTube list, such as a page's song shelf, which [key] tells apart; read each time, so songs it loaded since count too. */
+internal class YouTubeTrackList(val key: Any, val tracks: () -> List<YouTubeTrack>)
+
+/** Songs picked from one YouTube list, kept in the order the list shows them, to queue or save together. */
 internal class YouTubeSelection {
     var tracks by mutableStateOf(emptyList<YouTubeTrack>())
         private set
     var active by mutableStateOf(false)
         private set
-    /** The list the last picked song is in; read each time, so songs it loaded since count too. */
-    private var shown by mutableStateOf<() -> List<YouTubeTrack>>({ emptyList() })
-    private val visible get() = shown().distinctBy { it.videoId }
+    private var shown by mutableStateOf<YouTubeTrackList?>(null)
+    private val visible get() = shown?.tracks?.invoke().orEmpty().distinctBy { it.videoId }
     val allSelected get() = visible.let { list -> list.isNotEmpty() && list.all(::contains) }
     operator fun contains(track: YouTubeTrack) = tracks.any { it.videoId == track.videoId }
-    fun toggle(track: YouTubeTrack, list: () -> List<YouTubeTrack>) {
+    fun toggle(track: YouTubeTrack, list: YouTubeTrackList) {
+        // A song from another list, such as a page's second song shelf, starts a new selection.
+        if (shown?.key != list.key) tracks = emptyList()
         shown = list
         active = true
         val picked = if (track in this) tracks.filterNot { it.videoId == track.videoId } else tracks + track

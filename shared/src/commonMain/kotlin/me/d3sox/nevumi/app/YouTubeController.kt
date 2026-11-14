@@ -163,7 +163,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
             }
         }
         val name = if (collection.kind == YouTubeCollectionKind.LIST) collection.title else page.title.ifEmpty { collection.title }
-        return name to items.filterIsInstance<YouTubeTrack>()
+        return name to items.filterIsInstance<YouTubeTrack>().take(1_000)
     }
 
     /** Plays the songs of [collection], such as an album shown as a card, loading its page first. */

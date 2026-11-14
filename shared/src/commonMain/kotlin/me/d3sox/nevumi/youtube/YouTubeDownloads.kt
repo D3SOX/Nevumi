@@ -154,7 +154,10 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     private fun partFile(id: String) = directory / "$id.part"
     private fun finishedFile(id: String) = directory / "$id.m4a"
     private fun coverFile(id: String) = directory / "$id.cover"
-    private fun deleteFiles(id: String) = listOf(partFile(id), finishedFile(id), coverFile(id)).forEach { FileSystem.SYSTEM.delete(it, mustExist = false) }
+    private fun deleteFiles(id: String) = (listOf(coverFile(id)) + audioFiles(id)).forEach { FileSystem.SYSTEM.delete(it, mustExist = false) }
+    /** A canceled download keeps its chosen cover, which a retry still uses. */
+    private fun audioFiles(id: String) = listOf(partFile(id), finishedFile(id))
+    private fun deleteAudio(id: String) = audioFiles(id).forEach { FileSystem.SYSTEM.delete(it, mustExist = false) }
 
     private suspend fun save(job: YouTubeJob) = store.put("youtube-job:${job.id}", COLLECTION, job)
     private suspend fun job(id: String): YouTubeJob = requireNotNull(store.read("youtube-job:$id")) { "The download is no longer listed" }
@@ -216,7 +219,7 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
             require(job.state == YouTubeJobState.DOWNLOADING || job.state == YouTubeJobState.NEEDS_TAGS) { "This download can no longer be canceled" }
             save(job.copy(state = YouTubeJobState.CANCELLED, message = "Canceled", downloaded = false, percent = 0))
             // Deleting under the lock keeps a quick retry from starting a new writer before the old files are gone.
-            if (id !in fetching) withContext(Dispatchers.IO) { deleteFiles(id) }
+            if (id !in fetching) withContext(Dispatchers.IO) { deleteAudio(id) }
         }
     }
 
@@ -288,7 +291,8 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
                 fetching -= found.id
                 // A retry right after a cancellation continues this file, so only a stopped download loses it.
                 val current = store.read<YouTubeJob>("youtube-job:${found.id}")
-                if (current == null || current.state == YouTubeJobState.CANCELLED) withContext(Dispatchers.IO) { deleteFiles(found.id) }
+                if (current == null) withContext(Dispatchers.IO) { deleteFiles(found.id) }
+                else if (current.state == YouTubeJobState.CANCELLED) withContext(Dispatchers.IO) { deleteAudio(found.id) }
             } }
         }
     }
