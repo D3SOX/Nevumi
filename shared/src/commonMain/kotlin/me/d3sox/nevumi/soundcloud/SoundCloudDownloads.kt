@@ -91,7 +91,7 @@ data class SoundCloudJob(
     /** The music server's song for the downloaded file, saved as soon as an import finds it. */
     val serverSongId: String? = null,
     /**
-     * What the library knew when the file was ready, so a retry can still tell the new song apart: the revision of its server songs,
+     * What the library knew when the download started, so an import can tell the new song apart: the revision of its server songs,
      * which covers songs whose tags changed later, and the songs that matched then, which covers ones relinked since.
      */
     val knownSongsRevision: Long? = null,
@@ -312,7 +312,11 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
                 ?.let { running -> if (keepOffline && !running.keepOffline) running.copy(keepOffline = true).also { save(it) } else running }
                 ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, musicServerId, SoundCloudJobState.STARTING, keepOffline,
                     message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds(),
-                    reviewTags = reviewTags ?: profile.reviewTags).also {
+                    reviewTags = reviewTags ?: profile.reviewTags).let { created ->
+                    // Taken before sc-gate-dl can save the file, so no refresh can have added this download's own song yet.
+                    if (destination != ScGateDestination.LIBRARY) created
+                    else created.copy(knownSongsRevision = store.revision("source-owners"), knownSongIds = knownMatches(created, null))
+                }.also {
                     creating.update { ids -> ids + it.id }
                     save(it)
                     started = true
@@ -544,10 +548,9 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             val name = requireNotNull(job.fileName)
             // Only Navidrome's own API lists real file paths. Other Subsonic servers are matched by the tags below.
             val navidrome = client.isNavidrome()
-            // The library already knows these server songs, so only a match outside them is the new file. An older file elsewhere
-            // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder.
-            // Taken before the first attempt and kept, since a refresh may index the new file first or an attempt may stop after
-            // importing it; either would make the library know the song on the next attempt.
+            // The library already knew these server songs, so only a match outside them is the new file. An older file elsewhere
+            // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder. A download
+            // that an earlier version started records them here, before its first attempt, and keeps them for its retries.
             val baseline = job.knownSongsRevision ?: store.revision("source-owners")
             val matches = job.knownSongIds ?: knownMatches(job, name)
             if (job.knownSongsRevision == null || job.knownSongIds == null)
@@ -580,15 +583,15 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
         if (replace(job, next)) mutableCompleted.tryEmit(next)
     }
 
-    /** The music server songs the library knows with the download's file name or tags. */
-    private suspend fun knownMatches(job: SoundCloudJob, fileName: String): List<String> {
+    /** The music server songs the library knows with the download's tags or, once known, its file name. */
+    private suspend fun knownMatches(job: SoundCloudJob, fileName: String?): List<String> {
         val prefix = "server:${job.musicServerId}:"
         val title = job.tags?.title ?: job.track.title
         val artist = job.tags?.artist ?: job.track.artist
         return MusicLibrary(store).tracks().flatMap { track ->
             val tagged = track.metadata.title.equals(title, ignoreCase = true) && track.metadata.artist.equals(artist, ignoreCase = true)
             track.sources.filter { source -> source.kind == SourceKind.SERVER && source.id.startsWith(prefix) &&
-                (tagged || source.filePath?.let { it == fileName || it.endsWith("/$fileName") } == true) }
+                (tagged || fileName != null && source.filePath?.let { it == fileName || it.endsWith("/$fileName") } == true) }
                 .map { it.id.removePrefix(prefix) }
         }.distinct()
     }
