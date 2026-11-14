@@ -312,11 +312,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
                 ?.let { running -> if (keepOffline && !running.keepOffline) running.copy(keepOffline = true).also { save(it) } else running }
                 ?: SoundCloudJob(Uuid.random().toString(), track, destination, profile.format, profile.baseUrl, musicServerId, SoundCloudJobState.STARTING, keepOffline,
                     message = "Looking for a download", createdAt = Clock.System.now().toEpochMilliseconds(),
-                    reviewTags = reviewTags ?: profile.reviewTags).let { created ->
-                    // Taken before sc-gate-dl can save the file, so no refresh can have added this download's own song yet.
-                    if (destination != ScGateDestination.LIBRARY) created
-                    else created.copy(knownSongsRevision = store.revision("source-owners"), knownSongIds = knownMatches(created, null))
-                }.also {
+                    reviewTags = reviewTags ?: profile.reviewTags).let { withBaseline(it) }.also {
                     creating.update { ids -> ids + it.id }
                     save(it)
                     started = true
@@ -333,12 +329,16 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             requireNotNull(server()) { "Connect to your music server first" }.serverId
         }
 
+    /** Records what the library knows before sc-gate-dl can save the file, so no refresh can have added this download's own song yet. */
+    private suspend fun withBaseline(job: SoundCloudJob): SoundCloudJob = if (job.destination != ScGateDestination.LIBRARY) job
+        else job.copy(knownSongsRevision = store.revision("source-owners"), knownSongIds = knownMatches(job, null))
+
     /** Restarts [job] as a new server job when nobody changed it meanwhile. */
     private suspend fun restart(job: SoundCloudJob) {
         // A new server job goes to the server configured now, which may differ from the one that lost or canceled it.
         val profile = requireNotNull(store.read<SoundCloudProfile>("soundcloud:profile")) { "Set up SoundCloud downloads in Settings first" }
-        val restarted = job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null, baseUrl = profile.baseUrl,
-            musicServerId = musicServerFor(profile, job.destination))
+        val restarted = withBaseline(job.copy(state = SoundCloudJobState.STARTING, message = "Looking for a download", remoteId = null,
+            baseUrl = profile.baseUrl, musicServerId = musicServerFor(profile, job.destination)))
         creating.update { it + job.id }
         if (replace(job, restarted)) create(restarted) else creating.update { it - job.id }
     }
