@@ -165,16 +165,20 @@ class PlaylistController internal constructor(private val context: ControllerCon
             else if (removeCover) artwork?.remove(key)
             collections.edit(playlistId, name, description)
             refreshPlaylists()
-            context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, undo = {
-                collections.edit(playlistId, previous.name, previous.description)
-                if (cover != null || removeCover) {
-                    if (oldCover == null) artwork?.remove(key) else artwork?.save(key, oldCover)
-                }
-                refreshPlaylists()
+            context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, serializedUndo = false, undo = {
+                playlistEdits.withLock { context.operations.withLock {
+                    collections.edit(playlistId, previous.name, previous.description)
+                    if (cover != null || removeCover) {
+                        if (oldCover == null) artwork?.remove(key) else artwork?.save(key, oldCover)
+                    }
+                    refreshPlaylists()
+                } }
             }, redo = {
-                collections.edit(playlistId, name, description)
-                if (cover != null) artwork?.save(key, cover) else if (removeCover) artwork?.remove(key)
-                refreshPlaylists()
+                playlistEdits.withLock { context.operations.withLock {
+                    collections.edit(playlistId, name, description)
+                    if (cover != null) artwork?.save(key, cover) else if (removeCover) artwork?.remove(key)
+                    refreshPlaylists()
+                } }
             })
         }
     }
