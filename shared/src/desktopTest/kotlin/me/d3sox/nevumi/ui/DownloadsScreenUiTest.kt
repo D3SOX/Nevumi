@@ -2,6 +2,7 @@ package me.d3sox.nevumi.ui
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlinx.coroutines.runBlocking
@@ -12,6 +13,7 @@ import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playlists.Playlist
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.soundcloud.*
+import me.d3sox.nevumi.youtube.*
 import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
 import kotlin.test.Test
@@ -66,6 +68,41 @@ class DownloadsScreenUiTest {
                 state = state.copy(tracks = tracks.map { if (it.id == "t0") it.copy(metadata = it.metadata.copy(artist = "Big fan")) else it })
                 waitForIdle()
                 onNodeWithText("Song 0").assertExists()
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun aNoticeOpensTheGroupOfItsDownload() {
+        val directory = Files.createTempDirectory("focus")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"))
+        val playlist = PlaylistDownloadProgress(Playlist("p", "Mix", emptyList(), autoDownload = true), 0, 1, 0f)
+        val video = YouTubeJob("y", YouTubeTrack("v", "Tube Song", "Band"), YouTubeDestination.DEVICE, YouTubeJobState.DOWNLOADING)
+        val job = SoundCloudJob("j", SoundCloudTrack(1, "", "Gate Song", "DJ"), ScGateDestination.CLIENT, ScGateFormat.MP3_320, "http://x",
+            state = SoundCloudJobState.WORKING)
+        val state = controller.state.value.copy(playlistDownloads = listOf(playlist), youTubeJobs = listOf(video), soundCloudJobs = listOf(job))
+        try {
+            var focus by mutableStateOf(DownloadsFocus(DownloadGroup.YOUTUBE, 1))
+            var open by mutableStateOf(true)
+            runComposeUiTest {
+                // Navigation keeps the page's saved state while another page of the same depth is shown.
+                setContent { MaterialTheme { val pages = rememberSaveableStateHolder()
+                    if (open) pages.SaveableStateProvider("downloads") { DownloadsScreen(state, controller, focus) {} } } }
+                // Nothing needs the user, so without the notice's group the page would open on playlists.
+                onNodeWithText("Tube Song").assertExists()
+                onNodeWithText("Mix").assertDoesNotExist()
+                onNodeWithText("Playlists · 1").performClick()
+                open = false
+                waitForIdle()
+                focus = DownloadsFocus(DownloadGroup.YOUTUBE, 2)
+                open = true
+                waitForIdle()
+                onNodeWithText("Tube Song").assertExists()
+                // Another notice switches the open page to its group.
+                focus = DownloadsFocus(DownloadGroup.SOUNDCLOUD, 3)
+                waitForIdle()
+                onNodeWithText("Gate Song").assertExists()
+                onNodeWithText("Tube Song").assertDoesNotExist()
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

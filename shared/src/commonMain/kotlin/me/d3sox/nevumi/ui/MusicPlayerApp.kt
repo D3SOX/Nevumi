@@ -106,6 +106,9 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     val scope = rememberCoroutineScope()
     var libraryDestination by remember { mutableStateOf<LibraryDestination?>(null) }
     var page by rememberSaveable { mutableStateOf(AppPage.LIBRARY) }
+    var downloadsFocus by remember { mutableStateOf<DownloadsFocus?>(null) }
+    // Saved so a request after the activity is recreated does not reuse a revision the restored page already applied.
+    var downloadsRevision by rememberSaveable { mutableIntStateOf(0) }
     fun openLibrary(tab: me.d3sox.nevumi.library.LibraryTab, collectionId: String?, trackId: String? = null) {
         libraryDestination = LibraryDestination(tab, collectionId, (libraryDestination?.revision ?: 0) + 1, trackId)
         page = AppPage.LIBRARY
@@ -140,7 +143,15 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                 }
                 ActionDestination.FAVORITES -> openLibrary(me.d3sox.nevumi.library.LibraryTab.FAVORITES, null)
                 ActionDestination.PLAYLISTS -> openLibrary(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, null)
-                ActionDestination.DOWNLOADS -> page = AppPage.DOWNLOADS
+                ActionDestination.DOWNLOADS, ActionDestination.SOUNDCLOUD_DOWNLOADS, ActionDestination.YOUTUBE_DOWNLOADS -> {
+                    val group = when (destination) {
+                        ActionDestination.SOUNDCLOUD_DOWNLOADS -> DownloadGroup.SOUNDCLOUD
+                        ActionDestination.YOUTUBE_DOWNLOADS -> DownloadGroup.YOUTUBE
+                        else -> DownloadGroup.SONGS
+                    }
+                    downloadsFocus = DownloadsFocus(group, ++downloadsRevision)
+                    page = AppPage.DOWNLOADS
+                }
             }
         }
         LaunchedEffect(state.error) {
@@ -186,7 +197,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                         }
                     }
                     AppPage.SERVER -> ServerSettings(state, controller, ::closePage)
-                    AppPage.DOWNLOADS -> DownloadsScreen(state, controller, ::closePage)
+                    AppPage.DOWNLOADS -> DownloadsScreen(state, controller, downloadsFocus, ::closePage)
                     AppPage.SAVED_QUEUES -> SavedQueuesScreen(state, controller, ::closePage)
                     AppPage.FILE_RECOVERY -> FileRecovery(state, controller, ::closePage)
                     AppPage.AUDIO_EFFECTS -> AudioEffectsScreen(state, controller, ::closePage)
@@ -195,7 +206,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                     AppPage.SOUNDCLOUD -> SoundCloudSettings(state, controller, ::closePage)
                     AppPage.PAIRED_DEVICES -> controller.pairedDevices?.let { PairingSettings(it, state.tracks, ::closePage, state.artwork) }
                     AppPage.SETTINGS -> AppSettings(state, controller,
-                        server = { openPage(AppPage.SERVER) }, downloads = { openPage(AppPage.DOWNLOADS) },
+                        server = { openPage(AppPage.SERVER) }, downloads = { downloadsFocus = null; openPage(AppPage.DOWNLOADS) },
                         audioEffects = { openPage(AppPage.AUDIO_EFFECTS) },
                         serverFiles = { openPage(AppPage.SFTP) }, tunnel = { openPage(AppPage.TUNNEL) }, pairedDevices = { openPage(AppPage.PAIRED_DEVICES) },
                         soundCloud = { openPage(AppPage.SOUNDCLOUD) },
