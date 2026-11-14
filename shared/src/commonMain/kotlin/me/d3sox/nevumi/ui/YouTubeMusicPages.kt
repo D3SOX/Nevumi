@@ -189,7 +189,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
             while (content.items(index).size < 1_000) appendNext(content, content.next ?: break)
         }
         // A page that failed to load stops the list where it got to.
-        return content.items(index).filterIsInstance<YouTubeTrack>().take(1_000)
+        return content.items(index).filterIsInstance<YouTubeTrack>()
     }
     /** Plays the list shelf at [index] from [track], or from its start. */
     fun playShelf(content: YouTubePageContent, index: Int, track: YouTubeTrack?, shuffle: Boolean = false) {
@@ -202,11 +202,12 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
         }
     }
     fun enqueueShelf(content: YouTubePageContent, index: Int, action: QueueAction) = scope.launch {
-        val tracks = shelfTracks(content, index)
+        // Playing keeps every song shown, so a tapped song past the first 1,000 still plays; adding stops at 1,000.
+        val tracks = shelfTracks(content, index).take(1_000)
         if (tracks.isNotEmpty()) controller.enqueueYouTube(tracks, action)
     }
     fun downloadShelf(content: YouTubePageContent, index: Int, destination: YouTubeDestination) = scope.launch {
-        val tracks = shelfTracks(content, index)
+        val tracks = shelfTracks(content, index).take(1_000)
         if (tracks.isNotEmpty()) controller.downloadFromYouTube(tracks, content.page.title.ifEmpty { opened.collection.title }, destination,
             state.preferences.youTubeReviewTags)
     }
