@@ -12,6 +12,14 @@ import me.d3sox.nevumi.playlists.PlaylistServer
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.storage.openMusicStore
+import me.d3sox.nevumi.soundcloud.DirectoryMusicFiles
+import me.d3sox.nevumi.youtube.*
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import kotlin.test.Test
@@ -312,5 +320,55 @@ class PlaylistMembershipUiTest {
                 onNodeWithContentDescription("Playlist membership: Mix").assertIsEnabled()
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aPlayingYouTubeSongDownloadedToTheServerCanJoinItsPlaylistsFromNowPlaying() {
+        val directory = Files.createTempDirectory("playlist-membership-youtube")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        val preferences = MusicPreferences(store)
+        runBlocking {
+            preferences.update { it.copy(youTube = true) }
+            val playlist = playlists.create("Mix", emptyList())
+            store.put("playlist:${playlist.id}", "playlists", playlist.copy(server = PlaylistServer("server", "mix", "Mix", emptyList(), "owner")))
+        }
+        val stream = java.nio.file.Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/youtube-fragmented.m4a")
+        val audio = Files.readAllBytes(stream)
+        val source = object : YouTubeSource {
+            override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?) = YouTubePage(emptyList(), null)
+            override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
+            override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
+            override suspend fun audio(videoId: String, fresh: Boolean) = YouTubeAudio("https://media.test/$videoId", "audio/mp4", audio.size.toLong(), 48)
+            override fun playbackLocation(videoId: String) = stream.toString()
+            override suspend fun artwork(url: String) = ByteArray(0)
+        }
+        val http = HttpClient(MockEngine { request ->
+            val (from, to) = request.headers[HttpHeaders.Range]!!.removePrefix("bytes=").split('-').map { it.toInt() }
+            respond(audio.copyOfRange(from, to + 1), HttpStatusCode.PartialContent, headersOf(HttpHeaders.ContentRange, "bytes $from-$to/${audio.size}"))
+        })
+        // The server indexes the uploaded file as a copy of the downloaded song, like an SFTP upload does.
+        val downloads = YouTubeDownloads(store, http, source, directory.resolve("work").toString(),
+            DirectoryMusicFiles(directory.resolve("Music").toString()), LocalFiles(library), upload = { trackId, _ ->
+                library.importTrack(TrackMetadata("Song"), TrackSource("server:server:song", SourceKind.SERVER, "song"), linkTo = trackId)
+            })
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = preferences,
+            youTube = source, youTubeDownloads = downloads, sourceAccessible = { true })
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                waitUntil(timeoutMillis = 3_000) { !player.state.value.loading && player.state.value.preferences.youTube }
+                val video = YouTubeTrack("abcdefghijk", "Song", "Artist", 3_000, song = true)
+                runBlocking { player.playYouTube(video).join(); player.pause().join() }
+                runBlocking { player.downloadFromYouTube(video, YouTubeDestination.SERVER, reviewTags = false).join() }
+                waitUntil(timeoutMillis = 10_000) { player.state.value.youTubeJobs.singleOrNull()?.state == YouTubeJobState.COMPLETE }
+                waitUntil(timeoutMillis = 3_000) { player.state.value.queue.entries.single().trackId == player.state.value.youTubeJobs.single().trackId }
+                onNodeWithTag("mini-player").performClick()
+                onNodeWithContentDescription("Manage playlists").performClick()
+                onNodeWithText("Only songs from this server").assertDoesNotExist()
+                onNodeWithContentDescription("Playlist membership: Mix").assertIsEnabled()
+            }
+        } finally { runBlocking { player.closeAndJoin(); downloads.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 }

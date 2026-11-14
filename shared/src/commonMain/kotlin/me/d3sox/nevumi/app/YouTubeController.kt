@@ -14,6 +14,7 @@ import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.library.youTubeVideoId
+import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.notice_soundcloud_added
@@ -55,6 +56,10 @@ class YouTubeController internal constructor(private val context: ControllerCont
         downloads?.let { service -> context.scope.launch {
             service.completed.collect { job ->
                 val trackId = job.trackId
+                // A video played before its download streams as a separate song, which the queue and Now Playing still hold.
+                // Linking it to the download moves those references to the saved song and its server copy.
+                if (trackId != null) library.trackForSource("youtube:${job.track.videoId}")?.takeIf { it.id != trackId && !it.inLibrary }
+                    ?.let { libraryController.linkTracks(trackId, it.id).join() }
                 context.mutableNotices.tryEmit(if (trackId != null) ActionNotice(Res.string.notice_soundcloud_added, arguments = listOf(job.tags.title),
                     play = { queueController.playTrack(trackId, listOf(trackId), 0, "YouTube") })
                     else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.DOWNLOADS, arguments = listOf(job.tags.title)))
