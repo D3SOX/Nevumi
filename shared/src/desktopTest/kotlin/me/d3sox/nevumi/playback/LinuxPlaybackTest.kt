@@ -345,7 +345,7 @@ class LinuxPlaybackTest {
         }.array()
         val sent = 44 + rate * 2
         val release = CountDownLatch(1)
-        val server = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0).apply {
+        val server = HttpServer.create(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0).apply {
             executor = Executors.newCachedThreadPool()
             createContext("/song.wav") { exchange ->
                 exchange.responseHeaders.add("Content-Type", "audio/wav")
