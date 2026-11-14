@@ -90,7 +90,11 @@ data class SoundCloudJob(
     val trackId: String? = null,
     /** The music server's song for the downloaded file, saved as soon as an import finds it. */
     val serverSongId: String? = null,
-    /** Server songs that already matched the file's name or tags when it was ready, so a retry can still tell the new one apart. */
+    /**
+     * What the library knew when the file was ready, so a retry can still tell the new song apart: the revision of its server songs,
+     * which covers songs whose tags changed later, and the songs that matched then, which covers ones relinked since.
+     */
+    val knownSongsRevision: Long? = null,
     val knownSongIds: List<String>? = null,
     /** The device folder the song was saved to while the local folder rules leave it out of the library. */
     val excludedFolder: String? = null,
@@ -509,6 +513,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             "ready" -> if (job.destination == ScGateDestination.LIBRARY) {
                 val name = downloadFileName(requireNotNull(status.libraryFilename) { "sc-gate-dl did not report where it saved the song" })
                 job.copy(state = SoundCloudJobState.IMPORTING, message = "Adding to your music server", percent = 100, attention = false, browser = false,
+                    knownSongsRevision = job.knownSongsRevision ?: store.revision("source-owners"),
                     knownSongIds = job.knownSongIds ?: knownMatches(job, name), fileName = name)
             }
             else job.copy(state = SoundCloudJobState.TRANSFERRING, message = "Saving to this device", percent = 100, attention = false, browser = false,
@@ -543,9 +548,14 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder.
             // Taken before the first attempt and kept, since a refresh may index the new file first or an attempt may stop after
             // importing it; either would make the library know the song on the next attempt.
-            val known = (job.knownSongIds ?: knownMatches(job, name).also { ids ->
-                job.copy(knownSongIds = ids).let { if (replace(job, it)) job = it }
-            }).toHashSet()
+            val baseline = job.knownSongsRevision ?: store.revision("source-owners")
+            val matches = job.knownSongIds ?: knownMatches(job, name)
+            if (job.knownSongsRevision == null || job.knownSongIds == null)
+                job.copy(knownSongsRevision = baseline, knownSongIds = matches).let { if (replace(job, it)) job = it }
+            val owners = "source-owner:server:${client.serverId}:"
+            val known = store.database.records().list("source-owners").mapNotNullTo(matches.toHashSet()) { record ->
+                record.key.takeIf { key -> key.startsWith(owners) && record.changed <= baseline }?.removePrefix(owners)
+            }
             fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> song.id !in known }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
