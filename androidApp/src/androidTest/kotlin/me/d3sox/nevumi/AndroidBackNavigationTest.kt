@@ -208,4 +208,34 @@ class AndroidBackNavigationTest {
             }
         } finally { app.controller.pause().join(); file.delete() }
     }
+
+    @Test
+    fun backOverAPageOpenedBeforeThePlayerExpandedClosesOnlyThePlayer(): Unit = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as MusicApplication
+        val file = File(app.cacheDir, "player-over-page-${UUID.randomUUID()}.flac")
+        instrumentation.context.assets.open("fixture.flac").use { input -> file.outputStream().use { input.copyTo(it) } }
+        val track = app.controller.library.importTrack(TrackMetadata("Overlay song", album = "Overlay album"),
+            TrackSource("player-over-page", SourceKind.LOCAL, file.path))
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                compose.waitForLibrary(app.controller)
+                app.controller.playTrack(track.id, listOf(track.id)).join()
+                compose.waitUntil(15_000) { app.controller.state.value.playback.playing }
+                app.controller.pause().join()
+                compose.onNodeWithTag("mini-player").assertIsDisplayed()
+                compose.onNodeWithContentDescription("Search").performClick()
+                compose.onNodeWithContentDescription("Search your library").performTextInput("Overlay")
+                compose.onNodeWithTag("search-type:ALBUMS").performClick()
+                // The opened album registers its back handler after the player panel did.
+                compose.onNodeWithContentDescription("Open album: Overlay album").performClick()
+                compose.onNodeWithTag("track-row:${track.id}").assertIsDisplayed()
+                compose.onNodeWithTag("mini-player").performClick()
+                compose.onNodeWithTag("now-playing").assertIsDisplayed()
+                scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                compose.onNodeWithTag("mini-player").assertIsDisplayed()
+                compose.onNodeWithTag("track-row:${track.id}").assertIsDisplayed()
+            }
+        } finally { app.controller.pause().join(); file.delete() }
+    }
 }
