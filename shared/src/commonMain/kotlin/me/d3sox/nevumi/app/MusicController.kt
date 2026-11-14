@@ -91,7 +91,8 @@ data class AppState(
 
 data class PlaybackSeek(val entryId: String, val positionMs: Long)
 data class PlaybackConfirmation(val title: String, val play: () -> kotlinx.coroutines.Job)
-enum class ActionDestination { QUEUE, FAVORITES, PLAYLISTS, DOWNLOADS }
+/** Where a notice's action leads; the download destinations open the matching group of the downloads page. */
+enum class ActionDestination { QUEUE, FAVORITES, PLAYLISTS, DOWNLOADS, SOUNDCLOUD_DOWNLOADS, YOUTUBE_DOWNLOADS }
 /** A short confirmation of an action; [message] is formatted with [arguments] where it is shown. */
 data class ActionNotice(val message: StringResource, val destination: ActionDestination? = null, val undo: (() -> kotlinx.coroutines.Job)? = null,
     val isRedo: Boolean = false, val arguments: List<Any> = emptyList(), val play: (() -> kotlinx.coroutines.Job)? = null)

@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,7 +63,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun DownloadsScreen(state: AppState, controller: MusicController, dismiss: () -> Unit) {
+internal fun DownloadsScreen(state: AppState, controller: MusicController, focus: DownloadsFocus? = null, dismiss: () -> Unit) {
     fun count(group: DownloadGroup) = when (group) {
         DownloadGroup.PLAYLISTS -> state.playlistDownloads.size
         DownloadGroup.SOUNDCLOUD -> state.soundCloudJobs.size
@@ -71,9 +72,9 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
     }
     val groups = DownloadGroup.entries.filter { count(it) > 0 }
     // Open where something needs the user; the choice stays put while downloads finish so the page does not jump.
-    // It is kept above the tag editors so returning from one stays on its group.
+    // It is kept above the tag editors so returning from one stays on its group. A notice's action picks its group instead.
     var selected by rememberSaveable {
-        mutableStateOf(when {
+        mutableStateOf(focus?.group ?: when {
             state.soundCloudJobs.any { it.attention || it.state in SOUNDCLOUD_NEEDS_USER } -> DownloadGroup.SOUNDCLOUD
             state.youTubeJobs.any { it.state == YouTubeJobState.NEEDS_TAGS || it.state == YouTubeJobState.FAILED } -> DownloadGroup.YOUTUBE
             state.downloads.values.any { it.status == DownloadStatus.FAILED } -> DownloadGroup.SONGS
@@ -81,6 +82,9 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
         })
     }
     var tagging by rememberSaveable { mutableStateOf<String?>(null) }
+    // A newer request also applies when the page is open or comes back with its saved state.
+    var appliedFocus by rememberSaveable { mutableIntStateOf(focus?.revision ?: 0) }
+    if (focus != null && focus.revision != appliedFocus) { appliedFocus = focus.revision; selected = focus.group; tagging = null }
     val taggedJob = tagging?.let { id -> state.soundCloudJobs.firstOrNull { it.id == id && it.state == SoundCloudJobState.NEEDS_TAGS } }
     if (taggedJob != null) {
         SoundCloudTagEditor(taggedJob, controller) { tagging = null }
@@ -165,9 +169,12 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, dismi
     }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })
 }
 
-private enum class DownloadGroup(val label: StringResource) {
+internal enum class DownloadGroup(val label: StringResource) {
     PLAYLISTS(Res.string.library_tab_playlists), SOUNDCLOUD(Res.string.settings_soundcloud), YOUTUBE(Res.string.youtube), SONGS(Res.string.library_tab_songs),
 }
+
+/** Asks the downloads page to show [group]; a new [revision] repeats the request while the page is open. */
+internal data class DownloadsFocus(val group: DownloadGroup, val revision: Int)
 
 private val SOUNDCLOUD_NEEDS_USER = setOf(SoundCloudJobState.NEEDS_LINK, SoundCloudJobState.NEEDS_TRACK, SoundCloudJobState.NEEDS_TAGS,
     SoundCloudJobState.FAILED, SoundCloudJobState.LOST)

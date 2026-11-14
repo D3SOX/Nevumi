@@ -37,7 +37,7 @@ class SoundCloudController internal constructor(private val context: ControllerC
                         SoundCloudJobState.FAILED, SoundCloudJobState.LOST -> Res.string.notice_soundcloud_failed
                         else -> null
                     }
-                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.DOWNLOADS, arguments = listOf(job.track.title)))
+                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.SOUNDCLOUD_DOWNLOADS, arguments = listOf(job.track.title)))
                 }
             }
         } }
@@ -46,7 +46,7 @@ class SoundCloudController internal constructor(private val context: ControllerC
                 val trackId = job.trackId
                 context.mutableNotices.tryEmit(if (trackId != null) ActionNotice(Res.string.notice_soundcloud_added, arguments = listOf(job.track.title),
                     play = { queueController.playTrack(trackId, listOf(trackId), 0, "SoundCloud") })
-                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.DOWNLOADS, arguments = listOf(job.track.title)))
+                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.SOUNDCLOUD_DOWNLOADS, arguments = listOf(job.track.title)))
             }
         } }
     }
@@ -78,7 +78,7 @@ class SoundCloudController internal constructor(private val context: ControllerC
         val profile = requireNotNull(context.state.value.soundCloud) { "Set up SoundCloud downloads in Settings first" }
         if (destination == ScGateDestination.LIBRARY) requireNotNull(context.state.value.server) { "Connect to your music server first" }
         server.scGateAccess(profile.baseUrl)
-        context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.DOWNLOADS, arguments = listOf(track.title))
+        context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.SOUNDCLOUD_DOWNLOADS, arguments = listOf(track.title))
         service.download(track, destination, keepOffline, reviewTags)
     }
     fun submitSoundCloudLink(id: String, link: String) = context.action(serialized = false) {

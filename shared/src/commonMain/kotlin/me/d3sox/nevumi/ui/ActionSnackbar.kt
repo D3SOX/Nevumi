@@ -53,7 +53,7 @@ internal fun ActionDestination.openLabel() = when (this) {
     ActionDestination.QUEUE -> Res.string.player_open_queue
     ActionDestination.FAVORITES -> Res.string.player_open_favorites
     ActionDestination.PLAYLISTS -> Res.string.player_open_playlists
-    ActionDestination.DOWNLOADS -> Res.string.player_open_downloads
+    ActionDestination.DOWNLOADS, ActionDestination.SOUNDCLOUD_DOWNLOADS, ActionDestination.YOUTUBE_DOWNLOADS -> Res.string.player_open_downloads
 }
 
 @Composable
@@ -96,7 +96,7 @@ internal fun ActionSnackbar(data: SnackbarData, open: (ActionDestination) -> Uni
                 AppIconButton(when (destination) {
                     ActionDestination.QUEUE, ActionDestination.PLAYLISTS -> AppIcon.QUEUE
                     ActionDestination.FAVORITES -> AppIcon.FAVORITE
-                    ActionDestination.DOWNLOADS -> AppIcon.DOWNLOAD
+                    ActionDestination.DOWNLOADS, ActionDestination.SOUNDCLOUD_DOWNLOADS, ActionDestination.YOUTUBE_DOWNLOADS -> AppIcon.DOWNLOAD
                 }, stringResource(destination.openLabel())) { data.dismiss(); open(destination) }
             }
             if (data.visuals.withDismissAction) AppIconButton(AppIcon.CLOSE, stringResource(Res.string.player_dismiss_message), onClick = data::dismiss)

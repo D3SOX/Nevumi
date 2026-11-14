@@ -49,7 +49,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
                         YouTubeJobState.FAILED -> Res.string.notice_soundcloud_failed
                         else -> null
                     }
-                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.DOWNLOADS, arguments = listOf(job.tags.title)))
+                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(job.tags.title)))
                 }
             }
         } }
@@ -62,7 +62,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
                     ?.let { libraryController.linkTracks(trackId, it.id).join() }
                 context.mutableNotices.tryEmit(if (trackId != null) ActionNotice(Res.string.notice_soundcloud_added, arguments = listOf(job.tags.title),
                     play = { queueController.playTrack(trackId, listOf(trackId), 0, "YouTube") })
-                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.DOWNLOADS, arguments = listOf(job.tags.title)))
+                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(job.tags.title)))
             }
         } }
     }
@@ -236,8 +236,8 @@ class YouTubeController internal constructor(private val context: ControllerCont
             requireEnabled()
             require(tracks.isNotEmpty()) { "There is nothing to download" }
             val title = name ?: tracks.singleOrNull()?.suggestedTags()?.first
-            if (title != null) context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.DOWNLOADS, arguments = listOf(title))
-            else context.confirm(Res.string.notice_youtube_downloading_songs, ActionDestination.DOWNLOADS, arguments = listOf(tracks.size))
+            if (title != null) context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(title))
+            else context.confirm(Res.string.notice_youtube_downloading_songs, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(tracks.size))
             tracks.forEach { downloads().download(it, destination, reviewTags) }
         }
     /** Saves a song streamed from YouTube, such as the one playing, with the tags and cover it plays with. */
@@ -250,7 +250,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
         }
         // The song already carries the suggested tags, or the user's own edits, so they are kept as they are.
         val video = YouTubeTrack(videoId, track.metadata.title, track.metadata.artist, track.metadata.durationMs, song = true)
-        context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.DOWNLOADS, arguments = listOf(video.title))
+        context.confirm(Res.string.notice_soundcloud_downloading, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(video.title))
         downloads().download(video, destination, reviewTags, cover)
     }
     suspend fun youTubeCover(id: String): ByteArray? = downloads().cover(id)
