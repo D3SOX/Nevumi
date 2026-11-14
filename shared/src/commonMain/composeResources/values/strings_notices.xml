@@ -34,4 +34,5 @@
     <string name="notice_continue_server_queue">Continue “%1$s” from your music server</string>
     <string name="notice_soundcloud_saved_outside">Saved “%1$s” outside your library folders</string>
     <string name="notice_soundcloud_downloading">Downloading “%1$s”</string>
+    <string name="notice_youtube_downloading_songs">Downloading %1$d songs</string>
 </resources>

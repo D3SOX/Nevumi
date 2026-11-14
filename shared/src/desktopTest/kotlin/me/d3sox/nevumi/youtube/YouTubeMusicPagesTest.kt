@@ -109,6 +109,18 @@ class YouTubeMusicPagesTest {
         assertNotNull(page.next)
     }
 
+    @Test fun aVideosArtistAndASongsAlbumAreReadFromTheQueueItStarts() {
+        val response = response("next")
+        assertEquals(YouTubeCollection(YouTubeLink("UCRr1xG_2WIDs18a6cIiCxeA"), YouTubeCollectionKind.ARTIST, "Daft Punk"),
+            YouTubeMusicPages.pageOf(response, "FGBhQbmPwH8", YouTubeCollectionKind.ARTIST))
+        // A music video belongs to no album; a song names its album beside its artist.
+        assertNull(YouTubeMusicPages.pageOf(response, "FGBhQbmPwH8", YouTubeCollectionKind.ALBUM))
+        assertEquals(YouTubeCollection(YouTubeLink("MPREb_p6BGcsuOpGt"), YouTubeCollectionKind.ALBUM, "The Life of a Showgirl"),
+            YouTubeMusicPages.pageOf(response, "7nVctvQVz0U", YouTubeCollectionKind.ALBUM))
+        // Another video in the queue does not answer for the one asked about.
+        assertNull(YouTubeMusicPages.pageOf(response, "abcdefghijk", YouTubeCollectionKind.ARTIST))
+    }
+
     @Test fun lengthsReadMinutesAndHours() {
         assertEquals(227_000, YouTubeMusicPages.duration("3:47"))
         assertEquals(3_723_000, YouTubeMusicPages.duration("1:02:03"))

@@ -78,7 +78,7 @@ private fun SearchType.noun() = when (this) {
 
 @Composable
 internal fun LibrarySearchScreen(state: AppState, controller: MusicController, bottomSpace: Dp, dismiss: (() -> Unit)?, onSettings: (() -> Unit)? = null,
-    focusRequest: Int = 0) {
+    focusRequest: Int = 0, youTubePage: me.d3sox.nevumi.youtube.YouTubeCollection? = null, onYouTubePageShown: () -> Unit = {}) {
     var search by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     val query = search.text
     val youTube = controller.youTubeAvailable && state.preferences.youTube
@@ -111,7 +111,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     }
     CompositionLocalProvider(LocalSongSelection provides selection, LocalLibraryOrigin provides QueueOrigin(LibraryTab.SONGS),
         LocalLibraryScrollKey provides "global-search:${type.name}") {
-        YouTubePageHost(state, controller, bottomSpace) {
+        YouTubePageHost(state, controller, bottomSpace, youTubePage, onYouTubePageShown) {
         Column(Modifier.fillMaxSize().imePadding().testTag("library-search-page")) {
             val searchLabel = stringResource(Res.string.sources_search_your_library)
             if (selection.active) SongSelectionHeader(selection, controller)

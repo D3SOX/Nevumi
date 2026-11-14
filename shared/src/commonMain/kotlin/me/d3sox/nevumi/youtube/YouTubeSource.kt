@@ -70,6 +70,11 @@ interface YouTubeSource {
     suspend fun search(query: String, kind: YouTubeSearchKind = YouTubeSearchKind.SONGS, continuation: YouTubeContinuation? = null): YouTubePage
     /** The YouTube Music page at [link], such as an artist with their songs, albums, videos and similar artists. */
     suspend fun browse(link: YouTubeLink): YouTubeBrowsePage
+    /**
+     * The YouTube Music page of [videoId]'s artist, or of the channel that uploaded it, or of its album, by [kind];
+     * null when YouTube names none.
+     */
+    suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection?
     /** More entries of the last shelf of a page, which [YouTubeBrowsePage.next] or an earlier [YouTubePage.next] of this call points to. */
     suspend fun browseMore(continuation: YouTubeContinuation): YouTubePage
     /** The best audio stream for downloading and playback; [fresh] skips a stream found earlier, such as one that expired. */

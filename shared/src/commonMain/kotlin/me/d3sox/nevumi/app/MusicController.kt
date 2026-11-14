@@ -282,11 +282,21 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun playYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, action: QueueAction? = null) = youTubeController.playYouTube(track, action)
     fun playYouTube(tracks: List<me.d3sox.nevumi.youtube.YouTubeTrack>, index: Int, name: String, shuffle: Boolean = false,
         request: Long = youTubeController.reservePlayRequest()) = youTubeController.playYouTube(tracks, index, name, shuffle, request)
+    fun enqueueYouTube(tracks: List<me.d3sox.nevumi.youtube.YouTubeTrack>, action: QueueAction) = youTubeController.enqueueYouTube(tracks, action)
     fun reservePlayRequest() = youTubeController.reservePlayRequest()
+    fun playYouTube(collection: me.d3sox.nevumi.youtube.YouTubeCollection, shuffle: Boolean = false) = youTubeController.playYouTube(collection, shuffle)
+    fun enqueueYouTube(collection: me.d3sox.nevumi.youtube.YouTubeCollection, action: QueueAction) = youTubeController.enqueueYouTube(collection, action)
+    fun downloadFromYouTube(collection: me.d3sox.nevumi.youtube.YouTubeCollection, destination: me.d3sox.nevumi.youtube.YouTubeDestination,
+        reviewTags: Boolean) = youTubeController.downloadFromYouTube(collection, destination, reviewTags)
+    fun downloadFromYouTube(trackId: String, destination: me.d3sox.nevumi.youtube.YouTubeDestination, reviewTags: Boolean) =
+        youTubeController.downloadFromYouTube(trackId, destination, reviewTags)
+    suspend fun youTubePage(videoId: String, kind: me.d3sox.nevumi.youtube.YouTubeCollectionKind) = youTubeController.youTubePage(videoId, kind)
     suspend fun browseYouTube(link: me.d3sox.nevumi.youtube.YouTubeLink) = youTubeController.browseYouTube(link)
     suspend fun browseYouTubeMore(continuation: me.d3sox.nevumi.youtube.YouTubeContinuation) = youTubeController.browseYouTubeMore(continuation)
     fun downloadFromYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, destination: me.d3sox.nevumi.youtube.YouTubeDestination, reviewTags: Boolean) =
         youTubeController.downloadFromYouTube(track, destination, reviewTags)
+    fun downloadFromYouTube(tracks: List<me.d3sox.nevumi.youtube.YouTubeTrack>, name: String?, destination: me.d3sox.nevumi.youtube.YouTubeDestination,
+        reviewTags: Boolean) = youTubeController.downloadFromYouTube(tracks, name, destination, reviewTags)
     suspend fun youTubeCover(id: String): ByteArray? = youTubeController.youTubeCover(id)
     suspend fun finishYouTubeTags(id: String, choice: ScGateTagChoice) = youTubeController.finishYouTubeTags(id, choice)
     fun cancelYouTubeDownload(id: String) = youTubeController.cancelYouTubeDownload(id)

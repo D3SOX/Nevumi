@@ -10,6 +10,8 @@ import me.d3sox.nevumi.app.*
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.settings.TrackAction
+import me.d3sox.nevumi.youtube.YouTubeCollectionKind
+import me.d3sox.nevumi.youtube.YouTubeDestination
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.d3sox.nevumi.resources.Res
@@ -32,6 +34,11 @@ import me.d3sox.nevumi.resources.player_replace_server_artwork
 import me.d3sox.nevumi.resources.player_song_menu_artwork
 import me.d3sox.nevumi.resources.player_undo_file_edit
 import me.d3sox.nevumi.resources.player_upload_to_server
+import me.d3sox.nevumi.resources.sources_go_to_youtube_music_album
+import me.d3sox.nevumi.resources.sources_go_to_youtube_music_artist
+import me.d3sox.nevumi.resources.sources_open_on_youtube
+import me.d3sox.nevumi.resources.sources_save_to_this_device
+import me.d3sox.nevumi.resources.sources_youtube_save_to_server
 import org.jetbrains.compose.resources.stringResource
 
 /** Runs [action] on a right click that nothing inside has handled, such as to open a song's menu. */
@@ -79,14 +86,24 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     var artworkError by remember { mutableStateOf<String?>(null) }
     val artworkPicker = LocalArtworkPicker.current
     val scope = rememberCoroutineScope()
+    val browser = androidx.compose.ui.platform.LocalUriHandler.current
+    val openYouTubePage = LocalOpenYouTubeLinkedPage.current
+    val youTubeVideoId = track.youTubeVideoId?.takeIf { controller.youTubeAvailable && state.preferences.youTube }
+    // A song streamed from YouTube has a library artist page only when the library has songs by the same artist.
+    val artistInLibrary = track.inLibrary || libraryArtist(track.metadata.artist, state) != null
     fun enqueue(action: QueueAction): Boolean { controller.enqueue(track.id, action); return true }
+    // A song that only streams from YouTube is saved like a YouTube result, and the library views leave it out.
+    val youTubeOnly = youTubeVideoId != null && !track.inLibrary
+    fun inLibrary(matches: (Track) -> Boolean) = track.inLibrary || state.tracks.any { it.inLibrary && matches(it) }
     fun available(action: TrackAction): Boolean = when (action) {
         TrackAction.NONE, TrackAction.PLAY -> false
-        TrackAction.DOWNLOAD -> track.sources.any { it.kind == SourceKind.SERVER || it.kind == SourceKind.LOCAL && it.available }
-        TrackAction.GO_ARTIST -> track.metadata.artist.isNotBlank()
-        TrackAction.GO_ALBUM -> track.metadata.album.isNotBlank()
-        TrackAction.GO_ALBUM_ARTIST -> track.metadata.albumArtist.isNotBlank()
-        TrackAction.GO_GENRE -> track.metadata.genres.isNotEmpty()
+        TrackAction.DOWNLOAD -> if (youTubeOnly) controller.youTubeDeviceDownloads
+            else track.sources.any { it.kind == SourceKind.SERVER || it.kind == SourceKind.LOCAL && it.available }
+        TrackAction.GO_ARTIST -> track.metadata.artist.isNotBlank() && artistInLibrary
+        TrackAction.GO_ALBUM -> track.metadata.album.isNotBlank() && inLibrary { albumCollectionId(it.metadata) == albumCollectionId(track.metadata) }
+        TrackAction.GO_ALBUM_ARTIST -> track.metadata.albumArtist.isNotBlank() &&
+            inLibrary { it.metadata.albumArtist.ifBlank { it.metadata.artist } == track.metadata.albumArtist }
+        TrackAction.GO_GENRE -> track.metadata.genres.isNotEmpty() && inLibrary { track.metadata.genres.first() in it.metadata.genres }
         TrackAction.GO_FOLDER -> track.metadata.folder.isNotBlank()
         TrackAction.SELECT -> onSelect != null
         else -> true
@@ -103,7 +120,8 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             TrackAction.FAVORITE -> controller.setFavorite(currentTrack.id, !currentTrack.favorite)
             TrackAction.RATE -> rating = true
             TrackAction.ADD_TO_PLAYLIST -> playlistPicker = true
-            TrackAction.DOWNLOAD -> controller.downloadTracks(listOf(track.id))
+            TrackAction.DOWNLOAD -> if (youTubeOnly) controller.downloadFromYouTube(track.id, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
+                else controller.downloadTracks(listOf(track.id))
             TrackAction.GO_ARTIST -> navigate(LibraryTab.ARTISTS, track.metadata.artist)
             TrackAction.GO_ALBUM -> navigate(LibraryTab.ALBUMS, albumCollectionId(track.metadata))
             TrackAction.GO_ALBUM_ARTIST -> navigate(LibraryTab.ALBUM_ARTISTS, track.metadata.albumArtist)
@@ -130,9 +148,34 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
                 TrackAction.GO_GENRE, TrackAction.GO_FOLDER, TrackAction.SHOW_SOURCES,
                 TrackAction.SELECT, TrackAction.DOWNLOAD)
             val availableOffline = track.sources.any { it.kind == SourceKind.LOCAL && it.available }
-            primary.filter { it != hiddenAction && available(it) }.forEach { action -> option(action.displayLabel(track.favorite, availableOffline), action.icon(track.favorite, track.rating,
-                track.id in state.playlistTrackIds, availableOffline),
-                if (action == TrackAction.RATE && track.rating > 0) stringResource(Res.string.player_rating_out_of_five, track.rating) else null) { perform(action) } }
+            primary.forEach { action ->
+                // A YouTube song names where it saves to instead.
+                if (action != hiddenAction && available(action) && !(youTubeOnly && action == TrackAction.DOWNLOAD)) option(action.displayLabel(track.favorite, availableOffline), action.icon(track.favorite, track.rating,
+                    track.id in state.playlistTrackIds, availableOffline),
+                    if (action == TrackAction.RATE && track.rating > 0) stringResource(Res.string.player_rating_out_of_five, track.rating) else null) { perform(action) }
+                // The artist's and album's YouTube Music pages sit beside their library pages.
+                if (action == TrackAction.GO_ARTIST && youTubeVideoId != null) option(stringResource(Res.string.sources_go_to_youtube_music_artist),
+                    AppIcon.YOUTUBE) { openYouTubePage(youTubeVideoId, YouTubeCollectionKind.ARTIST) }
+                if (action == TrackAction.GO_ALBUM && youTubeVideoId != null) option(stringResource(Res.string.sources_go_to_youtube_music_album),
+                    AppIcon.ALBUM) { openYouTubePage(youTubeVideoId, YouTubeCollectionKind.ALBUM) }
+            }
+            youTubeVideoId?.let { videoId ->
+                // A song streamed from YouTube has no file yet, so it is saved like a YouTube search result.
+                if (!track.inLibrary && controller.youTubeDeviceDownloads) {
+                    val reviewTags = state.preferences.youTubeReviewTags
+                    option(stringResource(Res.string.sources_save_to_this_device), AppIcon.DEVICE) {
+                        controller.downloadFromYouTube(track.id, YouTubeDestination.DEVICE, reviewTags)
+                    }
+                    val sftp = state.sftp
+                    if (controller.youTubeServerUploads && sftp != null)
+                        option(stringResource(Res.string.sources_youtube_save_to_server), AppIcon.SERVER, sftp.libraryName) {
+                            controller.downloadFromYouTube(track.id, YouTubeDestination.SERVER, reviewTags)
+                        }
+                }
+                option(stringResource(Res.string.sources_open_on_youtube), AppIcon.OPEN_EXTERNAL) {
+                    runCatching { browser.openUri("https://www.youtube.com/watch?v=$videoId") }
+                }
+            }
             if (queueEntryId != null) {
                 option(stringResource(Res.string.player_remove_from_queue), AppIcon.REMOVE) { controller.removeQueueEntry(queueEntryId) }
                 val entry = state.queue.entries.firstOrNull { it.id == queueEntryId }

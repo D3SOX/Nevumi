@@ -49,6 +49,21 @@ internal object YouTubeMusicPages {
         link.params?.let { put("params", it) }
     }))
 
+    fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? = pageOf(request("next", mapOf("videoId" to videoId)), videoId, kind)
+
+    /**
+     * Reads the page of [kind] that [videoId] links to from the queue YouTube Music starts with it, whose byline links the artist or
+     * uploading channel and, for a song, its album.
+     */
+    fun pageOf(response: JsonObject, videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? {
+        val video = response.path("contents", "singleColumnMusicWatchNextResultsRenderer", "tabbedRenderer", "watchNextTabbedResultsRenderer")
+            .array("tabs").firstOrEmpty().path("tabRenderer", "content", "musicQueueRenderer", "content", "playlistPanelRenderer")
+            .array("contents").map { it.obj("playlistPanelVideoRenderer") }.firstOrNull { it.string("videoId") == videoId } ?: return null
+        return video.obj("longBylineText").array("runs").firstNotNullOfOrNull { run ->
+            collection(run.obj("navigationEndpoint"), run.string("text").orEmpty().trim(), "", null)?.takeIf { it.kind == kind }
+        }
+    }
+
     fun more(continuation: YouTubeContinuation): YouTubePage {
         val next = continuation.value as? Next ?: throw IllegalArgumentException("This page cannot continue")
         val response = if (next.search) request("search?ctoken=${next.token}&continuation=${next.token}&type=next", emptyMap(), next.visitor)

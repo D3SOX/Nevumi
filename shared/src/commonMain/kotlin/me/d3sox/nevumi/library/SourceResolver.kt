@@ -29,6 +29,9 @@ data class TrackSource(
 /** Songs streamed or queued from YouTube are kept for the queue and history, but only songs with another source belong to the library. */
 val Track.inLibrary: Boolean get() = sources.any { it.kind != SourceKind.YOUTUBE }
 
+/** The YouTube video the song streams from, if it was ever played from YouTube. */
+val Track.youTubeVideoId: String? get() = sources.firstOrNull { it.kind == SourceKind.YOUTUBE }?.location
+
 object SourceResolver {
     fun resolve(
         sources: List<TrackSource>,

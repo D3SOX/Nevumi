@@ -39,6 +39,7 @@ class YouTubeDownloadsTest {
         val lookups = Collections.synchronizedList(mutableListOf<Boolean>())
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?) = YouTubePage(emptyList(), null)
         override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
+        override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? = null
         override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
         override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {
             lookups += fresh
@@ -101,6 +102,22 @@ class YouTubeDownloadsTest {
             assertEquals("One More Time", song.metadata.title)
             // The work files are gone once the song is saved.
             assertEquals(emptyList(), fixture.directory.resolve("work").toFile().list().orEmpty().toList())
+        } finally { fixture.close() }
+    }
+
+    @Test fun aGivenCoverIsUsedInsteadOfTheVideosArtwork() = runBlocking {
+        val fixture = fixture(FakeYouTube(audio))
+        try {
+            val cover = byteArrayOf(1, 2, 3)
+            val job = fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags = true, cover = cover)
+            assertTrue(job.chosenCover)
+            fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.NEEDS_TAGS }
+            assertTrue(cover.contentEquals(fixture.downloads.cover(job.id)))
+            // A canceled download that is tried again keeps the cover.
+            fixture.downloads.cancel(job.id)
+            fixture.downloads.retry(job.id)
+            fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.NEEDS_TAGS }
+            assertTrue(cover.contentEquals(fixture.downloads.cover(job.id)))
         } finally { fixture.close() }
     }
 
