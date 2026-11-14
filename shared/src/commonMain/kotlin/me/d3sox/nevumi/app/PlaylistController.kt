@@ -31,6 +31,8 @@ class PlaylistController internal constructor(private val context: ControllerCon
     private val library: MusicLibrary, private val playlists: Playlists?, private val artwork: ArtworkLibrary?,
     private val navidrome: NavidromeConnection?, private val serverChanges: NavidromeChanges?, private val offline: OfflineMusic?) {
     val serverPlaylistPublishingAvailable: Boolean get() = serverChanges != null
+    // Edits wait for a cover upload outside the operation lock, so a second edit of the playlist must not overtake the first.
+    private val playlistEdits = kotlinx.coroutines.sync.Mutex()
 
     init {
         playlists?.let { collections -> context.scope.launch {
@@ -118,7 +120,9 @@ class PlaylistController internal constructor(private val context: ControllerCon
         requireNotNull(playlists) { "Playlists are unavailable" }.setSort(playlistId, sort, descending)
         refreshPlaylists()
     }
-    fun editPlaylist(playlistId: String, name: String, description: String, cover: ByteArray? = null, removeCover: Boolean = false) = context.action(serialized = false) {
+    fun editPlaylist(playlistId: String, name: String, description: String, cover: ByteArray? = null, removeCover: Boolean = false) =
+        context.action(serialized = false) { playlistEdits.withLock { editPlaylistNow(playlistId, name, description, cover, removeCover) } }
+    private suspend fun editPlaylistNow(playlistId: String, name: String, description: String, cover: ByteArray?, removeCover: Boolean) {
         require(name.isNotBlank()) { "Name the playlist" }
         val collections = requireNotNull(playlists) { "Playlists are unavailable" }
         val previous = context.operations.withLock {
@@ -138,21 +142,21 @@ class PlaylistController internal constructor(private val context: ControllerCon
                 collections.edit(playlistId, name, description)
                 refreshPlaylists()
             }
-            context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, serializedUndo = false, undo = {
+            context.confirm(Res.string.notice_playlist_updated, ActionDestination.PLAYLISTS, serializedUndo = false, undo = { playlistEdits.withLock {
                 setServerPlaylistCover(playlistId, link, serverPlaylistClient(link), oldCover)
                 context.operations.withLock {
                     collections.edit(playlistId, previous.name, previous.description)
                     oldLocalCover?.let { artwork?.save("playlist:$playlistId", it) }
                     refreshPlaylists()
                 }
-            }, redo = {
+            } }, redo = { playlistEdits.withLock {
                 setServerPlaylistCover(playlistId, link, serverPlaylistClient(link), cover)
                 context.operations.withLock {
                     collections.edit(playlistId, name, description)
                     refreshPlaylists()
                 }
-            })
-            return@action
+            } })
+            return
         }
         context.operations.withLock {
             val key = "playlist:$playlistId"

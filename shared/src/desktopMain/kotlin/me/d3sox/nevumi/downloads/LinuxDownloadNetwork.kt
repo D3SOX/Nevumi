@@ -17,12 +17,14 @@ class LinuxDownloadNetwork(address: String? = null) : AutoCloseable {
 
     init {
         try {
-            // Signals come from NetworkManager's unique bus name, which changes when it restarts; follow the new one.
+            // Signals come from NetworkManager's unique bus name, which changes when it restarts; follow the new one. Only the bus
+            // itself reports owner changes, so another program cannot pretend that NetworkManager stopped.
             connection.addSigHandler(DBus.NameOwnerChanged::class.java) { signal ->
-                if (signal.name == NETWORK_MANAGER) try { subscribe(signal.newOwner.takeIf { it.isNotEmpty() }) }
+                if (signal.source == "org.freedesktop.DBus" && signal.name == NETWORK_MANAGER) try { subscribe(signal.newOwner.takeIf { it.isNotEmpty() }) }
                 catch (error: Exception) { System.err.println("NetworkManager monitoring failed: ${error.message}") }
             }
-            subscribe(requireNotNull(connection.getDBusOwnerName(NETWORK_MANAGER)) { "NetworkManager is not running" })
+            // Held across the lookup, so an owner change reported meanwhile cannot be replaced by the owner read before it.
+            synchronized(values) { subscribe(requireNotNull(connection.getDBusOwnerName(NETWORK_MANAGER)) { "NetworkManager is not running" }) }
         } catch (error: Exception) { connection.close(); throw error }
     }
 

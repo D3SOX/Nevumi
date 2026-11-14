@@ -17,6 +17,8 @@ import kotlinx.serialization.Serializable
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.library.LocalSources
+import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.navidrome.NavidromeClient
@@ -88,8 +90,8 @@ data class SoundCloudJob(
     val trackId: String? = null,
     /** The music server's song for the downloaded file, saved as soon as an import finds it. */
     val serverSongId: String? = null,
-    /** The library's server songs as of this revision were there before the file, so a retry can still tell the new one apart. */
-    val knownSongsRevision: Long? = null,
+    /** Server songs that already matched the file's name or tags when it was ready, so a retry can still tell the new one apart. */
+    val knownSongIds: List<String>? = null,
     /** The device folder the song was saved to while the local folder rules leave it out of the library. */
     val excludedFolder: String? = null,
     val createdAt: Long = 0,
@@ -504,10 +506,11 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             "error" -> job.copy(state = SoundCloudJobState.FAILED, message = status.error ?: status.message.ifBlank { "sc-gate-dl could not download this song" },
                 attention = false, browser = false)
             "cancelled" -> job.copy(state = SoundCloudJobState.CANCELLED, message = "Canceled on sc-gate-dl", attention = false, browser = false)
-            "ready" -> if (job.destination == ScGateDestination.LIBRARY)
+            "ready" -> if (job.destination == ScGateDestination.LIBRARY) {
+                val name = downloadFileName(requireNotNull(status.libraryFilename) { "sc-gate-dl did not report where it saved the song" })
                 job.copy(state = SoundCloudJobState.IMPORTING, message = "Adding to your music server", percent = 100, attention = false, browser = false,
-                    knownSongsRevision = job.knownSongsRevision ?: store.revision("source-owners"),
-                    fileName = downloadFileName(requireNotNull(status.libraryFilename) { "sc-gate-dl did not report where it saved the song" }))
+                    knownSongIds = job.knownSongIds ?: knownMatches(job, name), fileName = name)
+            }
             else job.copy(state = SoundCloudJobState.TRANSFERRING, message = "Saving to this device", percent = 100, attention = false, browser = false,
                 fileName = downloadFileName(requireNotNull(status.outputFilename) { "sc-gate-dl did not report the finished file" }))
             // Only a visible browser can be watched. Some progress reports leave out that it is open, and it closes once the file downloads.
@@ -538,16 +541,12 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             val navidrome = client.isNavidrome()
             // The library already knows these server songs, so only a match outside them is the new file. An older file elsewhere
             // can have the same name or tags, because sc-gate-dl only reports the file name inside its library folder.
-            val owners = "source-owner:server:${client.serverId}:"
             // Taken before the first attempt and kept, since a refresh may index the new file first or an attempt may stop after
             // importing it; either would make the library know the song on the next attempt.
-            val baseline = job.knownSongsRevision ?: store.revision("source-owners").also { revision ->
-                job.copy(knownSongsRevision = revision).let { if (replace(job, it)) job = it }
-            }
-            val known = store.database.records().list("source-owners").mapNotNullTo(HashSet()) { record ->
-                record.key.takeIf { key -> key.startsWith(owners) && record.changed <= baseline }
-            }
-            fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> "$owners${song.id}" !in known }
+            val known = (job.knownSongIds ?: knownMatches(job, name).also { ids ->
+                job.copy(knownSongIds = ids).let { if (replace(job, it)) job = it }
+            }).toHashSet()
+            fun List<Pair<Track, ServerSong>>.indexed() = firstOrNull { (_, song) -> song.id !in known }
             client.rescan()
             val catalogue = changes.refreshLibrary(client, includeFilePaths = navidrome)
             // sc-gate-dl tags the file with the same title and artist the search showed, unless they were checked.
@@ -569,6 +568,19 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
             job.copy(state = SoundCloudJobState.COMPLETE, message = "Added to your music server", trackId = track.id)
         } else importLocal(job)
         if (replace(job, next)) mutableCompleted.tryEmit(next)
+    }
+
+    /** The music server songs the library knows with the download's file name or tags. */
+    private suspend fun knownMatches(job: SoundCloudJob, fileName: String): List<String> {
+        val prefix = "server:${job.musicServerId}:"
+        val title = job.tags?.title ?: job.track.title
+        val artist = job.tags?.artist ?: job.track.artist
+        return MusicLibrary(store).tracks().flatMap { track ->
+            val tagged = track.metadata.title.equals(title, ignoreCase = true) && track.metadata.artist.equals(artist, ignoreCase = true)
+            track.sources.filter { source -> source.kind == SourceKind.SERVER && source.id.startsWith(prefix) &&
+                (tagged || source.filePath?.let { it == fileName || it.endsWith("/$fileName") } == true) }
+                .map { it.id.removePrefix(prefix) }
+        }.distinct()
     }
 
     private suspend fun importLocal(job: SoundCloudJob): SoundCloudJob {

@@ -508,10 +508,12 @@ class NavidromeClient(
                     val response = nativeGet(nativeHttp, "$baseUrl/api/song") {
                         parameter("path", path); parameter("_start", 0); parameter("_end", 100)
                     }
+                    // Without the lookup the caller refreshes the library instead.
+                    if (response.status.value == 404) return@timedRequest ""
                     if (response.status.value !in 200..299) throw NavidromeRequestException("Navidrome file access failed: HTTP ${response.status.value}",
                         response.status.value)
                     response.bodyAsText()
-                }
+                }.ifEmpty { return@withLock null }
                 Json.parseToJsonElement(body).jsonArray.map { it.jsonObject }
                     .filter { it["missing"]?.jsonPrimitive?.booleanOrNull != true }
                     .map(::parseMusicFile).singleOrNull { it.path == path && it.libraryId == libraryId }
@@ -616,6 +618,7 @@ class NavidromeClient(
      * of one per album. Albums the list leaves without a release field, as on servers that omit it, are looked up one at a time.
      */
     private suspend fun albumListReleases(releases: MutableMap<String, String>) {
+        val seen = mutableSetOf<String>()
         var offset = 0
         while (true) {
             val page = try {
@@ -623,13 +626,17 @@ class NavidromeClient(
                     ?.get("albumList2")?.jsonObject?.get("album")?.jsonArray.orEmpty()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { return }
+            var fresh = false
             for (entry in page) {
                 val album = entry as? JsonObject ?: continue
                 val id = album["id"]?.jsonPrimitive?.contentOrNull ?: continue
-                val release = (album["musicBrainzId"] as? JsonPrimitive)?.contentOrNull ?: continue
+                if (seen.add(id)) fresh = true
+                // A blank id may only be missing from the list, so the album is looked up on its own.
+                val release = (album["musicBrainzId"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: continue
                 releases.getOrPut(id) { release }
             }
-            if (page.size < 500) return
+            // A server that ignores the offset repeats its first page; the albums still missing are looked up one at a time.
+            if (page.size < 500 || !fresh) return
             offset += page.size
         }
     }
