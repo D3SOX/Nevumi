@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pin: [projectm, mpv, appimagetool, milkdrop-presets, android-build-tools, android-ndk, android-cmake]
+        pin: [projectm, mpv, appimagetool, milkdrop-presets, go, newpipe-extractor, android-build-tools, android-ndk, android-cmake]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - if: startsWith(matrix.pin, 'android-')

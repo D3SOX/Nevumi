@@ -13,6 +13,9 @@ updates:
         patterns: ["androidx.media3:*"]
       camerax:
         patterns: ["androidx.camera:*"]
+    # A NewPipe Extractor update also changes its JitPack checksums, so scripts/update-pins.py updates it instead.
+    ignore:
+      - dependency-name: com.github.TeamNewPipe:NewPipeExtractor
   - package-ecosystem: github-actions
     directories: [/, /.github/actions/*]
     schedule:
