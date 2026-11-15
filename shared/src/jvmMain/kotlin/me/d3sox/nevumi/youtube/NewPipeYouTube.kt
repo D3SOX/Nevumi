@@ -69,9 +69,9 @@ private object UrlConnectionDownloader : Downloader() {
 class NewPipeYouTube : YouTubeSource, AutoCloseable {
     private val service = ServiceList.YouTube
     private val proxy = YouTubeStreamProxy { id, fresh -> audio(id, fresh) }
-    private class Found(val audio: YouTubeAudio, val expiresAt: Long)
-    private val found = ConcurrentHashMap<String, Found>()
-    private val lookups = ConcurrentHashMap<String, Mutex>()
+    internal class Found(val audio: YouTubeAudio, val expiresAt: Long)
+    internal val found = ConcurrentHashMap<String, Found>()
+    internal val lookups = ConcurrentHashMap<String, Mutex>()
 
     init { initialize() }
 
@@ -140,9 +140,17 @@ class NewPipeYouTube : YouTubeSource, AutoCloseable {
                 // Stream addresses name their expiry; refresh them a while before it so a long song does not stop halfway.
                 val expires = audio.url.substringAfter("expire=", "").substringBefore('&').toLongOrNull()?.times(1_000)
                     ?: (System.currentTimeMillis() + 3_600_000)
-                found[videoId] = Found(audio, expires - 20 * 60_000)
+                remember(videoId, Found(audio, expires - 20 * 60_000))
             }
         }
+    }
+
+    /** Keeps [entry] for [videoId] and forgets expired addresses and idle lookups, so the caches do not grow with every video played. */
+    internal fun remember(videoId: String, entry: Found, now: Long = System.currentTimeMillis()) {
+        found.values.removeIf { it.expiresAt <= now }
+        // Removing a lock someone just took costs at most one extra lookup of that video.
+        lookups.entries.removeIf { (id, lookup) -> id != videoId && !found.containsKey(id) && !lookup.isLocked }
+        found[videoId] = entry
     }
 
     private class Continued(val extractor: SearchExtractor, val page: org.schabi.newpipe.extractor.Page)
