@@ -36,9 +36,12 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
             generation
         }
         val (code, output, errors) = execute(listOf("lookup", "application", applicationId, "profile", key))
-        // secret-tool exits with 1 both for a missing secret and for errors such as a locked keyring; only errors print a message.
-        // Reading an error as a missing secret would let callers replace a secret they could not read.
-        check(code == 0 || code == 1 && errors.isBlank()) { "Could not open the desktop credential store" }
+        // secret-tool exits with 1 both for a missing secret and for errors such as a locked keyring; only errors print its
+        // "secret-tool: " message, while GLib warnings can appear either way. Reading an error as a missing secret would let callers
+        // replace a secret they could not read.
+        check(code == 0 || code == 1 && errors.lineSequence().none { it.startsWith("secret-tool: ") }) {
+            "Could not open the desktop credential store"
+        }
         // secret-tool adds a newline only when writing to a terminal, so the output is the stored secret.
         val secret = output.takeIf { code == 0 }
         recentLock.withLock { if (generation == started) recent[key] = Cached(secret, TimeSource.Monotonic.markNow()) }

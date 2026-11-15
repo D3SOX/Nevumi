@@ -36,6 +36,11 @@ class SecretServiceVaultTest {
     }
 
     @Test
+    fun aWarningAloneStillReadsAsAMissingSecret() = runBlocking {
+        assertNull(vault("echo '(secret-tool:42): GLib-GIO-WARNING **: unrelated' >&2; exit 1").read("server"))
+    }
+
+    @Test
     fun aKeyringErrorIsNotReadAsAMissingSecret() = runBlocking {
         val vault = vault("echo 'secret-tool: Cannot create an item in a locked collection' >&2; exit 1")
         assertFailsWith<IllegalStateException> { vault.read("server") }
