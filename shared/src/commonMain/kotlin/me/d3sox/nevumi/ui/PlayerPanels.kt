@@ -295,7 +295,8 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
         motion.layoutOffset = offset
         val expansion = (1 - offset / miniAnchor).coerceIn(0f, 1f)
         val queueProgress = (-offset / heightPx).coerceIn(0f, 1f)
-        PlatformPredictiveBackHandler(enabled = LocalNavigationActive.current && (backPanel != null || sheet.targetValue != PlayerPanel.MINI),
+        // Back goes to the handler registered last, so register this one when the player opens, after any page it covers.
+        if (LocalNavigationActive.current && (backPanel != null || sheet.targetValue != PlayerPanel.MINI)) PlatformPredictiveBackHandler(enabled = true,
             onStarted = { backPanel = sheet.targetValue; backStart = sheet.requireOffset() },
             onProgress = { progress ->
                 val destination = if (backPanel == PlayerPanel.QUEUE) 0f else heightPx - miniPx - miniBottomInset
