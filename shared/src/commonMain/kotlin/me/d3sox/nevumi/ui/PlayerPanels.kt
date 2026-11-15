@@ -280,7 +280,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     }
     // A song queued again from the player or queue keeps where it first came from.
     SongActionHost(current, state, controller, artworkOrigin = { playingArtworkBounds }, artworkCornerRadius = 28.dp,
-        rightClickMenu = false, queueOrigin = state.queue.originOf(state.queue.currentEntryId)) { _, _, openPlayingMenu, playingMenuOpen ->
+        rightClickMenu = false, queueOrigin = state.queue.originOf(state.playback.entryId ?: state.queue.currentEntryId)) { _, _, openPlayingMenu, playingMenuOpen ->
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds().onGloballyPositioned { motion.origin = it.positionInRoot() }) {
         val height = maxHeight
         val heightPx = with(LocalDensity.current) { height.toPx() }
@@ -412,7 +412,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                         .then(if (collapsed || queueProgress >= .999f) Modifier.clearAndSetSemantics {} else Modifier)) {
                         // The title opens where this song was played or added from, which differs from the queue's for a song queued later.
                         val openSongOrigin = {
-                            val origin = state.queue.originOf(state.queue.currentEntryId)
+                            val origin = state.queue.originOf(state.playback.entryId ?: state.queue.currentEntryId)
                             val videoId = current.youTubeVideoId?.takeIf { controller.youTubeAvailable && state.preferences.youTube }
                             // A YouTube song played from search has no page, and the Songs tab leaves it out, so its album stands in.
                             if ((origin ?: me.d3sox.nevumi.queue.QueueOrigin()) == me.d3sox.nevumi.queue.QueueOrigin() && videoId != null && !current.inLibrary)

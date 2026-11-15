@@ -40,6 +40,8 @@ internal class SongSelection {
         private set
     val allSelected get() = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
     fun toggle(id: String, visible: List<String>, origin: me.d3sox.nevumi.queue.QueueOrigin) {
+        // A song from another page, such as an album opened from search, starts a new selection.
+        if (origin != this.origin) selectedIds = emptyList()
         visibleIds = visible.distinct()
         this.origin = origin
         active = true

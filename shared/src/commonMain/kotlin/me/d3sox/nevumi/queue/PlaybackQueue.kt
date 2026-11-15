@@ -253,7 +253,8 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
     /** Starts a temporary queue that keeps only the current song; a selected live queue keeps its contents. */
     suspend fun startEmpty() = store.transaction {
         val current = snapshot()
-        write(QueueSnapshot(listOfNotNull(current.entries.getOrNull(current.currentIndex)?.copy(section = QueueSection.CONTEXT)), current.currentEntryId,
+        val kept = current.entries.getOrNull(current.currentIndex)?.copy(section = QueueSection.CONTEXT, origin = current.originOf(current.currentEntryId))
+        write(QueueSnapshot(listOfNotNull(kept), current.currentEntryId,
             current.positionMs, repeatMode = current.repeatMode, repeatPlays = current.repeatPlays), replacement = true)
     }
 
