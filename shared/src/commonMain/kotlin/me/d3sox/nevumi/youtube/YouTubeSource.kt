@@ -1,5 +1,9 @@
 package me.d3sox.nevumi.youtube
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 
 /** A search result or an entry of a YouTube Music page: a video, or a page such as an artist that it opens. */
@@ -55,6 +59,9 @@ class YouTubeContinuation(internal val value: Any)
 
 class YouTubePage(val results: List<YouTubeItem>, val next: YouTubeContinuation?)
 
+/** The first page of results of one [kind], for a search of every kind at once. */
+class YouTubeSearchSection(val kind: YouTubeSearchKind, val results: List<YouTubeItem>)
+
 /** Tags that YouTube Music's song descriptions name, such as the album; blank when the video names none. */
 @Serializable
 data class YouTubeDetails(val album: String = "", val year: Int = 0)
@@ -70,6 +77,17 @@ class YouTubeException(message: String, val retryable: Boolean = true) : Excepti
 interface YouTubeSource {
     /** A video address finds that video; anything else searches for [kind]. */
     suspend fun search(query: String, kind: YouTubeSearchKind = YouTubeSearchKind.SONGS, continuation: YouTubeContinuation? = null): YouTubePage
+    /** The first page of every kind, searched at the same time. A kind that fails is left out, unless every kind fails. */
+    suspend fun searchAll(query: String): List<YouTubeSearchSection> = coroutineScope {
+        val sections = YouTubeSearchKind.entries.map { kind ->
+            async {
+                try { Result.success(YouTubeSearchSection(kind, search(query, kind).results.distinctBy { it.key })) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (failure: Exception) { Result.failure(failure) }
+            }
+        }.awaitAll()
+        sections.mapNotNull { it.getOrNull() }.ifEmpty { throw sections.first().exceptionOrNull()!! }
+    }
     /** The YouTube Music page at [link], such as an artist with their songs, albums, videos and similar artists. */
     suspend fun browse(link: YouTubeLink): YouTubeBrowsePage
     /**

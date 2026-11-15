@@ -99,8 +99,10 @@ class YouTubeArtistPageUiTest {
                 onNodeWithContentDescription("Search").performClick()
                 onNodeWithContentDescription("Search your library").performTextInput("Taylor")
                 onNodeWithTag("search-youtube").performScrollTo().performClick()
-                onNodeWithTag("youtube-kind:ARTISTS").performClick()
+                pickFilter("youtube-kind:ARTISTS")
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Open artist: Taylor Swift").fetchSemanticsNodes().isNotEmpty() }
+                // The All tab may have searched artists too before Artists was picked, so only searches after this one count.
+                val artistSearches = youTube.searches.count { it == YouTubeSearchKind.ARTISTS }
                 onNodeWithContentDescription("Open artist: Taylor Swift").performClick()
 
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Top songs").fetchSemanticsNodes().isNotEmpty() }
@@ -225,10 +227,10 @@ class YouTubeArtistPageUiTest {
                 onNodeWithContentDescription("Open artist: Taylor Swift").assertIsDisplayed()
                 assertEquals(listOf("UCPC0L1d253x-KuMNwa05TpA", "MPREb_L64BnYDQpHZ", "MPREb_L64BnYDQpHZ", "MPADUCPC0L1d253x-KuMNwa05TpA", "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo",
                     "VLOLAK5uy_kRl6HdICkQpZF7zuHu_Yx-RDVHw-hboxo"), youTube.browsed.toList())
-                assertEquals(1, youTube.searches.count { it == YouTubeSearchKind.ARTISTS })
+                assertEquals(artistSearches, youTube.searches.count { it == YouTubeSearchKind.ARTISTS })
 
                 // An album found by a search opens its page too.
-                onNodeWithTag("youtube-kind:ALBUMS").performClick()
+                pickFilter("youtube-kind:ALBUMS")
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Open album: The Life of a Showgirl").fetchSemanticsNodes().isNotEmpty() }
                 snapshot("youtube-album-search")
                 onNodeWithContentDescription("Open album: The Life of a Showgirl").performClick()

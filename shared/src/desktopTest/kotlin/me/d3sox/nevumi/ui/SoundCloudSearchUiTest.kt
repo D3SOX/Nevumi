@@ -102,6 +102,13 @@ class SoundCloudSearchUiTest {
                 onNodeWithTag("search-soundcloud").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("SoundCloud song: Night Swim by Other").fetchSemanticsNodes().isNotEmpty() }
                 assertEquals(listOf("Night"), searches)
+                // Going back from the library shows the results found before without searching again.
+                onNodeWithTag("search-source:LIBRARY").performClick()
+                onNodeWithTag("search-source:SOUNDCLOUD").performClick()
+                onNodeWithContentDescription("SoundCloud song: Night Swim by Other").assertIsDisplayed()
+                mainClock.advanceTimeBy(1_000)
+                waitForIdle()
+                assertEquals(listOf("Night"), searches)
                 // Covers come through sc-gate-dl at the size a row needs.
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("soundcloud-cover", useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
                 assertEquals(setOf("https://i1.sndcdn.com/artworks-1-t300x300.jpg", "https://i1.sndcdn.com/artworks-2-t300x300.jpg"), covers.toSet())

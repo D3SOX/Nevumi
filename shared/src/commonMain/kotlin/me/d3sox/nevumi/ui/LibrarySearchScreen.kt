@@ -86,6 +86,9 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     // The library category to return to after searching another source.
     var libraryType by rememberSaveable { mutableStateOf(SearchType.ALL) }
     var openedType by rememberSaveable { mutableStateOf<SearchType?>(null) }
+    // Results of other sources stay while search is open, so switching sources or kinds does not search again.
+    val youTubeSearches = rememberSaveable(saver = YouTubeSearches.Saver) { YouTubeSearches() }
+    val soundCloudSearches = remember { RecentSearches(::SoundCloudSearch) }
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
     val selection = remember { SongSelection() }
     val focus = remember { FocusRequester() }
@@ -149,8 +152,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     if (type == SearchType.SOUNDCLOUD) SearchPrompt(AppIcon.CLOUD, stringResource(Res.string.sources_search_soundcloud_prompt), Modifier.align(Alignment.Center))
                     else if (type == SearchType.YOUTUBE) SearchPrompt(AppIcon.YOUTUBE, stringResource(Res.string.sources_search_youtube_prompt), Modifier.align(Alignment.Center))
                     else SearchPrompt(AppIcon.MUSIC, stringResource(Res.string.sources_enter_search_term), Modifier.align(Alignment.Center))
-                } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller)
-                else if (type == SearchType.YOUTUBE) YouTubeSearchResults(query, state, controller)
+                } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller, soundCloudSearches)
+                else if (type == SearchType.YOUTUBE) YouTubeSearchResults(query, state, controller, youTubeSearches)
                 else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search")
                 else {
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD && it != SearchType.YOUTUBE } else listOf(type)
@@ -166,11 +169,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                             val seeAll = { type = category; libraryType = category; stopTyping() }
                             // The heading stays pinned while its section scrolls by, so its See all button is always within reach.
                             if (total > 0) stickyHeader(key = "heading:${category.name}") {
-                                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).heightIn(min = 48.dp).padding(horizontal = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    Text("${stringResource(category.label)} · $total", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                                    if (total > limit) TextButton(onClick = seeAll) { Text(stringResource(Res.string.sources_see_all)) }
-                                }
+                                SearchSectionHeading("${stringResource(category.label)} · $total", seeAll.takeIf { total > limit })
                             }
                             if (category == SearchType.SONGS) itemsIndexed(results.songs.take(limit), key = { _, song -> "song:${song.id}" }) { index, song ->
                                 TrackRow(song, controller, songIds, index, selectionMode = selection.active, selected = song.id in selection.selectedIds,
@@ -211,6 +210,16 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
             Spacer(Modifier.height(bottomSpace))
         }
         }
+    }
+}
+
+/** The pinned heading of a section of search results, with [seeAll] when the section shows only some of them. */
+@Composable
+internal fun SearchSectionHeading(title: String, seeAll: (() -> Unit)?, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).heightIn(min = 48.dp).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+        if (seeAll != null) TextButton(onClick = seeAll) { Text(stringResource(Res.string.sources_see_all)) }
     }
 }
 

@@ -282,6 +282,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     // YouTube
     suspend fun searchYouTube(query: String, kind: me.d3sox.nevumi.youtube.YouTubeSearchKind,
         continuation: me.d3sox.nevumi.youtube.YouTubeContinuation? = null) = youTubeController.searchYouTube(query, kind, continuation)
+    suspend fun searchYouTubeAll(query: String) = youTubeController.searchYouTubeAll(query)
     suspend fun youTubeArtwork(url: String): ByteArray = youTubeController.youTubeArtwork(url)
     fun playYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, action: QueueAction? = null, page: me.d3sox.nevumi.youtube.YouTubeCollection? = null) =
         youTubeController.playYouTube(track, action, page)

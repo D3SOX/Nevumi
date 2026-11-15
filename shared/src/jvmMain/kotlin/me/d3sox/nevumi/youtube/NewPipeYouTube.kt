@@ -117,6 +117,14 @@ class NewPipeYouTube : YouTubeSource, AutoCloseable {
         page(extractor, extractor.initialPage)
     }
 
+    override suspend fun searchAll(query: String): List<YouTubeSearchSection> {
+        if (!accepts(query.trim())) return super.searchAll(query)
+        // A pasted link finds only its video, which every kind would look up again.
+        val found = search(query, YouTubeSearchKind.VIDEOS, null).results
+        val song = (found.singleOrNull() as? YouTubeTrack)?.song == true
+        return listOf(YouTubeSearchSection(if (song) YouTubeSearchKind.SONGS else YouTubeSearchKind.VIDEOS, found))
+    }
+
     override suspend fun browse(link: YouTubeLink): YouTubeBrowsePage = extract { YouTubeMusicPages.browse(link) }
 
     override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? {

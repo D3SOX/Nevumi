@@ -57,31 +57,46 @@ import org.jetbrains.compose.resources.stringResource
 
 private fun songKey(artist: String, title: String) = "${artist.trim().lowercase()}\u0000${title.trim().lowercase()}"
 
-/** Searches SoundCloud through sc-gate-dl once [query] stops changing, so typing does not send a request per letter. */
+/** The results of one SoundCloud search. */
+internal class SoundCloudSearch(val query: String) : CachedSearch() {
+    val results = mutableStateListOf<SoundCloudTrack>()
+    var nextOffset by mutableStateOf<Int?>(null)
+}
+
+/**
+ * Searches SoundCloud through sc-gate-dl once [query] stops changing, so typing does not send a request per letter. [searches] keeps
+ * the results, so going back to a query does not search again.
+ */
 @Composable
-internal fun SoundCloudSearchResults(query: String, state: AppState, controller: MusicController) {
-    val results = remember(query) { mutableStateListOf<SoundCloudTrack>() }
-    var nextOffset by remember(query) { mutableStateOf<Int?>(null) }
-    var loading by remember(query) { mutableStateOf(true) }
-    var error by remember(query) { mutableStateOf<String?>(null) }
+internal fun SoundCloudSearchResults(query: String, state: AppState, controller: MusicController,
+    searches: RecentSearches<String, SoundCloudSearch> = remember { RecentSearches(::SoundCloudSearch) }) {
+    // A search without recent results shows that it is loading until it finds them, rather than finding nothing.
+    val search = remember(searches, query.trim()) { searches.open(query.trim()).apply { if (!fresh) loading = true } }
     var picked by remember { mutableStateOf<SoundCloudTrack?>(null) }
     val scope = rememberCoroutineScope()
     val searchFailed = stringResource(Res.string.sources_soundcloud_search_failed)
     suspend fun load(offset: Int) {
-        loading = true; error = null
+        search.loading = true; search.error = null
         try {
             val page = controller.searchSoundCloud(query, offset)
-            if (offset == 0) results.clear()
-            results += page.results.filter { result -> results.none { it.id == result.id } }
-            nextOffset = page.nextOffset
+            if (offset == 0) search.results.clear()
+            search.results += page.results.filter { result -> search.results.none { it.id == result.id } }
+            search.nextOffset = page.nextOffset
+            if (offset == 0) search.markLoaded()
+            searches.keep(search.query, search)
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { error = failure.message ?: searchFailed }
-        finally { loading = false }
+        catch (failure: Exception) { search.error = failure.message ?: searchFailed }
+        finally { search.loading = false }
     }
-    LaunchedEffect(query) {
+    LaunchedEffect(search) {
+        if (search.fresh) return@LaunchedEffect
         delay(500)
         load(0)
     }
+    val results = search.results
+    val nextOffset = search.nextOffset
+    val error = search.error
+    val loading = search.loading
     val owned = remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
     val jobs = remember(state.soundCloudJobs) { state.soundCloudJobs.groupBy { it.track.url } }
     val profile = state.soundCloud

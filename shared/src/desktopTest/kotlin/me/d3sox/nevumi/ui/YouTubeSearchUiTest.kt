@@ -31,16 +31,20 @@ class YouTubeSearchUiTest {
         javax.imageio.ImageIO.write(image, "png", Path.of(directory).also(Files::createDirectories).resolve("$name.png").toFile())
     }
 
-    /** Fails the first search like a lost connection, then finds two songs. */
+    /** Fails the first search of every kind like a lost connection, then finds two songs, a video and four artists. */
     private class FakeYouTube : YouTubeSource {
         val searches = Collections.synchronizedList(mutableListOf<Pair<String, YouTubeSearchKind>>())
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?): YouTubePage {
-            searches += query to kind
-            if (searches.size == 1) throw YouTubeException("Could not reach YouTube. Check your connection.")
-            // YouTube can list a video twice on one page.
-            return YouTubePage(listOf(YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist", 201_000, song = true),
-                YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist", 201_000, song = true),
-                YouTubeTrack("bbbbbbbbbbb", "Other - Night Swim (Official Video)", "OtherVEVO", 180_000)), null)
+            val call = synchronized(searches) { searches += query to kind; searches.size }
+            if (call <= YouTubeSearchKind.entries.size) throw YouTubeException("Could not reach YouTube. Check your connection.")
+            return YouTubePage(when (kind) {
+                // YouTube can list a video twice on one page.
+                YouTubeSearchKind.SONGS -> listOf(YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist", 201_000, song = true),
+                    YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist", 201_000, song = true))
+                YouTubeSearchKind.VIDEOS -> listOf(YouTubeTrack("bbbbbbbbbbb", "Other - Night Swim (Official Video)", "OtherVEVO", 180_000))
+                YouTubeSearchKind.ARTISTS -> (1..4).map { YouTubeCollection(YouTubeLink("UC$it"), YouTubeCollectionKind.ARTIST, "Night Artist $it") }
+                YouTubeSearchKind.ALBUMS -> emptyList()
+            }, null)
         }
         override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
         override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? = null
@@ -72,7 +76,14 @@ class YouTubeSearchUiTest {
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Could not reach YouTube. Check your connection.").fetchSemanticsNodes().isNotEmpty() }
                 onNodeWithText("Retry").performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("YouTube song: Night Drive by Artist").fetchSemanticsNodes().isNotEmpty() }
-                assertEquals(listOf("Night" to YouTubeSearchKind.SONGS, "Night" to YouTubeSearchKind.SONGS), youTube.searches.toList())
+                // The All tab searches every kind at once, and searches them all again on a retry.
+                assertEquals(YouTubeSearchKind.entries.flatMap { listOf("Night" to it, "Night" to it) }.sortedBy { it.second }, youTube.searches.sortedBy { it.second })
+                // It groups the first results of each kind; only kinds with more results than shown offer all of them.
+                onNodeWithTag("youtube-section:SONGS").assertIsDisplayed()
+                onNodeWithText("Night Artist 3").assertExists()
+                onAllNodesWithText("Night Artist 4").assertCountEquals(0)
+                onAllNodesWithTag("youtube-section:ALBUMS").assertCountEquals(0)
+                onAllNodesWithText("See all").assertCountEquals(1)
                 onAllNodesWithText("In library", useUnmergedTree = true).assertCountEquals(1)
                 onAllNodesWithContentDescription("YouTube song: Night Drive by Artist").assertCountEquals(1)
                 snapshot("youtube-search")
@@ -114,8 +125,33 @@ class YouTubeSearchUiTest {
                 waitForIdle()
                 assertEquals(beforeReversal + 1, controller.state.value.queue.entries.size)
 
-                onNodeWithTag("youtube-kind:VIDEOS").performClick()
+                pickFilter("youtube-kind:VIDEOS")
                 waitUntil(timeoutMillis = 5_000) { youTube.searches.lastOrNull() == "Night" to YouTubeSearchKind.VIDEOS }
+                waitUntil(timeoutMillis = 5_000) {
+                    onAllNodesWithContentDescription("YouTube song: Other - Night Swim (Official Video) by OtherVEVO").fetchSemanticsNodes().isNotEmpty()
+                }
+
+                // See all opens the kind's own tab with all of its results.
+                pickFilter("youtube-kind:ALL")
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("See all").fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithText("See all").performScrollTo().performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Night Artist 4").fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithTag("youtube-kind:ARTISTS").assertIsSelected()
+                assertEquals("Night" to YouTubeSearchKind.ARTISTS, youTube.searches.last())
+
+                // Going back to a kind or from the library shows the results found before without searching again, on the kind picked last.
+                val searched = youTube.searches.size
+                pickFilter("youtube-kind:ALL")
+                onNodeWithTag("youtube-section:SONGS").assertIsDisplayed()
+                pickFilter("youtube-kind:VIDEOS")
+                onNodeWithContentDescription("YouTube song: Other - Night Swim (Official Video) by OtherVEVO").assertIsDisplayed()
+                onNodeWithTag("search-source:LIBRARY").performClick()
+                onNodeWithTag("search-source:YOUTUBE").performClick()
+                onNodeWithTag("youtube-kind:VIDEOS").assertIsSelected()
+                onNodeWithContentDescription("YouTube song: Other - Night Swim (Official Video) by OtherVEVO").assertIsDisplayed()
+                mainClock.advanceTimeBy(1_000)
+                waitForIdle()
+                assertEquals(searched, youTube.searches.size)
 
                 // A streamed song stays out of the library views, but a favorite one is listed in Favorites.
                 controller.setFavorite(queued.id, true).let { runBlocking { it.join() } }
