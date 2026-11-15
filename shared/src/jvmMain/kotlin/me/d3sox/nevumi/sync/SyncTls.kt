@@ -36,8 +36,8 @@ internal class SyncTls(private val key: PrivateKey, private val certificate: X50
         val manager = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply { init(keys, CharArray(0)) }
         val trust = object : X509ExtendedTrustManager() {
             private fun check(chain: Array<out X509Certificate>?) {
+                // The pinned fingerprint is the trust anchor, so the validity period is ignored: clocks differ between devices.
                 val peer = chain?.singleOrNull() ?: throw CertificateException("A device certificate is required")
-                peer.checkValidity()
                 if (!accept(fingerprint(peer))) throw CertificateException("Device certificate does not match")
             }
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
@@ -61,7 +61,6 @@ internal class SyncTls(private val key: PrivateKey, private val certificate: X50
                 val key = KeyFactory.getInstance("EC").generatePrivate(PKCS8EncodedKeySpec(Base64.getDecoder().decode(stored.key)))
                 val certificate = CertificateFactory.getInstance("X.509").generateCertificate(
                     ByteArrayInputStream(Base64.getDecoder().decode(stored.certificate))) as X509Certificate
-                certificate.checkValidity()
                 return SyncTls(key, certificate)
             }
             val generator = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }
@@ -70,7 +69,7 @@ internal class SyncTls(private val key: PrivateKey, private val certificate: X50
             val subject = X500Name("CN=Nevumi-$deviceId")
             val signer = JcaContentSignerBuilder("SHA256withECDSA").setProvider(BouncyCastleProvider()).build(keys.private)
             val certificate = JcaX509CertificateConverter().getCertificate(JcaX509v3CertificateBuilder(subject,
-                BigInteger(160, SecureRandom()).setBit(159), Date(now - 60_000), Date(now + 315_576_000_000L), subject, keys.public).build(signer))
+                BigInteger(160, SecureRandom()).setBit(159), Date(now - 86_400_000L), Date(now + 315_576_000_000L), subject, keys.public).build(signer))
             val encoder = Base64.getEncoder()
             vault.save("nevumi-sync-identity:$deviceId", Json.encodeToString(StoredSyncIdentity(
                 encoder.encodeToString(keys.private.encoded), encoder.encodeToString(certificate.encoded))))
