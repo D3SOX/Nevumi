@@ -48,6 +48,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
     val rowState = remember(appState, track.id) {
         appState.distinctUntilChanged { old, next ->
             old.preferences == next.preferences && old.artwork[track.id] == next.artwork[track.id] &&
+                (track.id in old.downloadingArtwork) == (track.id in next.downloadingArtwork) &&
                 old.downloads[track.id] == next.downloads[track.id] && old.fileEdits == next.fileEdits &&
                 old.playlists == next.playlists && old.server == next.server && old.sftp == next.sftp
         }
@@ -75,7 +76,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
                 Surface(Modifier.size(52.dp).onGloballyPositioned { artworkBounds = Rect(it.positionOnScreen(),
                     androidx.compose.ui.geometry.Size(it.size.width.toFloat(), it.size.height.toFloat())) }
                     .graphicsLayer { alpha = if (menuOpen) 0f else 1f }, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                    MusicArtwork(state.artwork[track.id], track.metadata.title, strings.artworkTemplate.withArgs(track.metadata.title))
+                    MusicArtwork(state, track.id, track.metadata.title, strings.artworkTemplate.withArgs(track.metadata.title))
                 }
                 Column(Modifier.weight(1f)) {
                     Text(track.metadata.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

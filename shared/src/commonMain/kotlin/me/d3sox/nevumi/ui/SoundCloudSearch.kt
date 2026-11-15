@@ -156,23 +156,24 @@ private val soundCloudCovers = mutableMapOf<String, ImageBitmap>()
 private fun SoundCloudCover(track: SoundCloudTrack, controller: MusicController) {
     // A 48 dp row needs no more than SoundCloud's 300 px variant.
     val url = track.artworkUrl?.replace("-t500x500.", "-t300x300.")
-    val image by produceState(url?.let(soundCloudCovers::get), url) {
-        if (url == null || value != null) return@produceState
-        value = try {
+    fun cached() = url?.let(soundCloudCovers::get).let { ArtworkImage(it, it == null && url != null) }
+    val artwork by produceState(cached(), url) {
+        value = cached()
+        if (url == null || value.image != null) return@produceState
+        val fetched = try {
             val bytes = controller.soundCloudArtwork(url)
             withContext(Dispatchers.Default) { decodeArtwork(bytes, 160) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { null }
-        value?.let { cover ->
+        fetched?.let { cover ->
             soundCloudCovers[url] = cover
             if (soundCloudCovers.size > 120) soundCloudCovers.remove(soundCloudCovers.keys.first())
         }
+        value = ArtworkImage(fetched, loading = false)
     }
     Surface(Modifier.size(48.dp), color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
-        image?.let { Image(it, null, Modifier.fillMaxSize().testTag("soundcloud-cover"), contentScale = ContentScale.Crop) }
-            ?: Box(contentAlignment = Alignment.Center) {
-                Icon(AppIcon.CLOUD.vector, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
+        artwork.image?.let { Image(it, null, Modifier.fillMaxSize().testTag("soundcloud-cover"), contentScale = ContentScale.Crop) }
+            ?: ArtworkPlaceholder(artwork.loading, AppIcon.CLOUD, null, Modifier.size(28.dp))
     }
 }
 

@@ -18,6 +18,7 @@ data class YouTubeTrack(val videoId: String, val title: String, val artist: Stri
 }
 
 /** Where a YouTube Music page is found; [params] picks a part of it, such as an artist's singles. */
+@Serializable
 data class YouTubeLink(val browseId: String, val params: String? = null) {
     val url: String get() = when {
         browseId.startsWith("VL") -> "https://music.youtube.com/playlist?list=${browseId.removePrefix("VL")}"
@@ -30,6 +31,7 @@ data class YouTubeLink(val browseId: String, val params: String? = null) {
 enum class YouTubeCollectionKind { ARTIST, ALBUM, PLAYLIST, LIST }
 
 /** An artist, album, playlist or list on YouTube Music that opens as a page. */
+@Serializable
 data class YouTubeCollection(val link: YouTubeLink, val kind: YouTubeCollectionKind, val title: String, val subtitle: String = "",
     val artworkUrl: String? = null) : YouTubeItem {
     override val key: String get() = link.browseId + link.params.orEmpty()

@@ -87,8 +87,9 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
 }
 
 @Composable
-internal fun QueueActionMenuItems(trackIds: List<String>, controller: MusicController, dismiss: () -> Unit) =
-    QueueActionMenuItems(trackIds.isNotEmpty(), dismiss) { controller.enqueue(trackIds, it) }
+internal fun QueueActionMenuItems(trackIds: List<String>, controller: MusicController,
+    origin: me.d3sox.nevumi.queue.QueueOrigin = LocalLibraryOrigin.current, dismiss: () -> Unit) =
+    QueueActionMenuItems(trackIds.isNotEmpty(), dismiss) { controller.enqueue(trackIds, it, origin) }
 
 @Composable
 internal fun QueueActionMenuItems(enabled: Boolean, dismiss: () -> Unit, enqueue: (QueueAction) -> Unit) {

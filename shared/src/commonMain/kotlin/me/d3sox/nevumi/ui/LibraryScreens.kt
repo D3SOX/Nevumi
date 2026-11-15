@@ -349,7 +349,7 @@ private fun groupedCollections(tracks: List<Track>, unknownName: String, keys: (
 internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: MusicController,
     modifier: Modifier = Modifier, playlistId: String? = null, statistics: Map<String, ListeningStatistics>? = null,
     extraInfo: Map<String, String> = emptyMap(), entryInfo: ((Int) -> String)? = null, scrollSort: LibrarySort = LibrarySort.TITLE, scrollIndicator: ((Int) -> String)? = null, header: (@Composable () -> Unit)? = null, contextName: String = "Library", playlistPositions: List<Int>? = null,
-    shuffleContext: Boolean = false, headerTitle: String? = null, headerBack: (() -> Unit)? = null) {
+    shuffleContext: Boolean = false, headerTitle: String? = null, headerBack: (() -> Unit)? = null, emptyText: String? = null) {
     val songPages = LocalSongGesturePages.current
     val origin = LocalLibraryOrigin.current
     ReportLibraryHeader(headerTitle ?: contextName.takeIf { origin.collectionId != null }, tracks.size, headerBack)
@@ -386,7 +386,7 @@ internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: M
     val sharedSelection = LocalSongSelection.current
     val selection = sharedSelection ?: remember { SongSelection() }
     val selectedIds = selection.selectedIds
-    fun toggle(id: String) { selection.toggle(id, ids) }
+    fun toggle(id: String) { selection.toggle(id, ids, origin) }
     Column(modifier.fillMaxSize()) {
         if (sharedSelection == null && selection.active) SongSelectionHeader(selection, controller)
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -398,7 +398,7 @@ internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: M
                     { toggle(track.id) }, statistics?.get(track.id), entryInfo?.invoke(index) ?: extraInfo[track.id], contextName,
                     playlistPosition = playlistPositions?.getOrNull(index), shuffleContext = shuffleContext)
             }
-            if (tracks.isEmpty()) item { Text(stringResource(Res.string.library_no_songs_yet), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (tracks.isEmpty()) item { Text(emptyText ?: stringResource(Res.string.library_no_songs_yet), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         }
         val statisticsLabels = rememberScrollStatisticsLabels(statistics)

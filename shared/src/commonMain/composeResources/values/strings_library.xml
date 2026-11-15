@@ -136,6 +136,7 @@
     <string name="library_sort_by">Sort by</string>
     <string name="library_search_playlists">Search playlists</string>
     <string name="library_clear_search">Clear search</string>
+    <string name="library_search_playlist">Search this playlist</string>
     <string name="library_playlist_membership">Playlist membership: %1$s</string>
     <string name="library_playlist_artwork">Playlist artwork: %1$s</string>
     <string name="library_read_only">Read-only</string>

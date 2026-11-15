@@ -99,7 +99,7 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
                         controller.playTrack(ids[index], ids, index, entry.title, shuffleContext = shuffle, origin = QueueOrigin(tab, entry.id))
                     }
                 } })
-            QueueActionMenuItems(trackIds, controller) { menu = false }
+            QueueActionMenuItems(trackIds, controller, if (saved != null) QueueOrigin(tab) else QueueOrigin(tab, entry.id)) { menu = false }
             AppMenuItem(text = { Text(stringResource(Res.string.manage_playlists)) }, leadingIcon = { Icon(AppIcon.PLAYLIST_PLUS.vector, null) },
                 enabled = trackIds.isNotEmpty(), onClick = { close { picker = true } })
             if (tracks.isNotEmpty()) {

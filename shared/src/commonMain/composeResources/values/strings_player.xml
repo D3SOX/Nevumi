@@ -173,6 +173,7 @@
     <string name="player_collapse">Collapse</string>
     <string name="player_playing_context">Playing context</string>
     <string name="player_playing_from">Playing from</string>
+    <string name="player_open_song_origin">Open where this song came from</string>
     <string name="player_queue_mini_player_artwork">Queue mini-player artwork: %1$s</string>
     <string name="player_playing">Playing</string>
     <string name="player_paused">Paused</string>

@@ -15,7 +15,19 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -99,6 +111,9 @@ import me.d3sox.nevumi.resources.playlists
 import me.d3sox.nevumi.resources.recently_added
 import me.d3sox.nevumi.resources.save
 import me.d3sox.nevumi.resources.songs
+import me.d3sox.nevumi.resources.library_search_playlist
+import me.d3sox.nevumi.resources.sources_close_search
+import me.d3sox.nevumi.resources.sources_no_results_for
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.getString
 
@@ -108,6 +123,8 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var folder by rememberSaveable { mutableStateOf<String?>(null) }
     var rearrangingSongs by rememberSaveable(selected) { mutableStateOf(false) }
+    // The songs search inside the open playlist; null while it is closed.
+    var songSearch by rememberSaveable(selected) { mutableStateOf<String?>(null) }
     var handledDestination by rememberSaveable { mutableIntStateOf(-1) }
     LaunchedEffect(destination) {
         if (destination?.tab == me.d3sox.nevumi.library.LibraryTab.PLAYLISTS && destination.revision != handledDestination) {
@@ -180,7 +197,10 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         ReportLibraryHeader(pageFolder, songCount,
             onBack = pageFolder?.let { { folder = parentFolder(it) } })
     }
-    Column(Modifier.fillMaxSize()) {
+    // Escape closes the playlist's search before the playlist, also while a song found has focus.
+    Column(Modifier.fillMaxSize().onKeyEvent {
+        if (songSearch != null && it.key == Key.Escape && it.type == KeyEventType.KeyUp) { songSearch = null; true } else false
+    }) {
         if (fileBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         fileMessage?.let { Text(it, Modifier.padding(horizontal = 24.dp)) }
         if (pageFolder != null) {
@@ -231,17 +251,25 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
                         rearrange = if (editable && playlist.trackIds.size > 1) ({
                             controller.setPlaylistSort(playlist.id, me.d3sox.nevumi.playlists.PlaylistSort.CUSTOM, false)
                             rearrangingSongs = true
-                        }) else null, finishRearranging = if (rearrangingSongs) ({ rearrangingSongs = false }) else null)
+                        }) else null, finishRearranging = if (rearrangingSongs) ({ rearrangingSongs = false }) else null,
+                        search = if (playlist.trackIds.isNotEmpty()) ({ songSearch = "" }) else null)
             }
+            val query = songSearch?.trim()?.lowercase().orEmpty()
+            val shown = remember(ordered, query) { if (query.isEmpty()) ordered else ordered.filter { query in it.value.searchText() } }
             CompositionLocalProvider(LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, playlist.id)) {
             if (rearrangingSongs && editable) {
                 ReportLibraryHeader(playlist.title, ordered.size, onBack = { closePlaylist() })
                 PlaylistRearrangeList(playlist, state, controller, Modifier.weight(1f), header)
             }
-            else SongList(ordered.map { it.value }, controller, Modifier.weight(1f), playlist.id.takeIf { editable },
-                scrollIndicator = { "${it + 1} / ${playlist.trackIds.size}" }, contextName = playlist.name,
-                playlistPositions = ordered.map { it.index }, shuffleContext = playlist.shuffle, header = header, headerTitle = playlist.title,
-                headerBack = { closePlaylist() })
+            else {
+                songSearch?.let { search -> PlaylistSongSearch(search, { songSearch = it }) { songSearch = null } }
+                SongList(shown.map { it.value }, controller, Modifier.weight(1f).imePadding(), playlist.id.takeIf { editable },
+                    scrollIndicator = { "${it + 1} / ${shown.size}" }, contextName = playlist.name,
+                    playlistPositions = shown.map { it.index }, shuffleContext = playlist.shuffle,
+                    // While searching, the songs found take the place of the playlist's header.
+                    header = header.takeIf { songSearch == null }, headerTitle = playlist.title, headerBack = { closePlaylist() },
+                    emptyText = if (query.isEmpty()) null else stringResource(Res.string.sources_no_results_for, query))
+            }
             }
         }
     }
@@ -289,6 +317,22 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         }) { Text(stringResource(Res.string.library_use_server_version)) } })
     }
     if (renaming && playlist != null) EditPlaylistDialog(playlist, state, controller) { renaming = false }
+}
+
+/** The search field above an open playlist's songs; it closes with its close button or Back. */
+@Composable
+private fun PlaylistSongSearch(query: String, change: (String) -> Unit, close: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val label = stringResource(Res.string.library_search_playlist)
+    PlatformBackHandler(close)
+    TextField(query, change, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).focusRequester(focus)
+        .semantics { contentDescription = label },
+        placeholder = { Text(label) }, singleLine = true, leadingIcon = { Icon(AppIcon.SEARCH.vector, null) },
+        trailingIcon = { AppIconButton(AppIcon.CLOSE, stringResource(Res.string.sources_close_search), onClick = close) },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); focusManager.clearFocus() }))
+    LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
 internal const val PLAYLIST_FOLDER_PREFIX = "playlist-folder:"

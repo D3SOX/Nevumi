@@ -64,7 +64,6 @@ import me.d3sox.nevumi.resources.sources_youtube_videos
 import me.d3sox.nevumi.youtube.YouTubeCollection
 import me.d3sox.nevumi.youtube.YouTubeCollectionKind
 import me.d3sox.nevumi.youtube.YouTubeContinuation
-import me.d3sox.nevumi.youtube.YouTubeLink
 import me.d3sox.nevumi.youtube.YouTubeDestination
 import me.d3sox.nevumi.youtube.YouTubeException
 import me.d3sox.nevumi.youtube.suggestedTags
@@ -196,15 +195,15 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
 internal fun rememberOwnedSongs(state: AppState): Set<String> =
     remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
 
-/** The YouTube Music page that is open, whose own album a song's menu does not offer to open again. */
-internal val LocalYouTubePageLink = compositionLocalOf<YouTubeLink?> { null }
+/** The YouTube Music page that is open: songs queued from it remember it, and a song's menu does not offer to open its own album again. */
+internal val LocalYouTubePage = compositionLocalOf<YouTubeCollection?> { null }
 
 /**
  * What a swipe or the menu of a YouTube song can do without adding it to the library: queue it, save it to this device, go to its
  * artist in the library with [navigate] when the library has songs by them, or start a selection with [select].
  */
 private class YouTubeTrackActions(val track: YouTubeTrack, val controller: MusicController, val state: AppState, val libraryArtist: String?,
-    val navigate: (LibraryTab, String?) -> Unit, val select: (() -> Unit)?) {
+    val navigate: (LibraryTab, String?) -> Unit, val select: (() -> Unit)?, val page: YouTubeCollection?) {
     fun available(action: TrackAction) = when (action) {
         TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND -> true
         TrackAction.DOWNLOAD -> controller.youTubeDeviceDownloads
@@ -215,9 +214,9 @@ private class YouTubeTrackActions(val track: YouTubeTrack, val controller: Music
     fun perform(action: TrackAction): Boolean {
         if (!available(action)) return false
         when (action) {
-            TrackAction.PLAY_NEXT -> controller.playYouTube(track, QueueAction.PLAY_NEXT)
-            TrackAction.PLAY_AFTER -> controller.playYouTube(track, QueueAction.PLAY_AFTER)
-            TrackAction.APPEND -> controller.playYouTube(track, QueueAction.APPEND)
+            TrackAction.PLAY_NEXT -> controller.playYouTube(track, QueueAction.PLAY_NEXT, page)
+            TrackAction.PLAY_AFTER -> controller.playYouTube(track, QueueAction.PLAY_AFTER, page)
+            TrackAction.APPEND -> controller.playYouTube(track, QueueAction.APPEND, page)
             TrackAction.DOWNLOAD -> controller.downloadFromYouTube(track, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
             TrackAction.GO_ARTIST -> navigate(LibraryTab.ARTISTS, libraryArtist)
             TrackAction.SELECT -> select?.invoke()
@@ -229,7 +228,8 @@ private class YouTubeTrackActions(val track: YouTubeTrack, val controller: Music
 
 @Composable
 private fun rememberYouTubeTrackActions(track: YouTubeTrack, controller: MusicController, state: AppState, select: (() -> Unit)?) =
-    YouTubeTrackActions(track, controller, state, libraryArtist(track.suggestedTags().second, state), LocalLibraryNavigate.current, select)
+    YouTubeTrackActions(track, controller, state, libraryArtist(track.suggestedTags().second, state), LocalLibraryNavigate.current, select,
+        LocalYouTubePage.current)
 
 /**
  * A song or video of [list]; [play] runs on a tap. It swipes like a library song, and a long press, right click or its options button
@@ -285,21 +285,23 @@ private val youTubeImages = mutableMapOf<String, ImageBitmap>()
 
 /** An image from YouTube's image servers, at most [maxDimension] pixels wide or high once decoded. */
 @Composable
-internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: MusicController): ImageBitmap? {
+internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: MusicController): ArtworkImage {
     val key = url?.let { "$maxDimension:$it" }
-    val image by produceState(key?.let(youTubeImages::get), key) {
+    fun cached() = key?.let(youTubeImages::get).let { ArtworkImage(it, it == null && key != null) }
+    val image by produceState(cached(), key) {
         // A reused row or card keeps the previous image until it learns this one's.
-        value = key?.let(youTubeImages::get)
-        if (url == null || key == null || value != null) return@produceState
-        value = try {
+        value = cached()
+        if (url == null || key == null || value.image != null) return@produceState
+        val fetched = try {
             val bytes = controller.youTubeArtwork(url)
             withContext(Dispatchers.Default) { decodeArtwork(bytes, maxDimension) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { null }
-        value?.let { image ->
+        fetched?.let { image ->
             youTubeImages[key] = image
             if (youTubeImages.size > 200) youTubeImages.remove(youTubeImages.keys.first())
         }
+        value = ArtworkImage(fetched, loading = false)
     }
     return image
 }
@@ -307,12 +309,10 @@ internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: M
 @Composable
 internal fun YouTubeImage(url: String?, controller: MusicController, modifier: Modifier, shape: Shape = RoundedCornerShape(12.dp),
     icon: AppIcon = AppIcon.YOUTUBE, maxDimension: Int = 160) {
-    val image = rememberYouTubeImage(url, maxDimension, controller)
+    val artwork = rememberYouTubeImage(url, maxDimension, controller)
     Surface(modifier, color = MaterialTheme.colorScheme.secondaryContainer, shape = shape) {
-        image?.let { Image(it, null, Modifier.fillMaxSize().testTag("youtube-artwork"), contentScale = ContentScale.Crop) }
-            ?: Box(contentAlignment = Alignment.Center) {
-                Icon(icon.vector, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
+        artwork.image?.let { Image(it, null, Modifier.fillMaxSize().testTag("youtube-artwork"), contentScale = ContentScale.Crop) }
+            ?: ArtworkPlaceholder(artwork.loading, icon, null, Modifier.size(28.dp))
     }
 }
 
@@ -343,7 +343,7 @@ internal fun YouTubeSongMenu(track: YouTubeTrack, state: AppState, controller: M
     val openPage = LocalOpenYouTubeLinkedPage.current
     val reviewTags = state.preferences.youTubeReviewTags
     val actions = rememberYouTubeTrackActions(track, controller, state, select)
-    val currentPage = LocalYouTubePageLink.current
+    val currentPage = LocalYouTubePage.current?.link
     val options = buildList {
         // The menu closes before an option runs.
         fun option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) = add(TrackOption(label, icon, detail) { dismiss(); click() })
@@ -366,10 +366,8 @@ internal fun YouTubeSongMenu(track: YouTubeTrack, state: AppState, controller: M
     }
     val artworkDescription = stringResource(Res.string.player_song_menu_artwork, track.title)
     TrackActionDialog(track.title, track.artist, { _ ->
-        val image = rememberYouTubeImage(smallArtwork(track), 160, controller)
-        image?.let { Image(it, artworkDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-            ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(AppIcon.YOUTUBE.vector, artworkDescription, Modifier.fillMaxSize(.45f), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
+        val artwork = rememberYouTubeImage(smallArtwork(track), 160, controller)
+        artwork.image?.let { Image(it, artworkDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+            ?: ArtworkPlaceholder(artwork.loading, AppIcon.YOUTUBE, artworkDescription, Modifier.fillMaxSize(.45f))
     }, options, dismiss, artworkOrigin, 12.dp, onArtworkPlaced)
 }

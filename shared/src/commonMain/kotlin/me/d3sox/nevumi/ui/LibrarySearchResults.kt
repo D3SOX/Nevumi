@@ -16,6 +16,9 @@ internal enum class SearchType(val label: StringResource, val tab: LibraryTab?) 
     YOUTUBE(Res.string.search_type_youtube, null)
 }
 
+/** A song's title, artists, album and genres in lowercase, which a lowercase search term must be part of to find it. */
+internal fun Track.searchText() = with(metadata) { listOf(title, artist, album, albumArtist, *genres.toTypedArray()) }.joinToString("\u0000").lowercase()
+
 internal data class LibrarySearchResults(val songs: List<Track>, val collections: Map<SearchType, List<TrackCollection>>) {
     val count: Int get() = songs.size + collections.values.sumOf { it.size }
 }
@@ -27,10 +30,7 @@ internal data class LibrarySearchResults(val songs: List<Track>, val collections
 internal class LibrarySearchIndex(tracks: List<Track>, playlists: List<Playlist>) {
     private class Entry<T>(val value: T, val text: String)
     private fun text(vararg values: String) = values.joinToString("\u0000").lowercase()
-    private val songs = tracks.map { track ->
-        val metadata = track.metadata
-        Triple(track, metadata.title.lowercase(), text(metadata.title, metadata.artist, metadata.album, metadata.albumArtist, *metadata.genres.toTypedArray()))
-    }.sortedWith(compareBy<Triple<Track, String, String>> { it.second }.thenBy { it.first.id }).map { Entry(it.first, it.third) }
+    private val songs = tracks.map { track -> Triple(track, track.metadata.title.lowercase(), track.searchText()) }.sortedWith(compareBy<Triple<Track, String, String>> { it.second }.thenBy { it.first.id }).map { Entry(it.first, it.third) }
     private fun groups(values: Map<String, List<Track>>) = values.entries.filter { it.key.isNotBlank() }
         .sortedBy { it.key.lowercase() }.map { Entry(TrackCollection(it.key, it.key, it.value), it.key.lowercase()) }
     private val albums = tracks.groupBy { it.metadata.album to it.metadata.albumArtist.ifBlank { it.metadata.artist } }
