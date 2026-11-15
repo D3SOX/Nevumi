@@ -264,6 +264,16 @@ class PlaybackQueueTest {
     }
 
     @Test
+    fun removingThePlayingLastEntryUnderRepeatAllSelectsTheFirstSong() = runBlocking {
+        withQueue { queue ->
+            queue.replace(listOf("first", "middle", "last"), startIndex = 2)
+            queue.setRepeat(RepeatMode.ALL)
+            queue.remove(requireNotNull(queue.snapshot().currentEntryId))
+            assertEquals("first", queue.snapshot().currentTrackId)
+        }
+    }
+
+    @Test
     fun thePlayheadPositionSurvivesRestart() = runBlocking {
         val directory = Files.createTempDirectory("playback-queue-test")
         val path = directory.resolve("queue.db").toString()
