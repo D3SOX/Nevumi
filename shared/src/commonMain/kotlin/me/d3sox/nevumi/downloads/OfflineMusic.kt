@@ -188,7 +188,11 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         }
     }
 
-    fun retry() { wake.trySend(Unit) }
+    fun retry() {
+        // Asking again also covers what a settled pass gave up on, such as songs the server lacked.
+        settled = null
+        wake.trySend(Unit)
+    }
 
     // The user asked for these downloads, so the platform may show the transfer and its progress.
     fun downloadPlaylists() {
@@ -287,7 +291,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         if (paused || connection == null) {
             downloads.replacePlaylistPins(playlists.all(), excluded)
             downloads.enforceCacheBudget(preferences.load().cacheBytes, inUseTracks())
-            return if (downloadsPaused) PassResult.PAUSED else PassResult.RETRY
+            // Without a music server nothing can download until one connects, which wakes the worker.
+            return if (downloadsPaused) PassResult.PAUSED else if (paused) PassResult.RETRY else PassResult.FINISHED
         }
         val requests = store.list<OfflineRequest>("offline-requests")
             .filterNot { it.trackId in excluded || library.findTrack(it.trackId)?.onDevice() == true }
@@ -306,10 +311,17 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             val source = track.sources.firstOrNull {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
             } ?: continue
-            // A song the server lacks waits for a library change, such as the next server refresh.
+            // A song the server lacks shows as failed and waits for a retry or a library change, such as the next server refresh.
             val song = (if (catalogue != null) catalogue[source.location]
                 else try { connection.song(source.location, releases) }
-                catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone }) ?: continue
+                catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone }) ?: run {
+                    val record = downloads.state(track.id)
+                    if (record?.status != DownloadStatus.FAILED)
+                        store.put("download:${track.id}", "downloads", record?.copy(status = DownloadStatus.FAILED, problem = null)
+                            ?: DownloadRecord(track.id, DownloadStatus.FAILED))
+                    refresh()
+                    continue
+                }
             val complete = downloads.download(track.id, song)
             if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}")
             else if (complete.retryable()) completed = false

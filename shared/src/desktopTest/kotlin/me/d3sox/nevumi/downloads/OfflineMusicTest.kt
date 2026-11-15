@@ -675,17 +675,35 @@ class OfflineMusicTest {
             repeat(2) { worker.runPending() }
             assertEquals(DownloadStatus.FAILED to DownloadProblem.INSUFFICIENT_SPACE,
                 worker.state.value.getValue(big.id).let { it.status to it.problem })
+            assertEquals(DownloadStatus.FAILED, worker.state.value.getValue(gone.id).status)
             assertEquals(false, worker.awaitingRetry)
             val requested = requests.get()
             assertEquals(true, worker.settledNow())
             worker.runPending()
             assertEquals(requested, requests.get())
+            // Asking to retry checks the server again even though nothing changed.
+            worker.retry()
+            assertEquals(false, worker.settledNow())
+            worker.runPending()
+            assertEquals(true, requests.get() > requested)
 
             space.set(reserved + 64)
             assertEquals(false, worker.settledNow())
             worker.runPending()
             assertEquals(DownloadStatus.COMPLETE, worker.state.value.getValue(big.id).status)
         } finally { worker.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun withoutAMusicServerThereIsNothingToRetry() = runBlocking {
+        val directory = Files.createTempDirectory("no-server-downloads")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val worker = OfflineMusic(store, MusicLibrary(store), { null }, directory.resolve("audio").toString(), Playlists(store),
+            scheduleWork = { _, _ -> })
+        try {
+            worker.runPending()
+            assertEquals(false, worker.awaitingRetry)
+        } finally { worker.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test

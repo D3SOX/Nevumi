@@ -26,7 +26,12 @@ class ServerAddressChangeTest {
     private fun song(id: String, title: String) = """{"id":"$id","title":"$title","duration":200,"starred":"2024-01-01T00:00:00Z","userRating":4}"""
 
     private val http = HttpClient(MockEngine { request ->
-        val songs = if (request.url.host == "other.example.test") otherSongs else ownSongs
+        val songs = when (request.url.host) {
+            "other.example.test" -> otherSongs
+            // Shares most songs with the first server but answers one of its IDs with another song.
+            "mixed.example.test" -> ownSongs.take(2) + otherSongs.last()
+            else -> ownSongs
+        }
         val body = when (request.url.encodedPath) {
             "/rest/ping.view" -> """{"status":"ok","type":"navidrome"}"""
             "/rest/search3.view" -> """{"status":"ok","searchResult3":{"song":[${
@@ -90,6 +95,21 @@ class ServerAddressChangeTest {
             assertEquals(6, separate.size)
             assertEquals(before.map { it.id }.toSet(), separate.filter { track -> track.sources.any {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:$serverId:") } }.map { it.id }.toSet())
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aServerThatAnswersAKnownSongIdWithAnotherSongGetsItsOwnIdentity() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-server-conflict")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val connection = NavidromeConnection(store, http, vault)
+            connection.connect("http://192.168.1.5:4533", ServerCredentials("fixture", "test"))
+            NavidromeChanges(store, library, client = connection::client).refreshLibrary(requireNotNull(connection.client()))
+            val serverId = requireNotNull(connection.profile()).serverId
+            connection.connect("https://mixed.example.test", ServerCredentials("fixture", "test"))
+            assertNotEquals(serverId, connection.client()?.serverId)
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
 

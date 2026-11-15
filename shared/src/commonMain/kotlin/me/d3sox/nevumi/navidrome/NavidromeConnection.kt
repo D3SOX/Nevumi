@@ -99,12 +99,16 @@ class NavidromeConnection(private val store: MusicStore, private val http: HttpC
             if (known.size == 8) break
         }
         val releases = mutableMapOf<String, String>()
-        val matches = known.count { (songId, metadata) ->
+        var matches = 0
+        for ((songId, metadata) in known) {
             val song = try { client.song(songId, releases).metadata }
                 catch (_: NavidromeException) { null }
                 catch (error: NavidromeRequestException) { if (error.serverUnavailable) throw error else null }
-            song != null && song.title.trim().equals(metadata.title.trim(), ignoreCase = true) &&
-                abs(song.durationMs - metadata.durationMs) <= 2_000
+                ?: continue
+            // Another song under a known ID means another server, however many others match.
+            if (!song.title.trim().equals(metadata.title.trim(), ignoreCase = true) || abs(song.durationMs - metadata.durationMs) > 2_000)
+                return false
+            matches++
         }
         // Songs removed from the server meanwhile no longer answer, so most of the sample suffices.
         return matches > 0 && matches * 2 >= known.size
