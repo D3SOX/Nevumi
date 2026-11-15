@@ -30,6 +30,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,6 +85,8 @@ internal class YouTubeSearch(val query: String, val kind: YouTubeSearchKind?) : 
     var next by mutableStateOf<YouTubeContinuation?>(null)
     // The page the last failed request asked for, which Retry asks for again; null is the first page.
     var failed: YouTubeContinuation? = null
+    // Loading a later page, which a refresh of the first page cancels so the late page cannot follow the new first page.
+    var more: Job? = null
     // Trying again cannot bring back a private or removed video that a pasted link found.
     var permanent by mutableStateOf(false)
 }
@@ -130,9 +134,11 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
             search.failed = continuation; search.error = failure.message ?: searchFailed; search.permanent = (failure as? YouTubeException)?.retryable == false
         } finally { search.loading = false }
     }
+    fun loadMore(continuation: YouTubeContinuation) { search.more = scope.launch { load(continuation) } }
     LaunchedEffect(search, attempt) {
         if (search.fresh) return@LaunchedEffect
         if (attempt == 0) delay(500)
+        search.more?.cancelAndJoin()
         load(null)
     }
     val results = search.results
@@ -174,7 +180,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(message, color = MaterialTheme.colorScheme.error)
                         if (!search.permanent) ActionButton(stringResource(Res.string.retry), AppIcon.REFRESH, style = ActionStyle.TONAL) {
-                            search.failed?.let { scope.launch { load(it) } } ?: attempt++
+                            search.failed?.let(::loadMore) ?: attempt++
                         }
                     }
                 }
@@ -183,7 +189,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
                 item { Text(stringResource(Res.string.sources_no_youtube_results, query.trim()), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             search.next?.let { continuation ->
                 if (!loading && error == null) item {
-                    TextButton(onClick = { scope.launch { load(continuation) } }, Modifier.padding(horizontal = 8.dp)) { Text(stringResource(Res.string.sources_show_more)) }
+                    TextButton(onClick = { loadMore(continuation) }, Modifier.padding(horizontal = 8.dp)) { Text(stringResource(Res.string.sources_show_more)) }
                 }
             }
         }
