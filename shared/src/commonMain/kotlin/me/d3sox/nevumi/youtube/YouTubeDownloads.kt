@@ -123,8 +123,9 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     private val mutableJobs = MutableStateFlow<List<YouTubeJob>?>(null)
     /** Newest first, or null until the stored jobs are loaded. */
     val jobs = mutableJobs.asStateFlow()
-    private val mutableCompleted = MutableSharedFlow<YouTubeJob>(extraBufferCapacity = 16)
-    /** Jobs that just finished adding their song. */
+    // Jobs resumed at launch can finish before the app subscribes, which still has to link their streamed songs.
+    private val mutableCompleted = MutableSharedFlow<YouTubeJob>(replay = 16)
+    /** Jobs that just finished adding their song, including the last few that finished before collection started. */
     val completed = mutableCompleted.asSharedFlow()
     val deviceDownloads: Boolean get() = files != null && localSources != null
     val serverUploads: Boolean get() = upload != null
