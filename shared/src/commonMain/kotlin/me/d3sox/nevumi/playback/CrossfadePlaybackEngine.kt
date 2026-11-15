@@ -30,6 +30,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var tracks = emptyList<PlayableTrack>()
     private var prepared: PlayableTrack? = null
     private var selectedEntry: String? = null
+    /** Android's decoder reports a load only once its main thread runs it, so until then the worker uses the loaded entry. */
+    private var loadingEntry: String? = null
     private data class PendingLoad(val track: PlayableTrack, val positionMs: Long)
     // Set by callers and cleared by the worker once the decoder reports the requested entry.
     @kotlin.concurrent.Volatile private var pendingLoad: PendingLoad? = null
@@ -132,6 +134,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             cancelFade()
             this.tracks = tracks.toList()
             selectedEntry = tracks[startIndex].entryId
+            loadingEntry = selectedEntry
             prepared = null
             standby?.pause()
             applyRepeat()
@@ -141,6 +144,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             } catch (failure: Exception) {
                 // The decoder never adopts the entry, so stop reporting it as loading and let the failure surface.
                 if (pendingLoad === pending) pendingLoad = null
+                loadingEntry = null
                 throw failure
             }
         }
@@ -152,6 +156,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         val index = currentIndex()
         if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
         else active.updateQueue(emptyList())
+        // A removed song may never be reported, and waiting for it would stop crossfades until the next load.
+        if (tracks.none { it.entryId == loadingEntry }) loadingEntry = null
         // A finished download or a new server route changes the next song's source, so the standby player loads it again.
         if (prepared != nextTrack()) { standby?.pause(); prepared = null }
         applyRepeat()
@@ -195,15 +201,19 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
 
     override suspend fun setAudioEffects(effects: AudioEffects) {
         effects.validate()
-        val completed = CompletableDeferred<Unit>(worker)
-        command {
-            try {
-                engines().forEach { it.setAudioEffects(effects) }
-                this.effects = effects
-                completed.complete(Unit)
-            } catch (failure: Exception) { completed.completeExceptionally(failure) }
-        }
-        completed.await()
+        // Without a parent, so a rejected filter fails only this call; a stopped worker drops the command, so it fails the wait.
+        val completed = CompletableDeferred<Unit>()
+        val stopped = worker.invokeOnCompletion { completed.completeExceptionally(IllegalStateException("The audio player is closed")) }
+        try {
+            command {
+                try {
+                    engines().forEach { it.setAudioEffects(effects) }
+                    this.effects = effects
+                    completed.complete(Unit)
+                } catch (failure: Exception) { completed.completeExceptionally(failure) }
+            }
+            completed.await()
+        } finally { stopped.dispose() }
     }
 
     override fun setRepeat(mode: RepeatMode, playCount: Int?) {
@@ -225,7 +235,9 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         withTimeoutOrNull(5_000) { active.status.first { it.repeatMode == nativeMode && it.repeatPlays == repeatPlays } }
     }
 
-    private fun currentIndex(): Int = tracks.indexOfFirst { it.entryId == (active.status.value.entryId ?: selectedEntry) }
+    private fun currentIndex(): Int = tracks.indexOfFirst { it.entryId == (loadingEntry ?: active.status.value.entryId ?: selectedEntry) }
+
+    private fun loadNext(next: PlayableTrack) { selectedEntry = next.entryId; loadingEntry = next.entryId; active.load(next) }
 
     private fun nextTrack(): PlayableTrack? {
         if (repeatMode == RepeatMode.ONE) return null
@@ -241,6 +253,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         val elapsed = (now - lastTickMs).coerceAtLeast(0)
         lastTickMs = now
         val current = active.status.value
+        if (current.entryId == loadingEntry) loadingEntry = null
         if (repeatPlays != null && current.repeatPlays == null && current.repeatMode == RepeatMode.OFF && current.durationMs > 0) {
             repeatPlays = null
             repeatMode = RepeatMode.OFF
@@ -250,7 +263,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                 if (requestedPlaying.value && current.playing) fadeElapsedMs += elapsed
                 applyGains()
                 if (fadeElapsedMs >= fadeDurationMs || outgoing?.status?.value?.ended == true) cancelFade()
-            } else {
+            } else if (loadingEntry == null) {
+                // The old song's ended state would otherwise advance past the requested song.
                 val next = nextTrack()
                 if (next != null && current.durationMs > 0 && prepared != next) {
                     val waiting = standby ?: factory().also { standby = it }
@@ -282,14 +296,13 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                     active.play()
                     applyGains()
                 } else if (current.ended && next != null && requestedPlaying.value) {
-                    active.load(next)
-                    selectedEntry = next.entryId
+                    loadNext(next)
                     prepared = null
                 }
             }
         }
         if (!gapless && crossfadeMs == 0L && current.ended && current.entryId == selectedEntry && requestedPlaying.value) {
-            nextTrack()?.let { next -> selectedEntry = next.entryId; active.load(next) }
+            nextTrack()?.let(::loadNext)
         }
         val requested = pendingLoad
         if (requested != null && active.status.value.entryId == requested.track.entryId) pendingLoad = null
