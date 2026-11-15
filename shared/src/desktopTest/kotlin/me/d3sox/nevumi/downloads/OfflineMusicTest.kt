@@ -29,6 +29,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.delay
 import me.d3sox.nevumi.queue.PlaybackQueue
 import kotlinx.coroutines.channels.Channel
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
 
 class OfflineMusicTest {
     @Test
@@ -612,14 +615,16 @@ class OfflineMusicTest {
     }
 
     @Test
-    fun anAutomaticSmartPlaylistKeepsBeingCheckedBecauseItFollowsListeningAndTime() = runBlocking {
+    fun anAutomaticSmartPlaylistIsCheckedAgainAfterAWhileBecauseItFollowsListeningAndTime() = runBlocking {
         val directory = Files.createTempDirectory("smart-downloads")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val http = HttpClient(MockEngine { respond("", HttpStatusCode.ServiceUnavailable) })
         val library = MusicLibrary(store)
         val checks = AtomicInteger()
+        val time = TestTimeSource()
         val offline = OfflineMusic(store, library, { NavidromeClient(http, "https://music.example", ServerCredentials("test", "test")) },
-            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true }, scheduleWork = { _, _ -> })
+            directory.resolve("audio").toString(), Playlists(store), sourceAccessible = { checks.incrementAndGet(); true },
+            scheduleWork = { _, _ -> }, timeSource = time)
         try {
             val file = Files.write(directory.resolve("song.flac"), byteArrayOf(1)).toString()
             library.importTrack(TrackMetadata("Song"), TrackSource("local:$file", SourceKind.LOCAL, file))
@@ -627,9 +632,92 @@ class OfflineMusicTest {
             playlists.setAutoDownload(playlists.createSmart("Everything", LibraryQuery()).id, true)
             repeat(2) { offline.runPending() }
             val checked = checks.get()
+            // Android schedules a job whenever the worker has not settled, so a smart playlist must not keep it unsettled.
+            assertEquals(true, offline.settledNow())
+            offline.runPending()
+            assertEquals(checked, checks.get())
+            time += 15.minutes
+            assertEquals(false, offline.settledNow())
             offline.runPending()
             assertEquals(true, checks.get() > checked)
         } finally { offline.closeAndJoin(); store.close(); http.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aSongTheServerLacksAndOneThatDoesNotFitSettleWithoutARetryUntilSpaceIsFreed() = runBlocking {
+        val directory = Files.createTempDirectory("permanent-download-failures")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val reserved = 64L * 1024 * 1024
+        val space = java.util.concurrent.atomic.AtomicLong(reserved + 4)
+        val requests = AtomicInteger()
+        val http = HttpClient(MockEngine { request ->
+            requests.incrementAndGet()
+            val id = request.url.parameters["id"]
+            when {
+                request.url.encodedPath.endsWith("getSong.view") && id == "gone" ->
+                    respond("""{"subsonic-response":{"status":"failed","error":{"code":70,"message":"Song not found"}}}""",
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                request.url.encodedPath.endsWith("getSong.view") ->
+                    respond("""{"subsonic-response":{"status":"ok","song":{"id":"big","title":"Big","suffix":"flac","size":8}}}""",
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                else -> respond(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), headers = headersOf(HttpHeaders.ContentType, "audio/flac"))
+            }
+        })
+        val client = NavidromeClient(http, "https://music.example", ServerCredentials("test", "test"))
+        val library = MusicLibrary(store)
+        val gone = library.importTrack(TrackMetadata("Gone"), TrackSource("server:${client.serverId}:gone", SourceKind.SERVER, "gone"))
+        val big = library.importTrack(TrackMetadata("Big"), TrackSource("server:${client.serverId}:big", SourceKind.SERVER, "big"))
+        val worker = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store),
+            availableSpace = { space.get() }, scheduleWork = { _, _ -> })
+        try {
+            worker.request(listOf(gone.id, big.id))
+            // The first pass records both failures, so the second one confirms nothing else changed.
+            repeat(2) { worker.runPending() }
+            assertEquals(DownloadStatus.FAILED to DownloadProblem.INSUFFICIENT_SPACE,
+                worker.state.value.getValue(big.id).let { it.status to it.problem })
+            assertEquals(false, worker.awaitingRetry)
+            val requested = requests.get()
+            assertEquals(true, worker.settledNow())
+            worker.runPending()
+            assertEquals(requested, requests.get())
+
+            space.set(reserved + 64)
+            assertEquals(false, worker.settledNow())
+            worker.runPending()
+            assertEquals(DownloadStatus.COMPLETE, worker.state.value.getValue(big.id).status)
+        } finally { worker.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aFailedTransferAsksForARetryAndEachFruitlessPassWaitsLongerBeforeTheNext() = runBlocking {
+        val directory = Files.createTempDirectory("transient-download-failures")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val available = AtomicBoolean(false)
+        val http = HttpClient(MockEngine { request ->
+            when {
+                request.url.encodedPath.endsWith("getSong.view") ->
+                    respond("""{"subsonic-response":{"status":"ok","song":{"id":"song","title":"Song","suffix":"flac","size":8}}}""",
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                available.get() -> respond(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), headers = headersOf(HttpHeaders.ContentType, "audio/flac"))
+                else -> respond("Unavailable", HttpStatusCode.ServiceUnavailable)
+            }
+        })
+        val client = NavidromeClient(http, "https://music.example", ServerCredentials("test", "test"))
+        val library = MusicLibrary(store)
+        val track = library.importTrack(TrackMetadata("Song"), TrackSource("server:${client.serverId}:song", SourceKind.SERVER, "song"))
+        val worker = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store), scheduleWork = { _, _ -> })
+        try {
+            worker.request(listOf(track.id))
+            assertEquals(30.seconds, worker.nextPassDelay)
+            worker.runPending()
+            assertEquals(true to 60.seconds, worker.awaitingRetry to worker.nextPassDelay)
+            worker.runPending()
+            assertEquals(120.seconds, worker.nextPassDelay)
+            available.set(true)
+            worker.runPending()
+            assertEquals(DownloadStatus.COMPLETE, worker.state.value.getValue(track.id).status)
+            assertEquals(false to 30.seconds, worker.awaitingRetry to worker.nextPassDelay)
+        } finally { worker.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test

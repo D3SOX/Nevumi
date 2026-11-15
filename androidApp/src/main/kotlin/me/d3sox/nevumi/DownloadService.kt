@@ -72,7 +72,8 @@ class DownloadService : JobService() {
                     catch (_: Exception) { /* The next scan, refresh or job links them. */ }
                     offline.runPending()
                 }
-                retry = offline.state.value.values.any { it.status != DownloadStatus.COMPLETE }
+                // Failures another attempt would not fix soon, such as a full disk, wait for a change rather than a retry.
+                retry = offline.awaitingRetry
             } catch (_: CancellationException) {
                 // The transfer retains its partial file and durable request.
             } catch (_: Exception) {

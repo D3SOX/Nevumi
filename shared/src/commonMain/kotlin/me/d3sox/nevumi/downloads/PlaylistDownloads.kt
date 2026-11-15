@@ -16,7 +16,10 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
     private val sourceAccessible: (String) -> Boolean = FileAudioAccess::available,
     /** Shares one catalogue download with the rest of a download pass. */
     private val catalogue: suspend () -> Map<String, ServerSong> = { client.songs().associateBy { it.id } }) {
-    /** Returns whether every song it had to download completed. */
+    /**
+     * Returns whether every song it had to download completed or failed in a way another attempt would not fix soon: the server
+     * lacks the song, or it does not fit until space is freed.
+     */
     suspend fun synchronize(excluded: Set<String> = emptySet()): Boolean {
         val collections = playlists.all()
         // This already pins every song of a downloaded playlist, so the loop below only finds songs to download.
@@ -29,6 +32,7 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
             for (trackId in wanted) {
                 val track = tracks[trackId] ?: continue
                 if (track.sources.any { it.kind != SourceKind.SERVER && it.available && accessible(it) }) continue
+                if (downloads.waitingForSpace(downloads.state(trackId))) continue
                 val remote = track.sources.firstOrNull {
                     it.kind == SourceKind.SERVER && it.id.startsWith("server:${client.serverId}:")
                 } ?: continue
@@ -40,11 +44,11 @@ class PlaylistDownloads(private val playlists: Playlists, private val library: M
         val releases = mutableMapOf<String, String>()
         var completed = true
         for ((trackId, songId) in missing) {
-            // A song the server lacks can return without any library change, so it does not count as done.
+            // A song the server lacks waits for a library change, such as the next server refresh.
             val song = (if (catalogue != null) catalogue[songId]
                 else try { client.song(songId, releases) } catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone })
-                ?: run { completed = false; continue }
-            if (downloads.download(trackId, song).status != DownloadStatus.COMPLETE) completed = false
+                ?: continue
+            if (downloads.download(trackId, song).retryable()) completed = false
         }
         return completed
     }
