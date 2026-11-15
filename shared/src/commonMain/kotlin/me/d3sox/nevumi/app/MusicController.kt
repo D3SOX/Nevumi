@@ -180,6 +180,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 recover { playbackController.applyPreferences() }
                 // An unavailable last song must not stop the rest of startup; the next play retries the load.
                 recover { playbackController.loadPersistedQueue() }
+                recover { youTubeController.removeUnusedTracks() }
                 loader.refreshLibrary()
             }
             loader.refreshDetails(loading = false)

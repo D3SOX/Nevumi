@@ -44,6 +44,7 @@ interface RecordDao {
     @Query("SELECT * FROM records WHERE kind = :kind ORDER BY `key`")
     suspend fun list(kind: String): List<StoredRecord>
     @Query("SELECT `key` FROM records WHERE kind = :kind") suspend fun keys(kind: String): List<String>
+    @Query("SELECT DISTINCT kind FROM records") suspend fun kinds(): List<String>
     /** Records of [kind] written after its revision was [revision]; deletions show in the revision of `deleted:` + kind. */
     @Query("SELECT * FROM records WHERE kind = :kind AND changed > :revision")
     suspend fun changedSince(kind: String, revision: Long): List<StoredRecord>
