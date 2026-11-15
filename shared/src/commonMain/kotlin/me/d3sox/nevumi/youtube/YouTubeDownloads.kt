@@ -321,35 +321,33 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
         }
         var position = withContext(Dispatchers.IO) { fs.metadataOrNull(target)?.size ?: 0 }.coerceAtMost(total)
         var refreshed = false
-        while (position < total) {
+        http.config { install(HttpTimeout) }.use { client -> while (position < total) {
             val last = minOf(total - 1, position + chunkBytes - 1)
-            val status = http.config { install(HttpTimeout) }.use { client ->
-                client.prepareGet(audio.url) {
-                    header(HttpHeaders.Range, "bytes=$position-$last")
-                    timeout { requestTimeoutMillis = 120_000; socketTimeoutMillis = 30_000 }
-                }.execute { response ->
-                    if (response.status.value == 206) withContext(Dispatchers.IO) {
-                        // Appending another part of the audio, or nothing at all, would damage the file or ask for the same range forever.
-                        val range = response.headers[HttpHeaders.ContentRange]
-                        val end = range?.takeIf { it.startsWith("bytes $position-") && it.endsWith("/$total") }
-                            ?.substringAfter('-')?.substringBefore('/')?.toLongOrNull()?.takeIf { it in position..last }
-                            ?: throw YouTubeException("YouTube sent the wrong part of the audio")
-                        val start = position
-                        fs.appendingSink(target).buffer().use { sink ->
-                            val channel = response.bodyAsChannel()
-                            val buffer = ByteArray(64 * 1024)
-                            // A shorter range than asked for is fine; the next request continues after it.
-                            while (position <= end) {
-                                val count = channel.readAvailable(buffer)
-                                if (count == -1) break
-                                val kept = minOf(count.toLong(), end + 1 - position).toInt()
-                                if (kept > 0) { sink.write(buffer, 0, kept); position += kept }
-                            }
+            val status = client.prepareGet(audio.url) {
+                header(HttpHeaders.Range, "bytes=$position-$last")
+                timeout { requestTimeoutMillis = 120_000; socketTimeoutMillis = 30_000 }
+            }.execute { response ->
+                if (response.status.value == 206) withContext(Dispatchers.IO) {
+                    // Appending another part of the audio, or nothing at all, would damage the file or ask for the same range forever.
+                    val range = response.headers[HttpHeaders.ContentRange]
+                    val end = range?.takeIf { it.startsWith("bytes $position-") && it.endsWith("/$total") }
+                        ?.substringAfter('-')?.substringBefore('/')?.toLongOrNull()?.takeIf { it in position..last }
+                        ?: throw YouTubeException("YouTube sent the wrong part of the audio")
+                    val start = position
+                    fs.appendingSink(target).buffer().use { sink ->
+                        val channel = response.bodyAsChannel()
+                        val buffer = ByteArray(64 * 1024)
+                        // A shorter range than asked for is fine; the next request continues after it.
+                        while (position <= end) {
+                            val count = channel.readAvailable(buffer)
+                            if (count == -1) break
+                            val kept = minOf(count.toLong(), end + 1 - position).toInt()
+                            if (kept > 0) { sink.write(buffer, 0, kept); position += kept }
                         }
-                        if (position == start) throw YouTubeException("YouTube sent no audio")
                     }
-                    response.status.value
+                    if (position == start) throw YouTubeException("YouTube sent no audio")
                 }
+                response.status.value
             }
             when {
                 status == 206 -> refreshed = false
@@ -370,7 +368,7 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
                 if (!replace(current, next)) return
                 job = next
             } else job = current
-        }
+        } }
         val review = job.reviewTags && !job.tagsChecked
         replace(job, job.copy(downloaded = true, percent = 100, state = if (review) YouTubeJobState.NEEDS_TAGS else YouTubeJobState.SAVING,
             message = if (review) "Check the tags to finish" else "Saving to this device"))
@@ -418,17 +416,20 @@ class YouTubeDownloads(private val store: MusicStore, private val http: HttpClie
     private companion object { const val COLLECTION = "youtube-jobs" }
 }
 
+// Composables size artwork on every recomposition, so the pattern is compiled once.
+private val artworkSize = Regex("""=w(\d+)-h(\d+)""")
+
 /** A version of YouTube artwork that is large enough for a cover. YouTube Music scales its square artwork to the size in the address. */
-internal fun largeArtwork(url: String): String = url.replace(Regex("""=w\d+-h\d+"""), "=w1200-h1200")
+internal fun largeArtwork(url: String): String = url.replace(artworkSize, "=w1200-h1200")
 
 /** A version of YouTube Music artwork [width] pixels wide in its own aspect ratio; other YouTube images come in fixed sizes. */
 fun sizedArtwork(url: String, width: Int): String {
-    val size = Regex("""=w(\d+)-h(\d+)""").find(url)?.takeIf { "googleusercontent.com" in url } ?: return url
+    val size = artworkSize.find(url)?.takeIf { "googleusercontent.com" in url } ?: return url
     val (originalWidth, originalHeight) = size.destructured.toList().map { it.toLong() }
     return url.replaceRange(size.range, "=w$width-h${width * originalHeight / originalWidth.coerceAtLeast(1)}")
 }
 
 /** A version of YouTube artwork that is large enough for a list row. */
 fun smallArtwork(track: YouTubeTrack): String? = track.artworkUrl?.let { url ->
-    if ("googleusercontent.com" in url) url.replace(Regex("""=w\d+-h\d+"""), "=w226-h226") else "https://i.ytimg.com/vi/${track.videoId}/mqdefault.jpg"
+    if ("googleusercontent.com" in url) url.replace(artworkSize, "=w226-h226") else "https://i.ytimg.com/vi/${track.videoId}/mqdefault.jpg"
 }
