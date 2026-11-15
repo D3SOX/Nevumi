@@ -6,6 +6,7 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -45,14 +46,16 @@ class YouTubeDownloadsTest {
     private val audio = Files.readAllBytes(Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/youtube-fragmented.m4a"))
     private val track = YouTubeTrack("abcdefghijk", "One More Time", "Daft Punk", 3_000, song = true)
 
-    /** Answers like YouTube: [audio] in byte ranges only, from addresses that [expired] rejects. */
-    private class FakeYouTube(val audio: ByteArray, val failure: Exception? = null, val mimeType: String = "audio/mp4") : YouTubeSource {
+    /** Answers like YouTube: [audio] in byte ranges only, from addresses that [expired] rejects, once [gate] opens. */
+    private class FakeYouTube(val audio: ByteArray, val failure: Exception? = null, val mimeType: String = "audio/mp4",
+        val gate: CompletableDeferred<Unit>? = null) : YouTubeSource {
         val lookups = Collections.synchronizedList(mutableListOf<Boolean>())
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?) = YouTubePage(emptyList(), null)
         override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
         override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? = null
         override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
         override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {
+            gate?.await()
             lookups += fresh
             failure?.let { throw it }
             return YouTubeAudio("https://media.test/${lookups.size}", mimeType, audio.size.toLong(), 48, YouTubeDetails("Discovery", 2001))
@@ -117,23 +120,26 @@ class YouTubeDownloadsTest {
     }
 
     @Test fun noticesThatWaitOnTheUserOrReportAFailureStayUntilDismissed() = runBlocking {
-        suspend fun noticeFor(source: YouTubeSource, reviewTags: Boolean, includeFolder: String? = null): ActionNotice {
+        suspend fun noticeFor(source: FakeYouTube, reviewTags: Boolean, includeFolder: String? = null): ActionNotice {
             val fixture = fixture(source, includeFolder = includeFolder)
             val player = MusicController(fixture.library, PlaybackQueue(fixture.store), MpvPlaybackEngine("null"), youTubeDownloads = fixture.downloads)
             try {
                 val notice = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(10_000) { player.notices.first() } }
-                fixture.downloads.jobs.first { it != null }
-                fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags)
+                val job = fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags)
+                // The controller only announces changes after the first job list it sees, so it must see this job before it ends.
+                withTimeout(10_000) { player.state.first { state -> state.youTubeJobs.any { it.id == job.id } } }
+                source.gate?.complete(Unit)
                 return notice.await()
             } finally { player.closeAndJoin(); fixture.close() }
         }
-        val review = noticeFor(FakeYouTube(audio), reviewTags = true)
+        val review = noticeFor(FakeYouTube(audio, gate = CompletableDeferred()), reviewTags = true)
         assertEquals(Res.string.notice_soundcloud_check_tags, review.message)
         assertEquals(NoticeDuration.UNTIL_DISMISSED, review.duration)
-        val failure = noticeFor(FakeYouTube(audio, YouTubeException("This video is private", retryable = false)), reviewTags = false)
+        val failure = noticeFor(FakeYouTube(audio, YouTubeException("This video is private", retryable = false), gate = CompletableDeferred()),
+            reviewTags = false)
         assertEquals(Res.string.notice_soundcloud_failed, failure.message)
         assertEquals(NoticeDuration.UNTIL_DISMISSED, failure.duration)
-        val outside = noticeFor(FakeYouTube(audio), reviewTags = false, includeFolder = "Elsewhere")
+        val outside = noticeFor(FakeYouTube(audio, gate = CompletableDeferred()), reviewTags = false, includeFolder = "Elsewhere")
         assertEquals(Res.string.notice_soundcloud_saved_outside, outside.message)
         assertEquals(NoticeDuration.LONG, outside.duration)
     }
