@@ -145,13 +145,15 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
         runCatching { register() }
         scope.launch {
             controller.state.map(::menuState).distinctUntilChanged().drop(1).collect {
-                revision++
-                connection.sendMessage(DBusMenu.LayoutUpdated(MENU_PATH, UInt32(revision), 0))
+                loggingFailures("Tray menu update") {
+                    revision++
+                    connection.sendMessage(DBusMenu.LayoutUpdated(MENU_PATH, UInt32(revision), 0))
+                }
             }
         }
         scope.launch {
             controller.state.map(::toolTipText).distinctUntilChanged().drop(1).collect {
-                connection.sendMessage(StatusNotifierItem.NewToolTip(ITEM_PATH))
+                loggingFailures("Tray tooltip update") { connection.sendMessage(StatusNotifierItem.NewToolTip(ITEM_PATH)) }
             }
         }
     }
@@ -192,9 +194,9 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
 
     override fun close() { registered = false; scope.cancel(); connection.close() }
 
-    /** What the menu shows; a change makes tray hosts load it again. */
+    /** What the menu shows; a change makes tray hosts load it again. Previous restarts the first song, as in MPRIS. */
     private fun menuState(state: AppState) = listOf(state.playback.playRequested, state.playback.trackId != null,
-        state.queue.currentIndex > 0 || (state.queue.currentIndex >= 0 && state.queue.repeatMode == RepeatMode.ALL),
+        state.queue.currentIndex >= 0,
         state.queue.currentIndex >= 0 && (state.queue.currentIndex < state.queue.entries.lastIndex || state.queue.repeatMode == RepeatMode.ALL))
 
     private fun toolTipText(state: AppState): String {

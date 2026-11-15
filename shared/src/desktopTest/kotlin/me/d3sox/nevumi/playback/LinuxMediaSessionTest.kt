@@ -484,4 +484,71 @@ class LinuxMediaSessionTest {
             directory.toFile().deleteRecursively()
         }
     }
+
+    private suspend fun withMonitoredSession(name: String, engine: PlaybackEngine = MpvPlaybackEngine("null"),
+        test: suspend (controller: MusicController, tracks: List<me.d3sox.nevumi.library.Track>, output: Path,
+            call: (String, Array<out String>) -> String) -> Unit) {
+        val directory = Files.createTempDirectory(name)
+        val address = "unix:path=${directory.resolve("bus")}"
+        val daemon = ProcessBuilder("dbus-daemon", "--session", "--nofork", "--print-address=1", "--address=$address")
+            .redirectError(directory.resolve("bus.log").toFile()).start()
+        assertTrue(daemon.inputStream.bufferedReader().readLine().startsWith("unix:path="))
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val tracks = LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music").toString())
+        val controller = MusicController(library, PlaybackQueue(store), engine)
+        var session: LinuxMediaSession? = null
+        var monitor: Process? = null
+        fun call(method: String, arguments: Array<out String>): String {
+            val process = ProcessBuilder(listOf("gdbus", "call", "--address", address, "--dest", "org.mpris.MediaPlayer2.nevumi",
+                "--object-path", "/org/mpris/MediaPlayer2", "--method", method) + arguments).redirectErrorStream(true).start()
+            try {
+                assertTrue(process.waitFor(5, TimeUnit.SECONDS), "D-Bus client timed out")
+                val result = process.inputStream.bufferedReader().readText()
+                assertEquals(0, process.exitValue(), result)
+                return result
+            } finally { process.destroyForcibly() }
+        }
+        try {
+            session = LinuxMediaSession(controller, address)
+            val output = directory.resolve("signals.log")
+            monitor = ProcessBuilder("gdbus", "monitor", "--address", address, "--dest", "org.mpris.MediaPlayer2.nevumi",
+                "--object-path", "/org/mpris/MediaPlayer2").redirectErrorStream(true).redirectOutput(output.toFile()).start()
+            withTimeout(3_000) { while (!Files.readString(output).contains("is owned by")) delay(20) }
+            withTimeout(3_000) { controller.state.first { !it.loading } }
+            test(controller, tracks, output, ::call)
+        } finally {
+            monitor?.destroyForcibly(); session?.close(); controller.closeAndJoin(); store.close()
+            daemon.destroy(); daemon.waitFor(5, TimeUnit.SECONDS); daemon.destroyForcibly()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun desktopMediaControlsLearnThatARepeatedSongStartedAgain() = runBlocking {
+        withMonitoredSession("music-mpris-loop") { controller, tracks, output, call ->
+            val northern = tracks.first { it.metadata.title == "Northern Light" }.id
+            controller.playTrack(northern, listOf(northern)).join()
+            call("org.freedesktop.DBus.Properties.Set", arrayOf("org.mpris.MediaPlayer2.Player", "LoopStatus", "<'Track'>"))
+            val first = withTimeout(3_000) { controller.state.first { it.queue.repeatMode == RepeatMode.ONE && it.playback.playing } }
+            withTimeout(6_000) { controller.state.first { it.playback.playing && it.playback.playbackId != first.playback.playbackId } }
+            // The song restarts within its first second.
+            withTimeout(3_000) { while (!Regex("""Seeked \(int64 \d{1,6},\)""").containsMatchIn(Files.readString(output))) delay(20) }
+        }
+    }
+
+    @Test
+    fun aFailedUpdateDoesNotStopLaterDesktopMediaControlUpdates() = runBlocking {
+        val decoder = MpvPlaybackEngine("null")
+        val reported = kotlinx.coroutines.flow.MutableStateFlow(PlaybackStatus())
+        withMonitoredSession("music-mpris-failure", object : PlaybackEngine by decoder { override val status = reported }) { controller, tracks, output, _ ->
+            val northern = tracks.first { it.metadata.title == "Northern Light" }.id
+            // A song without a queue entry has no MPRIS track ID, so building its metadata fails.
+            reported.value = PlaybackStatus(northern, entryId = null, playing = true, durationMs = 3_000)
+            withTimeout(3_000) { controller.state.first { it.playback.trackId == northern && it.playback.playing } }
+            delay(200)
+            reported.value = PlaybackStatus(northern, entryId = "entry", durationMs = 3_000)
+            withTimeout(3_000) { while (!Files.readString(output).contains("'PlaybackStatus': <'Paused'>")) delay(20) }
+        }
+    }
 }
