@@ -154,7 +154,9 @@ class AudioDownloads(
         store.put("download:$trackId", "downloads", record)
         try {
             fs.createDirectories(root)
-            if (previous?.sourceId != sourceId || previous?.sizeBytes != song.sizeBytes || previous?.validator == null)
+            // A partial already at full size was interrupted before it was finished, so it restarts rather than asking for no bytes.
+            if (previous?.sourceId != sourceId || previous?.sizeBytes != song.sizeBytes || previous?.validator == null ||
+                song.sizeBytes > 0 && (fs.metadataOrNull(partial)?.size ?: 0) >= song.sizeBytes)
                 fs.delete(partial, mustExist = false)
             val offset = fs.metadataOrNull(partial)?.size ?: 0
             val remaining = (song.sizeBytes - offset).coerceAtLeast(0)
@@ -179,7 +181,7 @@ class AudioDownloads(
                         throw InsufficientDownloadSpace()
                     requireNotNull(output).write(chunk)
                     receivedBytes += chunk.size
-                    // Each write makes every download observer reread its records, so a fast connection saves progress twice a second, not per 256 KiB.
+                    // Each write makes every download observer reread its records, so a fast connection saves progress twice a second, not per 32 KiB chunk.
                     if (firstProgress || lastProgress.elapsedNow().inWholeMilliseconds >= 500) {
                         firstProgress = false
                         lastProgress = TimeSource.Monotonic.markNow()

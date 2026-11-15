@@ -306,6 +306,53 @@ class AudioDownloadsTest {
     }
 
     @Test
+    fun aPartialAlreadyAtFullSizeRestartsInsteadOfRequestingNoBytes() = runBlocking {
+        val ranges = interruptedThenResumed(fillPartial = true)
+        assertEquals(listOf<String?>(null, null), ranges)
+    }
+
+    @Test
+    fun aServerThatCannotServeTheResumeRangeRestartsTheFile() = runBlocking {
+        val ranges = interruptedThenResumed(fillPartial = false)
+        assertEquals(listOf(null, "bytes=4-", null), ranges)
+    }
+
+    /** Interrupts a download after 4 of 8 bytes, then resumes it from a server that answers every range with HTTP 416. */
+    private suspend fun interruptedThenResumed(fillPartial: Boolean): List<String?> {
+        val directory = Files.createTempDirectory("audio-download-test")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val audio = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val ranges = mutableListOf<String?>()
+        val http = HttpClient(MockEngine { request ->
+            val range = request.headers[HttpHeaders.Range]
+            ranges += range
+            val headers = headersOf(HttpHeaders.ContentType to listOf("audio/flac"), HttpHeaders.ETag to listOf("\"audio-v1\""))
+            when {
+                ranges.size == 1 -> respond(audio.copyOfRange(0, 4), headers = headers)
+                range != null -> respond("", HttpStatusCode.RequestedRangeNotSatisfiable)
+                else -> respond(audio, headers = headers)
+            }
+        })
+        try {
+            val song = ServerSong("opaque-id", TrackMetadata("Northern Light"), "flac", 8)
+            val library = MusicLibrary(store)
+            val track = library.importTrack(song.metadata, TrackSource("server:opaque-id", SourceKind.SERVER, song.id))
+            val downloads = AudioDownloads(store, library,
+                NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test")),
+                directory.resolve("audio").toString())
+            assertEquals(DownloadStatus.FAILED, downloads.download(track.id, song).status)
+            // As if the app stopped after writing the last byte but before finishing the file.
+            if (fillPartial) directory.resolve("audio").toFile().listFiles()!!.single { it.name.endsWith(".part") }
+                .appendBytes(audio.copyOfRange(4, 8))
+            val result = downloads.download(track.id, song)
+
+            assertEquals(DownloadStatus.COMPLETE to audio.toList(),
+                result.status to result.path?.let { File(it).readBytes().toList() })
+            return ranges
+        } finally { http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun aCompletedDownloadRemainsPlayableOfflineAfterRestart() = runBlocking {
         val directory = Files.createTempDirectory("audio-download-test")
         val path = directory.resolve("library.db").toString()
