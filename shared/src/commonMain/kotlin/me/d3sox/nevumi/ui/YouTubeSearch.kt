@@ -172,8 +172,9 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
                 item {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(message, color = MaterialTheme.colorScheme.error)
+                        // Only a first page marks the search loaded, so a search that is not fresh failed its first page, even with older results.
                         if (!search.permanent) ActionButton(stringResource(Res.string.retry), AppIcon.REFRESH, style = ActionStyle.TONAL) {
-                            if (empty) attempt++ else scope.launch { load(search.next) }
+                            if (!search.fresh) attempt++ else scope.launch { load(search.next) }
                         }
                     }
                 }
