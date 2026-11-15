@@ -35,9 +35,13 @@ internal class SongSelection {
     private var visibleIds = emptyList<String>()
     var active by mutableStateOf(false)
         private set
+    /** The page the songs are selected on, which the header above it may not know. */
+    var origin = me.d3sox.nevumi.queue.QueueOrigin()
+        private set
     val allSelected get() = visibleIds.isNotEmpty() && visibleIds.all { it in selectedIds }
-    fun toggle(id: String, visible: List<String>) {
+    fun toggle(id: String, visible: List<String>, origin: me.d3sox.nevumi.queue.QueueOrigin) {
         visibleIds = visible.distinct()
+        this.origin = origin
         active = true
         selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
     }
@@ -56,7 +60,7 @@ internal fun SongSelectionHeader(selection: SongSelection, controller: MusicCont
     var editing by remember { mutableStateOf(false) }
     var fileTarget by remember { mutableStateOf(FileEditTarget.LOCAL) }
     var playlistPicker by remember { mutableStateOf(false) }
-    fun enqueue(operation: QueueAction) { controller.enqueue(tracks.map { it.id }, operation); selection.clear() }
+    fun enqueue(operation: QueueAction) { controller.enqueue(tracks.map { it.id }, operation, selection.origin); selection.clear() }
     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         AppIconButton(AppIcon.CLOSE, stringResource(Res.string.player_clear_selection), onClick = selection::clear)
         Text(pluralStringResource(Res.plurals.player_songs_selected, tracks.size, tracks.size), Modifier.weight(1f),

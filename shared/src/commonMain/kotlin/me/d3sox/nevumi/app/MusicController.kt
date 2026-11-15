@@ -283,10 +283,13 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     suspend fun searchYouTube(query: String, kind: me.d3sox.nevumi.youtube.YouTubeSearchKind,
         continuation: me.d3sox.nevumi.youtube.YouTubeContinuation? = null) = youTubeController.searchYouTube(query, kind, continuation)
     suspend fun youTubeArtwork(url: String): ByteArray = youTubeController.youTubeArtwork(url)
-    fun playYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, action: QueueAction? = null) = youTubeController.playYouTube(track, action)
+    fun playYouTube(track: me.d3sox.nevumi.youtube.YouTubeTrack, action: QueueAction? = null, page: me.d3sox.nevumi.youtube.YouTubeCollection? = null) =
+        youTubeController.playYouTube(track, action, page)
     fun playYouTube(tracks: List<me.d3sox.nevumi.youtube.YouTubeTrack>, index: Int, name: String, shuffle: Boolean = false,
-        request: Long = youTubeController.reservePlayRequest()) = youTubeController.playYouTube(tracks, index, name, shuffle, request)
-    fun enqueueYouTube(tracks: List<me.d3sox.nevumi.youtube.YouTubeTrack>, action: QueueAction) = youTubeController.enqueueYouTube(tracks, action)
+        request: Long = youTubeController.reservePlayRequest(), page: me.d3sox.nevumi.youtube.YouTubeCollection? = null) =
+        youTubeController.playYouTube(tracks, index, name, shuffle, request, page)
+    fun enqueueYouTube(tracks: List<me.d3sox.nevumi.youtube.YouTubeTrack>, action: QueueAction, page: me.d3sox.nevumi.youtube.YouTubeCollection? = null) =
+        youTubeController.enqueueYouTube(tracks, action, page)
     fun reservePlayRequest() = youTubeController.reservePlayRequest()
     fun playYouTube(collection: me.d3sox.nevumi.youtube.YouTubeCollection, shuffle: Boolean = false) = youTubeController.playYouTube(collection, shuffle)
     fun enqueueYouTube(collection: me.d3sox.nevumi.youtube.YouTubeCollection, action: QueueAction) = youTubeController.enqueueYouTube(collection, action)
@@ -387,8 +390,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun moveQueueEntry(entryId: String, destination: Int, section: me.d3sox.nevumi.queue.QueueSection? = null) = queueController.moveQueueEntry(entryId, destination, section)
     fun clearQueue(selection: me.d3sox.nevumi.queue.QueueClear = me.d3sox.nevumi.queue.QueueClear.ALL) = queueController.clearQueue(selection)
     fun moveQueueEntryToSection(entryId: String, section: me.d3sox.nevumi.queue.QueueSection) = queueController.moveQueueEntryToSection(entryId, section)
-    fun enqueue(trackId: String, operation: QueueAction) = queueController.enqueue(trackId, operation)
-    fun enqueue(trackIds: List<String>, operation: QueueAction) = queueController.enqueue(trackIds, operation)
+    fun enqueue(trackId: String, operation: QueueAction, origin: me.d3sox.nevumi.queue.QueueOrigin? = null) = queueController.enqueue(listOf(trackId), operation, origin)
+    fun enqueue(trackIds: List<String>, operation: QueueAction, origin: me.d3sox.nevumi.queue.QueueOrigin? = null) = queueController.enqueue(trackIds, operation, origin)
 
     override fun close() { context.scope.cancel(); pairedDevices?.close(); serverChanges?.close(); offline?.close(); scrobbling?.close(); soundCloud?.close(); youTubeDownloads?.close(); engine.close() }
 

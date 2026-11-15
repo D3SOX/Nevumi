@@ -91,7 +91,10 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     val youTubeVideoId = track.youTubeVideoId?.takeIf { controller.youTubeAvailable && state.preferences.youTube }
     // A song streamed from YouTube has a library artist page only when the library has songs by the same artist.
     val artistInLibrary = track.inLibrary || libraryArtist(track.metadata.artist, state) != null
-    fun enqueue(action: QueueAction): Boolean { controller.enqueue(track.id, action); return true }
+    // A song queued again from the queue keeps where it first came from.
+    fun enqueue(action: QueueAction): Boolean {
+        controller.enqueue(track.id, action, if (queueEntryId != null) state.queue.originOf(queueEntryId) else origin); return true
+    }
     // A song that only streams from YouTube is saved like a YouTube result, and the library views leave it out.
     val youTubeOnly = youTubeVideoId != null && !track.inLibrary
     fun inLibrary(matches: (Track) -> Boolean) = track.inLibrary || state.tracks.any { it.inLibrary && matches(it) }

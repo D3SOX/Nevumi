@@ -116,4 +116,45 @@ class PlayingOriginUiTest {
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test fun theTitleOpensWhereTheSongWasQueuedFromRatherThanWhatTheQueuePlays() {
+        val directory = Files.createTempDirectory("playing-song-origin-ui")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/fixture.flac").toString()
+        val songs = runBlocking { (0 until 4).map { index ->
+            library.importTrack(TrackMetadata("Song $index", "Test artist", if (index < 2) "Test album" else "Other album",
+                trackNumber = index + 1, durationMs = 3_000), TrackSource("source:$index", SourceKind.LOCAL, audio))
+        }.also { playlists.create("Night mix", listOf(it[3].id)) } }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists)
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.started && controller.state.value.playlists.isNotEmpty() }
+                openLibraryPage("Albums"); onNodeWithText("Test album").performClick()
+                onNodeWithTag("track-row:${songs[0].id}").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.queue.currentTrackId == songs[0].id }
+                runBlocking { controller.pause().join() }
+                openLibraryPage("Playlists"); onNodeWithText("Night mix").performClick()
+                onNodeWithContentDescription("Playlist options").performClick()
+                onNodeWithText("Play next", substring = false).performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.queue.upNext.size == 1 }
+                runBlocking { controller.skip(1).join(); controller.pause().join() }
+                openLibraryPage("Albums")
+                onNodeWithTag("mini-player").performClick()
+                // The queue still plays the album, but this song came from the playlist.
+                onNodeWithTag("now-playing-title").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.lastLibraryTab == LibraryTab.PLAYLISTS }
+                onNodeWithTag("track-row:${songs[3].id}").assertIsDisplayed()
+                // Back on the album's own song, the title opens the album.
+                runBlocking { controller.skip(1).join(); controller.pause().join() }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.queue.currentTrackId == songs[1].id }
+                onNodeWithTag("mini-player").performClick()
+                onNodeWithTag("now-playing-title").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.lastLibraryTab == LibraryTab.ALBUMS }
+                onNodeWithTag("track-row:${songs[1].id}").assertIsDisplayed()
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
 }

@@ -61,7 +61,6 @@ import me.d3sox.nevumi.resources.sources_youtube_videos
 import me.d3sox.nevumi.youtube.YouTubeCollection
 import me.d3sox.nevumi.youtube.YouTubeCollectionKind
 import me.d3sox.nevumi.youtube.YouTubeContinuation
-import me.d3sox.nevumi.youtube.YouTubeLink
 import me.d3sox.nevumi.youtube.YouTubeDestination
 import me.d3sox.nevumi.youtube.YouTubeException
 import me.d3sox.nevumi.youtube.suggestedTags
@@ -149,15 +148,15 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
 internal fun rememberOwnedSongs(state: AppState): Set<String> =
     remember(state.tracks) { state.tracks.filter { it.inLibrary }.map { songKey(it.metadata.artist, it.metadata.title) }.toSet() }
 
-/** The YouTube Music page that is open, whose own album a song's menu does not offer to open again. */
-internal val LocalYouTubePageLink = compositionLocalOf<YouTubeLink?> { null }
+/** The YouTube Music page that is open: songs queued from it remember it, and a song's menu does not offer to open its own album again. */
+internal val LocalYouTubePage = compositionLocalOf<YouTubeCollection?> { null }
 
 /**
  * What a swipe or the menu of a YouTube song can do without adding it to the library: queue it, save it to this device, go to its
  * artist in the library with [navigate] when the library has songs by them, or start a selection with [select].
  */
 private class YouTubeTrackActions(val track: YouTubeTrack, val controller: MusicController, val state: AppState, val libraryArtist: String?,
-    val navigate: (LibraryTab, String?) -> Unit, val select: (() -> Unit)?) {
+    val navigate: (LibraryTab, String?) -> Unit, val select: (() -> Unit)?, val page: YouTubeCollection?) {
     fun available(action: TrackAction) = when (action) {
         TrackAction.PLAY_NEXT, TrackAction.PLAY_AFTER, TrackAction.APPEND -> true
         TrackAction.DOWNLOAD -> controller.youTubeDeviceDownloads
@@ -168,9 +167,9 @@ private class YouTubeTrackActions(val track: YouTubeTrack, val controller: Music
     fun perform(action: TrackAction): Boolean {
         if (!available(action)) return false
         when (action) {
-            TrackAction.PLAY_NEXT -> controller.playYouTube(track, QueueAction.PLAY_NEXT)
-            TrackAction.PLAY_AFTER -> controller.playYouTube(track, QueueAction.PLAY_AFTER)
-            TrackAction.APPEND -> controller.playYouTube(track, QueueAction.APPEND)
+            TrackAction.PLAY_NEXT -> controller.playYouTube(track, QueueAction.PLAY_NEXT, page)
+            TrackAction.PLAY_AFTER -> controller.playYouTube(track, QueueAction.PLAY_AFTER, page)
+            TrackAction.APPEND -> controller.playYouTube(track, QueueAction.APPEND, page)
             TrackAction.DOWNLOAD -> controller.downloadFromYouTube(track, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
             TrackAction.GO_ARTIST -> navigate(LibraryTab.ARTISTS, libraryArtist)
             TrackAction.SELECT -> select?.invoke()
@@ -182,7 +181,8 @@ private class YouTubeTrackActions(val track: YouTubeTrack, val controller: Music
 
 @Composable
 private fun rememberYouTubeTrackActions(track: YouTubeTrack, controller: MusicController, state: AppState, select: (() -> Unit)?) =
-    YouTubeTrackActions(track, controller, state, libraryArtist(track.suggestedTags().second, state), LocalLibraryNavigate.current, select)
+    YouTubeTrackActions(track, controller, state, libraryArtist(track.suggestedTags().second, state), LocalLibraryNavigate.current, select,
+        LocalYouTubePage.current)
 
 /**
  * A song or video of [list]; [play] runs on a tap. It swipes like a library song, and a long press, right click or its options button
@@ -296,7 +296,7 @@ internal fun YouTubeSongMenu(track: YouTubeTrack, state: AppState, controller: M
     val openPage = LocalOpenYouTubeLinkedPage.current
     val reviewTags = state.preferences.youTubeReviewTags
     val actions = rememberYouTubeTrackActions(track, controller, state, select)
-    val currentPage = LocalYouTubePageLink.current
+    val currentPage = LocalYouTubePage.current?.link
     val options = buildList {
         // The menu closes before an option runs.
         fun option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) = add(TrackOption(label, icon, detail) { dismiss(); click() })

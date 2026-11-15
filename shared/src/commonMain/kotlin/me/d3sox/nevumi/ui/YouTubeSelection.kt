@@ -59,7 +59,8 @@ internal val LocalYouTubeSelection = compositionLocalOf<YouTubeSelection?> { nul
 internal fun YouTubeSelectionHeader(selection: YouTubeSelection, state: AppState, controller: MusicController) {
     val tracks = selection.tracks
     var actions by remember { mutableStateOf(false) }
-    fun enqueue(action: QueueAction) { controller.enqueueYouTube(tracks, action); selection.clear() }
+    val page = LocalYouTubePage.current
+    fun enqueue(action: QueueAction) { controller.enqueueYouTube(tracks, action, page); selection.clear() }
     fun download(destination: YouTubeDestination) {
         controller.downloadFromYouTube(tracks, null, destination, state.preferences.youTubeReviewTags); selection.clear()
     }

@@ -43,6 +43,9 @@ import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.inLibrary
+import me.d3sox.nevumi.library.youTubeVideoId
+import me.d3sox.nevumi.youtube.YouTubeCollectionKind
 import me.d3sox.nevumi.playback.RepeatMode
 import me.d3sox.nevumi.queue.QueueEntry
 import me.d3sox.nevumi.queue.QueueSection
@@ -184,6 +187,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
         if (sheet.targetValue != PlayerPanel.MINI) dismissSearchInput()
     }
     val navigateContext = LocalPlayingContextNavigate.current
+    val openYouTubeLinkedPage = LocalOpenYouTubeLinkedPage.current
     val motion = remember(sheet, scope) { PlayerMotion(sheet, scope) }
     var playingArtworkBounds by remember(current.id) { mutableStateOf<Rect?>(null) }
     var showRepeatCount by remember { mutableStateOf(false) }
@@ -405,6 +409,15 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                         alpha = expansion * visible * visible * visible * visible
                     }
                         .then(if (collapsed || queueProgress >= .999f) Modifier.clearAndSetSemantics {} else Modifier)) {
+                        // The title opens where this song was played or added from, which differs from the queue's for a song queued later.
+                        val openSongOrigin = {
+                            val origin = state.queue.originOf(state.queue.currentEntryId)
+                            val videoId = current.youTubeVideoId?.takeIf { controller.youTubeAvailable && state.preferences.youTube }
+                            // A YouTube song played from search has no page, and the Songs tab leaves it out, so its album stands in.
+                            if ((origin ?: me.d3sox.nevumi.queue.QueueOrigin()) == me.d3sox.nevumi.queue.QueueOrigin() && videoId != null && !current.inLibrary)
+                                openYouTubeLinkedPage(videoId, YouTubeCollectionKind.ALBUM)
+                            else navigateContext(origin ?: me.d3sox.nevumi.queue.QueueOrigin(), current.id)
+                        }
                         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
                             AppIconButton(AppIcon.DOWN, stringResource(Res.string.player_collapse)) { show(PlayerPanel.MINI) }
                             val playingContext = stringResource(Res.string.player_playing_context)
@@ -426,12 +439,12 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             if (maxWidth > maxHeight) Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                                 PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxHeight(), motion)
-                                PlayerControls(state, controller, current, requested, buffering, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
+                                PlayerControls(state, controller, current, requested, buffering, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) }, onTitle = openSongOrigin)
                             } else Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(24.dp)) {
                                 PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxWidth(), motion)
                                 PlayerControls(state, controller, current, requested, buffering,
-                                    Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) })
+                                    Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) }, onTitle = openSongOrigin)
                             }
                         }
 
@@ -721,7 +734,7 @@ private fun PlayerCover(state: AppState, controller: MusicController, track: Tra
 @Composable
 private fun PlayerControls(state: AppState, controller: MusicController, current: Track, requested: Boolean, buffering: Boolean,
     modifier: Modifier, motion: PlayerMotion, visible: Boolean, artworkSwipe: PlayingArtworkSwipe,
-    onRepeatCount: () -> Unit, onQueue: () -> Unit, onOutput: () -> Unit, onVisualizer: () -> Unit, onAudioEffects: () -> Unit, onPlaybackSettings: () -> Unit) {
+    onRepeatCount: () -> Unit, onQueue: () -> Unit, onTitle: () -> Unit, onOutput: () -> Unit, onVisualizer: () -> Unit, onAudioEffects: () -> Unit, onPlaybackSettings: () -> Unit) {
     var seeking by remember(state.playback.entryId) { mutableStateOf<Float?>(null) }
     var seekRequest by remember(state.playback.entryId) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -748,7 +761,7 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
     val controlsScroll = rememberScrollState()
     Column(modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(controlsScroll, enabled = controlsScroll.maxValue > 0), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe)
+        PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe, onTitle)
         Column(Modifier.fillMaxWidth()) {
             val playbackPosition = stringResource(Res.string.player_playback_position)
             Slider(value = (seeking ?: positionMs.toFloat()).coerceIn(0f, duration), valueRange = 0f..duration, colors = sliderColors,

@@ -174,7 +174,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                             }
                             if (category == SearchType.SONGS) itemsIndexed(results.songs.take(limit), key = { _, song -> "song:${song.id}" }) { index, song ->
                                 TrackRow(song, controller, songIds, index, selectionMode = selection.active, selected = song.id in selection.selectedIds,
-                                    onSelect = { selection.toggle(song.id, songIds) }, contextName = "Search")
+                                    onSelect = { selection.toggle(song.id, songIds, QueueOrigin(LibraryTab.SONGS)) }, contextName = "Search")
                             } else items(collections.take(limit), key = { "${category.name}:${it.id}" }) { collection ->
                                 val tab = requireNotNull(category.tab)
                                 val (openText, optionsText) = category.collectionDescriptions()

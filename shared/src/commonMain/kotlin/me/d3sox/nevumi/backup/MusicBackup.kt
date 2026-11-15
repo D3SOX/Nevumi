@@ -100,6 +100,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             // A queue played from a local folder is named after its path, which device sync also replaces.
             val folder = saved.snapshot.origin?.tab == LibraryTab.FOLDERS || isDeviceFolder(saved.snapshot.contextName)
             BackupSavedQueue(saved.name, saved.snapshot.copy(selectedSavedQueueId = null, origin = null,
+                entries = saved.snapshot.entries.map { it.copy(origin = null) },
                 contextName = if (folder) "Library" else saved.snapshot.contextName), saved.kind, saved.capturedAt)
         } else emptyList()
         val listens = if (BackupSection.LISTENING_HISTORY in sections) listened.map { it.copy(importedAt = null, metadata = it.metadata.copy(folder = "")) } else emptyList()
@@ -217,7 +218,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         var savedQueues = 0
         val existingQueues = queue.saved()
         for (backup in document.savedQueues) {
-            val entries = backup.snapshot.entries.mapNotNull { entry -> localId(entry.trackId)?.let { entry.copy(trackId = it) } }
+            val entries = backup.snapshot.entries.mapNotNull { entry -> localId(entry.trackId)?.let { entry.copy(trackId = it, origin = null) } }
             // An edited or damaged file may repeat entry IDs, which the queue screens use as keys.
             if (entries.isEmpty() || backup.name.isBlank() || entries.distinctBy { it.id }.size != entries.size) continue
             val ids = entries.map { it.id }.toSet()
@@ -231,7 +232,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             val kind = if (backup.kind == SavedQueueKind.RECOVERY) SavedQueueKind.SNAPSHOT else backup.kind
             // Only an identical saved queue counts as restored; its position, sections and order matter as much as its songs.
             if (existingQueues.any { saved -> saved.name == backup.name.trim() && saved.kind == kind &&
-                    saved.snapshot.copy(origin = null, selectedSavedQueueId = null) == restored }) continue
+                    saved.snapshot.copy(origin = null, selectedSavedQueueId = null, entries = saved.snapshot.entries.map { it.copy(origin = null) }) == restored }) continue
             queue.addSaved(backup.name, restored, kind, backup.capturedAt)
             savedQueues++
         }

@@ -116,11 +116,12 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     }
     // A YouTube Music page picked outside search, such as the playing song's artist or album, opens above the search page.
     var youTubePage by remember { mutableStateOf<me.d3sox.nevumi.youtube.YouTubeCollection?>(null) }
-    val openYouTubeLinkedPage = rememberYouTubeLinkedPageOpener(controller) { linked ->
-        youTubePage = linked
+    fun openYouTubePage(collection: me.d3sox.nevumi.youtube.YouTubeCollection) {
+        youTubePage = collection
         page = AppPage.SEARCH
         scope.launch { playerSheet.animateTo(PlayerPanel.MINI, spring()) }
     }
+    val openYouTubeLinkedPage = rememberYouTubeLinkedPageOpener(controller, ::openYouTubePage)
     val cover = if (state.preferences.colors == ColorMode.ARTWORK) rememberArtwork(state.artwork[state.playback.trackId]) else null
     val artworkColor by produceState<Color?>(null, cover) {
         value = if (cover == null) null else withContext(Dispatchers.Default) { cover.themeColor(Color(0xFF6750A4)) }
@@ -132,7 +133,9 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         LocalOpenYouTubeLinkedPage provides openYouTubeLinkedPage,
         LocalOpenSettings provides { page = AppPage.SETTINGS },
         LocalLibraryFocusHandled provides { libraryDestination = libraryDestination?.copy(trackId = null) },
-        LocalPlayingContextNavigate provides { origin, track -> openLibrary(origin.tab, origin.collectionId, track) }) {
+        LocalPlayingContextNavigate provides { origin, track ->
+            origin.youTube?.let(::openYouTubePage) ?: openLibrary(origin.tab, origin.collectionId, track)
+        }) {
     MusicTheme(state.preferences, artworkColor) {
         val messages = remember { SnackbarHostState() }
         fun openNotice(destination: ActionDestination) {
