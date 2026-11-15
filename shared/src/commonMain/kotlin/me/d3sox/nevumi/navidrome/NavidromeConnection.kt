@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.math.abs
+import kotlin.uuid.Uuid
 
 /**
  * Source IDs, playlist links and the other server data embed [serverId]. A server whose address changed keeps the ID of its
@@ -58,8 +59,15 @@ class NavidromeConnection(private val store: MusicStore, private val http: HttpC
         probe.ping()
         // A new address of the same server and account keeps its identity; another server or account starts a new one.
         val fresh = ServerProfile(address, credentials.username)
-        val previous = profile()?.takeIf { it.username == credentials.username && it.serverId != fresh.serverId }
-        val identity = previous?.serverId?.takeIf { previous.baseUrl == address || servesSongsOf(probe, it) }
+        val previous = profile()?.takeIf { it.username == credentials.username }
+        val identity = when {
+            previous == null -> null
+            previous.baseUrl == address -> previous.identity
+            servesSongsOf(probe, previous.serverId) -> previous.serverId
+            // The previous server kept the identity this address would get, so another server here needs its own.
+            previous.serverId == fresh.serverId -> "$address\u0000${credentials.username}\u0000${Uuid.random()}".encodeUtf8().sha256().hex()
+            else -> null
+        }?.takeIf { it != fresh.serverId }
         val profile = fresh.copy(identity = identity)
         val client = NavidromeClient(http, address, credentials, requestUrl, identity = identity)
         vault.save("navidrome", credentials.password)

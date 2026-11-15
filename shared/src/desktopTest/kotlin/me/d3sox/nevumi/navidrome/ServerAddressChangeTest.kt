@@ -23,13 +23,17 @@ class ServerAddressChangeTest {
     // Another server that numbers its songs the same way, as servers with sequential IDs do.
     private val otherSongs = listOf("a1" to "Morning Tide", "a2" to "Far Away", "a3" to "Dawn")
 
+    // Another server takes over the first address after the original one moved away.
+    @Volatile private var replacedFirstAddress = false
+
     private fun song(id: String, title: String) = """{"id":"$id","title":"$title","duration":200,"starred":"2024-01-01T00:00:00Z","userRating":4}"""
 
     private val http = HttpClient(MockEngine { request ->
-        val songs = when (request.url.host) {
-            "other.example.test" -> otherSongs
+        val host = request.url.host
+        val songs = when {
+            host == "other.example.test" || host == "192.168.1.5" && replacedFirstAddress -> otherSongs
             // Shares most songs with the first server but answers one of its IDs with another song.
-            "mixed.example.test" -> ownSongs.take(2) + otherSongs.last()
+            host == "mixed.example.test" -> ownSongs.take(2) + otherSongs.last()
             else -> ownSongs
         }
         val body = when (request.url.encodedPath) {
@@ -109,6 +113,25 @@ class ServerAddressChangeTest {
             NavidromeChanges(store, library, client = connection::client).refreshLibrary(requireNotNull(connection.client()))
             val serverId = requireNotNull(connection.profile()).serverId
             connection.connect("https://mixed.example.test", ServerCredentials("fixture", "test"))
+            assertNotEquals(serverId, connection.client()?.serverId)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun anotherServerAtTheAddressAMovedServerLeftGetsItsOwnIdentity() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-server-reused-address")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val connection = NavidromeConnection(store, http, vault)
+            val credentials = ServerCredentials("fixture", "test")
+            connection.connect("http://192.168.1.5:4533", credentials)
+            NavidromeChanges(store, library, client = connection::client).refreshLibrary(requireNotNull(connection.client()))
+            val serverId = requireNotNull(connection.profile()).serverId
+            connection.connect("https://music.example.test", credentials)
+            assertEquals(serverId, connection.client()?.serverId)
+            replacedFirstAddress = true
+            connection.connect("http://192.168.1.5:4533", credentials)
             assertNotEquals(serverId, connection.client()?.serverId)
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }

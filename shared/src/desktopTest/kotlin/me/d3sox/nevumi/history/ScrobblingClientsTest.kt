@@ -48,11 +48,11 @@ class ScrobblingClientsTest {
     }
 
     @Test
-    fun unavailableServicesAreRetriedAndGatewayTimeoutsStayUncertain() = runBlocking {
+    fun unavailableServicesAreRetriedAndGatewayFailuresStayUncertain() = runBlocking {
         var status = HttpStatusCode.BadGateway
         val http = HttpClient(MockEngine { respond("<html>Bad gateway</html>", status) })
         try {
-            for ((code, expected) in listOf(HttpStatusCode.BadGateway to ScrobbleFailure.RETRYABLE,
+            for ((code, expected) in listOf(HttpStatusCode.BadGateway to ScrobbleFailure.UNCERTAIN,
                 HttpStatusCode.ServiceUnavailable to ScrobbleFailure.RETRYABLE, HttpStatusCode.GatewayTimeout to ScrobbleFailure.UNCERTAIN,
                 HttpStatusCode.InternalServerError to ScrobbleFailure.UNCERTAIN)) {
                 status = code

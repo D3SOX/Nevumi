@@ -153,11 +153,12 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     override fun updateQueue(tracks: List<PlayableTrack>) = command {
         this.tracks = tracks.toList()
         if (outgoing != null && tracks.none { it.entryId == outgoing?.status?.value?.entryId }) cancelFade()
+        // A removed song may never be reported, and waiting for it would stop crossfades until the next load. Clearing it first
+        // keeps the song the decoder still plays.
+        if (tracks.none { it.entryId == loadingEntry }) loadingEntry = null
         val index = currentIndex()
         if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
         else active.updateQueue(emptyList())
-        // A removed song may never be reported, and waiting for it would stop crossfades until the next load.
-        if (tracks.none { it.entryId == loadingEntry }) loadingEntry = null
         // A finished download or a new server route changes the next song's source, so the standby player loads it again.
         if (prepared != nextTrack()) { standby?.pause(); prepared = null }
         applyRepeat()
@@ -237,7 +238,13 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
 
     private fun currentIndex(): Int = tracks.indexOfFirst { it.entryId == (loadingEntry ?: active.status.value.entryId ?: selectedEntry) }
 
-    private fun loadNext(next: PlayableTrack) { selectedEntry = next.entryId; loadingEntry = next.entryId; active.load(next) }
+    private fun loadNext(next: PlayableTrack) {
+        val previous = selectedEntry
+        selectedEntry = next.entryId
+        loadingEntry = next.entryId
+        // The decoder keeps the old song when it cannot load, so a later tick can try again.
+        try { active.load(next) } catch (failure: Exception) { selectedEntry = previous; loadingEntry = null; throw failure }
+    }
 
     private fun nextTrack(): PlayableTrack? {
         if (repeatMode == RepeatMode.ONE) return null

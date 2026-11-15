@@ -195,10 +195,12 @@ class CrossfadeQueueTest {
         val loads = CopyOnWriteArrayList<String>()
         val updates = CopyOnWriteArrayList<List<String>>()
         @Volatile var effectsFailure: Exception? = null
+        @Volatile var loadFailure: Exception? = null
         override val status = MutableStateFlow(PlaybackStatus())
         fun flush() { while (true) (posted.poll() ?: return)() }
         override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
         override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
+            loadFailure?.let { throw it }
             val track = tracks[startIndex]
             loads += track.entryId
             posted += { status.update { it.copy(trackId = track.id, entryId = track.entryId, durationMs = 10_000, positionMs = positionMs,
@@ -268,6 +270,43 @@ class CrossfadeQueueTest {
             decoder.status.update { it.copy(positionMs = 10_000, playing = false, ended = true) }
             withTimeout(2_000) { while (decoder.loads.size < 2) delay(10) }
             delay(300)
+            assertEquals(listOf("entry-1", "entry-2"), decoder.loads)
+        } finally { engine.close() }
+    }
+
+    @Test fun removingTheSongThatIsStillLoadingKeepsTheSongTheDecoderPlays() = runBlocking {
+        val decoder = PostedEngine()
+        val engine = CrossfadePlaybackEngine { decoder }
+        try {
+            val tracks = (1..3).map { PlayableTrack("song", audio, entryId = "entry-$it") }
+            engine.setGaplessPlayback(false)
+            engine.loadQueue(tracks)
+            engine.setAudioEffects(AudioEffects())
+            decoder.flush()
+            decoder.status.update { it.copy(positionMs = 10_000, playing = false, ended = true) }
+            withTimeout(2_000) { while (decoder.loads.size < 2) delay(10) }
+            // The decoder has not reported the next song yet when the user removes it.
+            engine.updateQueue(tracks - tracks[1])
+            engine.setAudioEffects(AudioEffects())
+            assertEquals(listOf("entry-1"), decoder.updates.last())
+        } finally { engine.close() }
+    }
+
+    @Test fun aFailedLoadOfTheNextSongIsTriedAgain() = runBlocking {
+        val decoders = CopyOnWriteArrayList<PostedEngine>()
+        val engine = CrossfadePlaybackEngine { PostedEngine().also { decoders += it } }
+        try {
+            val tracks = (1..2).map { PlayableTrack("song", audio, entryId = "entry-$it") }
+            engine.setCrossfadeDuration(1_000)
+            engine.loadQueue(tracks)
+            engine.setAudioEffects(AudioEffects())
+            val decoder = decoders.first()
+            decoder.flush()
+            decoder.loadFailure = IllegalStateException("The decoder is unavailable")
+            decoder.status.update { it.copy(positionMs = 10_000, playing = false, ended = true) }
+            delay(300)
+            decoder.loadFailure = null
+            withTimeout(2_000) { while (decoder.loads.size < 2) delay(10) }
             assertEquals(listOf("entry-1", "entry-2"), decoder.loads)
         } finally { engine.close() }
     }

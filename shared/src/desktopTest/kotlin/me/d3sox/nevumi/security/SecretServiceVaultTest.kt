@@ -20,10 +20,11 @@ class SecretServiceVaultTest {
 
     @AfterTest fun cleanUp() { directory.toFile().deleteRecursively() }
 
-    /** A stand-in for secret-tool that logs its action and runs [lookup] for lookups. */
-    private fun vault(lookup: String): SecretServiceVault {
+    /** A stand-in for secret-tool that logs its action and runs [lookup] for lookups and [search] for searches. */
+    private fun vault(lookup: String, search: String = "exit 1"): SecretServiceVault {
         val script = directory.resolve("secret-tool")
-        script.writeText("#!/bin/sh\necho \"$1\" >> '$calls'\nif [ \"$1\" = lookup ]; then\n$lookup\nfi\ncat > /dev/null\nexit 0\n")
+        script.writeText("#!/bin/sh\necho \"$1\" >> '$calls'\nif [ \"$1\" = lookup ]; then\n$lookup\nfi\n" +
+            "if [ \"$1\" = search ]; then\n$search\nfi\ncat > /dev/null\nexit 0\n")
         script.toFile().setExecutable(true)
         return SecretServiceVault("me.d3sox.nevumi.tests", command = script.toString())
     }
@@ -45,6 +46,15 @@ class SecretServiceVaultTest {
         val vault = vault("echo 'secret-tool: Cannot create an item in a locked collection' >&2; exit 1")
         assertFailsWith<IllegalStateException> { vault.read("server") }
         // The sync identity must stay as it is when the keyring cannot be read; a new one would end every pairing.
+        assertFailsWith<IllegalStateException> { SyncTls.load(vault, "11111111-1111-4111-8111-111111111111") }
+        assertFalse("store" in calls.lines())
+    }
+
+    @Test
+    fun aSecretInALockedKeyringIsNotReadAsMissing() = runBlocking {
+        // A dismissed unlock prompt ends the lookup without a message, while a search without unlocking still lists the item.
+        val vault = vault("exit 1", search = "printf '[/org/freedesktop/secrets/collection/login/1]\\nlabel = Nevumi\\n'; exit 0")
+        assertFailsWith<IllegalStateException> { vault.read("server") }
         assertFailsWith<IllegalStateException> { SyncTls.load(vault, "11111111-1111-4111-8111-111111111111") }
         assertFalse("store" in calls.lines())
     }

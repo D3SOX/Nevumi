@@ -82,16 +82,16 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
             val event = session.listen
             val updated = event.copy(listenedMs = event.listenedMs + heard, playedMs = event.playedMs + (heard * speed).toLong(),
                 durationMs = current.durationMs.takeIf { it > 0 } ?: event.durationMs, ended = current.ended)
-            session.listen = updated
             // Every write wakes every history reader (statistics, smart playlists, Home, scrobbling), so a running listen is only
             // checkpointed once a minute; starting, pausing, qualifying as a play or for scrobbling and ending still save it at once,
             // so the app being stopped meanwhile cannot lose a scrobble.
             if (current.ended || session.previous.playing != current.playing || updated.qualified != event.qualified ||
                 scrobbling != null && updated.qualifiesForScrobbling(scrobbling) != event.qualifiesForScrobbling(scrobbling) ||
                 now - session.writtenAt >= RUNNING_CHECKPOINT_MS) {
+                // A failed write keeps the last saved listen, so the next update still sees the change and saves it again.
                 session.listen = persist(updated)
                 session.writtenAt = now
-            }
+            } else session.listen = updated
             session.previous = current
             session.observedAt = now
             if (current.ended) sessions.remove(id)

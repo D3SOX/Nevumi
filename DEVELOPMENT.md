@@ -2,7 +2,7 @@
 
 ## Build and test
 
-Install JDK 21, Python 3.11 or newer for the scripts, the Go version in `native/tailscale/go.mod`, the Android SDK packages in `scripts/android-sdk-packages`. Linux also needs CMake, Ninja, SDL2 and OpenGL development files, mpv and its development library, FFmpeg, libsecret and PulseAudio client tools. Running or packaging the desktop app also needs JDK 25, which distributions bundle as their runtime. Android builds don't.
+Install JDK 21, Python 3.11 or newer for the scripts (3.12 or newer for the F-Droid tooling in `scripts/requirements.txt`), the Go version in `native/tailscale/go.mod`, the Android SDK packages in `scripts/android-sdk-packages`. Linux also needs CMake, Ninja, SDL2 and OpenGL development files, mpv and its development library, FFmpeg, libsecret and PulseAudio client tools. Running or packaging the desktop app also needs JDK 25, which distributions bundle as their runtime. Android builds don't.
 
 Set `JAVA_HOME` to JDK 21 and `ANDROID_HOME` to your Android SDK. Gradle detects installed toolchains or reads `JAVA_HOME_21_X64` and `JAVA_HOME_25_X64`.
 

@@ -268,11 +268,12 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         // A pass that wrote changes, or ran while something else changed them, runs once more before settling.
         // Smart playlists follow listening and the clock, which no record revision shows, so they are checked again after a while.
         if (result == PassResult.FINISHED && passInputs() == inputs) {
-            val downloads = AudioDownloads(store, library, null, directory, availableSpace)
             settled = Settled(inputs,
                 timeSource.markNow().takeIf { store.list<Playlist>("playlists").any { it.autoDownload && it.rule != null } }
                     ?.plus(SMART_PLAYLIST_CHECKS),
-                store.list<DownloadRecord>("downloads").filter(downloads::waitingForSpace).mapTo(HashSet()) { it.trackId })
+                // Every download that ran out of space, also one whose space was freed during the pass, so the next check sees it.
+                store.list<DownloadRecord>("downloads").filter { it.status == DownloadStatus.FAILED && it.problem == DownloadProblem.INSUFFICIENT_SPACE }
+                    .mapTo(HashSet()) { it.trackId })
         }
     }
 

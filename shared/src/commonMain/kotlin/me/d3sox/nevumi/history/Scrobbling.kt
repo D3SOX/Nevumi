@@ -334,7 +334,9 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
                 when (profile.service) {
                     ScrobblingService.LISTENBRAINZ -> ListenBrainzClient(http, token, profile.baseUrl).nowPlaying(listen)
                     ScrobblingService.LASTFM -> {
-                        val credentials = store.json.decodeFromString<LastFmCredentials>(token)
+                        // Unreadable credentials are left to the submission pass, which asks for a new sign-in.
+                        val credentials = try { store.json.decodeFromString<LastFmCredentials>(token) }
+                            catch (_: SerializationException) { nowPlayingRetryAt[profile.id] = now() + 30_000; continue }
                         LastFmClient(http, credentials.apiKey, credentials.sharedSecret, credentials.sessionKey, profile.baseUrl).nowPlaying(listen)
                     }
                     ScrobblingService.NAVIDROME -> sendNavidrome(requireNotNull(connected), requireNotNull(songId), listen.startedAt, submission = false)
