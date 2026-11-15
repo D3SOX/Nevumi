@@ -64,6 +64,11 @@ class ServerDiscoveryTest {
         } finally { server.http.close() }
     }
 
+    @Test fun aBiographyDecodesEachEntityOnce() {
+        // An escaped entity, such as "&amp;lt;" for the text "&lt;", stays text instead of becoming a tag character.
+        assertEquals("Rock & Roll &lt;3 \"Live\" <b>", plainBiography("Rock &amp; Roll &amp;lt;3 &quot;Live&quot; &lt;b&gt;"))
+    }
+
     @Test fun anArtistTheSearchMissesIsFoundThroughOneOfTheirSongs() = runBlocking {
         val server = Server().discoveryResponses()
         server.responses["search3"] = ok(""","searchResult3":{"artist":[{"id":"ar-other","name":"Someone Else"}]}""")
