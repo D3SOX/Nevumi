@@ -174,9 +174,11 @@ class NavidromeClient(
     private val idleTimeoutMillis: Long = 30_000,
     private val requestDeadlineMillis: Long = 5 * 60_000,
     private val retryDelaysMillis: List<Long> = listOf(2_000, 8_000),
+    /** The [ServerProfile.identity] this server kept from an earlier address. */
+    identity: String? = null,
 ) {
     private val baseUrl = normalizeServerAddress(requestUrl)
-    val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username).serverId
+    val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username, identity).serverId
     val username: String get() = credentials.username
     private val nativeAccess = Mutex()
     private var nativeToken: String? = null
