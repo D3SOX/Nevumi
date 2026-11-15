@@ -170,7 +170,7 @@ jobs:
       - uses: ./.github/actions/apt-install
         with:
           packages: libzbar0
-      - run: python3 -m venv .test-environment/fdroid-env && .test-environment/fdroid-env/bin/pip install -r scripts/requirements.txt
+      - run: python3 -m venv .test-environment/fdroid-env && .test-environment/fdroid-env/bin/pip install --require-hashes -r scripts/requirements.txt
       - name: Create the signed F-Droid repository
         env:
           NEVUMI_FDROID_KEYSTORE_BASE64: ${{ secrets.MANIDA_FDROID_KEYSTORE_BASE64 }}
