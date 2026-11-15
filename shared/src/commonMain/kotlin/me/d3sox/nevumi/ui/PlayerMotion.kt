@@ -30,8 +30,6 @@ import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.next_track
-import me.d3sox.nevumi.resources.pause
-import me.d3sox.nevumi.resources.play
 import me.d3sox.nevumi.resources.previous_track
 import me.d3sox.nevumi.resources.unknown_artist
 import org.jetbrains.compose.resources.stringResource
@@ -91,7 +89,7 @@ internal fun PlayerMotionGlow(motion: PlayerMotion, path: String?, expansion: Fl
 }
 
 @Composable
-internal fun PlayerMotionElements(motion: PlayerMotion, state: AppState, controller: MusicController, track: Track,
+internal fun PlayerMotionElements(motion: PlayerMotion, state: AppState, controller: MusicController, track: Track, buffering: Boolean,
     expansion: Float, queueProgress: Float, drag: Modifier, artworkSwipe: PlayingArtworkSwipe, artworkModifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val requested = state.playback.playWhenReady && !state.playback.ended && state.playback.error == null
@@ -134,8 +132,7 @@ internal fun PlayerMotionElements(motion: PlayerMotion, state: AppState, control
                     PlayerElement.NEXT -> AppIconButton(AppIcon.NEXT, stringResource(Res.string.next_track), Modifier.fillMaxSize()) { controller.skip(1) }
                     else -> FilledIconButton(onClick = { controller.togglePlayback() }, modifier = Modifier.fillMaxSize(), shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-                        Icon((if (requested) AppIcon.PAUSE else AppIcon.PLAY).vector, stringResource(if (requested) Res.string.pause else Res.string.play),
-                            Modifier.size((24 + 12 * expansion * (1 - queueProgress)).dp))
+                        PlayPauseIcon(requested, buffering, (24 + 12 * expansion * (1 - queueProgress)).dp)
                     }
                 }
             }

@@ -4,7 +4,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import com.sun.net.httpserver.HttpServer
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,6 +18,8 @@ import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.math.PI
+import kotlin.math.sin
 
 class LinuxPlaybackTest {
     @Test
@@ -322,6 +330,53 @@ class LinuxPlaybackTest {
 
             assertEquals(Triple("flac-fixture", 3_000L, false),
                 Triple(playing.trackId, sought.durationMs, engine.status.value.playing))
+        }
+    }
+
+    @Test
+    fun advancingToAStalledStreamReportsBufferingInsteadOfPlaying() = runBlocking {
+        // Ten seconds of a mono 16-bit sine; the server sends one and stalls, so mpv is still opening the stream.
+        val rate = 44_100
+        val samples = rate * 10
+        val audio = java.nio.ByteBuffer.allocate(44 + samples * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray()).putInt(36 + samples * 2).put("WAVEfmt ".toByteArray()).putInt(16).putShort(1).putShort(1)
+                .putInt(rate).putInt(rate * 2).putShort(2).putShort(16).put("data".toByteArray()).putInt(samples * 2)
+            repeat(samples) { putShort((sin(2 * PI * 440 * it / rate) * 8_000).toInt().toShort()) }
+        }.array()
+        val sent = 44 + rate * 2
+        val release = CountDownLatch(1)
+        val server = HttpServer.create(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0).apply {
+            executor = Executors.newCachedThreadPool()
+            createContext("/song.wav") { exchange ->
+                exchange.responseHeaders.add("Content-Type", "audio/wav")
+                exchange.sendResponseHeaders(200, audio.size.toLong())
+                exchange.responseBody.use { body ->
+                    body.write(audio, 0, sent)
+                    body.flush()
+                    release.await(20, TimeUnit.SECONDS)
+                    body.write(audio, sent, audio.size - sent)
+                }
+            }
+            start()
+        }
+        try {
+            MpvPlaybackEngine("null").use { engine ->
+                val local = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac").toString()
+                engine.loadQueue(listOf(PlayableTrack("local", local, entryId = "local"),
+                    PlayableTrack("stream", "http://127.0.0.1:${server.address.port}/song.wav", entryId = "stream")), positionMs = 2_700)
+                withTimeout(5_000) { engine.status.first { it.entryId == "stream" } }
+                delay(500)
+                val opening = engine.status.value
+                assertEquals(listOf("stream", true, false, null), listOf(opening.entryId, opening.playWhenReady, opening.playing, opening.error),
+                    "A stream that is still opening must not report playing: $opening")
+                release.countDown()
+                withTimeout(10_000) { engine.status.first { it.entryId == "stream" && it.playing && it.positionMs > 100 } }
+                Unit
+            }
+        } finally {
+            release.countDown()
+            server.stop(0)
+            (server.executor as java.util.concurrent.ExecutorService).shutdownNow()
         }
     }
 }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.app.playRequested
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.next_track
 import me.d3sox.nevumi.resources.pause
@@ -192,7 +193,7 @@ class LinuxTrayIcon(private val controller: MusicController, icon: BufferedImage
     override fun close() { registered = false; scope.cancel(); connection.close() }
 
     /** What the menu shows; a change makes tray hosts load it again. */
-    private fun menuState(state: AppState) = listOf(state.playback.playing, state.playback.trackId != null,
+    private fun menuState(state: AppState) = listOf(state.playback.playRequested, state.playback.trackId != null,
         state.queue.currentIndex > 0 || (state.queue.currentIndex >= 0 && state.queue.repeatMode == RepeatMode.ALL),
         state.queue.currentIndex >= 0 && (state.queue.currentIndex < state.queue.entries.lastIndex || state.queue.repeatMode == RepeatMode.ALL))
 
