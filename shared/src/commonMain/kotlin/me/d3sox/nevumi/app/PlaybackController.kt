@@ -190,7 +190,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
                     if (track?.sources?.any { it.id == playback.sourceId && it.kind == SourceKind.SERVER } == true)
                         offline.request(listOf(track.id), owner = null)
                 }
-                listeningHistory?.record(playback, enabled = context.state.value.preferences.recordListeningHistory)
+                val preferences = context.state.value.preferences
+                listeningHistory?.record(playback, enabled = preferences.recordListeningHistory, scrobbling = preferences)
                 scrobbling?.onPlayback(playback)
                 context.update { it.copy(playback = playback, queue = snapshot,
                     error = if (playback.error != null && !recovered) playback.error else it.error) }

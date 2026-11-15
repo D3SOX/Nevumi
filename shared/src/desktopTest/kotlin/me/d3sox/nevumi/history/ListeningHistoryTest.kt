@@ -179,6 +179,30 @@ class ListeningHistoryTest {
     }
 
     @Test
+    fun aListenIsSavedAsSoonAsItCrossesALowScrobblingThreshold() = runBlocking {
+        val directory = Files.createTempDirectory("listening-history-scrobble-threshold")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val track = library.importTrack(TrackMetadata("Song", "Artist", durationMs = 200_000), TrackSource("local", SourceKind.LOCAL, "song.flac"))
+            var elapsed = 0L
+            val history = ListeningHistory(store, library, wallClock = { 1_000 }, elapsedClock = { elapsed })
+            val settings = me.d3sox.nevumi.settings.MusicSettings(scrobblePercent = 20)
+            val playing = PlaybackStatus(track.id, playing = true, durationMs = 200_000, playbackId = "play")
+            history.record(playing, scrobbling = settings)
+            elapsed = 39_000
+            history.record(playing, scrobbling = settings)
+            assertEquals(0, history.all().single().playedMs, "A running listen is only checkpointed once a minute")
+            elapsed = 40_000
+            history.record(playing, scrobbling = settings)
+            // The app may be stopped before the next checkpoint, so the qualifying listen must already be saved.
+            val saved = ListeningHistory(store, library).all().single()
+            assertEquals(40_000, saved.playedMs)
+            assertTrue(saved.qualifiesForScrobbling(settings))
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun seeksAndPausedTimeDoNotInflateListeningAndTheHistorySurvivesRestart() = runBlocking {
         val directory = Files.createTempDirectory("listening-history")
         val database = directory.resolve("library.db").toString()

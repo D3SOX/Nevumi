@@ -4,6 +4,7 @@ import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.playback.PlaybackStatus
+import me.d3sox.nevumi.settings.MusicSettings
 import me.d3sox.nevumi.storage.MusicStore
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -67,7 +68,8 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
         var observedAt: Long, var writtenAt: Long)
     private val sessions = mutableMapOf<String, Recording>()
 
-    suspend fun record(playback: PlaybackStatus, enabled: Boolean = true) = recording.withLock {
+    /** [scrobbling] holds the scrobbling threshold, so a listen that crosses it is saved at once. */
+    suspend fun record(playback: PlaybackStatus, enabled: Boolean = true, scrobbling: MusicSettings? = null) = recording.withLock {
         val now = elapsedClock()
         val observed = listOfNotNull(playback.copy(fadingOut = null), playback.fadingOut?.copy(fadingOut = null))
             .filter { it.playbackId != null && it.trackId != null }.distinctBy { it.playbackId }
@@ -82,8 +84,10 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
                 durationMs = current.durationMs.takeIf { it > 0 } ?: event.durationMs, ended = current.ended)
             session.listen = updated
             // Every write wakes every history reader (statistics, smart playlists, Home, scrobbling), so a running listen is only
-            // checkpointed once a minute; starting, pausing, qualifying and ending still save it at once.
+            // checkpointed once a minute; starting, pausing, qualifying as a play or for scrobbling and ending still save it at once,
+            // so the app being stopped meanwhile cannot lose a scrobble.
             if (current.ended || session.previous.playing != current.playing || updated.qualified != event.qualified ||
+                scrobbling != null && updated.qualifiesForScrobbling(scrobbling) != event.qualifiesForScrobbling(scrobbling) ||
                 now - session.writtenAt >= RUNNING_CHECKPOINT_MS) {
                 session.listen = persist(updated)
                 session.writtenAt = now
