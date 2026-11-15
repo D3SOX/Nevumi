@@ -15,7 +15,8 @@ class DevelopmentPublicationTest(unittest.TestCase):
     def publish(self, **overrides):
         workflow = (ROOT / ".github/workflows/development.yml").read_text()
         step = workflow.split("- name: Publish the development prerelease\n", 1)[1]
-        script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        # The step ends where the next step of the job starts.
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1].split("\n      - ", 1)[0].split("\n      # ", 1)[0])
         with tempfile.TemporaryDirectory(prefix="nevumi-publication-") as temporary:
             directory = Path(temporary)
             (directory / "development").mkdir()
@@ -110,6 +111,35 @@ elif arguments[:2] == ['release', 'upload'] and os.environ.get('ADVANCE_ON_UPLOA
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(3, calls.count("gh release verify-asset development-123"))
         self.assertNotIn("gh release upload", calls)
+
+
+class DevelopmentPruningTest(unittest.TestCase):
+    def test_only_the_ten_newest_development_prereleases_remain(self):
+        workflow = (ROOT / ".github/workflows/development.yml").read_text()
+        step = workflow.split("- name: Prune old development prereleases\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1].split("\n      - ", 1)[0])
+        with tempfile.TemporaryDirectory(prefix="nevumi-pruning-") as temporary:
+            directory = Path(temporary)
+            # gh applies the --jq filter itself, so the stub prints its tab-separated result in API order.
+            releases = "".join(f"2026-10-{day:02d}T00:00:00Z\\tdevelopment-{day}\\n" for day in [5, 12, 1, 9, 3, 11, 2, 8, 7, 4, 10, 6])
+            (directory / "gh").write_text(f"""#!{sys.executable}
+import os, sys
+if sys.argv[1] == 'api':
+    sys.stdout.write("{releases}")
+else:
+    with open(os.environ['CALLS'], 'a') as log:
+        log.write(' '.join(sys.argv[1:]) + '\\n')
+""")
+            (directory / "gh").chmod(0o755)
+            calls = directory / "calls"
+            calls.touch()
+            environment = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ["PATH"],
+                               GH_REPO="example/nevumi", CALLS=str(calls))
+            result = subprocess.run(["bash", "-c", script], cwd=directory, env=environment,
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(["release delete development-2 --yes --cleanup-tag",
+                              "release delete development-1 --yes --cleanup-tag"], calls.read_text().splitlines())
 
 
 if __name__ == "__main__":

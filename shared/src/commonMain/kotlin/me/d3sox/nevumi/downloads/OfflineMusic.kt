@@ -24,6 +24,10 @@ import kotlin.concurrent.Volatile
 import me.d3sox.nevumi.queue.PlaybackQueue
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 @Serializable
 internal data class OfflineRequest(val trackId: String)
@@ -37,7 +41,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     private val availableSpace: (String) -> Long = ::downloadUsableSpace,
     private val sourceAccessible: (String) -> Boolean = FileAudioAccess::available,
     // Runs [runPending] on the platform's schedule. New work needs a pass soon; other calls only check that one is due.
-    private val scheduleWork: ((userInitiated: Boolean, newWork: Boolean) -> Unit)? = null) : AutoCloseable {
+    private val scheduleWork: ((userInitiated: Boolean, newWork: Boolean) -> Unit)? = null,
+    private val timeSource: TimeSource = TimeSource.Monotonic) : AutoCloseable {
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.IO)
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -53,8 +58,15 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     private val refreshing = Mutex()
     @Volatile private var processing: Deferred<Unit>? = null
     @Volatile private var changingLibrary = false
-    // Record revisions and protected songs after a pass that left nothing to download; while both stay the same, another pass would only repeat it.
-    @Volatile private var settled: Pair<List<RecordRevision>, Set<String>>? = null
+    // What the last pass that left nothing to download read; while it stays the same, another pass would only repeat it.
+    @Volatile private var settled: Settled? = null
+    // Passes in a row that failed and completed no download; each one doubles the wait before the next automatic pass.
+    @Volatile private var fruitlessPasses = 0
+    /** How long the worker waits for a change before its next automatic pass, from 30 seconds up to 32 minutes. */
+    internal val nextPassDelay get() = 30.seconds * (1 shl fruitlessPasses.coerceAtMost(6))
+    /** Whether the last pass left downloads that another attempt soon could complete, such as after a connection failure. */
+    @Volatile var awaitingRetry = false
+        private set
 
     init {
         scope.launch {
@@ -82,7 +94,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             refresh()
             wake.trySend(Unit)
             while (isActive) {
-                withTimeoutOrNull(30_000) { wake.receive() }
+                withTimeoutOrNull(nextPassDelay) { wake.receive() }
                 try {
                     // A settled pass has nothing to do until a pass input changes, so no platform job is scheduled for it.
                     if (scheduleWork == null) runPending() else if (!settledNow()) scheduleWork.invoke(false, false)
@@ -100,6 +112,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
             try { task.start(); task.await() }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
+                awaitingRetry = true
+                fruitlessPasses++
                 store.list<OfflineRequest>("offline-requests").forEach { request ->
                     if (library.findTrack(request.trackId)?.onDevice() == true) return@forEach
                     val previous = store.read<DownloadRecord>("download:${request.trackId}")
@@ -174,7 +188,11 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         }
     }
 
-    fun retry() { wake.trySend(Unit) }
+    fun retry() {
+        // Asking again also covers what a settled pass gave up on, such as songs the server lacked.
+        settled = null
+        wake.trySend(Unit)
+    }
 
     // The user asked for these downloads, so the platform may show the transfer and its progress.
     fun downloadPlaylists() {
@@ -229,24 +247,44 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     }
 
     /** Whether the last pass settled and nothing it reads has changed since. */
-    internal suspend fun settledNow(): Boolean =
-        settled != null && (store.database.records().revisions(PASS_INPUTS) to inUseTracks()) == settled
-
-    private suspend fun process() {
-        // The playing and current queue songs are kept out of cache eviction, so a change to them needs a pass too.
-        val inputs = store.database.records().revisions(PASS_INPUTS) to inUseTracks()
-        if (inputs == settled) return
-        settled = null
-        // A pass that wrote changes, or ran while something else changed them, runs once more before settling.
-        // Smart playlists follow listening and the clock, which no record revision shows, so they keep checking.
-        if (pass() && (store.database.records().revisions(PASS_INPUTS) to inUseTracks()) == inputs &&
-            store.list<Playlist>("playlists").none { it.autoDownload && it.rule != null }) settled = inputs
+    internal suspend fun settledNow(): Boolean {
+        val settled = settled ?: return false
+        val downloads = AudioDownloads(store, library, null, directory, availableSpace)
+        return settled.recheck?.hasPassedNow() != true && passInputs() == settled.inputs &&
+            settled.waitingForSpace.all { downloads.waitingForSpace(downloads.state(it)) }
     }
 
-    /** Returns whether every download the pass needed completed. Paused and offline passes only protect the cache, so they return false. */
-    private suspend fun pass(): Boolean {
+    // The playing and current queue songs are kept out of cache eviction, so a change to them needs a pass too.
+    private suspend fun passInputs() = store.database.records().revisions(PASS_INPUTS) to inUseTracks()
+
+    private suspend fun process() {
+        if (settledNow()) { awaitingRetry = false; return }
+        settled = null
+        val inputs = passInputs()
+        val before = completedDownloads()
+        val result = pass()
+        awaitingRetry = result == PassResult.RETRY
+        fruitlessPasses = if (result == PassResult.FINISHED || (completedDownloads() - before).isNotEmpty()) 0 else fruitlessPasses + 1
+        // A pass that wrote changes, or ran while something else changed them, runs once more before settling.
+        // Smart playlists follow listening and the clock, which no record revision shows, so they are checked again after a while.
+        if (result == PassResult.FINISHED && passInputs() == inputs) {
+            settled = Settled(inputs,
+                timeSource.markNow().takeIf { store.list<Playlist>("playlists").any { it.autoDownload && it.rule != null } }
+                    ?.plus(SMART_PLAYLIST_CHECKS),
+                // Every download that ran out of space, also one whose space was freed during the pass, so the next check sees it.
+                store.list<DownloadRecord>("downloads").filter { it.status == DownloadStatus.FAILED && it.problem == DownloadProblem.INSUFFICIENT_SPACE }
+                    .mapTo(HashSet()) { it.trackId })
+        }
+    }
+
+    private suspend fun completedDownloads() =
+        store.list<DownloadRecord>("downloads").filter { it.status == DownloadStatus.COMPLETE }.mapTo(HashSet()) { it.trackId }
+
+    /** Paused and offline passes only protect the cache. */
+    private suspend fun pass(): PassResult {
         dropDeviceFileDownloads()
-        val paused = preferences.load().downloadsPaused || !networkPermitted()
+        val downloadsPaused = preferences.load().downloadsPaused
+        val paused = downloadsPaused || !networkPermitted()
         val connection = if (paused) null else client()
         val downloads = AudioDownloads(store, library, connection, directory, availableSpace)
         downloads.removeUnusedFiles()
@@ -254,7 +292,8 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         if (paused || connection == null) {
             downloads.replacePlaylistPins(playlists.all(), excluded)
             downloads.enforceCacheBudget(preferences.load().cacheBytes, inUseTracks())
-            return false
+            // Without a music server nothing can download until one connects, which wakes the worker.
+            return if (downloadsPaused) PassResult.PAUSED else if (paused) PassResult.RETRY else PassResult.FINISHED
         }
         val requests = store.list<OfflineRequest>("offline-requests")
             .filterNot { it.trackId in excluded || library.findTrack(it.trackId)?.onDevice() == true }
@@ -269,20 +308,29 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
         for (request in requests) {
             currentCoroutineContext().ensureActive()
             val track = library.findTrack(request.trackId) ?: continue
+            if (downloads.waitingForSpace(downloads.state(track.id))) continue
             val source = track.sources.firstOrNull {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
             } ?: continue
-            // A song the server lacks can return without any library change, so the pass stays unsettled and asks again.
+            // A song the server lacks shows as failed and waits for a retry or a library change, such as the next server refresh.
             val song = (if (catalogue != null) catalogue[source.location]
                 else try { connection.song(source.location, releases) }
-                catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone }) ?: run { completed = false; continue }
+                catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone }) ?: run {
+                    val record = downloads.state(track.id)
+                    if (record?.status != DownloadStatus.FAILED || record.problem != null)
+                        store.put("download:${track.id}", "downloads", record?.copy(status = DownloadStatus.FAILED, problem = null)
+                            ?: DownloadRecord(track.id, DownloadStatus.FAILED))
+                    refresh()
+                    continue
+                }
             val complete = downloads.download(track.id, song)
-            if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}") else completed = false
+            if (complete.status == DownloadStatus.COMPLETE) store.database.records().delete("request:${track.id}")
+            else if (complete.retryable()) completed = false
             refresh()
         }
         if (!PlaylistDownloads(playlists, library, downloads, connection, sourceAccessible, ::catalogue).synchronize(excluded)) completed = false
         downloads.enforceCacheBudget(preferences.load().cacheBytes, inUseTracks())
-        return completed
+        return if (completed) PassResult.FINISHED else PassResult.RETRY
     }
 
     // A song whose server file is on the device needs no download; this also drops copies made before it was linked to that file.
@@ -314,9 +362,9 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     private suspend fun inUseTracks(): Set<String> =
         setOfNotNull(activeTrack.value, PlaybackQueue(store).snapshot().currentTrackId)
 
-    suspend fun enforceCacheBudget(bytes: Long) {
-        val connection = client()
-        AudioDownloads(store, library, connection, directory).enforceCacheBudget(bytes, inUseTracks())
+    /** Lets tests evict down to [bytes] without changing the saved cache size. */
+    internal suspend fun enforceCacheBudget(bytes: Long) {
+        transfers.withLock { AudioDownloads(store, library, null, directory).enforceCacheBudget(bytes, inUseTracks()) }
         refresh()
     }
 
@@ -328,6 +376,14 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     override fun close() { processing?.cancel(); supervisor.cancel() }
     suspend fun closeAndJoin() { val task = processing; close(); task?.join(); supervisor.join() }
 }
+
+/** How a pass ended: nothing left that another attempt soon could download, downloads paused, or worth retrying. */
+private enum class PassResult { FINISHED, PAUSED, RETRY }
+
+/** A settled pass's inputs, when a smart playlist needs another check, and the songs that wait for free space. */
+private class Settled(val inputs: Pair<List<RecordRevision>, Set<String>>, val recheck: TimeMark?, val waitingForSpace: Set<String>)
+
+private val SMART_PLAYLIST_CHECKS = 15.minutes
 
 // Everything a pass reads from the store to decide what to download, keep or evict.
 private val PASS_INPUTS = listOf("downloads", "offline-exclusions", "offline-requests", "pins", "playlists", "servers", "settings", "tracks")

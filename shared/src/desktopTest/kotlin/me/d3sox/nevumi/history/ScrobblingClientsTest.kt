@@ -48,6 +48,23 @@ class ScrobblingClientsTest {
     }
 
     @Test
+    fun unavailableServicesAreRetriedAndGatewayFailuresStayUncertain() = runBlocking {
+        var status = HttpStatusCode.BadGateway
+        val http = HttpClient(MockEngine { respond("<html>Bad gateway</html>", status) })
+        try {
+            for ((code, expected) in listOf(HttpStatusCode.BadGateway to ScrobbleFailure.UNCERTAIN,
+                HttpStatusCode.ServiceUnavailable to ScrobbleFailure.RETRYABLE, HttpStatusCode.GatewayTimeout to ScrobbleFailure.UNCERTAIN,
+                HttpStatusCode.InternalServerError to ScrobbleFailure.UNCERTAIN)) {
+                status = code
+                assertEquals(expected, assertFailsWith<ScrobbleException> { ListenBrainzClient(http, "fixture-token").submit(listen) }.failure, "$code")
+                assertEquals(expected, assertFailsWith<ScrobbleException> {
+                    LastFmClient(http, "fixture-key", "fixture-secret", "fixture-session").submit(listen)
+                }.failure, "$code")
+            }
+        } finally { http.close() }
+    }
+
+    @Test
     fun topArtistsAreReadForTheUserAndPeriodIncludingASingleArtistChart() = runBlocking {
         var payload = ""
         var form: Parameters? = null

@@ -36,8 +36,8 @@ internal fun parseArtistInfo(info: JsonObject) = ServerArtistInfo(
 
 /** Last.fm biographies end in an HTML "Read more" link; the link is shown separately, so only the text remains. */
 internal fun plainBiography(html: String) = html.replace(Regex("<a\\b[^>]*>.*?</a>", RegexOption.DOT_MATCHES_ALL), "")
-    .replace(Regex("<[^>]+>"), "").replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
-    .replace("&lt;", "<").replace("&gt;", ">").trim()
+    .replace(Regex("<[^>]+>"), "").replace("&quot;", "\"").replace("&#39;", "'")
+    .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").trim()
 
 /**
  * Asks the connected server for similar artists, top songs and similar songs. Every call returns null instead of throwing

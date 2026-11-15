@@ -118,8 +118,9 @@ class MusicBackupTest {
         val sftp = SftpConfiguration("server", 1, "Music", SftpProfile("music.test", 22, "nico", "/srv/music", "host-key-fingerprint"))
         store.put("sftp:profile:${sftp.id}", "sftp-profiles", sftp)
         vault.save(sftp.id, "sftp-private-key-secret")
-        store.put("soundcloud:profile", "soundcloud-settings", SoundCloudProfile("https://gate.test",
-            browserViewUrl = "https://gate.test/vnc?password=viewer-password-secret"))
+        // A profile from an earlier version, which saved the browser viewer's address and its password.
+        store.database.records().put("soundcloud:profile", "soundcloud-settings",
+            """{"baseUrl":"https://gate.test","browserViewUrl":"https://gate.test/vnc?password=viewer-password-secret"}""")
     }
 
     /** The same songs on another device, imported in another order so every track ID differs, without the missing song. */

@@ -356,8 +356,9 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         val current = snapshot()
         val entries = current.entries.filterNot { it.id == entryId }
         val removedCurrent = current.currentEntryId == entryId
-        val selected = if (removedCurrent)
-            entries.getOrNull(current.currentIndex.coerceAtMost(entries.lastIndex))?.id
+        // Removing the last song wraps to the first one under repeat-all, as skipping past it does.
+        val selected = if (removedCurrent) (entries.getOrNull(current.currentIndex)
+            ?: if (current.repeatMode == RepeatMode.ALL) entries.firstOrNull() else entries.lastOrNull())?.id
         else current.currentEntryId
         val finishedRepeat = removedCurrent && current.repeatPlays != null
         // Play after continues from the requested song before the removed one instead of starting again after the playing song.

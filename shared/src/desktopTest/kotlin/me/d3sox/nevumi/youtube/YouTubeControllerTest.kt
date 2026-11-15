@@ -4,6 +4,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.artwork.ArtworkLibrary
+import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.TrackMetadata
@@ -16,6 +18,7 @@ import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class YouTubeControllerTest {
     private object Source : YouTubeSource {
@@ -78,6 +81,39 @@ class YouTubeControllerTest {
             controller.playYouTube(listOf(YouTubeTrack("aaaaaaaaaaa", "Song A", "Other"), YouTubeTrack("bbbbbbbbbbb", "Song B", "Other")), 0, "Playlist",
                 request = tapped).join()
             assertEquals(listOf(chosen.id), controller.state.value.queue.entries.map { it.trackId })
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun startupDeletesYouTubeSongsThatNothingRefersToWithTheirCovers() = runBlocking {
+        val directory = Files.createTempDirectory("youtube-cleanup")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val artwork = ArtworkLibrary(directory.resolve("artwork").toString())
+        suspend fun video(id: String) = library.importTrack(TrackMetadata("Video $id"), TrackSource("youtube:$id", SourceKind.YOUTUBE, id))
+        val cover = java.io.ByteArrayOutputStream().also {
+            javax.imageio.ImageIO.write(java.awt.image.BufferedImage(8, 8, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", it)
+        }.toByteArray()
+        // Queueing a YouTube list kept a song for every video; this one left the queue again.
+        val unused = video("aaaaaaaaaaa").also { artwork.save(it.id, cover) }
+        val playlisted = video("bbbbbbbbbbb").also { artwork.save(it.id, cover) }
+        val favorite = video("ccccccccccc")
+        val local = library.importTrack(TrackMetadata("Local"), TrackSource("local:/music/local.flac", SourceKind.LOCAL, "/music/local.flac"))
+        Playlists(store).create("Mix", listOf(playlisted.id))
+        library.setFavorite(favorite.id, true)
+        // Any record that names a song keeps it, also of a kind the cleanup does not know.
+        val named = video("ddddddddddd")
+        store.database.records().put("elsewhere:1", "elsewhere", """{"trackId":"${named.id}"}""")
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), artwork = artwork)
+        try {
+            withTimeout(5_000) { controller.state.first { it.started } }
+            assertNull(library.trackForSource("youtube:aaaaaaaaaaa"))
+            assertNull(artwork.path(unused.id))
+            assertEquals(setOf(playlisted.id, favorite.id, named.id, local.id), library.tracks().map { it.id }.toSet())
+            assertEquals(true, artwork.path(playlisted.id) != null)
+            // Later songs wait for the next weekly cleanup.
+            val later = video("eeeeeeeeeee")
+            assertEquals(emptySet(), library.removeUnusedYouTubeTracks())
+            assertEquals(setOf(later.id), library.removeUnusedYouTubeTracks(System.currentTimeMillis() + 8 * 24 * 3_600_000L))
         } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 

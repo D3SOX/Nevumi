@@ -6,7 +6,7 @@ version="${version#v}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 export GNUPGHOME
 GNUPGHOME="$(mktemp -d)"
-cleanup() { gpgconf --kill gpg-agent; rm -rf -- "$GNUPGHOME"; }
+cleanup() { gpgconf --kill gpg-agent || true; rm -rf -- "$GNUPGHOME"; }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 printf '%s' "${NEVUMI_ARCH_SIGNING_KEY:?Configure the dedicated Arch signing key}" | gpg --batch --import

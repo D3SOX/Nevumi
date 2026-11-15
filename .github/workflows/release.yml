@@ -16,6 +16,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The version check compares versionCode with the previous release tag.
+          fetch-tags: true
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
@@ -24,7 +28,7 @@ jobs:
         with:
           go-version-file: native/tailscale/go.mod
           cache-dependency-path: native/tailscale/go.sum
-      - run: python3 scripts/check-release-version.py "$GITHUB_REF_NAME"
+      - run: python3 scripts/check-release-version.py --version-code "$GITHUB_REF_NAME"
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           log-accepted-android-sdk-licenses: false
@@ -83,6 +87,8 @@ jobs:
       LD_LIBRARY_PATH: ${{ github.workspace }}/.test-environment/mpv-runtime/lib
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
@@ -101,6 +107,11 @@ jobs:
       - run: python3 scripts/build_mpv.py --prefix .test-environment/mpv-runtime
       - run: ./gradlew --configure-on-demand :desktopApp:createDistributable --console=plain
       - run: python3 scripts/test-linux-player.py
+      # Needs the distributable, so it runs here instead of in tests.yml.
+      - name: Check the Arch package and signed repository
+        run: >-
+          docker compose -f scripts/compose.yaml run --rm -T -v "$GITHUB_WORKSPACE:/workspace" -w /workspace
+          -e "NEVUMI_BUILD_UID=$(id -u)" arch bash scripts/ci-test-linux-packaging.sh
       - name: Create and sign the Arch repository
         env:
           NEVUMI_ARCH_SIGNING_KEY: ${{ secrets.MANIDA_ARCH_SIGNING_KEY }}
@@ -128,6 +139,7 @@ jobs:
           name: release-linux
           path: |
             .test-environment/release/*.AppImage
+            .test-environment/release/*-linux-x86_64.tar.gz
             .test-environment/release/*.pkg.tar.zst
             .test-environment/release/*.pkg.tar.zst.sig
           if-no-files-found: error
@@ -142,6 +154,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
@@ -161,7 +175,7 @@ jobs:
       - uses: ./.github/actions/apt-install
         with:
           packages: libzbar0
-      - run: python3 -m venv .test-environment/fdroid-env && .test-environment/fdroid-env/bin/pip install -r scripts/requirements.txt
+      - run: python3 -m venv .test-environment/fdroid-env && .test-environment/fdroid-env/bin/pip install --require-hashes -r scripts/requirements.txt
       - name: Create the signed F-Droid repository
         env:
           NEVUMI_FDROID_KEYSTORE_BASE64: ${{ secrets.MANIDA_FDROID_KEYSTORE_BASE64 }}
@@ -204,7 +218,7 @@ jobs:
         run: |
           cd release
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "Nevumi ${GITHUB_REF_NAME#v}" \
-            --prerelease=false --generate-notes ./*.apk ./*.AppImage ./*.pkg.tar.zst \
+            --prerelease=false --generate-notes ./*.apk ./*.AppImage ./*-linux-x86_64.tar.gz ./*.pkg.tar.zst \
             ./*.pkg.tar.zst.sig ./nevumi-repositories.tar.gz
   website:
     needs: publish

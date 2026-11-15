@@ -3,6 +3,7 @@ package me.d3sox.nevumi.playback
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.app.playRequested
+import me.d3sox.nevumi.app.rethrowCancellation
 import me.d3sox.nevumi.library.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import org.freedesktop.dbus.annotations.PropertiesEmitsChangedSignal.EmitChangeSignal
 import org.freedesktop.dbus.DBusPath
 import org.freedesktop.dbus.TypeRef
@@ -103,7 +105,7 @@ class LinuxMediaSession(private val controller: MusicController, address: String
                     state.queue.currentIndex, state.queue.entries.size, state.artwork[playback.trackId], stopped,
                     // Tag edits change only the track, and Metadata is built from it.
                     currentTrack(state))
-            } }.distinctUntilChanged().collect {
+            } }.distinctUntilChanged().collect { loggingFailures("MPRIS update") {
                 val state = controller.state.value
                 if (state.playback.playRequested && !wasPlaying) stopped.value = false
                 wasPlaying = state.playback.playRequested
@@ -112,13 +114,24 @@ class LinuxMediaSession(private val controller: MusicController, address: String
                 previous = current.filterKeys { it != "Position" }
                 if (changed.isNotEmpty()) connection.sendMessage(Properties.PropertiesChanged(objectPath,
                     "org.mpris.MediaPlayer2.Player", changed, emptyList()))
-            }
+            } }
         }
         scope.launch {
-            controller.seeks.collect { seek ->
+            controller.seeks.collect { seek -> loggingFailures("MPRIS seek update") {
                 if (controller.state.value.queue.currentEntryId == seek.entryId)
                     connection.sendMessage(MprisPlayer.Seeked(objectPath, seek.positionMs * 1_000))
-            }
+            } }
+        }
+        scope.launch {
+            // Each repeated pass of a song gets a new playback ID; without the signal, clients count on past the song's end.
+            var previous: PlaybackStatus? = null
+            controller.state.map { it.playback }.distinctUntilChanged { a, b -> a.entryId == b.entryId && a.playbackId == b.playbackId }
+                .collect { playback -> loggingFailures("MPRIS repeat update") {
+                    val last = previous
+                    previous = playback
+                    if (last?.playbackId != null && playback.playbackId != null && last.entryId == playback.entryId)
+                        connection.sendMessage(MprisPlayer.Seeked(objectPath, playback.positionMs * 1_000))
+                } }
         }
     }
 
@@ -237,4 +250,12 @@ class LinuxMediaSession(private val controller: MusicController, address: String
     override fun close() { scope.cancel(); connection.close() }
 
     private fun trackPath(entryId: String) = "/org/mpris/MediaPlayer2/track/" + entryId.replace('-', '_')
+}
+
+/** One failed D-Bus update must not stop the desktop's media controls or tray for the rest of the session. */
+internal inline fun loggingFailures(update: String, block: () -> Unit) {
+    try { block() } catch (error: Exception) {
+        rethrowCancellation(error)
+        System.err.println("$update failed: ${error.message}")
+    }
 }

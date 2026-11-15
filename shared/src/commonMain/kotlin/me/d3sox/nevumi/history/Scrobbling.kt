@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.time.Clock
 
@@ -333,7 +334,9 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
                 when (profile.service) {
                     ScrobblingService.LISTENBRAINZ -> ListenBrainzClient(http, token, profile.baseUrl).nowPlaying(listen)
                     ScrobblingService.LASTFM -> {
-                        val credentials = store.json.decodeFromString<LastFmCredentials>(token)
+                        // Unreadable credentials are left to the submission pass, which asks for a new sign-in.
+                        val credentials = try { store.json.decodeFromString<LastFmCredentials>(token) }
+                            catch (_: SerializationException) { nowPlayingRetryAt[profile.id] = now() + 30_000; continue }
                         LastFmClient(http, credentials.apiKey, credentials.sharedSecret, credentials.sessionKey, profile.baseUrl).nowPlaying(listen)
                     }
                     ScrobblingService.NAVIDROME -> sendNavidrome(requireNotNull(connected), requireNotNull(songId), listen.startedAt, submission = false)
@@ -363,13 +366,19 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
             val connected = if (profile.service == ScrobblingService.NAVIDROME) reachableNavidrome() else null
             if (profile.service == ScrobblingService.NAVIDROME && connected?.serverId != profile.serverId) continue
             val token = if (profile.service == ScrobblingService.NAVIDROME) "" else vault.read("scrobbling:${profile.id}") ?: continue
+            // Decoded before the entry is marked in flight: unreadable credentials need a new sign-in and must not stop the pass.
+            val credentials = if (profile.service != ScrobblingService.LASTFM) null
+                else try { store.json.decodeFromString<LastFmCredentials>(token) } catch (_: SerializationException) {
+                    unauthorized += profile.id
+                    save(entry.copy(state = ScrobbleState.AUTHORIZATION, error = "Reconnect your Last.fm account."))
+                    continue
+                }
             save(entry.copy(state = ScrobbleState.IN_FLIGHT, attempts = entry.attempts + 1))
             try {
                 when (profile.service) {
                     ScrobblingService.LISTENBRAINZ -> ListenBrainzClient(http, token, profile.baseUrl).submit(listen)
-                    ScrobblingService.LASTFM -> {
-                        val credentials = store.json.decodeFromString<LastFmCredentials>(token)
-                        LastFmClient(http, credentials.apiKey, credentials.sharedSecret, credentials.sessionKey, profile.baseUrl).submit(listen)
+                    ScrobblingService.LASTFM -> requireNotNull(credentials).let {
+                        LastFmClient(http, it.apiKey, it.sharedSecret, it.sessionKey, profile.baseUrl).submit(listen)
                     }
                     ScrobblingService.NAVIDROME -> sendNavidrome(requireNotNull(connected), requireNotNull(entry.songId), listen.startedAt)
                 }

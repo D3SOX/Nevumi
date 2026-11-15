@@ -1,5 +1,7 @@
 package me.d3sox.nevumi.navidrome
 
+import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.storage.MusicStore
 import me.d3sox.nevumi.security.CredentialVault
 import io.ktor.client.HttpClient
@@ -8,10 +10,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okio.ByteString.Companion.encodeUtf8
+import kotlin.math.abs
+import kotlin.uuid.Uuid
 
+/**
+ * Source IDs, playlist links and the other server data embed [serverId]. A server whose address changed keeps the ID of its
+ * first address as [identity], so that data stays attached.
+ */
 @Serializable
-data class ServerProfile(val baseUrl: String, val username: String) {
-    val serverId: String get() = "$baseUrl\u0000$username".encodeUtf8().sha256().hex()
+data class ServerProfile(val baseUrl: String, val username: String, val identity: String? = null) {
+    val serverId: String get() = identity ?: "$baseUrl\u0000$username".encodeUtf8().sha256().hex()
 }
 
 internal fun normalizeServerAddress(baseUrl: String): String {
@@ -45,10 +53,23 @@ class NavidromeConnection(private val store: MusicStore, private val http: HttpC
     private var cachedClient: NavidromeClient? = null
 
     suspend fun connect(baseUrl: String, credentials: ServerCredentials) = access.withLock {
-        val profile = ServerProfile(normalizeServerAddress(baseUrl), credentials.username)
-        val requestUrl = route(profile.baseUrl)
-        val client = NavidromeClient(http, profile.baseUrl, credentials, requestUrl)
-        client.ping()
+        val address = normalizeServerAddress(baseUrl)
+        val requestUrl = route(address)
+        val probe = NavidromeClient(http, address, credentials, requestUrl)
+        probe.ping()
+        // A new address of the same server and account keeps its identity; another server or account starts a new one.
+        val fresh = ServerProfile(address, credentials.username)
+        val previous = profile()?.takeIf { it.username == credentials.username }
+        val identity = when {
+            previous == null -> null
+            previous.baseUrl == address -> previous.identity
+            servesSongsOf(probe, previous.serverId) -> previous.serverId
+            // The previous server kept the identity this address would get, so another server here needs its own.
+            previous.serverId == fresh.serverId -> "$address\u0000${credentials.username}\u0000${Uuid.random()}".encodeUtf8().sha256().hex()
+            else -> null
+        }?.takeIf { it != fresh.serverId }
+        val profile = fresh.copy(identity = identity)
+        val client = NavidromeClient(http, address, credentials, requestUrl, identity = identity)
         vault.save("navidrome", credentials.password)
         store.put("server:navidrome", "servers", profile)
         cachedProfile = profile
@@ -62,12 +83,43 @@ class NavidromeConnection(private val store: MusicStore, private val http: HttpC
         val password = vault.read("navidrome") ?: error("Unlock your credential store or reconnect to your music server")
         val requestUrl = route(profile.baseUrl)
         if (cachedProfile != profile || cachedPassword != password || cachedRequestUrl != requestUrl || cachedClient == null) {
-            cachedClient = NavidromeClient(http, profile.baseUrl, ServerCredentials(profile.username, password), requestUrl)
+            cachedClient = NavidromeClient(http, profile.baseUrl, ServerCredentials(profile.username, password), requestUrl,
+                identity = profile.identity)
             cachedProfile = profile
             cachedPassword = password
             cachedRequestUrl = requestUrl
         }
         cachedClient
+    }
+    /**
+     * Whether [client] serves the songs imported from [serverId]. Subsonic song IDs stay the same when a server moves, and
+     * matching titles and lengths rule out another server that happens to number its songs the same way.
+     */
+    private suspend fun servesSongsOf(client: NavidromeClient, serverId: String): Boolean {
+        val library = MusicLibrary(store)
+        val prefix = "server:$serverId:"
+        val known = mutableListOf<Pair<String, TrackMetadata>>()
+        // A sample of songs that were still on the server, without reading the whole library.
+        for (key in store.database.records().keys("source-owners").filter { it.startsWith("source-owner:$prefix") }.shuffled().take(64)) {
+            val sourceId = key.removePrefix("source-owner:")
+            val track = library.trackForSource(sourceId) ?: continue
+            if (track.sources.any { it.id == sourceId && it.available }) known += sourceId.removePrefix(prefix) to track.metadata
+            if (known.size == 8) break
+        }
+        val releases = mutableMapOf<String, String>()
+        var matches = 0
+        for ((songId, metadata) in known) {
+            val song = try { client.song(songId, releases).metadata }
+                catch (_: NavidromeException) { null }
+                catch (error: NavidromeRequestException) { if (error.serverUnavailable) throw error else null }
+                ?: continue
+            // Another song under a known ID means another server, however many others match.
+            if (!song.title.trim().equals(metadata.title.trim(), ignoreCase = true) || abs(song.durationMs - metadata.durationMs) > 2_000)
+                return false
+            matches++
+        }
+        // Songs removed from the server meanwhile no longer answer, so most of the sample suffices.
+        return matches > 0 && matches * 2 >= known.size
     }
     /** The queue this device last saved to the server, so it does not offer to continue its own queue. */
     suspend fun uploadedPlayQueue(serverId: String): ServerPlayQueue? = store.read("server:play-queue:$serverId")

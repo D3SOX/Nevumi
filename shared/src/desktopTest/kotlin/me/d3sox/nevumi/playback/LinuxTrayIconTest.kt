@@ -78,6 +78,8 @@ class LinuxTrayIconTest {
             controller.playTrack(track.id, listOf(track.id)).join()
             withTimeout(3_000) { controller.state.first { it.playback.playing } }
             withTimeout(3_000) { while (!layout().contains("'label': <'Pause'>")) kotlinx.coroutines.delay(20) }
+            // Previous restarts the only song, as it does through MPRIS.
+            assertTrue(layout().contains("'label': <'Previous track'>, 'icon-name': <'media-skip-backward'>, 'enabled': <true>"), layout())
             assertTrue(call("/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierItem", "ToolTip")
                 .contains("'Nevumi', 'Tray song – Tray artist'"))
             click(2)

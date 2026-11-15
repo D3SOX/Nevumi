@@ -25,6 +25,7 @@ import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.fromHttpToGmtDate
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.bodyAsChannel
@@ -174,9 +175,11 @@ class NavidromeClient(
     private val idleTimeoutMillis: Long = 30_000,
     private val requestDeadlineMillis: Long = 5 * 60_000,
     private val retryDelaysMillis: List<Long> = listOf(2_000, 8_000),
+    /** The [ServerProfile.identity] this server kept from an earlier address. */
+    identity: String? = null,
 ) {
     private val baseUrl = normalizeServerAddress(requestUrl)
-    val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username).serverId
+    val serverId: String = ServerProfile(normalizeServerAddress(baseUrl), credentials.username, identity).serverId
     val username: String get() = credentials.username
     private val nativeAccess = Mutex()
     private var nativeToken: String? = null
@@ -743,8 +746,19 @@ class NavidromeClient(
     suspend fun downloadSong(songId: String, offset: Long = 0, ifRange: String? = null,
         onValidator: suspend (String?) -> Unit = {},
         onStart: suspend (Long) -> Unit = {}, onChunk: suspend (ByteArray) -> Unit): Long = serverRequest {
+        client().use { http ->
+            // A partial the server cannot extend, such as one already at full size, restarts the file.
+            downloadSong(http, songId, offset, ifRange, onValidator, onStart, onChunk)
+                ?: downloadSong(http, songId, 0, null, onValidator, onStart, onChunk)
+                ?: error("Audio request failed: HTTP 416")
+        }
+    }
+
+    /** Returns null when the server cannot serve the requested byte [offset]. */
+    private suspend fun downloadSong(http: HttpClient, songId: String, offset: Long, ifRange: String?,
+        onValidator: suspend (String?) -> Unit, onStart: suspend (Long) -> Unit, onChunk: suspend (ByteArray) -> Unit): Long? {
         val salt = Uuid.random().toString()
-        client().use { it.prepareGet("${baseUrl.trimEnd('/')}/rest/download.view") {
+        return http.prepareGet("${baseUrl.trimEnd('/')}/rest/download.view") {
             parameter("u", credentials.username)
             parameter("t", passwordToken(credentials.password, salt))
             parameter("s", salt)
@@ -763,6 +777,7 @@ class NavidromeClient(
                 val error = envelope["error"]?.jsonObject
                 throw NavidromeException(error?.get("code")?.jsonPrimitive?.intOrNull ?: 0)
             }
+            if (offset > 0 && response.status == HttpStatusCode.RequestedRangeNotSatisfiable) return@execute null
             check(response.status.value in 200..299) { "Audio request failed: HTTP ${response.status.value}" }
             val start = if (response.status.value == 206) {
                 val range = response.headers[HttpHeaders.ContentRange].orEmpty()
@@ -794,7 +809,7 @@ class NavidromeClient(
                 }
             }
             received
-        } }
+        }
     }
 
     // Discovery: these endpoints are optional, so each returns null when the server does not offer it.

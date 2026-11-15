@@ -68,6 +68,9 @@ class YouTubeController internal constructor(private val context: ControllerCont
     }
 
 
+    /** Deletes the YouTube songs that nothing refers to any more, such as videos of a list that was queued once, with their covers. */
+    internal suspend fun removeUnusedTracks() = library.removeUnusedYouTubeTracks().forEach { artwork?.remove(it) }
+
     private fun source() = requireNotNull(source) { "YouTube is unavailable" }
     private fun downloads() = requireNotNull(downloads) { "YouTube downloads are unavailable" }
     private fun requireEnabled() = check(context.state.value.preferences.youTube) { "Turn on YouTube in Settings first" }

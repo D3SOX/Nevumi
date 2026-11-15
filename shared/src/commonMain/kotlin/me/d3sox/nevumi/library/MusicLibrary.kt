@@ -314,6 +314,38 @@ class MusicLibrary(private val store: MusicStore) {
     internal suspend fun trackForSource(sourceId: String): Track? =
         store.read<SourceOwner>("source-owner:$sourceId")?.let { findTrack(it.trackId) }
 
+    /**
+     * Deletes the songs that only stream from YouTube, which the library views leave out, when no other record refers to them,
+     * and returns their IDs. Playing or queueing a YouTube list keeps a song for each of its videos, which would otherwise pile up.
+     * Any record naming a song keeps it, such as a queue, playlist, listen or download, so new kinds of reference need no change here.
+     * Reading every record takes a moment in a large library while such songs pile up slowly, so this runs at most once a week.
+     */
+    internal suspend fun removeUnusedYouTubeTracks(now: Long = Clock.System.now().toEpochMilliseconds()): Set<String> = store.transaction {
+        if (now - (store.read<Long>("youtube-cleanup") ?: 0) in 0..<7 * 24 * 3_600_000L) return@transaction emptySet()
+        store.put("youtube-cleanup", "maintenance", now)
+        // A favorite or rating is kept in the song itself.
+        val candidates = loadTracks().filter { track -> track.sources.all { it.kind == SourceKind.YOUTUBE } && !track.favorite && track.rating == 0 }
+        if (candidates.isEmpty()) return@transaction emptySet()
+        val referenced = HashSet<String>()
+        // Collecting every ID in a record is much faster than searching it for each song; other IDs are searched for directly.
+        val unusual = candidates.map { it.id }.filterNot(TRACK_ID::matches)
+        for (kind in store.database.records().kinds() - setOf("tracks", "source-owners")) {
+            for (record in store.database.records().list(kind)) {
+                TRACK_ID.findAll(record.key).forEach { referenced += it.value }
+                TRACK_ID.findAll(record.value).forEach { referenced += it.value }
+                unusual.filterTo(referenced) { it in record.key || it in record.value }
+            }
+        }
+        val unused = candidates.filter { it.id !in referenced }
+        for (track in unused) {
+            store.database.records().delete("track:${track.id}")
+            track.sources.forEach { source ->
+                if (store.read<SourceOwner>("source-owner:${source.id}")?.trackId == track.id) store.database.records().delete("source-owner:${source.id}")
+            }
+        }
+        unused.mapTo(HashSet()) { it.id }
+    }
+
     suspend fun linkTracks(keepId: String, otherId: String): Track = store.transaction {
         require(keepId != otherId) { "Choose another song to link" }
         merge(keepId, otherId, store.list("file-edits")).also { remapReferences(mapOf(otherId to keepId)) }
@@ -431,3 +463,5 @@ private data class ChosenSong(val location: String)
 private data class SourceOwner(val trackId: String)
 
 internal val musicBrainzId = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+// Song IDs are random UUIDs, which Kotlin writes in lowercase.
+private val TRACK_ID = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")

@@ -420,7 +420,9 @@ class JvmPairedDevices(private val store: MusicStore, override val library: Libr
         private const val TRANSFER_LIMIT = "transfer-limit"
         /** A pairing request carries only identifiers, a name and the secret. */
         private const val MAX_PAIRING_FRAME = 16 * 1024
-        private const val AUTHORIZATION_TIMEOUT_MS = 30_000L
+        /** How long a connection may take for its handshake and, while an invitation is open, its pairing request. Until then it
+         *  holds one of the few connection slots, so anyone on the network could otherwise keep them busy. */
+        private const val AUTHORIZATION_TIMEOUT_MS = 5_000L
         private const val MATCHING_TIMEOUT_MS = 5 * 60_000
         /** Single byte a requester sends after merging a sync response. */
         private const val SYNC_MERGED = 0x06

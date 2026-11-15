@@ -110,6 +110,13 @@ class AudioDownloads(
     }
     suspend fun state(trackId: String): DownloadRecord? = store.read("download:$trackId")
 
+    /** Whether [record] failed for lack of space and the rest of its audio still does not fit, so another attempt would fail too. */
+    internal fun waitingForSpace(record: DownloadRecord?): Boolean = record?.status == DownloadStatus.FAILED &&
+        record.problem == DownloadProblem.INSUFFICIENT_SPACE && !fits(directory, record.sizeBytes - record.bytesDownloaded)
+
+    // Downloads leave 64 MiB free for the system and other apps.
+    private fun fits(root: String, bytes: Long) = availableSpace(root).coerceAtLeast(0) - 64L * 1024 * 1024 >= bytes
+
     /**
      * Deletes files no download record uses, such as abandoned partial downloads or the audio left behind when linking two
      * downloaded songs kept only one. An unfinished download keeps its files to resume. Run it while no transfer is writing.
@@ -154,12 +161,13 @@ class AudioDownloads(
         store.put("download:$trackId", "downloads", record)
         try {
             fs.createDirectories(root)
-            if (previous?.sourceId != sourceId || previous?.sizeBytes != song.sizeBytes || previous?.validator == null)
+            // A partial already at full size was interrupted before it was finished, so it restarts rather than asking for no bytes.
+            if (previous?.sourceId != sourceId || previous?.sizeBytes != song.sizeBytes || previous?.validator == null ||
+                song.sizeBytes > 0 && (fs.metadataOrNull(partial)?.size ?: 0) >= song.sizeBytes)
                 fs.delete(partial, mustExist = false)
             val offset = fs.metadataOrNull(partial)?.size ?: 0
             val remaining = (song.sizeBytes - offset).coerceAtLeast(0)
-            if (availableSpace(root.toString()).coerceAtLeast(0) - 64L * 1024 * 1024 < remaining)
-                throw InsufficientDownloadSpace()
+            if (!fits(root.toString(), remaining)) throw InsufficientDownloadSpace()
             var output: BufferedSink? = null
             var start = 0L
             var receivedBytes = 0L
@@ -175,11 +183,10 @@ class AudioDownloads(
                     output = (if (resumedAt > 0) fs.appendingSink(partial) else fs.sink(partial)).buffer()
                     store.put("download:$trackId", "downloads", record.copy(bytesDownloaded = resumedAt))
                 }) { chunk ->
-                    if (availableSpace(root.toString()).coerceAtLeast(0) - 64L * 1024 * 1024 < chunk.size)
-                        throw InsufficientDownloadSpace()
+                    if (!fits(root.toString(), chunk.size.toLong())) throw InsufficientDownloadSpace()
                     requireNotNull(output).write(chunk)
                     receivedBytes += chunk.size
-                    // Each write makes every download observer reread its records, so a fast connection saves progress twice a second, not per 256 KiB.
+                    // Each write makes every download observer reread its records, so a fast connection saves progress twice a second, not per 32 KiB chunk.
                     if (firstProgress || lastProgress.elapsedNow().inWholeMilliseconds >= 500) {
                         firstProgress = false
                         lastProgress = TimeSource.Monotonic.markNow()
@@ -218,6 +225,9 @@ class AudioDownloads(
 }
 
 private class InsufficientDownloadSpace : Exception()
+
+/** Whether another attempt soon could complete this download; one that ran out of space waits until enough is free. */
+internal fun DownloadRecord.retryable() = status != DownloadStatus.COMPLETE && problem != DownloadProblem.INSUFFICIENT_SPACE
 
 /** The owners keeping a song's download out of cache eviction, such as "manual" or "playlist:<id>". */
 @Serializable

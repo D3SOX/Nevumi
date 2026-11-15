@@ -105,6 +105,15 @@ class YouTubeDownloadsTest {
         } finally { fixture.close() }
     }
 
+    @Test fun aJobThatFinishesBeforeAnyoneListensIsStillAnnounced() = runBlocking {
+        val fixture = fixture(FakeYouTube(audio))
+        try {
+            val job = fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags = false)
+            fixture.downloads.awaitJob(job.id) { it.state == YouTubeJobState.COMPLETE }
+            assertEquals(job.id, withTimeout(2_000) { fixture.downloads.completed.first() }.id)
+        } finally { fixture.close() }
+    }
+
     @Test fun aGivenCoverIsUsedInsteadOfTheVideosArtwork() = runBlocking {
         val fixture = fixture(FakeYouTube(audio))
         try {

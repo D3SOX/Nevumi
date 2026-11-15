@@ -115,8 +115,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             scrobblingProfiles = if (profiles) scrobbling?.profiles().orEmpty() else emptyList(),
             server = if (profiles) store.read<ServerProfile>("server:navidrome") else null,
             sftpProfiles = if (profiles) store.list<SftpConfiguration>("sftp-profiles") else emptyList(),
-            // A viewer address can carry a password; it is fetched from sc-gate-dl again on first use.
-            soundCloud = if (profiles) store.read<SoundCloudProfile>("soundcloud:profile")?.copy(browserViewUrl = null) else null,
+            // The other device learns again from sc-gate-dl whether it offers a browser viewer, as before profiles stopped storing its address.
+            soundCloud = if (profiles) store.read<SoundCloudProfile>("soundcloud:profile")?.copy(browserViewer = false) else null,
             equalizerProfiles = if (BackupSection.EQUALIZER_PROFILES in sections) equalizer?.saved().orEmpty() else emptyList())
         return json.encodeToString(document)
     }

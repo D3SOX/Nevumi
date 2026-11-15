@@ -52,6 +52,7 @@ jobs:
       # Releases call this from their tag, so always deploy the current landing page instead of the tagged one.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
       # GitHub Pages replaces the whole site on each deployment, so keep the newest release's repositories.
       - name: Download the release repositories

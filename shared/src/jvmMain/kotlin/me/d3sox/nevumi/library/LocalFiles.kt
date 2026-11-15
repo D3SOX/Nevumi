@@ -55,19 +55,20 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         val indexed = library.tracks().flatMap { it.sources }.filter { it.kind == SourceKind.LOCAL }.associateBy { it.id }
         val folders = library.localFolderRules()
         val chosen = library.chosenSongs()
+        // Resolving a path reads every folder in it, so each file and indexed song is resolved once.
+        val indexedPaths by lazy {
+            indexed.values.filter { it.available && !it.location.startsWith("content:") }.associateWith { File(it.location).canonicalFile.toPath() }
+        }
         roots().filter { location ->
             if (location.startsWith("content:") || location == "device") return@filter false
             val root = File(location).canonicalFile
-            val files = root.walkMusicFolders().filter {
-                it.isFile && it.extension.lowercase() in localMusicExtensions && (it.canonicalPath in chosen ||
-                    folders.allows(it.canonicalFile.parent.orEmpty(), it.canonicalFile.parentFile?.relativeToOrNull(root)?.path))
-            }.associateBy { "local:${it.canonicalPath}" }
+            val files = root.musicFiles().filter { (_, canonical) ->
+                canonical.path in chosen || folders.allows(canonical.parent.orEmpty(), canonical.parentFile?.relativeToOrNull(root)?.path)
+            }.associate { (file, canonical) -> "local:${canonical.path}" to file }
             files.any { (id, file) ->
                 val source = indexed[id]
                 source == null || !source.available || source.modifiedAt != file.lastModified() || source.indexedSize != file.length()
-            } || indexed.values.any {
-                it.available && !it.location.startsWith("content:") && File(it.location).canonicalFile.toPath().startsWith(root.toPath()) && it.id !in files
-            }
+            } || indexedPaths.any { (source, path) -> path.startsWith(root.toPath()) && source.id !in files }
         }
     }
 
@@ -91,13 +92,12 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
             .minByOrNull { it.path.length } ?: root
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
-        val files = root.walkMusicFolders().filter { it.isFile && it.extension.lowercase() in
-            localMusicExtensions && (!followRules || it.canonicalPath in chosen || folders.allows(it.canonicalFile.parent.orEmpty(),
-                it.canonicalFile.parentFile?.relativeToOrNull(base)?.path)) }.toList()
+        val files = root.musicFiles().filter { (_, canonical) -> !followRules || canonical.path in chosen ||
+            folders.allows(canonical.parent.orEmpty(), canonical.parentFile?.relativeToOrNull(base)?.path) }.toList()
         onProgress(LocalScanProgress(0, files.size))
-        val imported = files.mapIndexedNotNull { index, file ->
+        val imported = files.mapIndexedNotNull { index, (file, canonical) ->
             try {
-            val sourceId = "local:${file.canonicalPath}"
+            val sourceId = "local:${canonical.path}"
             val cached = previous[sourceId]
             val source = cached?.sources?.firstOrNull { it.id == sourceId }
             if (!force && source?.available == true && source.modifiedAt == file.lastModified() &&
@@ -107,10 +107,10 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
                 return@mapIndexedNotNull cached
             }
             val audio = try { AudioFileIO.read(file) } catch (_: Exception) { return@mapIndexedNotNull null }
-            val metadata = audio.trackMetadata(file.nameWithoutExtension, file.canonicalFile.parent.orEmpty())
+            val metadata = audio.trackMetadata(file.nameWithoutExtension, canonical.parent.orEmpty())
             val cover = audio.fieldTag?.firstArtwork?.binaryData
             val track = library.importTrack(metadata, TrackSource(sourceId,
-                SourceKind.LOCAL, file.canonicalPath, modifiedAt = file.lastModified(), indexedSize = file.length(),
+                SourceKind.LOCAL, canonical.path, modifiedAt = file.lastModified(), indexedSize = file.length(),
                 hasArtwork = cover != null))
             seen += sourceId
             if (cover != null) {
@@ -129,6 +129,10 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         imported
     }
 }
+
+/** The music files in this folder, each with its resolved path. */
+private fun File.musicFiles() = walkMusicFolders().filter { it.isFile && it.extension.lowercase() in localMusicExtensions }
+    .map { it to it.canonicalFile }
 
 // A symbolic link back to a parent folder would otherwise be walked again and again.
 private fun File.walkMusicFolders(): FileTreeWalk {

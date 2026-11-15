@@ -152,6 +152,38 @@ class PairedDevicesTest {
     }
 
     @Test
+    fun connectionsThatNeverIdentifyThemselvesReleaseTheirSlotsQuickly() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-idle-connections")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val devices = JvmPairedDevices(store, LibrarySync(store, MusicLibrary(store)), vault(), "Linux desktop")
+        try {
+            devices.createInvitation("127.0.0.1")
+            val port = assertNotNull(devices.state.value.listeningPort)
+            // Connections that never start their handshake take every slot.
+            val idle = (1..4).map { java.net.Socket("127.0.0.1", port).apply { soTimeout = 10_000 } }
+            val closed = withContext(Dispatchers.IO) {
+                idle.map { socket -> socket.use {
+                    // The server may answer with a TLS alert before it closes the connection.
+                    try { it.inputStream.readAllBytes(); true }
+                    catch (_: java.net.SocketTimeoutException) { false }
+                    catch (_: java.io.IOException) { true }
+                } }
+            }
+            assertEquals(List(4) { true }, closed, "Idle connections must be closed well before the socket timeout")
+            val stranger = SyncTls.load(vault(), "22222222-2222-4222-8222-222222222222").context { true }
+            // The server frees each slot right after closing its connection.
+            val handshake = withContext(Dispatchers.IO) {
+                (1..50).firstNotNullOfOrNull {
+                    runCatching {
+                        (stranger.socketFactory.createSocket("127.0.0.1", port) as javax.net.ssl.SSLSocket).use { it.soTimeout = 2_000; it.startHandshake() }
+                    }.getOrNull() ?: run { Thread.sleep(100); null }
+                }
+            }
+            assertNotNull(handshake, "A new device must be able to connect once the idle connections are gone")
+        } finally { devices.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun aRejectedRepairingDoesNotUseUpTheInvitation() = runBlocking {
         val directory = Files.createTempDirectory("nevumi-pairing-conflict")
         val stores = (1..3).map { openMusicStore(directory.resolve("device-$it.db").toString()) }
