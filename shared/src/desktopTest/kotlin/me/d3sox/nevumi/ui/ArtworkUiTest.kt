@@ -19,6 +19,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.test.Test
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import kotlin.test.assertEquals
@@ -246,16 +247,24 @@ class ArtworkUiTest {
             runComposeUiTest {
                 setContent {
                     val state by controller.state.collectAsState()
-                    state.tracks.firstOrNull()?.let { track ->
-                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.size(64.dp)) { MusicArtwork(state, track.id, track.metadata.title, "Cover") }
+                    // A song row, which updates only for the parts of the app state it shows.
+                    androidx.compose.runtime.CompositionLocalProvider(LocalArtworkPicker provides ArtworkPicker { null }) {
+                        state.tracks.firstOrNull()?.let { track -> TrackRow(track, controller) }
                     }
                 }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.youTube }
+                // No state ever has the song queued with neither its cover nor a download of it.
+                val shownAsMissing = java.util.concurrent.atomic.AtomicBoolean()
+                val watcher = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+                    controller.state.collect { state ->
+                        if (state.queue.entries.any { it.trackId !in state.artwork && it.trackId !in state.downloadingArtwork }) shownAsMissing.set(true)
+                    }
+                }
                 val song = me.d3sox.nevumi.youtube.YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist",
                     artworkUrl = "https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg", song = true)
                 controller.enqueueYouTube(listOf(song), me.d3sox.nevumi.queue.QueueAction.APPEND)
                 // The song is queued while its cover is still on the way.
-                waitUntil(timeoutMillis = 3_000) { covers.covers.isNotEmpty() && onAllNodes(loading).fetchSemanticsNodes().size == 1 }
+                waitUntil(timeoutMillis = 3_000) { covers.covers.isNotEmpty() && onAllNodes(loading, useUnmergedTree = true).fetchSemanticsNodes().size == 1 }
                 // Queuing it again leaves the cover to the download already running, which alone ends the loading state.
                 runBlocking { kotlinx.coroutines.withTimeout(3_000) { controller.enqueueYouTube(listOf(song), me.d3sox.nevumi.queue.QueueAction.APPEND).join() } }
                 assertEquals(2, controller.state.value.queue.entries.size)
@@ -267,14 +276,78 @@ class ArtworkUiTest {
                 val deadline = System.currentTimeMillis() + 3_000
                 while (true) {
                     mainClock.advanceTimeByFrame()
-                    val shown = onNodeWithContentDescription("Cover").captureToImage().toPixelMap().let { it[it.width / 2, it.height / 2] } == Color(0xFFE05040)
+                    val shown = onNodeWithContentDescription("Song artwork: Night Drive", useUnmergedTree = true).captureToImage().toPixelMap().let { it[it.width / 2, it.height / 2] } == Color(0xFFE05040)
                     if (shown) break
-                    onNodeWithContentDescription("Cover").assert(loading)
+                    onNodeWithContentDescription("Song artwork: Night Drive", useUnmergedTree = true).assert(loading)
                     check(System.currentTimeMillis() < deadline) { "The cover did not appear" }
                     Thread.sleep(5)
                 }
-                onAllNodes(loading).assertCountEquals(0)
+                onAllNodes(loading, useUnmergedTree = true).assertCountEquals(0)
                 assertEquals(emptySet(), controller.state.value.downloadingArtwork)
+                watcher.cancel()
+                assertEquals(false, shownAsMissing.get())
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aCoverRetriedByAnotherActionStaysLoadingWhenTheFirstActionFinishes() {
+        val directory = Files.createTempDirectory("retried-artwork")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val preferences = MusicPreferences(store)
+        runBlocking { preferences.update { it.copy(youTube = true) } }
+        // Each request waits on its own answer, so a retry of a failed cover can stay pending.
+        val requests = java.util.concurrent.LinkedBlockingQueue<Pair<String, kotlinx.coroutines.CompletableDeferred<ByteArray>>>()
+        val covers = object : me.d3sox.nevumi.youtube.YouTubeSource by SlowCovers() {
+            override suspend fun artwork(url: String) = kotlinx.coroutines.CompletableDeferred<ByteArray>().also { requests.put(url to it) }.await()
+        }
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences,
+            artwork = ArtworkLibrary(directory.resolve("artwork").toString()), youTube = covers)
+        fun song(id: String) = me.d3sox.nevumi.youtube.YouTubeTrack(id.repeat(11), id, "Artist", artworkUrl = "https://i.ytimg.com/vi/${id.repeat(11)}/hq.jpg", song = true)
+        fun next(id: String) = requests.poll(3, java.util.concurrent.TimeUnit.SECONDS).also { assertEquals(true, it?.first?.contains(id.repeat(11))) }!!.second
+        try {
+            runBlocking {
+                kotlinx.coroutines.withTimeout(3_000) { while (!controller.state.value.preferences.youTube) kotlinx.coroutines.delay(10) }
+                val first = controller.enqueueYouTube(listOf(song("a"), song("b")), me.d3sox.nevumi.queue.QueueAction.APPEND)
+                next("a").completeExceptionally(IllegalStateException("Offline"))
+                val pendingB = next("b")
+                // Another action retries the failed cover while the first action still waits for the other one.
+                controller.enqueueYouTube(listOf(song("a")), me.d3sox.nevumi.queue.QueueAction.APPEND)
+                val retry = next("a")
+                pendingB.complete(ByteArray(0))
+                first.join()
+                val a = controller.state.value.tracks.single { it.metadata.title == "a" }.id
+                assertEquals(setOf(a), controller.state.value.downloadingArtwork)
+                retry.complete(ByteArray(0))
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aSongRowShowsTheMissingCoverIconOnceItsCoverDownloadFails() {
+        val directory = Files.createTempDirectory("failed-artwork")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val preferences = MusicPreferences(store)
+        runBlocking { preferences.update { it.copy(youTube = true) } }
+        val covers = SlowCovers()
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences,
+            artwork = ArtworkLibrary(directory.resolve("artwork").toString()), youTube = covers)
+        val loading = SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Loading cover")
+        try {
+            runComposeUiTest {
+                setContent {
+                    val state by controller.state.collectAsState()
+                    androidx.compose.runtime.CompositionLocalProvider(LocalArtworkPicker provides ArtworkPicker { null }) {
+                        state.tracks.firstOrNull()?.let { track -> TrackRow(track, controller) }
+                    }
+                }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.youTube }
+                controller.enqueueYouTube(listOf(me.d3sox.nevumi.youtube.YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist",
+                    artworkUrl = "https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg", song = true)), me.d3sox.nevumi.queue.QueueAction.APPEND)
+                waitUntil(timeoutMillis = 3_000) { onAllNodes(loading, useUnmergedTree = true).fetchSemanticsNodes().size == 1 }
+                // Only the download state changes, which the row must still follow.
+                covers.covers.values.forEach { it.complete(ByteArray(0)) }
+                waitUntil(timeoutMillis = 3_000) { onAllNodes(loading, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

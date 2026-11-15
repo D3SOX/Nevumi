@@ -135,10 +135,10 @@ class YouTubeController internal constructor(private val context: ControllerCont
             val ids = libraryTracks(tracks)
             val start = if (shuffle) queueController.shuffleStart(ids) else index.coerceIn(tracks.indices)
             source().audio(tracks[start].videoId)
-            saveArtwork(listOf(tracks[start]), listOf(ids[start]))
-            queueController.playTrack(ids[start], ids, start, name, shuffleContext = shuffle, request = request).join()
             // The other covers follow while the first song plays.
-            saveArtwork(tracks, ids)
+            saveArtwork(tracks, ids, first = ids[start]) {
+                queueController.playTrack(ids[start], ids, start, name, shuffleContext = shuffle, request = request).join()
+            }
         }
     }
 
@@ -147,8 +147,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
         requireEnabled()
         require(tracks.isNotEmpty()) { "There is nothing to add" }
         val ids = libraryTracks(tracks)
-        queueController.enqueue(ids, action).join()
-        saveArtwork(tracks, ids)
+        saveArtwork(tracks, ids) { queueController.enqueue(ids, action).join() }
     }
 
     /**
@@ -212,36 +211,46 @@ class YouTubeController internal constructor(private val context: ControllerCont
         return ids
     }
 
-    /** Saves the covers of songs that have none yet; songs of one album share a cover, which is fetched once. */
-    private suspend fun saveArtwork(tracks: List<YouTubeTrack>, ids: List<String>) {
-        if (artwork == null) return
-        // Until their turn comes, the songs show that their covers are on the way rather than missing. Songs whose covers another
-        // action already downloads stay with it, so neither clears the other's loading state.
-        var missing = emptyList<Pair<String, String>>()
+    /**
+     * Saves the covers of songs that have none yet; songs of one album share a cover, which is fetched once. The songs show their
+     * covers as loading from before [publish] puts them on screen, such as in the queue, until each download ends. [first]'s
+     * cover is saved before [publish] runs.
+     */
+    private suspend fun saveArtwork(tracks: List<YouTubeTrack>, ids: List<String>, first: String? = null,
+        publish: suspend () -> Unit = {}) {
+        if (artwork == null) return publish()
+        // Covers another action already downloads stay with it, so neither clears the other's loading state.
+        val owned = linkedMapOf<String, String>()
         context.update { state ->
-            missing = tracks.zip(ids).mapNotNull { (track, id) ->
-                track.artworkUrl?.takeIf { state.artwork[id] == null && id !in state.downloadingArtwork }?.let { url -> url to id }
+            owned.clear()
+            tracks.zip(ids).forEach { (track, id) ->
+                val url = track.artworkUrl
+                if (url != null && state.artwork[id] == null && id !in state.downloadingArtwork) owned[id] = url
             }
-            state.copy(downloadingArtwork = state.downloadingArtwork + missing.map { (_, id) -> id })
+            state.copy(downloadingArtwork = state.downloadingArtwork + owned.keys)
         }
-        val downloading = missing.map { (_, id) -> id }
         val fetched = mutableMapOf<String, ByteArray?>()
+        suspend fun save(id: String) {
+            val url = owned[id] ?: return
+            val path = try {
+                fetched.getOrPut(url) {
+                    try { source().artwork(largeArtwork(url)) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null }
+                }?.let { bytes -> artwork.save(id, bytes); artwork.path(id) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { null /* The song plays without a cover. */ }
+            owned.remove(id)
+            // The cover and the end of its download land together, so the song never shows as missing one in between.
+            context.update { state -> state.copy(downloadingArtwork = state.downloadingArtwork - id,
+                artwork = path?.let { state.artwork + (id to it) } ?: state.artwork) }
+        }
         try {
-            missing.forEach { (url, id) ->
-                val path = try {
-                    fetched.getOrPut(url) {
-                        try { source().artwork(largeArtwork(url)) }
-                        catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { null }
-                    }?.let { bytes -> artwork.save(id, bytes); artwork.path(id) }
-                } catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { null /* The song plays without a cover. */ }
-                // The cover and the end of its download land together, so the song never shows as missing one in between.
-                context.update { state -> state.copy(downloadingArtwork = state.downloadingArtwork - id,
-                    artwork = path?.let { state.artwork + (id to it) } ?: state.artwork) }
-            }
+            first?.let { save(it) }
+            publish()
+            owned.keys.toList().forEach { save(it) }
         } finally {
-            context.update { it.copy(downloadingArtwork = it.downloadingArtwork - downloading) }
+            context.update { it.copy(downloadingArtwork = it.downloadingArtwork - owned.keys) }
         }
     }
 

@@ -48,6 +48,7 @@ internal fun TrackRow(track: Track, controller: MusicController, contextTrackIds
     val rowState = remember(appState, track.id) {
         appState.distinctUntilChanged { old, next ->
             old.preferences == next.preferences && old.artwork[track.id] == next.artwork[track.id] &&
+                (track.id in old.downloadingArtwork) == (track.id in next.downloadingArtwork) &&
                 old.downloads[track.id] == next.downloads[track.id] && old.fileEdits == next.fileEdits &&
                 old.playlists == next.playlists && old.server == next.server && old.sftp == next.sftp
         }
