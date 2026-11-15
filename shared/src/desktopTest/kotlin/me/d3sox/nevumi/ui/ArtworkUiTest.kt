@@ -186,8 +186,9 @@ class ArtworkUiTest {
     /** Hands out each cover only once the test releases it. */
     private class SlowCovers : me.d3sox.nevumi.youtube.YouTubeSource {
         val covers = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<ByteArray>>()
+        val requests = java.util.concurrent.atomic.AtomicInteger()
         fun cover(url: String) = covers.getOrPut(url) { kotlinx.coroutines.CompletableDeferred() }
-        override suspend fun artwork(url: String) = cover(url).await()
+        override suspend fun artwork(url: String) = cover(url).also { requests.incrementAndGet() }.await()
         override suspend fun search(query: String, kind: me.d3sox.nevumi.youtube.YouTubeSearchKind,
             continuation: me.d3sox.nevumi.youtube.YouTubeContinuation?) = me.d3sox.nevumi.youtube.YouTubePage(emptyList(), null)
         override suspend fun browse(link: me.d3sox.nevumi.youtube.YouTubeLink) = me.d3sox.nevumi.youtube.YouTubeBrowsePage("")
@@ -250,10 +251,15 @@ class ArtworkUiTest {
                     }
                 }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.youTube }
-                controller.enqueueYouTube(listOf(me.d3sox.nevumi.youtube.YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist",
-                    artworkUrl = "https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg", song = true)), me.d3sox.nevumi.queue.QueueAction.APPEND)
+                val song = me.d3sox.nevumi.youtube.YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist",
+                    artworkUrl = "https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg", song = true)
+                controller.enqueueYouTube(listOf(song), me.d3sox.nevumi.queue.QueueAction.APPEND)
                 // The song is queued while its cover is still on the way.
                 waitUntil(timeoutMillis = 3_000) { covers.covers.isNotEmpty() && onAllNodes(loading).fetchSemanticsNodes().size == 1 }
+                // Queuing it again leaves the cover to the download already running, which alone ends the loading state.
+                runBlocking { kotlinx.coroutines.withTimeout(3_000) { controller.enqueueYouTube(listOf(song), me.d3sox.nevumi.queue.QueueAction.APPEND).join() } }
+                assertEquals(2, controller.state.value.queue.entries.size)
+                assertEquals(1, covers.requests.get())
 
                 // Frame by frame, the slot goes from loading straight to the cover, never showing the missing-cover icon in between.
                 mainClock.autoAdvance = false

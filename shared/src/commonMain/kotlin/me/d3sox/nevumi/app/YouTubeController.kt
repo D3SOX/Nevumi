@@ -215,12 +215,16 @@ class YouTubeController internal constructor(private val context: ControllerCont
     /** Saves the covers of songs that have none yet; songs of one album share a cover, which is fetched once. */
     private suspend fun saveArtwork(tracks: List<YouTubeTrack>, ids: List<String>) {
         if (artwork == null) return
-        val missing = tracks.zip(ids).mapNotNull { (track, id) ->
-            track.artworkUrl?.takeIf { context.state.value.artwork[id] == null }?.let { url -> url to id }
+        // Until their turn comes, the songs show that their covers are on the way rather than missing. Songs whose covers another
+        // action already downloads stay with it, so neither clears the other's loading state.
+        var missing = emptyList<Pair<String, String>>()
+        context.update { state ->
+            missing = tracks.zip(ids).mapNotNull { (track, id) ->
+                track.artworkUrl?.takeIf { state.artwork[id] == null && id !in state.downloadingArtwork }?.let { url -> url to id }
+            }
+            state.copy(downloadingArtwork = state.downloadingArtwork + missing.map { (_, id) -> id })
         }
         val downloading = missing.map { (_, id) -> id }
-        // Until their turn comes, the songs show that their covers are on the way rather than missing.
-        context.update { it.copy(downloadingArtwork = it.downloadingArtwork + downloading) }
         val fetched = mutableMapOf<String, ByteArray?>()
         try {
             missing.forEach { (url, id) ->
