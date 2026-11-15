@@ -278,8 +278,9 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
         if (dragAxis == Orientation.Vertical) { dragDistance += delta.y; sheet.dispatchRawDelta(delta.y) }
         else if (artworkDragAllowed) artworkSwipe.drag(delta.x)
     }
+    // A song queued again from the player or queue keeps where it first came from.
     SongActionHost(current, state, controller, artworkOrigin = { playingArtworkBounds }, artworkCornerRadius = 28.dp,
-        rightClickMenu = false) { _, _, openPlayingMenu, playingMenuOpen ->
+        rightClickMenu = false, queueOrigin = state.queue.originOf(state.queue.currentEntryId)) { _, _, openPlayingMenu, playingMenuOpen ->
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds().onGloballyPositioned { motion.origin = it.positionInRoot() }) {
         val height = maxHeight
         val heightPx = with(LocalDensity.current) { height.toPx() }
@@ -633,7 +634,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                     else -> MaterialTheme.colorScheme.surface
                                 }))
                             }
-                            if (track != null) SongActionHost(track, state, controller, queueEntryId = entry.id,
+                            if (track != null) SongActionHost(track, state, controller, queueEntryId = entry.id, queueOrigin = state.queue.originOf(entry.id),
                                 artworkOrigin = { artworkBounds }, artworkCornerRadius = 12.dp) { _, _, openMenu, menuOpen -> item(openMenu, menuOpen) }
                             else item(null, false)
                             }

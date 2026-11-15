@@ -154,6 +154,17 @@ class PlayingOriginUiTest {
                 onNodeWithTag("now-playing-title").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.lastLibraryTab == LibraryTab.ALBUMS }
                 onNodeWithTag("track-row:${songs[1].id}").assertIsDisplayed()
+                // Queued again from the player's menu, the song still opens its album.
+                openLibraryPage("Playlists")
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.lastLibraryTab == LibraryTab.PLAYLISTS }
+                onNodeWithTag("mini-player").performClick()
+                onNodeWithContentDescription("Track options: Song 1").performClick()
+                onNodeWithText("Play next", substring = false).performScrollTo().performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.queue.upNext.size == 1 }
+                runBlocking { controller.skip(1).join(); controller.pause().join() }
+                onNodeWithTag("now-playing-title").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.lastLibraryTab == LibraryTab.ALBUMS }
+                onNodeWithTag("track-row:${songs[1].id}").assertIsDisplayed()
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

@@ -62,6 +62,8 @@ internal fun Modifier.onSecondaryClick(action: () -> Unit): Modifier {
 internal fun SongActionHost(track: Track, state: AppState, controller: MusicController,
     contextTrackIds: List<String>? = null, contextIndex: Int? = null, playlistId: String? = null,
     onSelect: (() -> Unit)? = null, queueEntryId: String? = null, contextName: String = "Library",
+    /** Where a song in the player or queue came from, which outside the library the page cannot tell. */
+    queueOrigin: me.d3sox.nevumi.queue.QueueOrigin? = null,
     playlistPosition: Int? = null, shuffleContext: Boolean = false,
     artworkOrigin: () -> androidx.compose.ui.geometry.Rect? = { null },
     artworkCornerRadius: androidx.compose.ui.unit.Dp = 16.dp,
@@ -91,10 +93,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     val youTubeVideoId = track.youTubeVideoId?.takeIf { controller.youTubeAvailable && state.preferences.youTube }
     // A song streamed from YouTube has a library artist page only when the library has songs by the same artist.
     val artistInLibrary = track.inLibrary || libraryArtist(track.metadata.artist, state) != null
-    // A song queued again from the queue keeps where it first came from.
-    fun enqueue(action: QueueAction): Boolean {
-        controller.enqueue(track.id, action, if (queueEntryId != null) state.queue.originOf(queueEntryId) else origin); return true
-    }
+    fun enqueue(action: QueueAction): Boolean { controller.enqueue(track.id, action, queueOrigin ?: origin); return true }
     // A song that only streams from YouTube is saved like a YouTube result, and the library views leave it out.
     val youTubeOnly = youTubeVideoId != null && !track.inLibrary
     fun inLibrary(matches: (Track) -> Boolean) = track.inLibrary || state.tracks.any { it.inLibrary && matches(it) }
