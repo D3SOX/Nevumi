@@ -386,7 +386,7 @@ internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: M
     val sharedSelection = LocalSongSelection.current
     val selection = sharedSelection ?: remember { SongSelection() }
     val selectedIds = selection.selectedIds
-    fun toggle(id: String) { selection.toggle(id, ids) }
+    fun toggle(id: String) { selection.toggle(id, ids, origin) }
     Column(modifier.fillMaxSize()) {
         if (sharedSelection == null && selection.active) SongSelectionHeader(selection, controller)
         Box(Modifier.weight(1f).fillMaxWidth()) {

@@ -16,6 +16,7 @@ import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.library.youTubeVideoId
 import me.d3sox.nevumi.library.inLibrary
 import me.d3sox.nevumi.queue.QueueAction
+import me.d3sox.nevumi.queue.QueueOrigin
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.notice_soundcloud_added
 import me.d3sox.nevumi.resources.notice_soundcloud_check_tags
@@ -105,8 +106,11 @@ class YouTubeController internal constructor(private val context: ControllerCont
         return source().browseMore(continuation)
     }
 
-    /** Plays [track] on its own, or with [action] adds it to the queue. Its audio is looked up first, so an unavailable video says why. */
-    fun playYouTube(track: YouTubeTrack, action: QueueAction? = null): kotlinx.coroutines.Job {
+    /**
+     * Plays [track] on its own, or with [action] adds it to the queue. Its audio is looked up first, so an unavailable video says why.
+     * [page] is the YouTube Music page it was picked on.
+     */
+    fun playYouTube(track: YouTubeTrack, action: QueueAction? = null, page: YouTubeCollection? = null): kotlinx.coroutines.Job {
         // Numbered when tapped, so the order of the taps decides, not the order the lookups finish in.
         val request = if (action == null) ++context.playRequests else 0
         return context.action(serialized = false) {
@@ -115,10 +119,12 @@ class YouTubeController internal constructor(private val context: ControllerCont
             val trackId = libraryTracks(listOf(track)).single()
             saveArtwork(listOf(track), listOf(trackId))
             // Looking a video up takes a moment. The queue checks the request when it plays, so anything chosen before then wins.
-            if (action == null) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube", request = request).join()
-            else queueController.enqueue(trackId, action).join()
+            if (action == null) queueController.playTrack(trackId, listOf(trackId), 0, "YouTube", origin = origin(page), request = request).join()
+            else queueController.enqueue(listOf(trackId), action, origin(page)).join()
         }
     }
+
+    private fun origin(page: YouTubeCollection?) = QueueOrigin(youTube = page)
 
     /** Numbers a play choice when it is made, for a play that starts only after its songs load; any later choice wins over it. */
     fun reservePlayRequest(): Long = ++context.playRequests
@@ -128,7 +134,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
      * before it plays; the others are looked up when the player reaches them.
      */
     fun playYouTube(tracks: List<YouTubeTrack>, index: Int, name: String, shuffle: Boolean = false,
-        request: Long = reservePlayRequest()): kotlinx.coroutines.Job {
+        request: Long = reservePlayRequest(), page: YouTubeCollection? = null): kotlinx.coroutines.Job {
         return context.action(serialized = false) {
             requireEnabled()
             require(tracks.isNotEmpty()) { "There is nothing to play" }
@@ -137,17 +143,17 @@ class YouTubeController internal constructor(private val context: ControllerCont
             source().audio(tracks[start].videoId)
             // The other covers follow while the first song plays.
             saveArtwork(tracks, ids, first = ids[start]) {
-                queueController.playTrack(ids[start], ids, start, name, shuffleContext = shuffle, request = request).join()
+                queueController.playTrack(ids[start], ids, start, name, shuffleContext = shuffle, origin = origin(page), request = request).join()
             }
         }
     }
 
     /** Adds [tracks], such as an album, to the queue with [action]; their audio is looked up when the player reaches them. */
-    fun enqueueYouTube(tracks: List<YouTubeTrack>, action: QueueAction) = context.action(serialized = false) {
+    fun enqueueYouTube(tracks: List<YouTubeTrack>, action: QueueAction, page: YouTubeCollection? = null) = context.action(serialized = false) {
         requireEnabled()
         require(tracks.isNotEmpty()) { "There is nothing to add" }
         val ids = libraryTracks(tracks)
-        saveArtwork(tracks, ids) { queueController.enqueue(ids, action).join() }
+        saveArtwork(tracks, ids) { queueController.enqueue(ids, action, origin(page)).join() }
     }
 
     /**
@@ -179,13 +185,13 @@ class YouTubeController internal constructor(private val context: ControllerCont
         return context.action(serialized = false) {
             requireEnabled()
             val (name, tracks) = collectionTracks(collection)
-            playYouTube(tracks, 0, name, shuffle, request).join()
+            playYouTube(tracks, 0, name, shuffle, request, collection).join()
         }
     }
 
     fun enqueueYouTube(collection: YouTubeCollection, action: QueueAction) = context.action(serialized = false) {
         requireEnabled()
-        enqueueYouTube(collectionTracks(collection).second, action).join()
+        enqueueYouTube(collectionTracks(collection).second, action, collection).join()
     }
 
     fun downloadFromYouTube(collection: YouTubeCollection, destination: YouTubeDestination, reviewTags: Boolean) = context.action(serialized = false) {

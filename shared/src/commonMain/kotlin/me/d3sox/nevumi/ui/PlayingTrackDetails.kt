@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,15 +20,17 @@ import me.d3sox.nevumi.resources.manage_playlists
 import me.d3sox.nevumi.resources.player_favorite
 import me.d3sox.nevumi.resources.player_in_a_playlist
 import me.d3sox.nevumi.resources.player_not_in_a_playlist
+import me.d3sox.nevumi.resources.player_open_song_origin
 import me.d3sox.nevumi.resources.player_remove_favorite
 import me.d3sox.nevumi.resources.unknown_artist
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun PlayingTrackDetails(state: AppState, controller: MusicController, current: Track,
-    motion: PlayerMotion, visible: Boolean, swipe: PlayingArtworkSwipe) {
+    motion: PlayerMotion, visible: Boolean, swipe: PlayingArtworkSwipe, onTitle: () -> Unit) {
     var managingPlaylist by remember { mutableStateOf<String?>(null) }
     val preview = swipe.preview
+    val openOrigin = stringResource(Res.string.player_open_song_origin)
     val tracks = remember(state.tracks) { state.tracks.associateBy { it.id } }
     val entries = buildList {
         add(0 to (preview?.current ?: current))
@@ -48,7 +51,8 @@ internal fun PlayingTrackDetails(state: AppState, controller: MusicController, c
                 }, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     PlayerMarquee(track.metadata.title, MaterialTheme.typography.headlineSmall,
-                        if (direction == 0) motion.anchor(PlayerPanel.PLAYING, PlayerElement.TITLE, visible) else Modifier,
+                        if (direction == 0) motion.anchor(PlayerPanel.PLAYING, PlayerElement.TITLE, visible).testTag("now-playing-title")
+                            .clickable(onClickLabel = openOrigin, onClick = onTitle) else Modifier,
                         marqueeState = if (direction == 0) motion.marquee(PlayerElement.TITLE, track.metadata.title) else null, active = visible)
                     PlayerMarquee(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, MaterialTheme.typography.titleMedium,
                         if (direction == 0) motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTIST, visible) else Modifier,

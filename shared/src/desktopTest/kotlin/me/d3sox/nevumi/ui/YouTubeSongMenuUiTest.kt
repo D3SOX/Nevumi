@@ -123,4 +123,65 @@ class YouTubeSongMenuUiTest {
             }
         } finally { runBlocking { controller.closeAndJoin(); downloads.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test fun thePlayingTitleOpensTheYouTubeMusicPageTheSongWasQueuedFromOrItsAlbum() {
+        val directory = Files.createTempDirectory("youtube-title-origin-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = me.d3sox.nevumi.playlists.Playlists(store)
+        val preferences = MusicPreferences(store)
+        runBlocking { preferences.update { it.copy(youTube = true) } }
+        val youTube = FakeYouTube()
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences,
+            youTube = youTube, playlists = playlists)
+        val album = YouTubeCollection(YouTubeLink("MPREb_playedAlbum"), YouTubeCollectionKind.ALBUM, "Played album")
+        val queuedAlbum = YouTubeCollection(YouTubeLink("MPREb_queuedAlbum"), YouTubeCollectionKind.ALBUM, "Queued album")
+        fun track(id: Char, title: String) = YouTubeTrack(id.toString().repeat(11), title, "Artist", 180_000, song = true)
+        try {
+            runSkikoComposeUiTest(size = Size(420f, 900f)) {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady && controller.state.value.preferences.youTube }
+                fun openTitle(title: String) {
+                    onNodeWithTag("mini-player").performClick()
+                    onNodeWithText(title).assertExists()
+                    onNodeWithTag("now-playing-title").performClick()
+                }
+                // A song played from an album page opens that page.
+                runBlocking { controller.playYouTube(listOf(track('a', "Day Ride")), 0, "Played album", page = album).join(); controller.pause().join() }
+                openTitle("Day Ride")
+                waitUntil(timeoutMillis = 5_000) { youTube.browsed.size == 1 }
+                assertEquals("MPREb_playedAlbum", youTube.browsed.last())
+
+                // A search result queued while that album plays has no page of its own, so its title opens its own album.
+                runBlocking { controller.playYouTube(track('b', "Night Ride"), me.d3sox.nevumi.queue.QueueAction.PLAY_NEXT).join(); controller.skip(1).join(); controller.pause().join() }
+                openTitle("Night Ride")
+                waitUntil(timeoutMillis = 5_000) { youTube.browsed.size == 2 }
+                assertEquals(listOf("bbbbbbbbbbb"), youTube.albumLookups.toList())
+                assertEquals("MPREb_p6BGcsuOpGt", youTube.browsed.last())
+
+                // A song queued from another album page opens that page.
+                runBlocking {
+                    controller.enqueueYouTube(listOf(track('c', "Noon Ride")), me.d3sox.nevumi.queue.QueueAction.PLAY_NEXT, queuedAlbum).join()
+                    controller.skip(1).join(); controller.pause().join()
+                }
+                openTitle("Noon Ride")
+                waitUntil(timeoutMillis = 5_000) { youTube.browsed.size == 3 }
+                assertEquals("MPREb_queuedAlbum", youTube.browsed.last())
+
+                // A streamed song played from a library playlist opens the playlist, not its album.
+                val streamed = requireNotNull(controller.state.value.queue.currentTrackId)
+                val playlist = runBlocking { playlists.create("Streams", listOf(streamed)) }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.playlists.isNotEmpty() }
+                runBlocking {
+                    controller.playTrack(streamed, listOf(streamed), 0, "Streams", origin = me.d3sox.nevumi.queue.QueueOrigin(LibraryTab.PLAYLISTS, playlist.id)).join()
+                    controller.pause().join()
+                }
+                openTitle("Noon Ride")
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.preferences.lastLibraryTab == LibraryTab.PLAYLISTS }
+                onNodeWithTag("track-row:$streamed").assertIsDisplayed()
+                assertEquals(1, youTube.albumLookups.size)
+                assertEquals(3, youTube.browsed.size)
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
 }

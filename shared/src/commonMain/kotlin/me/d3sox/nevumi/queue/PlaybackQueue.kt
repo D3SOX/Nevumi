@@ -11,6 +11,7 @@ import me.d3sox.nevumi.playback.RepeatMode
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.settings.MusicSettings
 import me.d3sox.nevumi.settings.QueueRecoveryMode
+import me.d3sox.nevumi.youtube.YouTubeCollection
 
 private fun List<QueueEntry>.indexOfFirstAfter(index: Int, predicate: (QueueEntry) -> Boolean): Int =
     ((index + 1).coerceAtLeast(0) until size).firstOrNull { predicate(this[it]) } ?: size
@@ -24,11 +25,13 @@ enum class QueueSection { MANUAL, CONTEXT }
 
 enum class QueueClear { DUPLICATES, PREVIOUS, NEXT, ALL }
 
+/** A song in the queue; [origin] is where it was played or added from on its own, while songs of the queue's context share its origin. */
 @Serializable
-data class QueueEntry(val id: String, val trackId: String, val section: QueueSection = QueueSection.CONTEXT)
+data class QueueEntry(val id: String, val trackId: String, val section: QueueSection = QueueSection.CONTEXT, val origin: QueueOrigin? = null)
 
+/** Where music was played or added from: a library page, or a YouTube Music page when [youTube] is set. */
 @Serializable
-data class QueueOrigin(val tab: LibraryTab = LibraryTab.SONGS, val collectionId: String? = null)
+data class QueueOrigin(val tab: LibraryTab = LibraryTab.SONGS, val collectionId: String? = null, val youTube: YouTubeCollection? = null)
 
 @Serializable
 enum class SavedQueueKind { LIVE, SNAPSHOT, RECOVERY }
@@ -73,6 +76,8 @@ data class QueueSnapshot(
     fun indexOf(entryId: String?): Int = entryId?.let { positions[it] } ?: -1
     val currentIndex: Int get() = indexOf(currentEntryId)
     val currentTrackId: String? get() = entries.getOrNull(currentIndex)?.trackId
+    /** Where the entry with [entryId] was played or added from, falling back to where the queue was played from. */
+    fun originOf(entryId: String?): QueueOrigin? = entries.getOrNull(indexOf(entryId))?.origin ?: origin
     val upNext: List<QueueEntry> get() = entries.drop(currentIndex + 1).filter { it.section == QueueSection.MANUAL }
     val context: List<QueueEntry> get() = entries.drop(currentIndex + 1).filter { it.section == QueueSection.CONTEXT }
 }
@@ -112,7 +117,7 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
             selected.copy(snapshot = live.copy(selectedSavedQueueId = null)))
     }
 
-    suspend fun enqueue(trackIds: List<String>, action: QueueAction) = store.transaction {
+    suspend fun enqueue(trackIds: List<String>, action: QueueAction, origin: QueueOrigin? = null) = store.transaction {
         if (trackIds.isEmpty()) return@transaction
         val current = snapshot()
         val anchor = current.entries.indexOfFirst { it.id == current.lastInsertedEntryId && it.section == QueueSection.MANUAL }
@@ -121,7 +126,7 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
             QueueAction.PLAY_AFTER -> maxOf(anchor, current.currentIndex) + 1
             QueueAction.APPEND -> current.entries.indexOfFirstAfter(current.currentIndex) { it.section == QueueSection.CONTEXT }
         }
-        val inserted = trackIds.map { QueueEntry(Uuid.random().toString(), it, QueueSection.MANUAL) }
+        val inserted = trackIds.map { QueueEntry(Uuid.random().toString(), it, QueueSection.MANUAL, origin) }
         val before = current.entries.getOrNull(destination - 1)?.id
         val entries = current.entries.toMutableList().apply { addAll(destination, inserted) }
         write(current.copy(entries = entries,
@@ -248,7 +253,8 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
     /** Starts a temporary queue that keeps only the current song; a selected live queue keeps its contents. */
     suspend fun startEmpty() = store.transaction {
         val current = snapshot()
-        write(QueueSnapshot(listOfNotNull(current.entries.getOrNull(current.currentIndex)?.copy(section = QueueSection.CONTEXT)), current.currentEntryId,
+        val kept = current.entries.getOrNull(current.currentIndex)?.copy(section = QueueSection.CONTEXT, origin = current.originOf(current.currentEntryId))
+        write(QueueSnapshot(listOfNotNull(kept), current.currentEntryId,
             current.positionMs, repeatMode = current.repeatMode, repeatPlays = current.repeatPlays), replacement = true)
     }
 
@@ -283,9 +289,9 @@ class PlaybackQueue(private val store: MusicStore, private val queueId: String =
         return snapshot
     }
 
-    suspend fun playNow(trackId: String) = store.transaction {
+    suspend fun playNow(trackId: String, origin: QueueOrigin? = null) = store.transaction {
         val current = snapshot()
-        val playing = QueueEntry(Uuid.random().toString(), trackId, QueueSection.MANUAL)
+        val playing = QueueEntry(Uuid.random().toString(), trackId, QueueSection.MANUAL, origin)
         val entries = current.entries.toMutableList().apply { add(current.currentIndex + 1, playing) }
         write(current.copy(entries = entries, currentEntryId = playing.id,
             positionMs = 0, repeatPlays = null, unshuffledEntryIds = current.unshuffledEntryIds?.toMutableList()?.apply {

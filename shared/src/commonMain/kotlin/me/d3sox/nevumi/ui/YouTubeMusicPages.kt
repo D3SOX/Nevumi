@@ -198,13 +198,14 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
         playing.value?.cancel()
         playing.value = scope.launch {
             val tracks = shelfTracks(content, index)
-            if (tracks.isNotEmpty()) controller.playYouTube(tracks, track?.let(tracks::indexOf)?.coerceAtLeast(0) ?: 0, content.page.title, shuffle, request)
+            if (tracks.isNotEmpty()) controller.playYouTube(tracks, track?.let(tracks::indexOf)?.coerceAtLeast(0) ?: 0, content.page.title, shuffle, request,
+                opened.collection)
         }
     }
     fun enqueueShelf(content: YouTubePageContent, index: Int, action: QueueAction) = scope.launch {
         // Playing keeps every song shown, so a tapped song past the first 1,000 still plays; adding stops at 1,000.
         val tracks = shelfTracks(content, index).take(1_000)
-        if (tracks.isNotEmpty()) controller.enqueueYouTube(tracks, action)
+        if (tracks.isNotEmpty()) controller.enqueueYouTube(tracks, action, opened.collection)
     }
     fun downloadShelf(content: YouTubePageContent, index: Int, destination: YouTubeDestination) = scope.launch {
         val tracks = shelfTracks(content, index).take(1_000)
@@ -227,7 +228,7 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
     }
     val actions = if (content != null && playable != null) ShelfActions({ shuffle -> playShelf(content, playable, null, shuffle) },
         { action -> enqueueShelf(content, playable, action) }, { destination -> downloadShelf(content, playable, destination) }) else null
-    CompositionLocalProvider(LocalYouTubeSelection provides selection, LocalYouTubePageLink provides opened.collection.link) {
+    CompositionLocalProvider(LocalYouTubeSelection provides selection, LocalYouTubePage provides opened.collection) {
     Column(Modifier.fillMaxSize().testTag("youtube-page").focusRequester(focus).focusable()) {
         // Like a library page, the header names the page and holds what it can do.
         if (selection.active) YouTubeSelectionHeader(selection, state, controller)
@@ -465,6 +466,7 @@ private fun YouTubeCard(item: YouTubeItem, state: AppState, controller: MusicCon
 @Composable
 private fun YouTubeCardContent(item: YouTubeItem, controller: MusicController, modifier: Modifier?, openMenu: () -> Unit) {
     val open = LocalOpenYouTubePage.current
+    val page = LocalYouTubePage.current
     val wide = item is YouTubeTrack && !item.song
     val (title, subtitle) = when (item) {
         is YouTubeTrack -> item.title to item.artist
@@ -474,7 +476,7 @@ private fun YouTubeCardContent(item: YouTubeItem, controller: MusicController, m
     val artist = item is YouTubeCollection && item.kind == YouTubeCollectionKind.ARTIST
     // A grid sizes its cards; in a carousel, videos are wider than the square covers.
     Column((modifier ?: Modifier.width(if (wide) 256.dp else 160.dp)).clip(RoundedCornerShape(12.dp))
-        .combinedClickable(onClick = { if (item is YouTubeTrack) controller.playYouTube(item) else open(item as YouTubeCollection) },
+        .combinedClickable(onClick = { if (item is YouTubeTrack) controller.playYouTube(item, page = page) else open(item as YouTubeCollection) },
             onLongClick = openMenu)
         .semantics(mergeDescendants = true) { contentDescription = description }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val kind = (item as? YouTubeCollection)?.kind

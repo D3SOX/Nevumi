@@ -105,7 +105,7 @@ class QueueController internal constructor(private val context: ControllerContex
         val currentQueue = queue.snapshot()
         persistPlaybackPosition()
         val manualQueue = currentQueue.upNext.isNotEmpty() || currentQueue.entries.getOrNull(currentQueue.currentIndex)?.section == QueueSection.MANUAL
-        if (preserveManualQueue && manualQueue) queue.playNow(trackId)
+        if (preserveManualQueue && manualQueue) queue.playNow(trackId, origin)
         else queue.replace(tracks.map { it.id }, index, contextName, shuffle = shuffleContext, origin = origin,
             weight = if (shuffleContext) shuffleWeights() else null)
         playback.loadSnapshot(queue.snapshot())
@@ -274,23 +274,10 @@ class QueueController internal constructor(private val context: ControllerContex
         context.confirm(if (section == QueueSection.MANUAL) Res.string.notice_moved_to_up_next else Res.string.notice_moved_to_context,
             undo = { restoreQueue(before) }, redo = { restoreQueue(snapshot) })
     }
-    fun enqueue(trackId: String, operation: QueueAction) = context.action {
-        requireNotNull(library.findTrack(trackId)) { "Track is missing" }
-        val before = queue.snapshot()
-        when (operation) {
-            QueueAction.PLAY_NEXT -> queue.playNext(trackId)
-            QueueAction.PLAY_AFTER -> queue.playAfter(trackId)
-            QueueAction.APPEND -> queue.append(trackId)
-        }
-        val snapshot = queue.snapshot()
-        context.update { it.copy(queue = snapshot) }
-        confirmQueueAction(operation, before, snapshot)
-        if (playback.queueLoaded) engine.updateQueue(playback.playableQueue(snapshot))
-    }
-    fun enqueue(trackIds: List<String>, operation: QueueAction) = context.action {
+    fun enqueue(trackIds: List<String>, operation: QueueAction, origin: QueueOrigin? = null) = context.action {
         trackIds.forEach { requireNotNull(library.findTrack(it)) { "Track is missing" } }
         val before = queue.snapshot()
-        queue.enqueue(trackIds, operation)
+        queue.enqueue(trackIds, operation, origin)
         val snapshot = queue.snapshot()
         context.update { it.copy(queue = snapshot) }
         confirmQueueAction(operation, before, snapshot)

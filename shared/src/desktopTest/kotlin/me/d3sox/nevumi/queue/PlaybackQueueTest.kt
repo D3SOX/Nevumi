@@ -362,7 +362,8 @@ class PlaybackQueueTest {
             val before = queue.snapshot()
             queue.startEmpty()
             val empty = queue.snapshot()
-            assertEquals(listOf(before.entries[1]), empty.entries)
+            // The kept song still opens the album it came from.
+            assertEquals(listOf(before.entries[1].copy(origin = QueueOrigin(collectionId = "album"))), empty.entries)
             assertEquals(before.currentEntryId, empty.currentEntryId)
             assertEquals(42_000, empty.positionMs)
             assertEquals(QueueSnapshot().contextName, empty.contextName)
