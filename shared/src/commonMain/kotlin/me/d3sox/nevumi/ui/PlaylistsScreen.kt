@@ -141,23 +141,25 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
     // An open playlist belongs to its current folder, which also covers playlists opened from the player.
     // A folder disappears once its last playlist moves out, so fall back to the closest folder that still exists.
     val openFolder = if (playlist != null) playlist.folder else generateSequence(folder, ::parentFolder).firstOrNull { name -> visiblePlaylists.any { isInFolder(it.folder, name) } }
-    fun collections(page: String?) = visiblePlaylists.filter { it.folder == page }.map { collection ->
-        CollectionItem(collection.id, collection.title, "", collection.artworkPath(state), AppIcon.QUEUE,
-            songCount = collection.trackIds.size, recentAt = collection.trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0,
-            trackIds = collection.trackIds, describe = {
-                listOfNotNull(countLabel(collection.trackIds.size, Res.plurals.songs),
-                    if (collection.rule != null) stringResource(Res.string.library_smart_playlist) else null,
-                    if (collection.autoDownload) stringResource(Res.string.library_automatic_downloads) else null).joinToString(" · ")
-            })
-    } + visiblePlaylists.mapNotNull { playlist ->
+    val layout = state.preferences.collectionLayout(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS)
+    fun entry(collection: Playlist) = CollectionItem(collection.id, collection.title, "", collection.artworkPath(state), AppIcon.QUEUE,
+        songCount = collection.trackIds.size, recentAt = collection.trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0,
+        trackIds = collection.trackIds, describe = {
+            listOfNotNull(countLabel(collection.trackIds.size, Res.plurals.songs),
+                if (collection.rule != null) stringResource(Res.string.library_smart_playlist) else null,
+                if (collection.autoDownload) stringResource(Res.string.library_automatic_downloads) else null).joinToString(" · ")
+        })
+    fun collections(page: String?) = visiblePlaylists.filter { it.folder == page }.map(::entry) + visiblePlaylists.mapNotNull { playlist ->
         // Group everything below this page by the subfolder it sits in.
         val path = playlist.folder?.takeIf { it != page && (page == null || isInFolder(it, page)) } ?: return@mapNotNull null
         folderPath(folderSegments(path).take((page?.let(::folderSegments)?.size ?: 0) + 1)) to playlist
     }.groupBy({ it.first }, { it.second }).map { (name, contents) ->
         val trackIds = contents.flatMap(Playlist::trackIds).distinct()
-        CollectionItem(PLAYLIST_FOLDER_PREFIX + name, folderSegments(name).last(), "", null, AppIcon.FOLDER,
+        // Folders preview the playlists inside in the tab's order, preferring those with artwork, like the home screen's collection cards.
+        val artwork = contents.map(::entry).sortedWith(layout.comparator()).map { it.artwork }.sortedBy { it == null }
+        CollectionItem(PLAYLIST_FOLDER_PREFIX + name, folderSegments(name).last(), "", artwork.firstOrNull(), AppIcon.FOLDER,
             songCount = trackIds.size, recentAt = trackIds.maxOfOrNull { recentAt[it] ?: 0 } ?: 0, trackIds = trackIds,
-            describe = { countLabel(contents.size, Res.plurals.playlists) })
+            describe = { countLabel(contents.size, Res.plurals.playlists) }, covers = artwork.take(4).takeIf { it.firstOrNull() != null }.orEmpty())
     }
     fun closePlaylist() { folder = openFolder; selected = null }
     fun open(id: String) { if (id.startsWith(PLAYLIST_FOLDER_PREFIX)) folder = id.removePrefix(PLAYLIST_FOLDER_PREFIX) else selected = id }
@@ -184,7 +186,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         if (fileBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         fileMessage?.let { Text(it, Modifier.padding(horizontal = 24.dp)) }
         if (pageFolder != null) {
-            val entries = remember(visiblePlaylists, state.artwork, recentAt, pageFolder) { collections(pageFolder) }
+            val entries = remember(visiblePlaylists, state.artwork, recentAt, layout, pageFolder) { collections(pageFolder) }
             CompositionLocalProvider(LocalLibraryScrollKey provides "${LocalLibraryScrollKey.current}:folder:$pageFolder") {
                 CollectionBrowser(entries, me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, state, controller, Modifier.weight(1f),
                     total = visiblePlaylists.count { isInFolder(it.folder, pageFolder) }, rearranging = rearranging, finishRearranging = finishRearranging, open = ::open)
@@ -203,7 +205,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
                 }
                 }
             }
-            val entries = remember(visiblePlaylists, state.artwork, recentAt) { collections(null) }
+            val entries = remember(visiblePlaylists, state.artwork, recentAt, layout) { collections(null) }
             CollectionBrowser(entries, me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, state, controller, Modifier.weight(1f), total = visiblePlaylists.size,
                 rearranging = rearranging, finishRearranging = finishRearranging, open = ::open)
         } else {
