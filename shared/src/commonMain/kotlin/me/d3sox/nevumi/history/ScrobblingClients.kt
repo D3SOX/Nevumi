@@ -31,7 +31,9 @@ private fun checkStatus(response: HttpResponse) {
     if (code in 200..299) return
     val failure = when (code) {
         401, 403 -> ScrobbleFailure.AUTHORIZATION
-        429 -> ScrobbleFailure.RETRYABLE
+        // A proxy answers 502 when it cannot reach the service and 503 when the service is down, so the listen was not recorded.
+        // A gateway timeout (504) may come after the service recorded it, like a read timeout, so it stays uncertain.
+        429, 502, 503 -> ScrobbleFailure.RETRYABLE
         in 400..499 -> ScrobbleFailure.REJECTED
         else -> ScrobbleFailure.UNCERTAIN
     }
