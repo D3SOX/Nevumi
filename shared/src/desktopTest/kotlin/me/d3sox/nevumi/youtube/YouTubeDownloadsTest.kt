@@ -6,6 +6,9 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -29,6 +32,7 @@ import me.d3sox.nevumi.soundcloud.DirectoryMusicFiles
 import me.d3sox.nevumi.soundcloud.ScGateTagChoice
 import me.d3sox.nevumi.soundcloud.ScGateTags
 import me.d3sox.nevumi.storage.openMusicStore
+import me.d3sox.nevumi.ui.MusicPlayerApp
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
@@ -142,6 +146,25 @@ class YouTubeDownloadsTest {
         val outside = noticeFor(FakeYouTube(audio, gate = CompletableDeferred()), reviewTags = false, includeFolder = "Elsewhere")
         assertEquals(Res.string.notice_soundcloud_saved_outside, outside.message)
         assertEquals(NoticeDuration.LONG, outside.duration)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test fun anErrorReplacesADownloadNoticeThatWaitsForTheUser() {
+        val source = FakeYouTube(audio, gate = CompletableDeferred())
+        val fixture = fixture(source)
+        val player = MusicController(fixture.library, PlaybackQueue(fixture.store), MpvPlaybackEngine("null"), youTubeDownloads = fixture.downloads)
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                val job = runBlocking { fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags = true) }
+                waitUntil(timeoutMillis = 10_000) { player.state.value.youTubeJobs.any { it.id == job.id } }
+                source.gate?.complete(Unit)
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("to finish", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                // YouTube is off in Settings, so this download fails with an error.
+                player.downloadFromYouTube(track, YouTubeDestination.DEVICE, reviewTags = false)
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Turn on YouTube in Settings first").fetchSemanticsNodes().isNotEmpty() }
+            }
+        } finally { runBlocking { player.closeAndJoin() }; fixture.close() }
     }
 
     @Test fun aJobThatFinishesBeforeAnyoneListensIsStillAnnounced() = runBlocking {
