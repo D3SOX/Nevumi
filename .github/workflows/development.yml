@@ -83,6 +83,11 @@ jobs:
       - run: python3 scripts/build_mpv.py --prefix .test-environment/mpv-runtime
       - run: ./gradlew --configure-on-demand :desktopApp:createDistributable --console=plain
       - run: python3 scripts/test-linux-player.py
+      # Needs the distributable, so it runs here instead of in tests.yml.
+      - name: Check the Arch package and signed repository
+        run: >-
+          docker compose -f scripts/compose.yaml run --rm -T -v "$GITHUB_WORKSPACE:/workspace" -w /workspace
+          -e "NEVUMI_BUILD_UID=$(id -u)" arch bash scripts/ci-test-linux-packaging.sh
       - name: Create the Arch development package
         run: |
           version=$(sed -n 's/^appVersion=//p' gradle.properties)
