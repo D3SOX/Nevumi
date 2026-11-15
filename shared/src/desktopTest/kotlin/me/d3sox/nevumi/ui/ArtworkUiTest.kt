@@ -19,6 +19,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.test.Test
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import me.d3sox.nevumi.settings.MusicPreferences
@@ -177,6 +179,96 @@ class ArtworkUiTest {
                 }
                 val pixels = onNodeWithContentDescription("Album artwork: Artwork Fixture").captureToImage().toPixelMap()
                 assertEquals(Color(0xFFE05040), pixels[pixels.width / 2, pixels.height / 2])
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    /** Hands out each cover only once the test releases it. */
+    private class SlowCovers : me.d3sox.nevumi.youtube.YouTubeSource {
+        val covers = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<ByteArray>>()
+        fun cover(url: String) = covers.getOrPut(url) { kotlinx.coroutines.CompletableDeferred() }
+        override suspend fun artwork(url: String) = cover(url).await()
+        override suspend fun search(query: String, kind: me.d3sox.nevumi.youtube.YouTubeSearchKind,
+            continuation: me.d3sox.nevumi.youtube.YouTubeContinuation?) = me.d3sox.nevumi.youtube.YouTubePage(emptyList(), null)
+        override suspend fun browse(link: me.d3sox.nevumi.youtube.YouTubeLink) = me.d3sox.nevumi.youtube.YouTubeBrowsePage("")
+        override suspend fun page(videoId: String, kind: me.d3sox.nevumi.youtube.YouTubeCollectionKind): me.d3sox.nevumi.youtube.YouTubeCollection? = null
+        override suspend fun browseMore(continuation: me.d3sox.nevumi.youtube.YouTubeContinuation) = me.d3sox.nevumi.youtube.YouTubePage(emptyList(), null)
+        override suspend fun audio(videoId: String, fresh: Boolean) = throw UnsupportedOperationException()
+        override fun playbackLocation(videoId: String) = ""
+    }
+
+    @Test
+    fun aCoverThatIsStillLoadingShowsALoadingIndicatorInsteadOfTheMissingCoverIcon() {
+        val directory = Files.createTempDirectory("loading-artwork")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val covers = SlowCovers()
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), youTube = covers)
+        val loading = SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Loading cover")
+        val indicator = SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.ProgressBarRangeInfo)
+        try {
+            runComposeUiTest {
+                setContent {
+                    androidx.compose.foundation.layout.Row {
+                        for (url in listOf("https://covers.test/found", "https://covers.test/broken"))
+                            YouTubeImage(url, controller, androidx.compose.ui.Modifier.size(48.dp))
+                        YouTubeImage("https://covers.test/large", controller, androidx.compose.ui.Modifier.size(200.dp))
+                    }
+                }
+                waitUntil(timeoutMillis = 3_000) { onAllNodes(indicator, useUnmergedTree = true).fetchSemanticsNodes().size == 3 }
+                onAllNodes(loading, useUnmergedTree = true).assertCountEquals(3)
+                // A large cover keeps the indicator at its standard size instead of filling the slot.
+                onAllNodes(indicator, useUnmergedTree = true).fetchSemanticsNodes().forEach { node ->
+                    kotlin.test.assertTrue(with(density) { node.size.width.toDp() } <= 48.dp, "Indicator is ${node.size}")
+                }
+                covers.cover("https://covers.test/large").complete(ByteArray(0))
+
+                covers.cover("https://covers.test/found").complete(image(0xE05040))
+                covers.cover("https://covers.test/broken").complete(ByteArray(0))
+                waitUntil(timeoutMillis = 3_000) { onAllNodes(loading, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
+                onAllNodes(indicator, useUnmergedTree = true).assertCountEquals(0)
+                onAllNodesWithTag("youtube-artwork").assertCountEquals(1)
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun aQueuedYouTubeSongShowsItsCoverAsLoadingUntilTheDownloadFinishes() {
+        val directory = Files.createTempDirectory("downloading-artwork")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val preferences = MusicPreferences(store)
+        runBlocking { preferences.update { it.copy(youTube = true) } }
+        val covers = SlowCovers()
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences,
+            artwork = ArtworkLibrary(directory.resolve("artwork").toString()), youTube = covers)
+        val loading = SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Loading cover")
+        try {
+            runComposeUiTest {
+                setContent {
+                    val state by controller.state.collectAsState()
+                    state.tracks.firstOrNull()?.let { track ->
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.size(64.dp)) { MusicArtwork(state, track.id, track.metadata.title, "Cover") }
+                    }
+                }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.youTube }
+                controller.enqueueYouTube(listOf(me.d3sox.nevumi.youtube.YouTubeTrack("aaaaaaaaaaa", "Night Drive", "Artist",
+                    artworkUrl = "https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg", song = true)), me.d3sox.nevumi.queue.QueueAction.APPEND)
+                // The song is queued while its cover is still on the way.
+                waitUntil(timeoutMillis = 3_000) { covers.covers.isNotEmpty() && onAllNodes(loading).fetchSemanticsNodes().size == 1 }
+
+                // Frame by frame, the slot goes from loading straight to the cover, never showing the missing-cover icon in between.
+                mainClock.autoAdvance = false
+                covers.covers.values.forEach { it.complete(image(0xE05040)) }
+                val deadline = System.currentTimeMillis() + 3_000
+                while (true) {
+                    mainClock.advanceTimeByFrame()
+                    val shown = onNodeWithContentDescription("Cover").captureToImage().toPixelMap().let { it[it.width / 2, it.height / 2] } == Color(0xFFE05040)
+                    if (shown) break
+                    onNodeWithContentDescription("Cover").assert(loading)
+                    check(System.currentTimeMillis() < deadline) { "The cover did not appear" }
+                    Thread.sleep(5)
+                }
+                onAllNodes(loading).assertCountEquals(0)
+                assertEquals(emptySet(), controller.state.value.downloadingArtwork)
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

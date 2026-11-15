@@ -215,19 +215,29 @@ class YouTubeController internal constructor(private val context: ControllerCont
     /** Saves the covers of songs that have none yet; songs of one album share a cover, which is fetched once. */
     private suspend fun saveArtwork(tracks: List<YouTubeTrack>, ids: List<String>) {
         if (artwork == null) return
+        val missing = tracks.zip(ids).mapNotNull { (track, id) ->
+            track.artworkUrl?.takeIf { context.state.value.artwork[id] == null }?.let { url -> url to id }
+        }
+        val downloading = missing.map { (_, id) -> id }
+        // Until their turn comes, the songs show that their covers are on the way rather than missing.
+        context.update { it.copy(downloadingArtwork = it.downloadingArtwork + downloading) }
         val fetched = mutableMapOf<String, ByteArray?>()
-        tracks.zip(ids).forEach { (track, id) ->
-            val url = track.artworkUrl ?: return@forEach
-            if (context.state.value.artwork[id] != null) return@forEach
-            try {
-                val bytes = fetched.getOrPut(url) {
-                    try { source().artwork(largeArtwork(url)) }
-                    catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { null }
-                } ?: return@forEach
-                artwork.save(id, bytes)
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { /* The song plays without a cover. */ }
+        try {
+            missing.forEach { (url, id) ->
+                val path = try {
+                    fetched.getOrPut(url) {
+                        try { source().artwork(largeArtwork(url)) }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { null }
+                    }?.let { bytes -> artwork.save(id, bytes); artwork.path(id) }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null /* The song plays without a cover. */ }
+                // The cover and the end of its download land together, so the song never shows as missing one in between.
+                context.update { state -> state.copy(downloadingArtwork = state.downloadingArtwork - id,
+                    artwork = path?.let { state.artwork + (id to it) } ?: state.artwork) }
+            }
+        } finally {
+            context.update { it.copy(downloadingArtwork = it.downloadingArtwork - downloading) }
         }
     }
 

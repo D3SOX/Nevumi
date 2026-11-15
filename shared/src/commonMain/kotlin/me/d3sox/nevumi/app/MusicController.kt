@@ -70,6 +70,8 @@ data class AppState(
     val playlists: List<Playlist> = emptyList(),
     val preferences: MusicSettings = MusicSettings(),
     val artwork: Map<String, String> = emptyMap(),
+    /** Songs whose covers are still being downloaded, which show as loading rather than missing. */
+    val downloadingArtwork: Set<String> = emptySet(),
     val fileEdits: List<LocalFileEdit> = emptyList(),
     val listens: List<Listen> = emptyList(),
     val scrobbling: ScrobblingStatus = ScrobblingStatus(),

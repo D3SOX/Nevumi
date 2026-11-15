@@ -238,21 +238,23 @@ private val youTubeImages = mutableMapOf<String, ImageBitmap>()
 
 /** An image from YouTube's image servers, at most [maxDimension] pixels wide or high once decoded. */
 @Composable
-internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: MusicController): ImageBitmap? {
+internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: MusicController): ArtworkImage {
     val key = url?.let { "$maxDimension:$it" }
-    val image by produceState(key?.let(youTubeImages::get), key) {
+    fun cached() = key?.let(youTubeImages::get).let { ArtworkImage(it, it == null && key != null) }
+    val image by produceState(cached(), key) {
         // A reused row or card keeps the previous image until it learns this one's.
-        value = key?.let(youTubeImages::get)
-        if (url == null || key == null || value != null) return@produceState
-        value = try {
+        value = cached()
+        if (url == null || key == null || value.image != null) return@produceState
+        val fetched = try {
             val bytes = controller.youTubeArtwork(url)
             withContext(Dispatchers.Default) { decodeArtwork(bytes, maxDimension) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { null }
-        value?.let { image ->
+        fetched?.let { image ->
             youTubeImages[key] = image
             if (youTubeImages.size > 200) youTubeImages.remove(youTubeImages.keys.first())
         }
+        value = ArtworkImage(fetched, loading = false)
     }
     return image
 }
@@ -260,12 +262,10 @@ internal fun rememberYouTubeImage(url: String?, maxDimension: Int, controller: M
 @Composable
 internal fun YouTubeImage(url: String?, controller: MusicController, modifier: Modifier, shape: Shape = RoundedCornerShape(12.dp),
     icon: AppIcon = AppIcon.YOUTUBE, maxDimension: Int = 160) {
-    val image = rememberYouTubeImage(url, maxDimension, controller)
+    val artwork = rememberYouTubeImage(url, maxDimension, controller)
     Surface(modifier, color = MaterialTheme.colorScheme.secondaryContainer, shape = shape) {
-        image?.let { Image(it, null, Modifier.fillMaxSize().testTag("youtube-artwork"), contentScale = ContentScale.Crop) }
-            ?: Box(contentAlignment = Alignment.Center) {
-                Icon(icon.vector, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
+        artwork.image?.let { Image(it, null, Modifier.fillMaxSize().testTag("youtube-artwork"), contentScale = ContentScale.Crop) }
+            ?: ArtworkPlaceholder(artwork.loading, icon, null, Modifier.size(28.dp))
     }
 }
 
@@ -319,10 +319,8 @@ internal fun YouTubeSongMenu(track: YouTubeTrack, state: AppState, controller: M
     }
     val artworkDescription = stringResource(Res.string.player_song_menu_artwork, track.title)
     TrackActionDialog(track.title, track.artist, { _ ->
-        val image = rememberYouTubeImage(smallArtwork(track), 160, controller)
-        image?.let { Image(it, artworkDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-            ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(AppIcon.YOUTUBE.vector, artworkDescription, Modifier.fillMaxSize(.45f), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
+        val artwork = rememberYouTubeImage(smallArtwork(track), 160, controller)
+        artwork.image?.let { Image(it, artworkDescription, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+            ?: ArtworkPlaceholder(artwork.loading, AppIcon.YOUTUBE, artworkDescription, Modifier.fillMaxSize(.45f))
     }, options, dismiss, artworkOrigin, 12.dp, onArtworkPlaced)
 }

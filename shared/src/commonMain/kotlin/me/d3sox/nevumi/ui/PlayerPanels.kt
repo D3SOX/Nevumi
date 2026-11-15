@@ -455,7 +455,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                         Surface(Modifier.size(56.dp).then(motion.anchor(PlayerPanel.QUEUE, PlayerElement.ARTWORK, queueProgress >= .999f))
                             .then(if (queueProgress >= .999f) Modifier.testTag("player-artwork") else Modifier),
                             shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                            MusicArtwork(state.artwork[current.id], current.metadata.title, stringResource(Res.string.player_queue_mini_player_artwork, current.metadata.title))
+                            MusicArtwork(state, current.id, current.metadata.title, stringResource(Res.string.player_queue_mini_player_artwork, current.metadata.title))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             PlayerMarquee(current.metadata.title, MaterialTheme.typography.titleSmall,
@@ -603,7 +603,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                         Surface(Modifier.size(48.dp).onGloballyPositioned { artworkBounds = Rect(it.positionOnScreen(), it.size.toSize()) }
                                             .graphicsLayer { alpha = if (menuOpen) 0f else 1f },
                                             shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                                            MusicArtwork(state.artwork[entry.trackId], track?.metadata?.title.orEmpty(), stringResource(Res.string.player_queue_artwork, entry.id))
+                                            MusicArtwork(state, entry.trackId, track?.metadata?.title.orEmpty(), stringResource(Res.string.player_queue_artwork, entry.id))
                                         }
                                     }
                                 }, trailingContent = {
@@ -692,7 +692,7 @@ internal fun MiniTrackInformation(state: AppState, track: Track, modifier: Modif
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Surface(Modifier.size(48.dp).then(motion?.anchor(PlayerPanel.MINI, PlayerElement.ARTWORK, visible) ?: Modifier)
             .then(if (preview == null && visible) Modifier.testTag("player-artwork") else Modifier), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-            MusicArtwork(state.artwork[track.id], track.metadata.title,
+            MusicArtwork(state, track.id, track.metadata.title,
                 if (preview == null) stringResource(Res.string.player_mini_player_artwork, track.metadata.title) else stringResource(Res.string.player_track_preview, preview, track.metadata.title))
         }
         Spacer(Modifier.width(12.dp))
@@ -712,7 +712,7 @@ private fun PlayerCover(state: AppState, controller: MusicController, track: Tra
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
         if (PlayerLyrics.shown(controller)) LyricsCover(state, controller, motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTWORK)) else
         Surface(Modifier.size(minOf(maxWidth, maxHeight, 420.dp)).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTWORK)), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-            MusicArtwork(state.artwork[track.id], track.metadata.title, stringResource(Res.string.player_album_artwork, track.metadata.title), maxDimension = 1024)
+            MusicArtwork(state, track.id, track.metadata.title, stringResource(Res.string.player_album_artwork, track.metadata.title), maxDimension = 1024)
         }
     }
 }
