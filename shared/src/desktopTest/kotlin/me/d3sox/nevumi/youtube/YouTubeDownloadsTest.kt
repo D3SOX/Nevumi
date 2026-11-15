@@ -6,12 +6,23 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import me.d3sox.nevumi.app.ActionNotice
+import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.app.NoticeDuration
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
+import me.d3sox.nevumi.playback.MpvPlaybackEngine
+import me.d3sox.nevumi.queue.PlaybackQueue
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.notice_soundcloud_check_tags
+import me.d3sox.nevumi.resources.notice_soundcloud_failed
+import me.d3sox.nevumi.resources.notice_soundcloud_saved_outside
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.soundcloud.DirectoryMusicFiles
 import me.d3sox.nevumi.soundcloud.ScGateTagChoice
@@ -51,7 +62,7 @@ class YouTubeDownloadsTest {
     }
 
     private class Fixture(val directory: Path, val downloads: YouTubeDownloads, val library: MusicLibrary, val requests: MutableList<String>,
-        val close: () -> Unit)
+        val store: me.d3sox.nevumi.storage.MusicStore, val close: () -> Unit)
 
     private fun fixture(source: YouTubeSource, expired: Set<String> = emptySet(), includeFolder: String? = null,
         upload: (suspend (String, String) -> Unit)? = null): Fixture {
@@ -73,7 +84,7 @@ class YouTubeDownloadsTest {
         })
         val downloads = YouTubeDownloads(store, http, source, directory.resolve("work").toString(),
             DirectoryMusicFiles(directory.resolve("Music/YouTube").toString()), LocalFiles(library), upload = upload, chunkBytes = 4_096)
-        return Fixture(directory, downloads, library, requests) {
+        return Fixture(directory, downloads, library, requests, store) {
             runBlocking { downloads.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively()
         }
     }
@@ -103,6 +114,28 @@ class YouTubeDownloadsTest {
             // The work files are gone once the song is saved.
             assertEquals(emptyList(), fixture.directory.resolve("work").toFile().list().orEmpty().toList())
         } finally { fixture.close() }
+    }
+
+    @Test fun noticesThatWaitOnTheUserOrReportAFailureStayUntilDismissed() = runBlocking {
+        suspend fun noticeFor(source: YouTubeSource, reviewTags: Boolean, includeFolder: String? = null): ActionNotice {
+            val fixture = fixture(source, includeFolder = includeFolder)
+            val player = MusicController(fixture.library, PlaybackQueue(fixture.store), MpvPlaybackEngine("null"), youTubeDownloads = fixture.downloads)
+            try {
+                val notice = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(10_000) { player.notices.first() } }
+                fixture.downloads.jobs.first { it != null }
+                fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags)
+                return notice.await()
+            } finally { player.closeAndJoin(); fixture.close() }
+        }
+        val review = noticeFor(FakeYouTube(audio), reviewTags = true)
+        assertEquals(Res.string.notice_soundcloud_check_tags, review.message)
+        assertEquals(NoticeDuration.UNTIL_DISMISSED, review.duration)
+        val failure = noticeFor(FakeYouTube(audio, YouTubeException("This video is private", retryable = false)), reviewTags = false)
+        assertEquals(Res.string.notice_soundcloud_failed, failure.message)
+        assertEquals(NoticeDuration.UNTIL_DISMISSED, failure.duration)
+        val outside = noticeFor(FakeYouTube(audio), reviewTags = false, includeFolder = "Elsewhere")
+        assertEquals(Res.string.notice_soundcloud_saved_outside, outside.message)
+        assertEquals(NoticeDuration.LONG, outside.duration)
     }
 
     @Test fun aJobThatFinishesBeforeAnyoneListensIsStillAnnounced() = runBlocking {

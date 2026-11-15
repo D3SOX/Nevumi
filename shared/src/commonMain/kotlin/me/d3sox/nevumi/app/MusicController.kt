@@ -97,7 +97,10 @@ data class PlaybackConfirmation(val title: String, val play: () -> kotlinx.corou
 enum class ActionDestination { QUEUE, FAVORITES, PLAYLISTS, DOWNLOADS, SOUNDCLOUD_DOWNLOADS, YOUTUBE_DOWNLOADS }
 /** A short confirmation of an action; [message] is formatted with [arguments] where it is shown. */
 data class ActionNotice(val message: StringResource, val destination: ActionDestination? = null, val undo: (() -> kotlinx.coroutines.Job)? = null,
-    val isRedo: Boolean = false, val arguments: List<Any> = emptyList(), val play: (() -> kotlinx.coroutines.Job)? = null)
+    val isRedo: Boolean = false, val arguments: List<Any> = emptyList(), val play: (() -> kotlinx.coroutines.Job)? = null,
+    val duration: NoticeDuration = if (undo != null || play != null) NoticeDuration.LONG else NoticeDuration.SHORT)
+/** How long a notice stays; background events the user may miss last longer, and those waiting on the user stay until dismissed. */
+enum class NoticeDuration { SHORT, LONG, UNTIL_DISMISSED }
 enum class FileEditTarget { LOCAL, SERVER }
 
 /**

@@ -2,21 +2,39 @@ package me.d3sox.nevumi.ui
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.material3.SnackbarDuration
+import me.d3sox.nevumi.app.ActionDestination
+import me.d3sox.nevumi.app.ActionNotice
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.app.NoticeDuration
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.queue.QueueAction
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.notice_soundcloud_check_tags
 import me.d3sox.nevumi.storage.openMusicStore
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class ActionFeedbackUiTest {
+    @Test
+    fun noticesWaitingOnTheUserStayUntilDismissed() {
+        val visuals = ActionSnackbarVisuals(ActionNotice(Res.string.notice_soundcloud_check_tags, ActionDestination.SOUNDCLOUD_DOWNLOADS,
+            arguments = listOf("Song"), duration = NoticeDuration.UNTIL_DISMISSED), "Open downloads")
+        assertEquals(SnackbarDuration.Indefinite, visuals.duration)
+        assertTrue(visuals.withDismissAction)
+        assertEquals(SnackbarDuration.Short, ActionSnackbarVisuals(ActionNotice(Res.string.notice_soundcloud_check_tags), null).duration)
+        assertEquals(SnackbarDuration.Long, ActionSnackbarVisuals(ActionNotice(Res.string.notice_soundcloud_check_tags, play = { Job() }), "Play").duration)
+    }
+
     @Test
     fun addingSongsOffersUndoAndAQueueShortcut() {
         val directory = Files.createTempDirectory("action-feedback-ui")
