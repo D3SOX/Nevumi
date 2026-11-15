@@ -31,3 +31,10 @@ internal fun ComposeUiTest.openLibraryPage(label: String) {
         onNode(destination).performClick()
     } else onNode(destination).performClick()
 }
+
+/** Picks the filter chip tagged [tag], from the row's More menu when it does not fit in the row. */
+@OptIn(ExperimentalTestApi::class)
+internal fun ComposeUiTest.pickFilter(tag: String) {
+    if (onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty()) onNodeWithTag("search-filters-more").performClick()
+    onNodeWithTag(tag).performClick()
+}

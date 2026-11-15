@@ -6,9 +6,11 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +42,7 @@ import me.d3sox.nevumi.settings.TrackAction
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.player_song_menu_artwork
 import me.d3sox.nevumi.resources.retry
+import me.d3sox.nevumi.resources.search_type_all
 import me.d3sox.nevumi.resources.search_type_albums
 import me.d3sox.nevumi.resources.search_type_artists
 import me.d3sox.nevumi.resources.search_type_songs
@@ -67,75 +70,117 @@ import me.d3sox.nevumi.youtube.YouTubeException
 import me.d3sox.nevumi.youtube.suggestedTags
 import me.d3sox.nevumi.youtube.YouTubeItem
 import me.d3sox.nevumi.youtube.YouTubeSearchKind
+import me.d3sox.nevumi.youtube.YouTubeSearchSection
 import me.d3sox.nevumi.youtube.YouTubeTrack
 import me.d3sox.nevumi.youtube.smallArtwork
 import org.jetbrains.compose.resources.stringResource
 
 private fun songKey(artist: String, title: String) = "${artist.trim().lowercase()}\u0000${title.trim().lowercase()}"
 
+/** The results of one YouTube search, for one kind or, without a kind, for every kind at once. */
+internal class YouTubeSearch(val query: String, val kind: YouTubeSearchKind?) : CachedSearch() {
+    val results = mutableStateListOf<YouTubeItem>()
+    var sections by mutableStateOf<List<YouTubeSearchSection>>(emptyList())
+    var next by mutableStateOf<YouTubeContinuation?>(null)
+    // Trying again cannot bring back a private or removed video that a pasted link found.
+    var permanent by mutableStateOf(false)
+}
+
+/** The kind of YouTube search picked last and the latest searches' results, kept while the search screen is open. */
+internal class YouTubeSearches(kind: YouTubeSearchKind? = null) {
+    // Null searches every kind.
+    var kind by mutableStateOf(kind)
+    val recent = RecentSearches<Pair<String, YouTubeSearchKind?>, YouTubeSearch> { (query, kind) -> YouTubeSearch(query, kind) }
+
+    companion object {
+        val Saver = Saver<YouTubeSearches, String>({ it.kind?.name.orEmpty() },
+            { name -> YouTubeSearches(YouTubeSearchKind.entries.firstOrNull { it.name == name }) })
+    }
+}
+
 /**
- * Searches YouTube once [query] stops changing, preferring songs from YouTube Music. A pasted video link finds that video.
- * Tapping a result plays it, or opens an artist's or album's YouTube Music page; its options add it to the queue or download it, so another
- * source's query only leads to a recording the user picked.
+ * Searches YouTube once [query] stops changing, first for every kind at once, grouped like the library's search, or for one kind the
+ * user picks. A pasted video link finds that video. Tapping a result plays it, or opens an artist's or album's YouTube Music page; its
+ * options add it to the queue or download it, so another source's query only leads to a recording the user picked.
  */
 @Composable
-internal fun YouTubeSearchResults(query: String, state: AppState, controller: MusicController) {
-    var kind by rememberSaveable { mutableStateOf(YouTubeSearchKind.SONGS) }
-    val results = remember(query, kind) { mutableStateListOf<YouTubeItem>() }
-    var next by remember(query, kind) { mutableStateOf<YouTubeContinuation?>(null) }
-    var loading by remember(query, kind) { mutableStateOf(true) }
-    var error by remember(query, kind) { mutableStateOf<String?>(null) }
-    // Trying again cannot bring back a private or removed video that a pasted link found.
-    var permanent by remember(query, kind) { mutableStateOf(false) }
-    var attempt by remember(query, kind) { mutableStateOf(0) }
+internal fun YouTubeSearchResults(query: String, state: AppState, controller: MusicController,
+    searches: YouTubeSearches = rememberSaveable(saver = YouTubeSearches.Saver) { YouTubeSearches() }) {
+    val kind = searches.kind
+    // A search without recent results shows that it is loading until it finds them, rather than finding nothing.
+    val search = remember(searches, query.trim(), kind) { searches.recent.open(query.trim() to kind).apply { if (!fresh) loading = true } }
+    var attempt by remember(search) { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val searchFailed = stringResource(Res.string.sources_youtube_search_failed)
     suspend fun load(continuation: YouTubeContinuation?) {
-        loading = true; error = null
+        search.loading = true; search.error = null
         try {
-            val page = controller.searchYouTube(query, kind, continuation)
-            if (continuation == null) results.clear()
-            results += page.results.distinctBy { it.key }.filter { result -> results.none { it.key == result.key } }
-            next = page.next
+            if (kind == null) search.sections = controller.searchYouTubeAll(query)
+            else {
+                val page = controller.searchYouTube(query, kind, continuation)
+                if (continuation == null) search.results.clear()
+                search.results += page.results.distinctBy { it.key }.filter { result -> search.results.none { it.key == result.key } }
+                search.next = page.next
+            }
+            if (continuation == null) search.markLoaded()
+            searches.recent.keep(search.query to search.kind, search)
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { error = failure.message ?: searchFailed; permanent = (failure as? YouTubeException)?.retryable == false }
-        finally { loading = false }
+        catch (failure: Exception) {
+            search.error = failure.message ?: searchFailed; search.permanent = (failure as? YouTubeException)?.retryable == false
+        } finally { search.loading = false }
     }
-    LaunchedEffect(query, kind, attempt) {
+    LaunchedEffect(search, attempt) {
+        if (search.fresh) return@LaunchedEffect
         if (attempt == 0) delay(500)
         load(null)
     }
+    val results = search.results
+    val sections = search.sections
+    val error = search.error
+    val loading = search.loading
     val owned = rememberOwnedSongs(state)
-    val selection = remember(query, kind) { YouTubeSelection() }
-    val tracks by remember(results) { derivedStateOf { results.filterIsInstance<YouTubeTrack>() } }
+    val selection = remember(search) { YouTubeSelection() }
+    val labels = mapOf(YouTubeSearchKind.SONGS to Res.string.search_type_songs, YouTubeSearchKind.ARTISTS to Res.string.search_type_artists,
+        YouTubeSearchKind.ALBUMS to Res.string.search_type_albums, YouTubeSearchKind.VIDEOS to Res.string.sources_youtube_videos)
+    // Every kind shows its first results, each heading offering the rest.
+    fun limit(section: YouTubeSearchSection) = if (section.kind == YouTubeSearchKind.SONGS) 5 else 3
+    val tracks by remember(search) { derivedStateOf {
+        (if (search.kind == null) search.sections.flatMap { it.results.take(limit(it)) } else search.results).filterIsInstance<YouTubeTrack>()
+    } }
+    val empty = if (kind == null) sections.all { it.results.isEmpty() } else results.isEmpty()
     CompositionLocalProvider(LocalYouTubeSelection provides selection) { Column(Modifier.fillMaxSize()) {
-        val labels = mapOf(YouTubeSearchKind.SONGS to Res.string.search_type_songs, YouTubeSearchKind.ARTISTS to Res.string.search_type_artists,
-            YouTubeSearchKind.ALBUMS to Res.string.search_type_albums, YouTubeSearchKind.VIDEOS to Res.string.sources_youtube_videos)
         // Picking songs replaces the kinds, so another kind cannot drop the picked songs from view.
         if (selection.active) YouTubeSelectionHeader(selection, state, controller)
-        else OverflowChipRow(YouTubeSearchKind.entries, kind, { stringResource(labels.getValue(it)) }, { "youtube-kind:${it.name}" },
-            Modifier.padding(horizontal = 16.dp)) { kind = it }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("youtube-results")) {
-            items(results, key = { "youtube:${it.key}" }) { result ->
-                when (result) {
-                    is YouTubeTrack -> YouTubeTrackRow(result, owned, state, controller, YouTubeTrackList("results") { tracks }) { controller.playYouTube(result) }
-                    is YouTubeCollection -> YouTubeCollectionRow(result, state, controller)
+        else OverflowChipRow(listOf(null) + YouTubeSearchKind.entries, kind, { stringResource(it?.let(labels::getValue) ?: Res.string.search_type_all) },
+            { "youtube-kind:${it?.name ?: "ALL"}" }, Modifier.padding(horizontal = 16.dp)) { searches.kind = it }
+        @Composable fun row(result: YouTubeItem) = when (result) {
+            is YouTubeTrack -> YouTubeTrackRow(result, owned, state, controller, YouTubeTrackList("results") { tracks }) { controller.playYouTube(result) }
+            is YouTubeCollection -> YouTubeCollectionRow(result, state, controller)
+        }
+        // Each kind starts at its top instead of keeping the scroll position of the one it was opened from.
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("youtube-results"), key(kind) { rememberLazyListState() }) {
+            if (kind == null) sections.forEach { section ->
+                val shown = section.results.take(limit(section))
+                if (shown.isNotEmpty()) stickyHeader(key = "heading:${section.kind.name}") {
+                    SearchSectionHeading(stringResource(labels.getValue(section.kind)),
+                        { searches.kind = section.kind }.takeIf { section.results.size > shown.size && !selection.active }, Modifier.testTag("youtube-section:${section.kind.name}"))
                 }
-            }
+                items(shown, key = { "youtube:${section.kind.name}:${it.key}" }) { row(it) }
+            } else items(results, key = { "youtube:${it.key}" }) { row(it) }
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp)) }
             error?.let { message ->
                 item {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(message, color = MaterialTheme.colorScheme.error)
-                        if (!permanent) ActionButton(stringResource(Res.string.retry), AppIcon.REFRESH, style = ActionStyle.TONAL) {
-                            if (results.isEmpty()) attempt++ else scope.launch { load(next) }
+                        if (!search.permanent) ActionButton(stringResource(Res.string.retry), AppIcon.REFRESH, style = ActionStyle.TONAL) {
+                            if (empty) attempt++ else scope.launch { load(search.next) }
                         }
                     }
                 }
             }
-            if (!loading && error == null && results.isEmpty())
+            if (!loading && error == null && empty)
                 item { Text(stringResource(Res.string.sources_no_youtube_results, query.trim()), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            next?.let { continuation ->
+            search.next?.let { continuation ->
                 if (!loading && error == null) item {
                     TextButton(onClick = { scope.launch { load(continuation) } }, Modifier.padding(horizontal = 8.dp)) { Text(stringResource(Res.string.sources_show_more)) }
                 }

@@ -80,6 +80,11 @@ class YouTubeController internal constructor(private val context: ControllerCont
         return source().search(query, kind, continuation)
     }
 
+    suspend fun searchYouTubeAll(query: String): List<YouTubeSearchSection> {
+        requireEnabled()
+        return source().searchAll(query)
+    }
+
     suspend fun youTubeArtwork(url: String): ByteArray = source().artwork(url)
 
     /** The YouTube Music page of [videoId]'s artist or album, by [kind], or null after showing why it could not be found. */
