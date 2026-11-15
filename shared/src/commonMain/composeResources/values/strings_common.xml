@@ -52,6 +52,7 @@
     <string name="descending">Descending</string>
     <string name="most_played">Most played</string>
     <string name="recently_added">Recently added</string>
+    <string name="artwork_loading">Loading cover</string>
 
     <!-- Metadata fields and library nouns -->
     <string name="name">Name</string>

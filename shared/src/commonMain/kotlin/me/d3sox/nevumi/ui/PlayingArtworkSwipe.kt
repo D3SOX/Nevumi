@@ -86,7 +86,7 @@ internal fun PlayingArtwork(state: AppState, current: Track, swipe: PlayingArtwo
                 translationX = swipe.offset + direction * size.width
                 alpha = (1f - abs(translationX) / size.width.coerceAtLeast(1f)).coerceIn(0f, 1f)
             }, shape = RoundedCornerShape((12 + 16 * expansion * (1 - queueProgress)).dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                MusicArtwork(state.artwork[track.id], track.metadata.title, when {
+                MusicArtwork(state, track.id, track.metadata.title, when {
                     direction < 0 -> stringResource(Res.string.player_previous_artwork, track.metadata.title)
                     direction > 0 -> stringResource(Res.string.player_next_artwork, track.metadata.title)
                     queueProgress >= .999f -> stringResource(Res.string.player_queue_artwork, state.queue.currentEntryId.toString())

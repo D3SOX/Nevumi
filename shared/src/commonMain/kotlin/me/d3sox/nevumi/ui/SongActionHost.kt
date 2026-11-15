@@ -223,7 +223,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
         }
         val artworkDescription = stringResource(Res.string.player_song_menu_artwork, track.metadata.title)
         TrackActionDialog(track.metadata.title, track.metadata.artist, { maxDimension ->
-            MusicArtwork(state.artwork[track.id], track.metadata.title, artworkDescription, maxDimension)
+            MusicArtwork(state, track.id, track.metadata.title, artworkDescription, maxDimension)
         }, options, { menu = false },
             artworkOrigin = openingArtwork,
             onArtworkPlaced = { artworkPlaced = true },

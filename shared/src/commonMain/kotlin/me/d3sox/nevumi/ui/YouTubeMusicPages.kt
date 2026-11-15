@@ -387,7 +387,7 @@ private fun YouTubeCollectionMenuHost(collection: YouTubeCollection, state: AppS
 private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowsePage, width: Dp, state: AppState, controller: MusicController,
     actions: ShelfActions?) {
     val open = LocalOpenYouTubePage.current
-    val image = page.artworkUrl?.let { url -> rememberYouTubeImage(sizedArtwork(url, if (page.banner) 1440 else 544), if (page.banner) 1440 else 400, controller) }
+    val image = page.artworkUrl?.let { url -> rememberYouTubeImage(sizedArtwork(url, if (page.banner) 1440 else 544), if (page.banner) 1440 else 400, controller).image }
     val fallback = MaterialTheme.colorScheme.primary
     val color by produceState(fallback, image) {
         value = if (image == null) fallback else withContext(Dispatchers.Default) { image.themeColor(fallback) }
