@@ -1,6 +1,13 @@
 pluginManagement {
     repositories {
-        google()
+        // Only Google's groups, so other lookups never reach dl.google.com, which sometimes fails builds on CI runners.
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -8,7 +15,13 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
-        google()
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
         // NewPipe Extractor and its JSON parser are only published on JitPack.
         exclusiveContent {

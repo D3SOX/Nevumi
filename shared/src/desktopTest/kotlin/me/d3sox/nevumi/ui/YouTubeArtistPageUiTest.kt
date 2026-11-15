@@ -69,7 +69,12 @@ class YouTubeArtistPageUiTest {
             return YouTubeMusicPages.continued(Json.parseToJsonElement(
                 requireNotNull(javaClass.getResource("/youtube-music/continued.json")).readText()).jsonObject)
         }
-        override suspend fun audio(videoId: String, fresh: Boolean) = YouTubeAudio("https://media.test/$videoId", "audio/mp4", 1, 128)
+        /** The videos whose audio was looked up, such as the song a play starts at. */
+        val audioLookups = Collections.synchronizedList(mutableListOf<String>())
+        override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {
+            audioLookups += videoId
+            return YouTubeAudio("https://media.test/$videoId", "audio/mp4", 1, 128)
+        }
         override fun playbackLocation(videoId: String) = "http://127.0.0.1:9/$videoId"
         override suspend fun artwork(url: String) = ByteArray(0)
     }
@@ -205,9 +210,13 @@ class YouTubeArtistPageUiTest {
                 waitUntil(timeoutMillis = 5_000) { youTube.gates.size == 1 }
                 onNodeWithContentDescription("YouTube song: Blank Space by Taylor Swift").performClick()
                 waitUntil(timeoutMillis = 5_000) { youTube.gates.size == 2 && youTube.cancelled == 1 }
+                val entries = controller.state.value.queue.entries.map { it.id }
+                val lookups = youTube.audioLookups.size
                 youTube.gates[1].complete(Unit)
-                waitUntil(timeoutMillis = 5_000) { controller.state.value.let { state ->
-                    state.tracks.firstOrNull { it.id == state.queue.currentTrackId }?.metadata?.title == "Blank Space" } }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.queue.entries.map { it.id } != entries }
+                // These songs cannot stream, so the player soon moves past the one it started at; a play looks up its first song's audio.
+                val started = youTube.audioLookups[lookups]
+                assertEquals("Blank Space", controller.state.value.tracks.first { track -> track.sources.any { it.location == started } }.metadata.title)
                 youTube.hold = false
                 onNodeWithContentDescription("Back").performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("150 songs", substring = true).fetchSemanticsNodes().isEmpty() }
