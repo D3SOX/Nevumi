@@ -82,6 +82,8 @@ internal class YouTubeSearch(val query: String, val kind: YouTubeSearchKind?) : 
     val results = mutableStateListOf<YouTubeItem>()
     var sections by mutableStateOf<List<YouTubeSearchSection>>(emptyList())
     var next by mutableStateOf<YouTubeContinuation?>(null)
+    // The page the last failed request asked for, which Retry asks for again; null is the first page.
+    var failed: YouTubeContinuation? = null
     // Trying again cannot bring back a private or removed video that a pasted link found.
     var permanent by mutableStateOf(false)
 }
@@ -126,7 +128,7 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
             searches.recent.keep(search.query to search.kind, search)
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) {
-            search.error = failure.message ?: searchFailed; search.permanent = (failure as? YouTubeException)?.retryable == false
+            search.failed = continuation; search.error = failure.message ?: searchFailed; search.permanent = (failure as? YouTubeException)?.retryable == false
         } finally { search.loading = false }
     }
     LaunchedEffect(search, attempt) {
@@ -172,9 +174,8 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
                 item {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(message, color = MaterialTheme.colorScheme.error)
-                        // Only a first page marks the search loaded, so a search that is not fresh failed its first page, even with older results.
                         if (!search.permanent) ActionButton(stringResource(Res.string.retry), AppIcon.REFRESH, style = ActionStyle.TONAL) {
-                            if (!search.fresh) attempt++ else scope.launch { load(search.next) }
+                            search.failed?.let { scope.launch { load(it) } } ?: attempt++
                         }
                     }
                 }
