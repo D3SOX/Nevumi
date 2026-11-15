@@ -2,6 +2,7 @@ package me.d3sox.nevumi.security
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.minutes
@@ -10,7 +11,8 @@ import kotlin.time.TimeSource
 import kotlinx.coroutines.sync.withLock
 
 class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
-    private val cacheFor: kotlin.time.Duration = 15.seconds, private val keepFoundFor: kotlin.time.Duration = 10.minutes) : CredentialVault {
+    private val cacheFor: kotlin.time.Duration = 15.seconds, private val keepFoundFor: kotlin.time.Duration = 10.minutes,
+    private val command: String = "secret-tool") : CredentialVault {
     private data class Cached(val secret: String?, val readAt: kotlin.time.TimeMark)
     // Each lookup spawns secret-tool; background workers read the same key every few seconds. Saves and deletes through this vault
     // update it at once, so a found secret is read again only after [keepFoundFor], for changes made in another keyring app. A missing
@@ -33,9 +35,12 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
             recent[key]?.takeIf { it.readAt.elapsedNow() < if (it.secret != null) keepFoundFor else cacheFor }?.let { return it.secret }
             generation
         }
-        val (code, output) = execute(listOf("lookup", "application", applicationId, "profile", key))
-        check(code == 0 || code == 1) { "Could not open the desktop credential store" }
-        val secret = output.removeSuffix("\n").takeIf { code == 0 }
+        val (code, output, errors) = execute(listOf("lookup", "application", applicationId, "profile", key))
+        // secret-tool exits with 1 both for a missing secret and for errors such as a locked keyring; only errors print a message.
+        // Reading an error as a missing secret would let callers replace a secret they could not read.
+        check(code == 0 || code == 1 && errors.isBlank()) { "Could not open the desktop credential store" }
+        // secret-tool adds a newline only when writing to a terminal, so the output is the stored secret.
+        val secret = output.takeIf { code == 0 }
         recentLock.withLock { if (generation == started) recent[key] = Cached(secret, TimeSource.Monotonic.markNow()) }
         return secret
     }
@@ -46,12 +51,15 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
             check(code == 0 || code == 1) { "Could not remove the saved password" }
         } finally { withContext(NonCancellable) { invalidate(key) } }
     }
-    private suspend fun execute(arguments: List<String>, input: String? = null): Pair<Int, String> = withContext(Dispatchers.IO) {
-        val process = ProcessBuilder(listOf("secret-tool") + arguments).start()
+    private suspend fun execute(arguments: List<String>, input: String? = null): Triple<Int, String, String> = withContext(Dispatchers.IO) {
+        val process = ProcessBuilder(listOf(command) + arguments).start()
         try {
+            // Both streams are drained while it runs, or a full pipe would block it until the unlock timeout.
+            val output = async { process.inputStream.bufferedReader().readText() }
+            val errors = async { process.errorStream.bufferedReader().readText() }
             process.outputStream.bufferedWriter().use { if (input != null) it.write(input) }
             check(process.waitFor(30, TimeUnit.SECONDS)) { "Unlock the desktop credential store and try again" }
-            process.exitValue() to process.inputStream.bufferedReader().readText()
+            Triple(process.exitValue(), output.await(), errors.await())
         } finally { if (process.isAlive) process.destroyForcibly() }
     }
 }
