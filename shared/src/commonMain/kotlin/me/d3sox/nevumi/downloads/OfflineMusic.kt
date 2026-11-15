@@ -349,9 +349,9 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
     private suspend fun inUseTracks(): Set<String> =
         setOfNotNull(activeTrack.value, PlaybackQueue(store).snapshot().currentTrackId)
 
-    suspend fun enforceCacheBudget(bytes: Long) {
-        val connection = client()
-        AudioDownloads(store, library, connection, directory).enforceCacheBudget(bytes, inUseTracks())
+    /** Lets tests evict down to [bytes] without changing the saved cache size. */
+    internal suspend fun enforceCacheBudget(bytes: Long) {
+        transfers.withLock { AudioDownloads(store, library, null, directory).enforceCacheBudget(bytes, inUseTracks()) }
         refresh()
     }
 
