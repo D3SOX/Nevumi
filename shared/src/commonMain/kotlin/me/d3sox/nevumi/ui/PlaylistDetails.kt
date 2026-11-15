@@ -74,6 +74,7 @@ import me.d3sox.nevumi.resources.library_playlist_sort_direction
 import me.d3sox.nevumi.resources.library_playlist_title
 import me.d3sox.nevumi.resources.library_publish_to_server
 import me.d3sox.nevumi.resources.library_rearrange
+import me.d3sox.nevumi.resources.library_search_playlist
 import me.d3sox.nevumi.resources.library_resolve_conflict
 import me.d3sox.nevumi.resources.library_server_playlist
 import me.d3sox.nevumi.resources.library_shuffle_playlist
@@ -96,7 +97,7 @@ internal fun Playlist.artworkPath(state: AppState, custom: Boolean = true): Stri
 internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: MusicController,
     orderedIds: List<String>, edit: () -> Unit, delete: () -> Unit, export: () -> Unit, editRules: () -> Unit,
     publish: (() -> Unit)?, resolve: () -> Unit, busy: Boolean, rearrange: (() -> Unit)? = null,
-    finishRearranging: (() -> Unit)? = null) {
+    finishRearranging: (() -> Unit)? = null, search: (() -> Unit)? = null) {
     val path = playlist.artworkPath(state)
     val origin = LocalLibraryOrigin.current
     val bitmap = rememberArtwork(path, 128)
@@ -178,6 +179,7 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
                         modifier = Modifier.semantics { contentDescription = sortDirectionDescription })
                 }
             }
+            if (finishRearranging == null && search != null) AppIconButton(AppIcon.SEARCH, stringResource(Res.string.library_search_playlist), onClick = search)
             Spacer(Modifier.weight(1f))
             IconToggleButton(playlist.shuffle, { controller.setPlaylistShuffle(playlist.id, it) },
                 modifier = Modifier.semantics { contentDescription = shuffleDescription; selected = playlist.shuffle },

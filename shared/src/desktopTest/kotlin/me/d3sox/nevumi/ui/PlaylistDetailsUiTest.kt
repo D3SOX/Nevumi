@@ -124,6 +124,48 @@ class PlaylistDetailsUiTest {
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test fun searchingAPlaylistShowsOnlyMatchingSongsAndRemovesTheChosenOccurrence() {
+        val directory = Files.createTempDirectory("playlist-search")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        val songs = runBlocking { listOf("Bravo" to "Zed", "Alpha" to "Ada", "Charlie" to "Bravo Band").map { (title, artist) ->
+            library.importTrack(TrackMetadata(title, artist = artist), TrackSource(title, SourceKind.LOCAL, "/music/$title.flac"))
+        } }
+        val custom = listOf(songs[0].id, songs[1].id, songs[2].id, songs[0].id)
+        val playlist = runBlocking { playlists.create("Evening", custom) }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store).withOptionsButtons())
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.isNotEmpty() }
+                openLibraryPage("Playlists"); onNodeWithText("Evening").performClick()
+                onNodeWithContentDescription("Search this playlist").performClick()
+                // The search matches artists too, so "Charlie" by "Bravo Band" shows next to both "Bravo" entries.
+                onNode(hasSetTextAction()).performTextInput("BRAVO")
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithContentDescription("Track options: Alpha").fetchSemanticsNodes().isEmpty() }
+                onAllNodesWithContentDescription("Track options: Bravo").assertCountEquals(2)
+                onAllNodesWithContentDescription("Track options: Charlie").assertCountEquals(1)
+                onAllNodesWithContentDescription("Playlist options").assertCountEquals(0)
+                onAllNodesWithContentDescription("Track options: Bravo")[1].performClick()
+                onNodeWithText("Remove from playlist").performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.single().trackIds.size == 3 }
+                kotlin.test.assertEquals(custom.dropLast(1), runBlocking { playlists.get(playlist.id)!! }.trackIds)
+                onNode(hasSetTextAction()).performTextReplacement("nothing like this")
+                onNodeWithText("No results for “nothing like this”").assertExists()
+                onNodeWithContentDescription("Close search").performClick()
+                onNodeWithContentDescription("Playlist options").assertExists()
+                onAllNodesWithContentDescription("Track options: Alpha").assertCountEquals(1)
+                // Escape closes the search, not the playlist.
+                onNodeWithContentDescription("Search this playlist").performClick()
+                onNode(hasSetTextAction()).performTextInput("alpha")
+                onNode(hasSetTextAction()).performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Escape) }
+                onNodeWithContentDescription("Playlist options").assertExists()
+                onAllNodes(hasSetTextAction()).assertCountEquals(0)
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun playlistSortingAndShuffleAreSavedAndShuffledPlaybackKeepsEveryOccurrence() {
         val directory = Files.createTempDirectory("playlist-sort-shuffle")
         val database = directory.resolve("music.db").toString()
