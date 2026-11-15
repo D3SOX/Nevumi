@@ -45,8 +45,9 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
         // A keyring that stays locked, such as after a dismissed unlock prompt, also ends the lookup silently. Searching without
         // unlocking still lists a locked item, so a secret that exists but could not be read is not mistaken for a missing one.
         if (code == 1) {
-            val (_, found, searchErrors) = execute(listOf("search", "application", applicationId, "profile", key))
-            check(found.lineSequence().none { it.startsWith("[") } && searchErrors.lineSequence().none { it.startsWith("secret-tool: ") }) {
+            // An empty search succeeds; a failed one exits with 1, so only a successful search without items means missing.
+            val (searched, found, _) = execute(listOf("search", "application", applicationId, "profile", key))
+            check(searched == 0 && found.lineSequence().none { it.startsWith("[") }) {
                 "Unlock the desktop credential store and try again"
             }
         }

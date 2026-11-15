@@ -21,7 +21,7 @@ class SecretServiceVaultTest {
     @AfterTest fun cleanUp() { directory.toFile().deleteRecursively() }
 
     /** A stand-in for secret-tool that logs its action and runs [lookup] for lookups and [search] for searches. */
-    private fun vault(lookup: String, search: String = "exit 1"): SecretServiceVault {
+    private fun vault(lookup: String, search: String = "exit 0"): SecretServiceVault {
         val script = directory.resolve("secret-tool")
         script.writeText("#!/bin/sh\necho \"$1\" >> '$calls'\nif [ \"$1\" = lookup ]; then\n$lookup\nfi\n" +
             "if [ \"$1\" = search ]; then\n$search\nfi\ncat > /dev/null\nexit 0\n")
@@ -65,6 +65,12 @@ class SecretServiceVaultTest {
         assertFailsWith<IllegalStateException> { vault.read("server") }
         assertFailsWith<IllegalStateException> { SyncTls.load(vault, "11111111-1111-4111-8111-111111111111") }
         assertFalse("store" in calls.lines())
+    }
+
+    @Test
+    fun aSearchThatStopsWithoutAMessageIsNotReadAsMissing() = runBlocking {
+        assertFailsWith<IllegalStateException> { vault("exit 1", search = "exit 1").read("server") }
+        Unit
     }
 
     @Test
