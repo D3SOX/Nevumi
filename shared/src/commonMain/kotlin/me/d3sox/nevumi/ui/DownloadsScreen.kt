@@ -153,7 +153,7 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, focus
                     DownloadGroup.PLAYLISTS -> items(playlists, key = { "playlist:${it.playlist.id}" }) { PlaylistDownloadItem(it) }
                     DownloadGroup.SOUNDCLOUD -> items(state.soundCloudJobs, key = { "soundcloud:${it.id}" }) { job ->
                         // Settings only know the viewer of the server they use now, which may not be the one running this job.
-                        val viewer = state.soundCloud?.let { it.baseUrl == job.baseUrl && it.browserViewUrl != null } == true
+                        val viewer = state.soundCloud?.let { it.baseUrl == job.baseUrl && it.browserViewer } == true
                         SoundCloudJobItem(job, controller, viewer) { tagging = job.id }
                     }
                     DownloadGroup.YOUTUBE -> items(state.youTubeJobs, key = { "youtube:${it.id}" }) { job ->

@@ -137,7 +137,7 @@ internal fun SoundCloudSettings(state: AppState, controller: MusicController, di
             }
             if (format == ScGateFormat.FLAC) Text(stringResource(Res.string.sources_flac_hint),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (connected != null && browser == ScGateBrowser.HEADED) Text(if (connected.browserViewUrl != null)
+            if (connected != null && browser == ScGateBrowser.HEADED) Text(if (connected.browserViewer)
                 stringResource(Res.string.sources_browser_view_hint)
                 else stringResource(Res.string.sources_browser_view_setup_hint),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -170,6 +170,22 @@ class SoundCloudDownloadsTest {
     }
 
     @Test
+    fun aSavedBrowserViewerAddressIsForgottenSoItsPasswordLeavesTheDatabase() = runBlocking {
+        val directory = Files.createTempDirectory("soundcloud-viewer")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val http = HttpClient(MockEngine { respond("", HttpStatusCode.NotFound) })
+        // As saved by earlier versions.
+        store.database.records().put("soundcloud:profile", "soundcloud-settings",
+            """{"baseUrl":"https://gate.test","browserViewUrl":"https://gate.test/vnc?password=viewer-secret"}""")
+        val downloads = SoundCloudDownloads(store, http)
+        try {
+            withTimeout(5_000) { downloads.profile.first { it != null } }
+            assertEquals(true, downloads.profile.value?.browserViewer)
+            assertFalse(store.database.records().read("soundcloud:profile")!!.contains("viewer-secret"))
+        } finally { downloads.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun theBrowserViewerGoesThroughTheTunnelWhenSoundCloudDownloadsUseIt() = runBlocking {
         val fixture = fixture(route = { if (it == "http://sc-gate.test:6080") "http://127.0.0.1:9/secret" else it }) { request ->
             when (request.url.encodedPath) {
@@ -182,7 +198,7 @@ class SoundCloudDownloadsTest {
         }
         try {
             fixture.downloads.connect("http://sc-gate.test", ScGateFormat.MP3_320, SoundCloudDestination.DEVICE)
-            assertEquals("http://{host}:6080/vnc.html?autoconnect=true&resize=scale", fixture.downloads.profile.value?.browserViewUrl)
+            assertEquals(true, fixture.downloads.profile.value?.browserViewer)
             val job = fixture.downloads.download(track, ScGateDestination.CLIENT)
             assertEquals("http://127.0.0.1:9/secret/vnc.html?autoconnect=true&resize=scale", fixture.downloads.browserView(job.id))
         } finally { fixture.close() }

@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonObject
 import me.d3sox.nevumi.artwork.ArtworkLibrary
 import me.d3sox.nevumi.downloads.OfflineMusic
 import me.d3sox.nevumi.library.LocalSources
@@ -47,10 +49,13 @@ data class SoundCloudProfile(val baseUrl: String, val format: ScGateFormat = ScG
     val reviewTags: Boolean = false,
     /** The browser modes sc-gate-dl offers. */
     val browserModes: List<ScGateBrowser> = emptyList(),
-    /** sc-gate-dl's viewer for its visible browser, such as noVNC, where `{host}` stands for sc-gate-dl's host. */
-    val browserViewUrl: String? = null) {
+    /**
+     * sc-gate-dl offers a viewer for its visible browser, such as noVNC. Its address can carry a password, so it is not saved
+     * but asked for each time it opens.
+     */
+    val browserViewer: Boolean = false) {
     internal fun with(capabilities: ScGateCapabilities) = copy(libraryDestination = capabilities.libraryDestination,
-        browserModes = capabilities.browserModes, browserViewUrl = capabilities.browserViewUrl,
+        browserModes = capabilities.browserModes, browserViewer = capabilities.browserViewUrl != null,
         browser = browser?.takeIf { it in capabilities.browserModes })
 }
 
@@ -192,6 +197,7 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
 
     init {
         scope.launch {
+            forgetBrowserViewAddress()
             store.database.records().observeRevision("soundcloud-settings").distinctUntilChanged().collect {
                 mutableProfile.value = store.read("soundcloud:profile")
             }
@@ -221,6 +227,14 @@ class SoundCloudDownloads(private val store: MusicStore, private val http: HttpC
 
     override fun close() { supervisor.cancel() }
     suspend fun closeAndJoin() { close(); supervisor.join() }
+
+    // Earlier versions saved the browser viewer's address, which can carry a password; only whether there is one stays.
+    private suspend fun forgetBrowserViewAddress() = profiles.withLock {
+        val saved = store.database.records().read("soundcloud:profile") ?: return@withLock
+        val address = store.json.parseToJsonElement(saved).jsonObject["browserViewUrl"] ?: return@withLock
+        val profile = store.read<SoundCloudProfile>("soundcloud:profile") ?: return@withLock
+        store.put("soundcloud:profile", "soundcloud-settings", profile.copy(browserViewer = address !is JsonNull))
+    }
 
     private suspend fun save(job: SoundCloudJob) = store.put("soundcloud-job:${job.id}", "soundcloud-jobs", job)
     private suspend fun job(id: String): SoundCloudJob = requireNotNull(store.read("soundcloud-job:$id")) { "The download is no longer listed" }
