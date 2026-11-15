@@ -60,6 +60,14 @@ class SecretServiceVaultTest {
     }
 
     @Test
+    fun aFailedSearchAfterASilentLookupIsNotReadAsMissing() = runBlocking {
+        val vault = vault("exit 1", search = "echo 'secret-tool: Cannot get secret service' >&2; exit 1")
+        assertFailsWith<IllegalStateException> { vault.read("server") }
+        assertFailsWith<IllegalStateException> { SyncTls.load(vault, "11111111-1111-4111-8111-111111111111") }
+        assertFalse("store" in calls.lines())
+    }
+
+    @Test
     fun theSecretIsReturnedExactly() = runBlocking {
         // secret-tool prints the stored value without a newline when its output is not a terminal.
         assertEquals("token\n", vault("printf 'token\\n'; exit 0").read("server"))

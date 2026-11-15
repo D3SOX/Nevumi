@@ -695,6 +695,30 @@ class OfflineMusicTest {
     }
 
     @Test
+    fun aSongThatRanOutOfSpaceAndLeftTheServerSettlesOnceSpaceIsFree() = runBlocking {
+        val directory = Files.createTempDirectory("missing-after-space")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val http = HttpClient(MockEngine {
+            respond("""{"subsonic-response":{"status":"failed","error":{"code":70,"message":"Song not found"}}}""",
+                headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        })
+        val client = NavidromeClient(http, "https://music.example", ServerCredentials("test", "test"))
+        val library = MusicLibrary(store)
+        val gone = library.importTrack(TrackMetadata("Gone"), TrackSource("server:${client.serverId}:gone", SourceKind.SERVER, "gone"))
+        // An earlier attempt ran out of space; there is room now, but the server no longer has the song.
+        store.put("download:${gone.id}", "downloads", DownloadRecord(gone.id, DownloadStatus.FAILED, sizeBytes = 8,
+            problem = DownloadProblem.INSUFFICIENT_SPACE))
+        val worker = OfflineMusic(store, library, { client }, directory.resolve("audio").toString(), Playlists(store),
+            availableSpace = { Long.MAX_VALUE }, scheduleWork = { _, _ -> })
+        try {
+            worker.request(listOf(gone.id))
+            repeat(2) { worker.runPending() }
+            assertEquals(DownloadStatus.FAILED to null, worker.state.value.getValue(gone.id).let { it.status to it.problem })
+            assertEquals(true, worker.settledNow())
+        } finally { worker.closeAndJoin(); http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun withoutAMusicServerThereIsNothingToRetry() = runBlocking {
         val directory = Files.createTempDirectory("no-server-downloads")
         val store = openMusicStore(directory.resolve("library.db").toString())

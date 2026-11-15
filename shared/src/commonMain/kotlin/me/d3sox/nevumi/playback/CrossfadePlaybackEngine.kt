@@ -154,8 +154,11 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         this.tracks = tracks.toList()
         if (outgoing != null && tracks.none { it.entryId == outgoing?.status?.value?.entryId }) cancelFade()
         // A removed song may never be reported, and waiting for it would stop crossfades until the next load. Clearing it first
-        // keeps the song the decoder still plays.
-        if (tracks.none { it.entryId == loadingEntry }) loadingEntry = null
+        // keeps the song the decoder still plays, which also advances to the next song again when it ends.
+        if (tracks.none { it.entryId == loadingEntry }) {
+            loadingEntry = null
+            selectedEntry = active.status.value.entryId ?: selectedEntry
+        }
         val index = currentIndex()
         if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
         else active.updateQueue(emptyList())

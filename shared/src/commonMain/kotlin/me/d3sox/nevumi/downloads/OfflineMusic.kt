@@ -317,7 +317,7 @@ class OfflineMusic(private val store: MusicStore, private val library: MusicLibr
                 else try { connection.song(source.location, releases) }
                 catch (gone: NavidromeException) { if (gone.code == 70) null else throw gone }) ?: run {
                     val record = downloads.state(track.id)
-                    if (record?.status != DownloadStatus.FAILED)
+                    if (record?.status != DownloadStatus.FAILED || record.problem != null)
                         store.put("download:${track.id}", "downloads", record?.copy(status = DownloadStatus.FAILED, problem = null)
                             ?: DownloadRecord(track.id, DownloadStatus.FAILED))
                     refresh()

@@ -44,8 +44,12 @@ class SecretServiceVault(private val applicationId: String = "me.d3sox.nevumi",
         }
         // A keyring that stays locked, such as after a dismissed unlock prompt, also ends the lookup silently. Searching without
         // unlocking still lists a locked item, so a secret that exists but could not be read is not mistaken for a missing one.
-        if (code == 1) check(execute(listOf("search", "application", applicationId, "profile", key)).second.lineSequence()
-            .none { it.startsWith("[") }) { "Unlock the desktop credential store and try again" }
+        if (code == 1) {
+            val (_, found, searchErrors) = execute(listOf("search", "application", applicationId, "profile", key))
+            check(found.lineSequence().none { it.startsWith("[") } && searchErrors.lineSequence().none { it.startsWith("secret-tool: ") }) {
+                "Unlock the desktop credential store and try again"
+            }
+        }
         // secret-tool adds a newline only when writing to a terminal, so the output is the stored secret.
         val secret = output.takeIf { code == 0 }
         recentLock.withLock { if (generation == started) recent[key] = Cached(secret, TimeSource.Monotonic.markNow()) }

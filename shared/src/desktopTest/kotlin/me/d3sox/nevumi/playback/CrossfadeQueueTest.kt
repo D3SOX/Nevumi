@@ -289,6 +289,9 @@ class CrossfadeQueueTest {
             engine.updateQueue(tracks - tracks[1])
             engine.setAudioEffects(AudioEffects())
             assertEquals(listOf("entry-1"), decoder.updates.last())
+            // The song that still plays ends, so playback continues with the song after the removed one.
+            withTimeout(2_000) { while (decoder.loads.size < 3) delay(10) }
+            assertEquals(listOf("entry-1", "entry-2", "entry-3"), decoder.loads)
         } finally { engine.close() }
     }
 
