@@ -158,8 +158,10 @@ internal fun versionedCoverId(coverId: String, etag: String?): String {
 
 private val coverHash = Regex("[0-9a-f]{8,64}")
 
-// Navidrome draws covers for half as many requests as it has CPU cores, at least two, and queues the rest; on a small server more would wait out their timeout.
-internal const val CONCURRENT_COVERS = 2
+// Navidrome draws covers for half as many requests as it has CPU cores, at least two, and queues the rest for ten seconds.
+// Behind a tunnel most of a request is spent in transit, so two downloads leave even a small server idle; four keep its two
+// slots busy while each waiting request queues behind at most one other. Six made the last ones wait out the queue.
+internal const val CONCURRENT_COVERS = 4
 
 /**
  * Requests go to [requestUrl], such as a tunnel relay, while [baseUrl] identifies the server.

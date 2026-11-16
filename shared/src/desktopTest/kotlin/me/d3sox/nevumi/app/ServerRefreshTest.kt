@@ -158,7 +158,8 @@ class ServerRefreshTest {
             val stopped = controller.state.value.serverRefresh
             assertEquals(ServerRefreshStage.FAILED, stopped?.stage)
             assertTrue(stopped?.message.orEmpty().startsWith("Songs are saved. Artwork could not finish."), stopped?.message)
-            assertTrue(coverRequests.get() <= 11, "Only about ten of 30 covers are tried, not ${coverRequests.get()}")
+            // The tenth failure in a row stops the refresh; the other downloads already in flight still finish.
+            assertTrue(coverRequests.get() <= 10 + CONCURRENT_COVERS - 1, "Only about ten of 30 covers are tried, not ${coverRequests.get()}")
         } finally {
             controller.closeAndJoin()
             http.close(); store.close(); directory.toFile().deleteRecursively()
@@ -229,8 +230,8 @@ class ServerRefreshTest {
             withTimeout(1_000) { controller.refreshServer().join() }
             release.complete(Unit)
             withTimeout(5_000) { refresh.join() }
-            // A small Navidrome server draws two covers at once; further requests would wait out their timeout in its queue.
-            assertTrue(requests.get() <= 2, "An overloaded server must not receive the remaining cover requests")
+            // Only the downloads already in flight reach an overloaded server; further requests would wait out their timeout in its queue.
+            assertTrue(requests.get() <= CONCURRENT_COVERS, "An overloaded server must not receive the remaining cover requests")
             withTimeout(3_000) { controller.state.first { it.tracks.size == 30 } }
             assertEquals(30, library.tracks().size)
             assertFalse(controller.state.value.loading)
