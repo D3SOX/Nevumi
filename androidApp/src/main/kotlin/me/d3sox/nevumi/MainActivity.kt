@@ -15,6 +15,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
+import me.d3sox.nevumi.app.resumeQueue
+import me.d3sox.nevumi.app.shuffleLibrary
+import me.d3sox.nevumi.ui.AppShortcuts
 import me.d3sox.nevumi.ui.MusicPlayerApp
 
 class MainActivity : ComponentActivity() {
@@ -25,6 +31,7 @@ class MainActivity : ComponentActivity() {
     /** A song another app opened while Nevumi asks for the audio permission it needs to find the song. */
     private var songAwaitingPermission: String? = null
     private lateinit var openSongPermission: ActivityResultLauncher<String>
+    private lateinit var shortcuts: AppShortcuts
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,10 +102,12 @@ class MainActivity : ComponentActivity() {
             songAwaitingPermission?.let(controller::openSong)
             songAwaitingPermission = null
         }
-        // A recreated activity, or one reopened from recents, already handled its song.
-        if (savedInstanceState == null) openSong(intent)
+        shortcuts = AppShortcuts(controller)
+        publishLauncherShortcuts()
+        // A recreated activity, or one reopened from recents, already handled its song or shortcut.
+        if (savedInstanceState == null) { openSong(intent); openShortcut(intent) }
         setContent {
-            MusicPlayerApp(controller, onAddMusic = {
+            MusicPlayerApp(controller, shortcuts = shortcuts, crashReports = app.crashLog, onAddMusic = {
                 if (checkSelfPermission(audioPermission) == PackageManager.PERMISSION_GRANTED) controller.importSource("device")
                 else request.launch(audioPermission)
             })
@@ -108,6 +117,30 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openSong(intent)
+        openShortcut(intent)
+    }
+
+    /** Offers Shuffle, Search and Resume when the launcher icon is held. Published at runtime so each build's application ID works. */
+    private fun publishLauncherShortcuts() {
+        fun shortcut(id: String, label: Int, longLabel: Int, icon: Int) = ShortcutInfo.Builder(this, id)
+            .setShortLabel(getString(label)).setLongLabel(getString(longLabel)).setIcon(Icon.createWithResource(this, icon))
+            .setIntent(Intent(this, MainActivity::class.java).setAction(id)).build()
+        getSystemService(ShortcutManager::class.java)?.dynamicShortcuts = listOf(
+            shortcut(SHUFFLE_SHORTCUT, R.string.shortcut_shuffle, R.string.shortcut_shuffle_long, R.drawable.ic_shortcut_shuffle),
+            shortcut(SEARCH_SHORTCUT, R.string.shortcut_search, R.string.shortcut_search_long, R.drawable.ic_shortcut_search),
+            shortcut(RESUME_SHORTCUT, R.string.shortcut_resume, R.string.shortcut_resume_long, R.drawable.ic_shortcut_resume))
+    }
+
+    private fun openShortcut(intent: Intent) {
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val controller = (application as MusicApplication).controller
+        when (intent.action) {
+            SHUFFLE_SHORTCUT -> lifecycleScope.launch { controller.shuffleLibrary() }
+            SEARCH_SHORTCUT -> lifecycleScope.launch { shortcuts.openSearch() }
+            RESUME_SHORTCUT -> lifecycleScope.launch { controller.resumeQueue() }
+            else -> return
+        }
+        getSystemService(ShortcutManager::class.java)?.reportShortcutUsed(intent.action)
     }
 
     /** Plays a song another app opened in Nevumi. */
@@ -126,5 +159,11 @@ class MainActivity : ComponentActivity() {
         outState.putString("launched-network-request", launchedNetworkRequest)
         outState.putString("song-awaiting-permission", songAwaitingPermission)
         super.onSaveInstanceState(outState)
+    }
+
+    private companion object {
+        const val SHUFFLE_SHORTCUT = "me.d3sox.nevumi.shortcut.SHUFFLE"
+        const val SEARCH_SHORTCUT = "me.d3sox.nevumi.shortcut.SEARCH"
+        const val RESUME_SHORTCUT = "me.d3sox.nevumi.shortcut.RESUME"
     }
 }

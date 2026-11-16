@@ -68,6 +68,10 @@ import me.d3sox.nevumi.resources.settings_add_included_folder
 import me.d3sox.nevumi.resources.settings_amoled_black
 import me.d3sox.nevumi.resources.settings_amoled_black_description
 import me.d3sox.nevumi.resources.settings_any_network
+import me.d3sox.nevumi.resources.settings_stream_quality
+import me.d3sox.nevumi.resources.settings_stream_quality_bit_rate
+import me.d3sox.nevumi.resources.settings_stream_quality_metered
+import me.d3sox.nevumi.resources.settings_stream_quality_original
 import me.d3sox.nevumi.resources.settings_appearance
 import me.d3sox.nevumi.resources.settings_appearance_description
 import me.d3sox.nevumi.resources.settings_audio_effects_description
@@ -90,6 +94,8 @@ import me.d3sox.nevumi.resources.settings_confirm_queue_jumps
 import me.d3sox.nevumi.resources.settings_keep_playing
 import me.d3sox.nevumi.resources.settings_keep_playing_description
 import me.d3sox.nevumi.resources.settings_tray_icon
+import me.d3sox.nevumi.resources.settings_resume_on_headphones
+import me.d3sox.nevumi.resources.settings_resume_on_headphones_description
 import me.d3sox.nevumi.resources.settings_tray_icon_description
 import me.d3sox.nevumi.resources.settings_confirm_queue_jumps_description
 import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption
@@ -397,6 +403,12 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsToggle(stringResource(Res.string.settings_confirm_up_next_interruption), AppIcon.CONFIRM, stringResource(Res.string.settings_confirm_up_next_interruption_description), settings.confirmNextUpInterruption) {
                 enabled -> controller.updatePreferences { it.copy(confirmNextUpInterruption = enabled) }
             }
+            if (headphoneResumeSetting) {
+                SettingsToggle(stringResource(Res.string.settings_resume_on_headphones), AppIcon.HEADPHONES,
+                    stringResource(Res.string.settings_resume_on_headphones_description), settings.resumeOnHeadphones) { enabled ->
+                    controller.updatePreferences { it.copy(resumeOnHeadphones = enabled) }
+                }
+            }
             if (desktopWindowSettings) {
                 SettingsToggle(stringResource(Res.string.settings_keep_playing), AppIcon.HEADPHONES, stringResource(Res.string.settings_keep_playing_description),
                     settings.keepPlayingInBackground) { enabled -> controller.updatePreferences { it.copy(keepPlayingInBackground = enabled) } }
@@ -427,6 +439,15 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingChoice(Res.string.playback_cache, settings.cacheBytes, listOf(0L to stringResource(Res.string.off), 268_435_456L to "256 MiB",
                 1_073_741_824L to "1 GiB", 2_147_483_648L to "2 GiB", 5_368_709_120L to "5 GiB")) { bytes ->
                 controller.updatePreferences { it.copy(cacheBytes = bytes) }
+            }
+            val streamQualities = me.d3sox.nevumi.settings.STREAM_BIT_RATES.map { rate ->
+                rate to if (rate == 0) stringResource(Res.string.settings_stream_quality_original) else stringResource(Res.string.settings_stream_quality_bit_rate, rate)
+            }
+            SettingChoice(Res.string.settings_stream_quality, settings.streamBitRate, streamQualities) { rate ->
+                controller.updatePreferences { it.copy(streamBitRate = rate) }
+            }
+            SettingChoice(Res.string.settings_stream_quality_metered, settings.meteredStreamBitRate, streamQualities) { rate ->
+                controller.updatePreferences { it.copy(meteredStreamBitRate = rate) }
             }
             SettingChoice(Res.string.download_network, settings.downloadOnMetered,
                 listOf(false to stringResource(Res.string.settings_unmetered_only), true to stringResource(Res.string.settings_any_network))) { allowed ->
@@ -603,12 +624,14 @@ private fun <T> SettingChoice(label: String, key: StringResource?, icon: AppIcon
         else -> null
     }
     val distinctIcons = choices.map { choiceIcon(it.first) }.distinct().size > 1
-    val row: @Composable () -> Unit = {
+    val row: @Composable () -> Unit = { BoxWithConstraints {
+    // A long value, such as the source order, must leave its label room on a phone instead of wrapping it letter by letter.
+    val valueWidth = minOf(240.dp, maxWidth * 0.6f)
     Row(Modifier.fillMaxWidth().then(if (card && LocalSettingsCards.current) Modifier else Modifier.clickable { expanded = true })
         .semantics { contentDescription = label }, verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Box {
-            Row(Modifier.widthIn(max = 240.dp).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.widthIn(max = valueWidth).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 choiceIcon(selected)?.takeIf { distinctIcons }?.let { icon ->
                     Icon(icon.vector, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
                 }
@@ -618,7 +641,7 @@ private fun <T> SettingChoice(label: String, key: StringResource?, icon: AppIcon
             }
         }
     }
-    }
+    } }
     Box(Modifier.fillMaxWidth()) {
         if (card && LocalSettingsCards.current) SettingsCard(icon, onClick = { expanded = true }) {
             Box(Modifier.weight(1f)) { row() }

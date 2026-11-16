@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.about_nevumi
 import me.d3sox.nevumi.resources.app_name
+import me.d3sox.nevumi.resources.crash_reports
 import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.nevumi_logo
 import me.d3sox.nevumi.resources.settings_about_tagline
@@ -35,12 +36,18 @@ internal fun AboutNevumi(dismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     val source = "https://github.com/D3SOX/Nevumi"
     var showLicense by remember { mutableStateOf(false) }
+    var showCrashes by remember { mutableStateOf(false) }
+    val crashReports = LocalCrashReports.current
+    val crashCount = crashReports?.reports?.collectAsState()?.value?.size ?: 0
     var license by remember { mutableStateOf("") }
     LaunchedEffect(showLicense) {
         if (showLicense) license = Res.readBytes("files/LICENSE").decodeToString()
     }
-    AnimatedNavigation(showLicense, false, canGoBack = showLicense, onBack = { showLicense = false }, depth = { if (it) 1 else 0 }) { licenseShown ->
-    if (licenseShown) {
+    val subpage = when { showLicense -> "license"; showCrashes -> "crashes"; else -> null }
+    AnimatedNavigation(subpage, null, canGoBack = subpage != null, onBack = { showLicense = false; showCrashes = false },
+        depth = { if (it != null) 1 else 0 }) { shown ->
+    if (shown == "crashes" && crashReports != null) CrashReportsPage(crashReports) { showCrashes = false }
+    else if (shown == "license") {
         SettingsScreen(onDismissRequest = { showLicense = false }, title = { Text(stringResource(Res.string.settings_license)) },
             text = { Text(license, Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) })
     } else SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.about_nevumi)) }, text = {
@@ -58,6 +65,9 @@ internal fun AboutNevumi(dismiss: () -> Unit) {
             }
             OutlinedButton(onClick = { showLicense = true }, Modifier.widthIn(max = 360.dp).fillMaxWidth().heightIn(min = 48.dp)) {
                 Icon(AppIcon.LICENSE.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.settings_view_license))
+            }
+            if (crashCount > 0) OutlinedButton(onClick = { showCrashes = true }, Modifier.widthIn(max = 360.dp).fillMaxWidth().heightIn(min = 48.dp)) {
+                Icon(AppIcon.BUG_REPORT.vector, null); Spacer(Modifier.width(8.dp)); Text("${stringResource(Res.string.crash_reports)} ($crashCount)")
             }
         }
     }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })

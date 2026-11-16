@@ -109,6 +109,8 @@
     <string name="settings_previous_track_limit">Previous track limit</string>
     <string name="settings_keep_playing">Keep playing after closing</string>
     <string name="settings_keep_playing_description">Closing the window while music plays hides it. Reopen Nevumi from the tray icon or your media controls</string>
+    <string name="settings_resume_on_headphones">Resume when headphones connect</string>
+    <string name="settings_resume_on_headphones_description">Continue the paused song when you connect wired, USB or Bluetooth audio</string>
     <string name="settings_tray_icon">Tray icon</string>
     <string name="settings_tray_icon_description">Closing the window keeps Nevumi in the system tray, where you can control playback, reopen it or quit</string>
 
@@ -162,6 +164,10 @@
     <string name="settings_source_local">Local</string>
     <string name="settings_unmetered_only">Unmetered only</string>
     <string name="settings_any_network">Any network</string>
+    <string name="settings_stream_quality">Streaming quality</string>
+    <string name="settings_stream_quality_metered">Streaming quality on metered networks</string>
+    <string name="settings_stream_quality_original">Original</string>
+    <string name="settings_stream_quality_bit_rate">Up to %1$d kbit/s</string>
     <string name="settings_manage_downloads_description">Downloads, progress and offline music</string>
 
     <!-- Listening & scrobbling -->
@@ -203,6 +209,16 @@
     <string name="settings_about_tagline">Local music and your music server in one library.</string>
     <string name="settings_source_code">Source code</string>
     <string name="settings_view_license">View license</string>
+    <string name="crash_reports">Crash reports</string>
+    <string name="crash_reports_description">Reports of crashes are kept only on this device. Copy one into a bug report to help fix the crash. Reports can contain file and song names, so check them before sharing.</string>
+    <string name="crash_reports_empty">No crash reports</string>
+    <string name="crash_report_copy">Copy report</string>
+    <string name="crash_report_copied">Copied the crash report</string>
+    <string name="crash_report_delete">Delete crash report from %1$s</string>
+    <string name="crash_reports_delete_all">Delete all</string>
+    <string name="crash_prompt_title">Nevumi closed unexpectedly</string>
+    <string name="crash_prompt_message">A crash report was saved on this device. You can copy it into a bug report. It can contain file and song names, so check it before sharing.</string>
+    <string name="crash_prompt_dismiss">Not now</string>
 
     <!-- Settings search -->
     <string name="settings_search_query">Search settings query</string>
@@ -236,6 +252,7 @@
     <string name="settings_keywords_previous_track_limit">queue history count</string>
     <string name="settings_keywords_confirm_queue_jumps">confirmation skip play now</string>
     <string name="settings_keywords_confirm_up_next_interruption">confirmation replace queue starting music album playlist</string>
+    <string name="settings_keywords_resume_on_headphones">headset bluetooth wired usb car connect autoplay continue</string>
     <string name="settings_keywords_keep_playing">background close window hide minimize quit tray</string>
     <string name="settings_keywords_tray_icon">system tray status notifier panel background quit</string>
     <string name="settings_keywords_prepare_all_waveforms">audio waveform background cache precompute progress</string>
@@ -244,6 +261,8 @@
     <string name="settings_keywords_source_priority">local downloads server mixed library</string>
     <string name="settings_keywords_playback_cache">storage offline</string>
     <string name="settings_keywords_download_network">metered wifi unmetered</string>
+    <string name="settings_keywords_stream_quality">bitrate transcode kbps wifi unmetered server</string>
+    <string name="settings_keywords_stream_quality_metered">bitrate transcode kbps mobile data cellular server</string>
     <string name="settings_keywords_manage_downloads">offline progress auto playlist</string>
     <string name="settings_keywords_music_server">navidrome subsonic address url username password connect refresh disconnect</string>
     <string name="settings_keywords_sync_play_queue">play queue resume continue other devices subsonic apps</string>

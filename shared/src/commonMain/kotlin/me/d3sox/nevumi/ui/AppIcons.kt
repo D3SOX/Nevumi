@@ -2,6 +2,8 @@ package me.d3sox.nevumi.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.VolumeOff
@@ -264,6 +266,8 @@ internal enum class AppIcon(val vector: ImageVector) {
     VISIBLE(Icons.Rounded.Visibility),
     HIDDEN(Icons.Rounded.VisibilityOff),
     COPY(Icons.Rounded.ContentCopy),
+    BUG_REPORT(Icons.Rounded.BugReport),
+    MOBILE_DATA(Icons.Rounded.SignalCellularAlt),
     CLEAN_UP(Icons.Rounded.AutoFixHigh),
     TAGS(Icons.Rounded.Sell),
     NEW_RELEASES(Icons.Rounded.NewReleases),

@@ -10,4 +10,10 @@
     <string name="playback_play">Play</string>
     <string name="playback_pause">Pause</string>
     <string name="playback_next">Next</string>
+    <string name="shortcut_shuffle">Shuffle</string>
+    <string name="shortcut_shuffle_long">Shuffle all songs</string>
+    <string name="shortcut_search">Search</string>
+    <string name="shortcut_search_long">Search your music</string>
+    <string name="shortcut_resume">Resume</string>
+    <string name="shortcut_resume_long">Continue playing</string>
 </resources>

@@ -24,7 +24,9 @@ import me.d3sox.nevumi.playback.MprisApplication
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.security.SecretServiceVault
 import me.d3sox.nevumi.storage.openMusicStore
+import me.d3sox.nevumi.diagnostics.CrashLog
 import me.d3sox.nevumi.ui.AppShortcuts
+import me.d3sox.nevumi.ui.NEVUMI_VERSION
 import me.d3sox.nevumi.ui.closeHidesWindow
 import me.d3sox.nevumi.ui.MusicPlayerApp
 import me.d3sox.nevumi.ui.MusicPlayerStartup
@@ -72,8 +74,7 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
     val resources = mutableListOf<suspend () -> Unit>()
     try {
         fun option(name: String) = arguments.firstOrNull { it.startsWith("$name=") }?.substringAfter('=')
-        val base = System.getenv("XDG_DATA_HOME") ?: File(System.getProperty("user.home"), ".local/share").path
-        val directory = File(option("--data-dir") ?: "$base/me.d3sox.nevumi").apply { mkdirs() }
+        val directory = dataDirectory(arguments).apply { mkdirs() }
         // A second instance, such as one launched to import a folder, would write the same database and downloads.
         val lockChannel = java.nio.channels.FileChannel.open(File(directory, "nevumi.lock").toPath(),
             java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE).also { resources += { it.close() } }
@@ -154,13 +155,21 @@ private fun raiseRunningPlayer(): Boolean = try {
     }
 } catch (_: Exception) { false }
 
+private fun dataDirectory(arguments: Array<String>): File {
+    val base = System.getenv("XDG_DATA_HOME") ?: File(System.getProperty("user.home"), ".local/share").path
+    return File(arguments.firstOrNull { it.startsWith("--data-dir=") }?.substringAfter('=') ?: "$base/me.d3sox.nevumi")
+}
+
 fun main(arguments: Array<String>) {
     // Options such as another data directory or a folder to import need their own instance, so only a plain launch is handed over.
     if (arguments.isEmpty() && raiseRunningPlayer()) return
-    runApplication(arguments)
+    val crashLog = CrashLog(File(dataDirectory(arguments), "crashes"), {
+        "Nevumi $NEVUMI_VERSION on Linux ${System.getProperty("os.version")} (${System.getProperty("os.arch")}, Java ${System.getProperty("java.version")})"
+    }).apply { install() }
+    runApplication(arguments, crashLog)
 }
 
-private fun runApplication(arguments: Array<String>) = application {
+private fun runApplication(arguments: Array<String>, crashLog: CrashLog) = application {
     val lifecycle = rememberCoroutineScope()
     var closing by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(true) }
@@ -233,7 +242,7 @@ private fun runApplication(arguments: Array<String>) = application {
             catch (error: Throwable) { startupError = error.message ?: error.toString() }
         }
         LaunchedEffect(raised) { if (raised > 0) window.toFront() }
-        if (ready != null) MusicPlayerApp(ready, shortcuts = shortcuts)
+        if (ready != null) MusicPlayerApp(ready, shortcuts = shortcuts, crashReports = crashLog)
         else MusicPlayerStartup(startupError)
     }
 }
