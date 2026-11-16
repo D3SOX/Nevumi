@@ -208,6 +208,9 @@ class YouTubeControllerTest {
             val now = System.currentTimeMillis()
             assertEquals(emptySet(), library.removeUnusedYouTubeTracks(now))
             assertEquals(fresh.id, library.trackForSource("youtube:aaaaaaaaaaa")?.id)
+            // A cleanup that read the time just before the import still keeps it.
+            store.put("youtube-cleanup", "maintenance", 0L)
+            assertEquals(emptySet(), library.removeUnusedYouTubeTracks(fresh.addedAt - 1))
             // Still unused a week later, it goes.
             assertEquals(setOf(fresh.id), library.removeUnusedYouTubeTracks(now + 8 * 24 * 3_600_000L))
         } finally { store.close(); directory.toFile().deleteRecursively() }

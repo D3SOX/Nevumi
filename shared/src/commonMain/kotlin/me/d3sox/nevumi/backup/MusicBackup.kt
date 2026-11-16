@@ -167,11 +167,10 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         for ((index, backup) in document.playlists.withIndex()) {
             val name = backup.name.trim().takeIf { it.isNotEmpty() } ?: continue
             backup.youTube?.let { link ->
-                val followed = playlists.followed(link) ?: playlists.follow(link, name, backup.description, emptyList()).also { created ->
-                    if (backup.shuffle) playlists.setShuffle(created.id, true)
-                    if (backup.sort != PlaylistSort.CUSTOM || backup.descending) playlists.setSort(created.id, backup.sort, backup.descending)
-                    playlistsAdded++
-                }
+                // Like other playlists, the backup wins for shuffle and order; YouTube Music keeps the name, description and songs.
+                val followed = playlists.followed(link) ?: playlists.follow(link, name, backup.description, emptyList()).also { playlistsAdded++ }
+                if (backup.shuffle != followed.shuffle) playlists.setShuffle(followed.id, backup.shuffle)
+                if (backup.sort != followed.sort || backup.descending != followed.descending) playlists.setSort(followed.id, backup.sort, backup.descending)
                 restoredPlaylists["$BACKUP_PLAYLIST$index"] = followed.id
                 continue
             }

@@ -166,8 +166,11 @@ class MusicBackupTest {
         assertEquals("Fresh songs", restored.description)
         assertTrue(restored.shuffle)
         assertTrue(restored.trackIds.isEmpty())
+        // Restoring it again only takes its shuffle and order from the backup.
+        target.playlists.setShuffle(restored.id, false)
         assertEquals(0, target.backup.restore(exported).playlistsAdded)
         assertEquals(1, target.playlists.all().size)
+        assertTrue(target.playlists.followed(link)!!.shuffle)
     }
 
     @Test
