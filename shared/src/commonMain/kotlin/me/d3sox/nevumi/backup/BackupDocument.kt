@@ -78,8 +78,13 @@ data class SignInRequired(val service: BackupService, val account: String)
 
 enum class BackupService { MUSIC_SERVER, SFTP, LISTENBRAINZ, LASTFM }
 
-/** What a restore added or changed. [unmatchedTracks] counts song references whose song is not in this library. */
+/**
+ * What a restore added or changed. [unmatchedTracks] counts song references whose song is not in this library, and
+ * [playlistsSkipped] counts playlists left out because none of their songs is. [serverPlaylistsLackingSongs] counts music server
+ * playlists that stood in for a backed-up playlist and were kept as the server has them, without some of its songs.
+ */
 data class RestoreSummary(val settings: Boolean = false, val favorites: Int = 0, val ratings: Int = 0, val playlistsAdded: Int = 0,
     val playlistsMerged: Int = 0, val savedQueues: Int = 0, val listens: Int = 0, val equalizerProfiles: Int = 0,
     val scrobblingProfiles: Int = 0, val soundCloud: Boolean = false, val unmatchedTracks: Int = 0,
-    val signInRequired: List<SignInRequired> = emptyList())
+    val signInRequired: List<SignInRequired> = emptyList(), val playlistsSkipped: Int = 0,
+    val serverPlaylistsLackingSongs: Int = 0)

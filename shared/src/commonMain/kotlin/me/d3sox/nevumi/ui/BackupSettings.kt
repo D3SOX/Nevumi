@@ -56,6 +56,10 @@ import me.d3sox.nevumi.resources.backup_summary_soundcloud_restored
 import me.d3sox.nevumi.resources.backup_summary_title
 import me.d3sox.nevumi.resources.backup_summary_unmatched
 import me.d3sox.nevumi.resources.backup_summary_unmatched_description
+import me.d3sox.nevumi.resources.backup_summary_playlists_skipped
+import me.d3sox.nevumi.resources.backup_summary_playlists_skipped_description
+import me.d3sox.nevumi.resources.backup_summary_server_playlists
+import me.d3sox.nevumi.resources.backup_summary_server_playlists_description
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.done
 import org.jetbrains.compose.resources.StringResource
@@ -159,13 +163,14 @@ private fun RestoreSummaryContent(summary: RestoreSummary) {
         if (summary.soundCloud) Res.string.backup_summary_soundcloud to stringResource(Res.string.backup_summary_soundcloud_restored) else null,
     )
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (rows.isEmpty()) Text(stringResource(Res.string.backup_summary_nothing))
+        // Playlists left out, or kept or restored without some songs, mean the backup is not all here.
+        if (rows.isEmpty() && summary.playlistsSkipped == 0 && summary.serverPlaylistsLackingSongs == 0 && summary.unmatchedTracks == 0)
+            Text(stringResource(Res.string.backup_summary_nothing))
         rows.forEach { (label, value) -> SummaryRow(stringResource(label), value) }
-        if (summary.unmatchedTracks > 0) {
-            SummaryRow(stringResource(Res.string.backup_summary_unmatched), summary.unmatchedTracks.toString())
-            Text(stringResource(Res.string.backup_summary_unmatched_description), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        ExplainedRow(Res.string.backup_summary_playlists_skipped, Res.string.backup_summary_playlists_skipped_description, summary.playlistsSkipped)
+        ExplainedRow(Res.string.backup_summary_server_playlists, Res.string.backup_summary_server_playlists_description,
+            summary.serverPlaylistsLackingSongs)
+        ExplainedRow(Res.string.backup_summary_unmatched, Res.string.backup_summary_unmatched_description, summary.unmatchedTracks)
         if (summary.signInRequired.isNotEmpty()) {
             Text(stringResource(Res.string.backup_summary_sign_in), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
             summary.signInRequired.forEach { SummaryRow(stringResource(it.service.label()), it.account) }
@@ -174,6 +179,14 @@ private fun RestoreSummaryContent(summary: RestoreSummary) {
 }
 
 private fun count(label: StringResource, value: Int) = if (value > 0) label to value.toString() else null
+
+/** A count that needs a word on what to do about it. */
+@Composable
+private fun ExplainedRow(label: StringResource, description: StringResource, value: Int) {
+    if (value <= 0) return
+    SummaryRow(stringResource(label), value.toString())
+    Text(stringResource(description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
 
 @Composable
 private fun SummaryRow(label: String, value: String) {

@@ -158,10 +158,12 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 
         var playlistsAdded = 0
         var playlistsMerged = 0
+        var playlistsSkipped = 0
+        var serverPlaylistsLackingSongs = 0
         val existingPlaylists = playlists.all()
         // Each compatible playlist already here stands in for one backed-up playlist of its name, so same-named playlists stay separate.
-        // A smart playlist is compatible with the same rule. A server playlist is only compatible when it already has every song,
-        // because adding to it would push songs removed since the backup back to the server. Anything else is restored on its own.
+        // A smart playlist is compatible with the same rule. A server playlist is kept as the server has it, because adding to it
+        // would push songs removed since the backup back to the server; the summary counts it when it lacks backed-up songs.
         val matched = mutableSetOf<String>()
         val restoredPlaylists = mutableMapOf<String, String>()
         for ((index, backup) in document.playlists.withIndex()) {
@@ -180,7 +182,6 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 playlist.id !in matched && playlist.name.trim() == name && when {
                     backup.rule != null -> playlist.rule == backup.rule
                     playlist.rule != null || playlist.youTube != null -> false
-                    playlist.server != null -> playlist.trackIds.containsAll(songs)
                     else -> true
                 }
             }.maxWithOrNull(compareBy<me.d3sox.nevumi.playlists.Playlist> { it.description == backup.description }
@@ -188,7 +189,10 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             if (existing != null) {
                 matched += existing.id
                 restoredPlaylists["$BACKUP_PLAYLIST$index"] = existing.id
-                if (existing.server != null) continue
+                if (existing.server != null) {
+                    if (!existing.trackIds.containsAll(songs)) serverPlaylistsLackingSongs++
+                    continue
+                }
                 // The backup wins for the description, shuffle and order it sets, as it does for a playlist it creates.
                 var changed = false
                 if (backup.description.isNotBlank() && backup.description != existing.description) {
@@ -207,6 +211,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 if (changed) playlistsMerged++
                 continue
             }
+            // None of its songs are here, such as while the library is still being indexed; an empty copy would only stand in
+            // the way of the playlist a later restore brings back.
+            if (backup.rule == null && songs.isEmpty() && backup.trackKeys.isNotEmpty()) { playlistsSkipped++; continue }
             val created = if (backup.rule != null) playlists.createSmart(name, backup.rule) else playlists.create(name, songs)
             if (backup.description.isNotBlank()) playlists.edit(created.id, name, backup.description)
             if (backup.shuffle) playlists.setShuffle(created.id, true)
@@ -281,7 +288,8 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val soundCloud = document.soundCloud?.let { soundCloud?.restore(it) } == true
 
         return RestoreSummary(settings, favorites.size, ratings.size, playlistsAdded, playlistsMerged, savedQueues, listens,
-            equalizerProfiles, scrobblingProfiles, soundCloud, unmatched.size, signIn)
+            equalizerProfiles, scrobblingProfiles, soundCloud, unmatched.size, signIn, playlistsSkipped,
+            serverPlaylistsLackingSongs)
     }
 
     private fun decode(text: String): BackupDocument {

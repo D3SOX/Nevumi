@@ -39,6 +39,10 @@
     <string name="backup_summary_scrobbling">Scrobbling accounts updated</string>
     <string name="backup_summary_soundcloud">SoundCloud downloads</string>
     <string name="backup_summary_soundcloud_restored">Set up</string>
+    <string name="backup_summary_playlists_skipped">Playlists not restored</string>
+    <string name="backup_summary_playlists_skipped_description">None of their songs are in this library yet. Restore again once your music has synced.</string>
+    <string name="backup_summary_server_playlists">Server playlists missing songs</string>
+    <string name="backup_summary_server_playlists_description">These playlists on your music server lack songs from the backup. They stay as the server has them.</string>
     <string name="backup_summary_unmatched">Songs not found in this library</string>
     <string name="backup_summary_unmatched_description">Playlists, queues and history skip these songs. Add the music, then restore again to fill them in.</string>
     <string name="backup_summary_nothing">Everything in this backup is already here.</string>

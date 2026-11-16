@@ -78,7 +78,10 @@ class BackupSettingsUiTest {
             preferences = MusicPreferences(store), backup = MusicBackup(store, library))
         val files = object : BackupFiles {
             var opened = 0
-            override suspend fun open(): String { opened++; return """{"format":"nevumi-backup","version":1,"createdAt":0,"playlists":[{"name":"Road"}]}""" }
+            // The second backup only names a song this library lacks, in a playlist that is already here.
+            override suspend fun open(): String = if (++opened == 1)
+                """{"format":"nevumi-backup","version":1,"createdAt":0,"playlists":[{"name":"Road"},{"name":"Gone","trackKeys":["missing"]}]}"""
+            else """{"format":"nevumi-backup","version":1,"createdAt":0,"playlists":[{"name":"Road","trackKeys":["missing"]}]}"""
             override suspend fun save(name: String, text: String) = false
         }
         try {
@@ -106,10 +109,17 @@ class BackupSettingsUiTest {
                 onNodeWithText("Choose file").performClick()
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Backup restored").fetchSemanticsNodes().isNotEmpty() }
                 onNodeWithText("New playlists").assertIsDisplayed()
+                onNodeWithText("Playlists not restored").assertIsDisplayed()
+                onNodeWithText("Everything in this backup is already here.").assertDoesNotExist()
+                captureUiSnapshot("backup-restore-summary", onNode(isDialog()))
                 onNodeWithText("Done").performClick()
                 waitForIdle()
                 onNodeWithText("New playlists").assertDoesNotExist()
                 assertEquals(listOf("Road"), runBlocking { playlists.all().map { it.name } })
+                onNodeWithText("Restore backup").performScrollTo().performClick()
+                onNodeWithText("Choose file").performClick()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Songs not found in this library").fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithText("Everything in this backup is already here.").assertDoesNotExist()
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
