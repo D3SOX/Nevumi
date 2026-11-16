@@ -37,7 +37,8 @@ class SoundCloudController internal constructor(private val context: ControllerC
                         SoundCloudJobState.FAILED, SoundCloudJobState.LOST -> Res.string.notice_soundcloud_failed
                         else -> null
                     }
-                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.SOUNDCLOUD_DOWNLOADS, arguments = listOf(job.track.title)))
+                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.SOUNDCLOUD_DOWNLOADS, arguments = listOf(job.track.title),
+                        duration = NoticeDuration.UNTIL_DISMISSED))
                 }
             }
         } }
@@ -46,7 +47,8 @@ class SoundCloudController internal constructor(private val context: ControllerC
                 val trackId = job.trackId
                 context.mutableNotices.tryEmit(if (trackId != null) ActionNotice(Res.string.notice_soundcloud_added, arguments = listOf(job.track.title),
                     play = { queueController.playTrack(trackId, listOf(trackId), 0, "SoundCloud") })
-                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.SOUNDCLOUD_DOWNLOADS, arguments = listOf(job.track.title)))
+                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.SOUNDCLOUD_DOWNLOADS, arguments = listOf(job.track.title),
+                        duration = NoticeDuration.LONG))
             }
         } }
     }

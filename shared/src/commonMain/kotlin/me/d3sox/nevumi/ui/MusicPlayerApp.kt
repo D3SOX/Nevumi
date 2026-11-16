@@ -159,6 +159,8 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         }
         LaunchedEffect(state.error) {
             state.error?.let { error ->
+                // A notice waiting for the user would otherwise hold the error back until dismissed.
+                messages.currentSnackbarData?.takeIf { it.visuals.duration == SnackbarDuration.Indefinite }?.dismiss()
                 messages.showSnackbar(error, withDismissAction = true, duration = SnackbarDuration.Short)
                 controller.dismissError(error)
             }

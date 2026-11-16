@@ -53,7 +53,8 @@ class ServerController internal constructor(private val context: ControllerConte
         // Subscribe before the first sync so its notices are not lost.
         serverChanges?.let { changes -> context.scope.launch(start = CoroutineStart.UNDISPATCHED) {
             changes.discardedEdits.collect { name ->
-                context.confirm(Res.string.notice_playlist_edit_discarded, ActionDestination.PLAYLISTS, arguments = listOf(name))
+                context.mutableNotices.tryEmit(ActionNotice(Res.string.notice_playlist_edit_discarded, ActionDestination.PLAYLISTS,
+                    arguments = listOf(name), duration = NoticeDuration.LONG))
             }
         } }
         serverChanges?.start()

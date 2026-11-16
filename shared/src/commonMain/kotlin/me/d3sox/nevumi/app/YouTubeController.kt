@@ -50,7 +50,8 @@ class YouTubeController internal constructor(private val context: ControllerCont
                         YouTubeJobState.FAILED -> Res.string.notice_soundcloud_failed
                         else -> null
                     }
-                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(job.tags.title)))
+                    if (message != null) context.mutableNotices.tryEmit(ActionNotice(message, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(job.tags.title),
+                        duration = NoticeDuration.UNTIL_DISMISSED))
                 }
             }
         } }
@@ -63,7 +64,8 @@ class YouTubeController internal constructor(private val context: ControllerCont
                     ?.let { libraryController.linkTracks(trackId, it.id).join() }
                 context.mutableNotices.tryEmit(if (trackId != null) ActionNotice(Res.string.notice_soundcloud_added, arguments = listOf(job.tags.title),
                     play = { queueController.playTrack(trackId, listOf(trackId), 0, "YouTube") })
-                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(job.tags.title)))
+                    else ActionNotice(Res.string.notice_soundcloud_saved_outside, ActionDestination.YOUTUBE_DOWNLOADS, arguments = listOf(job.tags.title),
+                        duration = NoticeDuration.LONG))
             }
         } }
     }

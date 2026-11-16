@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.ActionDestination
 import me.d3sox.nevumi.app.ActionNotice
+import me.d3sox.nevumi.app.NoticeDuration
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.play
 import me.d3sox.nevumi.resources.player_dismiss_message
@@ -45,8 +46,12 @@ internal suspend fun ActionSnackbarVisuals(notice: ActionNotice) = ActionSnackba
 internal class ActionSnackbarVisuals(val notice: ActionNotice, override val actionLabel: String?) : SnackbarVisuals {
     /** The notice text is a string resource; [ActionSnackbar] resolves it where it is drawn. */
     override val message = ""
-    override val withDismissAction = false
-    override val duration = if (notice.undo != null || notice.play != null) SnackbarDuration.Long else SnackbarDuration.Short
+    override val withDismissAction = notice.duration == NoticeDuration.UNTIL_DISMISSED
+    override val duration = when (notice.duration) {
+        NoticeDuration.SHORT -> SnackbarDuration.Short
+        NoticeDuration.LONG -> SnackbarDuration.Long
+        NoticeDuration.UNTIL_DISMISSED -> SnackbarDuration.Indefinite
+    }
 }
 
 internal fun ActionDestination.openLabel() = when (this) {

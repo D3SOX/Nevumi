@@ -6,17 +6,33 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.v2.runComposeUiTest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import me.d3sox.nevumi.app.ActionNotice
+import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.app.NoticeDuration
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
+import me.d3sox.nevumi.playback.MpvPlaybackEngine
+import me.d3sox.nevumi.queue.PlaybackQueue
+import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.notice_soundcloud_check_tags
+import me.d3sox.nevumi.resources.notice_soundcloud_failed
+import me.d3sox.nevumi.resources.notice_soundcloud_saved_outside
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.soundcloud.DirectoryMusicFiles
 import me.d3sox.nevumi.soundcloud.ScGateTagChoice
 import me.d3sox.nevumi.soundcloud.ScGateTags
 import me.d3sox.nevumi.storage.openMusicStore
+import me.d3sox.nevumi.ui.MusicPlayerApp
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
@@ -34,14 +50,16 @@ class YouTubeDownloadsTest {
     private val audio = Files.readAllBytes(Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/youtube-fragmented.m4a"))
     private val track = YouTubeTrack("abcdefghijk", "One More Time", "Daft Punk", 3_000, song = true)
 
-    /** Answers like YouTube: [audio] in byte ranges only, from addresses that [expired] rejects. */
-    private class FakeYouTube(val audio: ByteArray, val failure: Exception? = null, val mimeType: String = "audio/mp4") : YouTubeSource {
+    /** Answers like YouTube: [audio] in byte ranges only, from addresses that [expired] rejects, once [gate] opens. */
+    private class FakeYouTube(val audio: ByteArray, val failure: Exception? = null, val mimeType: String = "audio/mp4",
+        val gate: CompletableDeferred<Unit>? = null) : YouTubeSource {
         val lookups = Collections.synchronizedList(mutableListOf<Boolean>())
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?) = YouTubePage(emptyList(), null)
         override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
         override suspend fun page(videoId: String, kind: YouTubeCollectionKind): YouTubeCollection? = null
         override suspend fun browseMore(continuation: YouTubeContinuation) = YouTubePage(emptyList(), null)
         override suspend fun audio(videoId: String, fresh: Boolean): YouTubeAudio {
+            gate?.await()
             lookups += fresh
             failure?.let { throw it }
             return YouTubeAudio("https://media.test/${lookups.size}", mimeType, audio.size.toLong(), 48, YouTubeDetails("Discovery", 2001))
@@ -51,7 +69,7 @@ class YouTubeDownloadsTest {
     }
 
     private class Fixture(val directory: Path, val downloads: YouTubeDownloads, val library: MusicLibrary, val requests: MutableList<String>,
-        val close: () -> Unit)
+        val store: me.d3sox.nevumi.storage.MusicStore, val close: () -> Unit)
 
     private fun fixture(source: YouTubeSource, expired: Set<String> = emptySet(), includeFolder: String? = null,
         upload: (suspend (String, String) -> Unit)? = null): Fixture {
@@ -73,7 +91,7 @@ class YouTubeDownloadsTest {
         })
         val downloads = YouTubeDownloads(store, http, source, directory.resolve("work").toString(),
             DirectoryMusicFiles(directory.resolve("Music/YouTube").toString()), LocalFiles(library), upload = upload, chunkBytes = 4_096)
-        return Fixture(directory, downloads, library, requests) {
+        return Fixture(directory, downloads, library, requests, store) {
             runBlocking { downloads.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively()
         }
     }
@@ -103,6 +121,50 @@ class YouTubeDownloadsTest {
             // The work files are gone once the song is saved.
             assertEquals(emptyList(), fixture.directory.resolve("work").toFile().list().orEmpty().toList())
         } finally { fixture.close() }
+    }
+
+    @Test fun noticesThatWaitOnTheUserOrReportAFailureStayUntilDismissed() = runBlocking {
+        suspend fun noticeFor(source: FakeYouTube, reviewTags: Boolean, includeFolder: String? = null): ActionNotice {
+            val fixture = fixture(source, includeFolder = includeFolder)
+            val player = MusicController(fixture.library, PlaybackQueue(fixture.store), MpvPlaybackEngine("null"), youTubeDownloads = fixture.downloads)
+            try {
+                val notice = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(10_000) { player.notices.first() } }
+                val job = fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags)
+                // The controller only announces changes after the first job list it sees, so it must see this job before it ends.
+                withTimeout(10_000) { player.state.first { state -> state.youTubeJobs.any { it.id == job.id } } }
+                source.gate?.complete(Unit)
+                return notice.await()
+            } finally { player.closeAndJoin(); fixture.close() }
+        }
+        val review = noticeFor(FakeYouTube(audio, gate = CompletableDeferred()), reviewTags = true)
+        assertEquals(Res.string.notice_soundcloud_check_tags, review.message)
+        assertEquals(NoticeDuration.UNTIL_DISMISSED, review.duration)
+        val failure = noticeFor(FakeYouTube(audio, YouTubeException("This video is private", retryable = false), gate = CompletableDeferred()),
+            reviewTags = false)
+        assertEquals(Res.string.notice_soundcloud_failed, failure.message)
+        assertEquals(NoticeDuration.UNTIL_DISMISSED, failure.duration)
+        val outside = noticeFor(FakeYouTube(audio, gate = CompletableDeferred()), reviewTags = false, includeFolder = "Elsewhere")
+        assertEquals(Res.string.notice_soundcloud_saved_outside, outside.message)
+        assertEquals(NoticeDuration.LONG, outside.duration)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test fun anErrorReplacesADownloadNoticeThatWaitsForTheUser() {
+        val source = FakeYouTube(audio, gate = CompletableDeferred())
+        val fixture = fixture(source)
+        val player = MusicController(fixture.library, PlaybackQueue(fixture.store), MpvPlaybackEngine("null"), youTubeDownloads = fixture.downloads)
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                val job = runBlocking { fixture.downloads.download(track, YouTubeDestination.DEVICE, reviewTags = true) }
+                waitUntil(timeoutMillis = 10_000) { player.state.value.youTubeJobs.any { it.id == job.id } }
+                source.gate?.complete(Unit)
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("to finish", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                // YouTube is off in Settings, so this download fails with an error.
+                player.downloadFromYouTube(track, YouTubeDestination.DEVICE, reviewTags = false)
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Turn on YouTube in Settings first").fetchSemanticsNodes().isNotEmpty() }
+            }
+        } finally { runBlocking { player.closeAndJoin() }; fixture.close() }
     }
 
     @Test fun aJobThatFinishesBeforeAnyoneListensIsStillAnnounced() = runBlocking {
