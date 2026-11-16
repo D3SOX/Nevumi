@@ -203,6 +203,8 @@ class ServerMediaController internal constructor(private val context: Controller
             previous = current
             if (last == null || last.trackId == null) return@collect
             val changed = current.entryId != last.entryId
+            // Reaching an episode through the queue, such as by Next or when the previous one ends, also resumes its bookmark.
+            if (changed) resumeBookmark(current)
             val paused = last.playing && !current.playing && !changed
             val now = clock.elapsedNow().inWholeMilliseconds
             val periodic = current.playing && !changed && now - savedAt >= 30_000
@@ -213,13 +215,24 @@ class ServerMediaController internal constructor(private val context: Controller
             savedAt = now
             val duration = status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs
             val finished = status.ended || duration > 0 && status.positionMs >= duration - 15_000
-            savePosition(episode.location, if (finished) null else status.positionMs.takeIf { it >= 5_000 })
+            savePosition(episode, if (finished) null else status.positionMs.takeIf { it >= 5_000 })
         }
     }
 
-    private suspend fun savePosition(streamId: String, positionMs: Long?) {
+    private fun resumeBookmark(status: PlaybackStatus) {
+        val entryId = status.entryId ?: return
+        val serverId = context.state.value.server?.serverId ?: return
+        val track = context.state.value.tracks.firstOrNull { it.id == status.trackId } ?: return
+        val episode = track.sources.firstOrNull { it.kind == SourceKind.PODCAST && it.id.startsWith("podcast:$serverId:") } ?: return
+        val resume = mutableMedia.value.takeIf { it.serverId == serverId }?.bookmarks?.get(episode.location) ?: return
+        if (resume > 0 && status.positionMs < 5_000) playback.seekCurrentEntry(entryId, resume)
+    }
+
+    /** Writes only to the server [episode] came from, as another server may use the same stream ID for something else. */
+    private suspend fun savePosition(episode: me.d3sox.nevumi.library.TrackSource, positionMs: Long?) {
+        val streamId = episode.location
         try {
-            val client = client() ?: return
+            val client = client()?.takeIf { episode.id.startsWith("podcast:${it.serverId}:") } ?: return
             if (positionMs == null) client.deleteBookmark(streamId) else client.saveBookmark(streamId, positionMs)
             mutableMedia.update { media ->
                 media.copy(bookmarks = if (positionMs == null) media.bookmarks - streamId else media.bookmarks + (streamId to positionMs))

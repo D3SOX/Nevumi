@@ -44,17 +44,17 @@ class ServerMediaIntegrationTest {
             podcasts().orEmpty().single { it.url == feed }
         }
         assertEquals("Nevumi Fixture Podcast", channel.title)
-        val episode = channel.episodes.single { it.title == "Fixture episode two" }
-        assertFalse(episode.playable, "gonic lists new episodes without downloading them")
-        downloadPodcastEpisode(episode.id)
+        assertTrue(channel.episodes.none { it.playable }, "gonic lists new episodes without downloading them")
+        // Both episodes download, so the second can also be reached from the first through the queue.
+        channel.episodes.forEach { downloadPodcastEpisode(it.id) }
         return withTimeout(60_000) {
-            var current: PodcastEpisode
+            var episodes: List<PodcastEpisode>
             do {
                 delay(250)
-                current = podcasts().orEmpty().single { it.url == feed }.episodes.single { it.id == episode.id }
-                assertNotEquals(PodcastStatus.ERROR, current.status)
-            } while (!current.playable)
-            current
+                episodes = podcasts().orEmpty().single { it.url == feed }.episodes
+                episodes.forEach { assertNotEquals(PodcastStatus.ERROR, it.status) }
+            } while (!episodes.all { it.playable })
+            episodes.single { it.title == "Fixture episode two" }
         }
     }
 
@@ -136,6 +136,7 @@ class ServerMediaIntegrationTest {
         try {
             client.removeFixtures()
             client.createRadioStation("Nevumi fixture radio", radioStream)
+            client.createRadioStation("Nevumi fixture radio two", radioStream)
             val episode = client.subscribedEpisode()
             val streamId = requireNotNull(episode.streamId)
             client.saveBookmark(streamId, 30_000)
@@ -145,18 +146,22 @@ class ServerMediaIntegrationTest {
             controller = player
             val media = player.serverMediaController
             val loaded = withTimeout(10_000) {
-                media.media.first { it.stations.orEmpty().any { station -> station.streamUrl == radioStream } && it.bookmarks[streamId] != null }
+                media.media.first { it.stations.orEmpty().count { station -> station.streamUrl == radioStream } == 2 && it.bookmarks[streamId] != null }
             }
             assertTrue(loaded.radioAvailable && loaded.podcastsAvailable && !loaded.sharingAvailable)
 
-            media.playStation(loaded.stations.orEmpty().single { it.streamUrl == radioStream }).join()
+            media.playStation(loaded.stations.orEmpty().last { it.streamUrl == radioStream }).join()
             val live = withTimeout(10_000) { player.state.first { it.playback.playing && it.playback.streamTitle != null } }
             assertEquals("Fixture Artist - Live Song One", live.playback.streamTitle)
             assertEquals(0, live.playback.durationMs)
             val station = live.tracks.single { it.id == live.playback.trackId }
             assertTrue(station.isRadio && !station.inLibrary)
-            delay(1_500)
+            delay(3_500)
             assertFalse(player.state.value.playback.ended)
+            // A live stream has no start to restart, so Previous changes the station even after a few seconds.
+            player.skip(-1).join()
+            val previous = withTimeout(10_000) { player.state.first { it.playback.playing && it.playback.trackId != station.id } }
+            assertTrue(previous.tracks.single { it.id == previous.playback.trackId }.isRadio)
             player.pause().join()
 
             media.playEpisode(loaded.podcasts.orEmpty().flatMap { it.episodes }.single { it.id == episode.id }).join()
@@ -169,6 +174,14 @@ class ServerMediaIntegrationTest {
             // Pausing keeps the position as a bookmark on the server, where other clients find it too.
             val saved = withTimeout(10_000) { media.media.first { (it.bookmarks[streamId] ?: 0) > 30_000 } }.bookmarks.getValue(streamId)
             assertEquals(saved, client.bookmarks()?.get(streamId))
+            // Reaching the episode through the queue resumes its bookmark too.
+            val channel = media.media.value.podcasts.orEmpty().single { it.url == feed }
+            media.playEpisode(channel.episodes.single { it.title == "Fixture episode one" }).join()
+            withTimeout(10_000) { player.state.first { it.playback.playing } }
+            player.skip(1).join()
+            val queued = withTimeout(10_000) { player.state.first { it.playback.playing && it.playback.positionMs >= saved - 1_000 } }
+            assertEquals(resumed.playback.trackId, queued.playback.trackId)
+            player.pause().join()
             // Neither a station nor an episode counts as a listen.
             assertEquals(emptyList(), history.all())
         } finally {

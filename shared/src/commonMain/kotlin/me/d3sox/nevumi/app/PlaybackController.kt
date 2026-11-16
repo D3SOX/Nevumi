@@ -271,7 +271,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
     fun skip(direction: Int, restartPrevious: Boolean = true) = context.action {
         val snapshot = queue.snapshot()
         val playing = engine.status.value.playRequested
-        if (restartPrevious && direction < 0 && engine.status.value.positionMs > 3_000) {
+        // A live station has no start to return to, so Previous goes to the previous station.
+        val live = snapshot.currentEntryId?.let { lastResolved[it] }?.live == true
+        if (restartPrevious && direction < 0 && engine.status.value.positionMs > 3_000 && !live) {
             queue.setPosition(0); engine.seek(0)
             publishSeek(0)
         } else {
