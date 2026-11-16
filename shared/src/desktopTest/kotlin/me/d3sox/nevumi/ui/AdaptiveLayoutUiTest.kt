@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.resources.discovery_playing_similar_songs
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.queue.PlaybackQueue
@@ -114,5 +115,19 @@ class AdaptiveLayoutUiTest {
         width = 400.dp
         waitForIdle()
         onNodeWithTag("mini-player").assertIsDisplayed()
+    }
+
+    @Test fun aNoticeOpensTheQueueInThePaneAfterTheWindowWidens() = withApp(400.dp) { controller, tracks ->
+        play(controller, tracks)
+        width = 1200.dp
+        waitForIdle()
+        onNodeWithTag("now-playing-pane").assertIsDisplayed()
+        // Such as "Playing 3 similar songs", whose action opens the queue; the notice collector started in the compact layout.
+        val context = MusicController::class.java.getDeclaredField("context").apply { isAccessible = true }.get(controller) as me.d3sox.nevumi.app.ControllerContext
+        context.mutableNotices.tryEmit(me.d3sox.nevumi.app.ActionNotice(me.d3sox.nevumi.resources.Res.string.discovery_playing_similar_songs,
+            me.d3sox.nevumi.app.ActionDestination.QUEUE, arguments = listOf(3)))
+        onNodeWithText("Open queue").performClick()
+        onNodeWithTag("queue-header").assertIsDisplayed()
+        assertTrue(bounds("queue-header").left >= bounds("now-playing-pane").left - 1f, "The queue opens inside the pane")
     }
 }

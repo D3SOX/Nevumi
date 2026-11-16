@@ -195,13 +195,15 @@ private fun MusicPlayerScreen(controller: MusicController, onAddMusic: (() -> Un
                 controller.dismissError(error)
             }
         }
+        // The collector outlives layout changes, so it reads the latest callback, which knows whether the player is docked.
+        val currentOpenNotice by rememberUpdatedState<(ActionDestination) -> Unit> { openNotice(it) }
         LaunchedEffect(controller) {
             controller.notices.collectLatest { notice ->
                 messages.currentSnackbarData?.dismiss()
                 if (messages.showSnackbar(ActionSnackbarVisuals(notice)) == SnackbarResult.ActionPerformed) {
                     if (notice.undo != null) notice.undo.invoke()
                     else if (notice.play != null) notice.play.invoke()
-                    else notice.destination?.let(::openNotice)
+                    else notice.destination?.let(currentOpenNotice)
                 }
             }
         }
