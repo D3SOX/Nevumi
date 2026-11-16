@@ -165,6 +165,8 @@ class ScrobblingUiTest {
                 authorized = true
                 onNodeWithText("Complete sign-in").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.scrobbling.profiles.size == 1 }
+                // The controller updates off the test dispatcher, so wait for the page to recompose too.
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Connected as fixture").fetchSemanticsNodes().isNotEmpty() }
                 onNodeWithText("Connected as fixture").performScrollTo().assertIsDisplayed()
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Complete sign-in").fetchSemanticsNodes().isEmpty() }
                 assertEquals(ScrobblingService.LASTFM, controller.state.value.scrobbling.profiles.single().service)
@@ -270,6 +272,8 @@ class ScrobblingUiTest {
                 onNodeWithText("User token").performTextInput("fixture-token")
                 onNodeWithText("Connect").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.scrobbling.profiles.size == 1 }
+                // The controller updates off the test dispatcher, so wait for the page to recompose too.
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Connected as fixture").fetchSemanticsNodes().isNotEmpty() }
                 onNodeWithText("Connected as fixture").performScrollTo().assertIsDisplayed()
                 onNodeWithContentDescription("Back").performClick()
                 onNodeWithContentDescription("Back").performClick()

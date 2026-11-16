@@ -138,17 +138,29 @@ sys.exit(1 if 'wait-for-device' in sys.argv and len(calls) >= 2 else print('36')
         self.assertFalse(unfinished.exists())
         # The first emulator's results stay next to the new ones.
         self.assertTrue((output / "AndroidFirstTest/TEST-example.xml").is_file())
-        self.assertTrue((output / "new-emulator/AndroidThirdTest/TEST-example.xml").is_file())
+        self.assertTrue((output / "emulator-2/AndroidThirdTest/TEST-example.xml").is_file())
 
-    def test_a_second_stopped_emulator_fails_the_shard(self):
+    def test_a_stopped_second_emulator_gets_a_third_and_a_stopped_third_fails_the_shard(self):
         self.source("AndroidExampleTest", tests=2)
-        (self.root / ".test-environment").mkdir()
-        (self.root / ".test-environment/android-unfinished-classes").write_text("AndroidExampleTest\n")
+        environment = self.root / ".test-environment"
+        environment.mkdir()
+        unfinished = environment / "android-unfinished-classes"
+        unfinished.write_text("AndroidExampleTest\n")
+        (environment / "android-emulators").write_text("1\n")
         self.executable("adb", "import sys\nsys.exit(1 if 'wait-for-device' in sys.argv else print('36'))\n")
         result = self.run_suite("--resume", PARTIAL="true")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Android suite failed on a second emulator: emulator-5554 stopped responding", result.stdout + result.stderr)
-        self.assertFalse((self.root / ".test-environment/android-unfinished-classes").exists())
+        self.assertIn("Android emulator replaced", result.stdout)
+        self.assertEqual(["AndroidExampleTest"], unfinished.read_text().split())
+        self.assertTrue((environment / "android-class-results/emulator-2/AndroidExampleTest/TEST-example.xml").is_file())
+
+        result = self.run_suite("--resume", PARTIAL="true")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Android suite failed on a third emulator: emulator-5554 stopped responding", result.stdout + result.stderr)
+        self.assertFalse(unfinished.exists())
+        # Each emulator keeps its own results.
+        self.assertTrue((environment / "android-class-results/emulator-2/AndroidExampleTest/TEST-example.xml").is_file())
+        self.assertTrue((environment / "android-class-results/emulator-3/AndroidExampleTest/TEST-example.xml").is_file())
 
     def test_a_class_that_fails_twice_runs_once_more_on_a_new_emulator(self):
         self.source("AndroidPassingTest")
