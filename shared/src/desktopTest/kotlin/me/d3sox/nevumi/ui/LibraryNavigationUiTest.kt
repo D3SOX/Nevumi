@@ -2,6 +2,7 @@ package me.d3sox.nevumi.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -259,6 +260,46 @@ class LibraryNavigationUiTest {
         }
         onNodeWithText("Save tabs").performClick()
         assertEquals(tabs, saved)
+    }
+
+    @Test fun theRailFitsPagesByHeightAndKeepsOverflowAndSelection() = runSkikoComposeUiTest(size = Size(600f, 1500f)) {
+        var height by mutableStateOf(400.dp)
+        var current by mutableStateOf(LibraryTab.SONGS)
+        val selected = mutableListOf<LibraryTab>()
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.height(height)) { LibraryNavigationRail(tabs, current) { selected += it; current = it } }
+        } }
+        val shown = onAllNodes(navigationItem).fetchSemanticsNodes()
+        assertTrue(shown.size in 3 until tabs.size, "A short rail should overflow: ${shown.size}")
+        val bounds = shown.map { it.boundsInRoot }
+        assertTrue(bounds.zipWithNext().all { (above, below) -> above.bottom <= below.top + 1f }, "Rail items stack vertically")
+        assertTrue(bounds.last().bottom <= with(density) { height.toPx() } + 1f, "Every rail item fits its height")
+        onNodeWithContentDescription("Folders").assertDoesNotExist()
+        onNodeWithText("More").performClick()
+        onNodeWithTag("library-more-pages").performScrollToNode(hasText("Folders"))
+        onNodeWithText("Folders").performClick()
+        onNodeWithText("More").assertIsSelected()
+        // Tapping the current page again still reaches the library, which returns that tab to its top level.
+        onNodeWithContentDescription("Home").performClick()
+        onNodeWithContentDescription("Home").performClick()
+        assertEquals(listOf(LibraryTab.FOLDERS, LibraryTab.HOME, LibraryTab.HOME), selected)
+
+        runOnIdle { height = 1400.dp }
+        onNodeWithText("More").assertDoesNotExist()
+        onAllNodes(navigationItem).assertCountEquals(tabs.size)
+        onNodeWithContentDescription("Home").assertIsSelected()
+        captureNavigation("navigation-rail")
+    }
+
+    @Test fun theRailShowsOnlyTheChosenTabs() = runComposeUiTest {
+        val chosen = setOf(LibraryTab.HOME, LibraryTab.PLAYLISTS)
+        setContent { MusicTheme(MusicSettings(), null) {
+            Box(Modifier.height(900.dp)) { LibraryNavigationRail(tabs, LibraryTab.SONGS, bottomNavigationTabs = chosen) {} }
+        } }
+        onAllNodes(navigationItem).assertCountEquals(3)
+        onNodeWithText("More").assertIsSelected().performClick()
+        onNodeWithTag("library-more-pages").performScrollToNode(hasText("Songs"))
+        onNode(hasText("Songs") and hasAnyAncestor(hasTestTag("library-more-pages"))).assertIsDisplayed()
     }
 
     private fun ComposeUiTest.captureNavigation(name: String, tag: String = "library-navigation") {

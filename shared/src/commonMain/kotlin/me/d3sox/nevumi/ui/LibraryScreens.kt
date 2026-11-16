@@ -191,7 +191,19 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     if (selection.active && backEnabled) PlatformBackHandler(selection::clear)
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages,
         LocalDerivedResults provides derived, LocalLibraryHeaders provides headers, LocalLibraryReselects provides reselects) {
+    val rail = LocalWindowLayout.current != WindowLayout.COMPACT
+    // The rail leaves the bottom free, so nothing above the player needs to make room for a navigation bar.
+    LaunchedEffect(rail) { if (rail) { navigationHeight = 0.dp; onNavigationHeight(0) } }
+    // A lambda, not a local function reference, so the navigation recomposes with the tab that is open now.
+    val selectTab: (LibraryTab) -> Unit = { page ->
+        if (selectedTab != LibraryTab.SEARCH) searchReturnTab = selectedTab
+        if (page == tabs[currentIndex]) reselects.tryEmit(page)
+        selection.clear(); selectedTab = page
+    }
     Column(modifier.fillMaxWidth()) {
+    Row(Modifier.weight(1f).fillMaxWidth()) {
+    if (rail) LibraryNavigationRail(tabs, tabs[currentIndex], bottomNavigationTabs = state.preferences.bottomNavigationTabs, select = selectTab)
+    Column(Modifier.weight(1f).fillMaxHeight()) {
         // Search ignores the source and library filters, and Playlists only follow the source.
         val libraryFiltersApply = tabs[currentIndex] !in setOf(LibraryTab.SEARCH, LibraryTab.PLAYLISTS)
         if (selection.active) SongSelectionHeader(selection, controller)
@@ -323,15 +335,13 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         }
         }
         }
+    }
+    }
         Spacer(Modifier.height(miniPlayerSpace))
-        LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged {
+        if (!rail) LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged {
             navigationHeight = with(density) { it.height.toDp() }
             onNavigationHeight(it.height)
-        }, state.preferences.bottomNavigationTabs) { page ->
-            if (selectedTab != LibraryTab.SEARCH) searchReturnTab = selectedTab
-            if (page == tabs[currentIndex]) reselects.tryEmit(page)
-            selection.clear(); selectedTab = page
-        }
+        }, state.preferences.bottomNavigationTabs, selectTab)
     }
     }
     if (filters) LibraryFiltersDialog(state, controller) { filters = false }

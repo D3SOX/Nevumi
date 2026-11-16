@@ -14,8 +14,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.unit.Constraints
 import me.d3sox.nevumi.library.LibraryTab
 import org.jetbrains.compose.resources.stringResource
 import me.d3sox.nevumi.resources.Res
@@ -33,6 +37,10 @@ internal class LibraryNavigationSizing(private val widths: Map<LibraryTab, Float
         } ?: 0
         return candidates.take(count)
     }
+
+    /** The widest label among [tabs] and, with [more], More, so a navigation rail can fit each of them. */
+    fun widest(tabs: List<LibraryTab>, more: Boolean): Float =
+        maxOf(if (more) moreWidth else 0f, tabs.maxOfOrNull { widths.getValue(it) } ?: 0f)
 }
 
 @Composable
@@ -75,14 +83,81 @@ internal fun LibraryNavigation(tabs: List<LibraryTab>, current: LibraryTab, modi
         if (overflow.isNotEmpty()) NavigationBarItem(selected = current !in primary, onClick = { more = true }, colors = itemColors,
             icon = { Icon(AppIcon.MORE_PAGES.vector, null) }, label = { Text(stringResource(Res.string.more)) })
     }
-    if (more && overflow.isNotEmpty()) AppBottomSheet(onDismissRequest = { more = false }) {
+    if (more && overflow.isNotEmpty()) MorePagesSheet(overflow, current, { more = false }, select)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MorePagesSheet(overflow: List<LibraryTab>, current: LibraryTab, dismiss: () -> Unit, select: (LibraryTab) -> Unit) {
+    AppBottomSheet(onDismissRequest = dismiss) {
         LazyColumn(Modifier.fillMaxWidth().testTag("library-more-pages")) {
             items(overflow, key = { it }) { page ->
-                ListItem(modifier = Modifier.clickable { more = false; select(page) }.semantics { selected = page == current },
+                ListItem(modifier = Modifier.clickable { dismiss(); select(page) }.semantics { selected = page == current },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text(stringResource(page.label)) }, leadingContent = { Icon(page.icon().vector, null) },
                     trailingContent = { if (page == current) Icon(AppIcon.CHECK.vector, null) })
             }
         }
     }
+}
+
+/**
+ * The side navigation for medium and wider windows. Like the bottom bar, it shows the chosen tabs that fit, here by height,
+ * and moves the rest to More.
+ */
+@Composable
+internal fun LibraryNavigationRail(tabs: List<LibraryTab>, current: LibraryTab, modifier: Modifier = Modifier,
+    bottomNavigationTabs: Set<LibraryTab>? = null, select: (LibraryTab) -> Unit) {
+    var more by remember { mutableStateOf(false) }
+    val candidates = tabs.filter { bottomNavigationTabs == null || it in bottomNavigationTabs }
+    // Measuring decides how many fit; the More sheet then lists the rest.
+    var fitting by remember { mutableIntStateOf(candidates.size) }
+    val primary = candidates.take(fitting)
+    val overflow = tabs.filterNot { it in primary }
+    LaunchedEffect(overflow.isEmpty()) { if (overflow.isEmpty()) more = false }
+    val sizing = rememberLibraryNavigationSizing()
+    // Only the labels shown widen the rail; fewer fitting items can only narrow it, so measuring settles.
+    val width = with(LocalDensity.current) { sizing.widest(primary, overflow.isNotEmpty()).toDp() }.coerceAtLeast(80.dp)
+    val itemColors = NavigationRailItemDefaults.colors(
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+    )
+    val label: @Composable (String) -> Unit = { text -> Text(text, maxLines = 2, textAlign = TextAlign.Center) }
+    NavigationRail(modifier.width(width).fillMaxHeight().testTag("library-navigation"), windowInsets = WindowInsets(0)) {
+        SubcomposeLayout(Modifier.weight(1f).fillMaxWidth()) { constraints ->
+            val spacing = 4.dp.roundToPx()
+            val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
+            val railItem: @Composable (LibraryTab?, Modifier) -> Unit = { page, itemModifier ->
+                if (page == null) NavigationRailItem(selected = current !in primary, onClick = { more = true }, colors = itemColors,
+                    modifier = itemModifier, icon = { Icon(AppIcon.MORE_PAGES.vector, null) }, label = { label(stringResource(Res.string.more)) })
+                else {
+                    val pageLabel = stringResource(page.label)
+                    NavigationRailItem(selected = current == page, onClick = { select(page) }, colors = itemColors,
+                        modifier = itemModifier.semantics { contentDescription = pageLabel },
+                        icon = { Icon(page.icon().vector, null) },
+                        label = { label(if (page == LibraryTab.RECENT) stringResource(Res.string.sources_recent) else pageLabel) })
+                }
+            }
+            // Measuring copies stay unplaced, so they must not appear to accessibility services and tests.
+            fun measure(page: LibraryTab?) = subcompose("measure:$page") { railItem(page, Modifier.clearAndSetSemantics {}) }.single().measure(loose).height
+            val heights = candidates.map(::measure)
+            val moreHeight = measure(null)
+            val count = (candidates.size downTo 0).first { count ->
+                val shown = heights.take(count).sum() + spacing * (count - 1).coerceAtLeast(0)
+                count == 0 || shown + (if (count < tabs.size) spacing + moreHeight else 0) <= constraints.maxHeight
+            }
+            if (count != fitting) fitting = count
+            val items = candidates.take(count).map { page -> subcompose(page) { railItem(page, Modifier) }.single().measure(loose) } +
+                if (count < tabs.size) listOf(subcompose("more") { railItem(null, Modifier) }.single().measure(loose)) else emptyList()
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                var y = 0
+                items.forEach { item ->
+                    item.place((constraints.maxWidth - item.width) / 2, y)
+                    y += item.height + spacing
+                }
+            }
+        }
+    }
+    if (more && overflow.isNotEmpty()) MorePagesSheet(overflow, current, { more = false }, select)
 }

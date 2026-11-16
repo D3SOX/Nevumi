@@ -175,7 +175,7 @@ private fun queueEntries(rows: List<QueueRow>, queue: QueueSnapshot): List<Queue
 
 @Composable
 internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: AnchoredDraggableState<PlayerPanel>, navigationHeight: androidx.compose.ui.unit.Dp = 80.dp,
-    onPairedDevices: () -> Unit = {}, onAudioEffects: () -> Unit = {}, savedQueues: () -> Unit) {
+    onPairedDevices: () -> Unit = {}, onAudioEffects: () -> Unit = {}, docked: Boolean = false, savedQueues: () -> Unit) {
     val current = state.tracks.firstOrNull { it.id == (state.playback.trackId ?: state.queue.currentTrackId) } ?: return
     val requested = state.playback.playWhenReady && !state.playback.ended && state.playback.error == null
     val buffering = rememberBuffering(state.playback)
@@ -183,8 +183,9 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     fun dismissSearchInput() { focus.clearFocus(force = true); keyboard?.hide() }
+    // A docked player sits beside the page instead of covering it, so it leaves the keyboard alone.
     LaunchedEffect(sheet.targetValue) {
-        if (sheet.targetValue != PlayerPanel.MINI) dismissSearchInput()
+        if (!docked && sheet.targetValue != PlayerPanel.MINI) dismissSearchInput()
     }
     val navigateContext = LocalPlayingContextNavigate.current
     val openYouTubeLinkedPage = LocalOpenYouTubeLinkedPage.current
@@ -253,7 +254,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
     val panelThreshold = with(LocalDensity.current) { 120.dp.toPx() }
     var panelAnimation by remember { mutableStateOf<Job?>(null) }
     fun show(panel: PlayerPanel) {
-        if (panel != PlayerPanel.MINI) dismissSearchInput()
+        if (!docked && panel != PlayerPanel.MINI) dismissSearchInput()
         panelAnimation?.cancel()
         panelAnimation = scope.launch { sheet.animateTo(panel, spring()) }
     }
@@ -296,12 +297,13 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
         // player collapsed during that frame, while preserving actual drag progress.
         val offset = if (sheet.targetValue == PlayerPanel.MINI && previousMiniAnchor.isFinite() &&
             rawOffset.isFinite() && abs(rawOffset - previousMiniAnchor) < .5f) miniAnchor
-            else rawOffset.takeIf { it.isFinite() } ?: miniAnchor
+            else rawOffset.takeIf { it.isFinite() } ?: if (docked) 0f else miniAnchor
         motion.layoutOffset = offset
         val expansion = (1 - offset / miniAnchor).coerceIn(0f, 1f)
         val queueProgress = (-offset / heightPx).coerceIn(0f, 1f)
         // Back goes to the handler registered last, so register this one when the player opens, after any page it covers.
-        if (LocalNavigationActive.current && (backPanel != null || sheet.targetValue != PlayerPanel.MINI)) PlatformPredictiveBackHandler(enabled = true,
+        // A docked player is not a layer above the page, so back keeps navigating the page.
+        if (!docked && LocalNavigationActive.current && (backPanel != null || sheet.targetValue != PlayerPanel.MINI)) PlatformPredictiveBackHandler(enabled = true,
             onStarted = { backPanel = sheet.targetValue; backStart = sheet.requireOffset() },
             onProgress = { progress ->
                 val destination = if (backPanel == PlayerPanel.QUEUE) 0f else heightPx - miniPx - miniBottomInset
@@ -324,7 +326,7 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
         }
         SideEffect {
             val anchors = DraggableAnchors {
-                PlayerPanel.MINI at heightPx - miniPx - miniBottomInset
+                if (!docked) PlayerPanel.MINI at heightPx - miniPx - miniBottomInset
                 PlayerPanel.PLAYING at 0f
                 PlayerPanel.QUEUE at -heightPx
             }
@@ -422,7 +424,9 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             else navigateContext(origin ?: me.d3sox.nevumi.queue.QueueOrigin(), current.id)
                         }
                         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
-                            AppIconButton(AppIcon.DOWN, stringResource(Res.string.player_collapse)) { show(PlayerPanel.MINI) }
+                            // The docked player cannot collapse; the space keeps the context centered between the buttons.
+                            if (docked) Spacer(Modifier.width(48.dp))
+                            else AppIconButton(AppIcon.DOWN, stringResource(Res.string.player_collapse)) { show(PlayerPanel.MINI) }
                             val playingContext = stringResource(Res.string.player_playing_context)
                             val liveQueue = state.savedQueues.firstOrNull { it.id == state.queue.selectedSavedQueueId }
                             val manualTrack = state.queue.entries.getOrNull(state.queue.currentIndex)?.section == QueueSection.MANUAL
@@ -481,7 +485,8 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                 motion.anchor(PlayerPanel.QUEUE, PlayerElement.ARTIST, queueProgress >= .999f), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 marqueeState = motion.marquee(PlayerElement.ARTIST, current.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }), active = queueProgress >= .999f)
                         }
-                        AppVolume(controller, Modifier.width(240.dp))
+                        // The docked player is too narrow for a second volume slider; its controls have one.
+                        if (!docked) AppVolume(controller, Modifier.width(240.dp))
                         val playState = stringResource(if (buffering) Res.string.player_buffering else if (requested) Res.string.player_playing else Res.string.player_paused)
                         FilledIconButton(onClick = { controller.togglePlayback() },
                             modifier = Modifier.size(48.dp).then(motion.anchor(PlayerPanel.QUEUE, PlayerElement.PLAY, queueProgress >= .999f))

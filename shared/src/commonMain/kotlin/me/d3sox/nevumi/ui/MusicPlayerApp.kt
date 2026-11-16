@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import me.d3sox.nevumi.app.ActionDestination
 import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.snapTo
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
@@ -58,6 +59,19 @@ private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES,
 fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null, artworkPicker: ArtworkPicker? = null,
     playlistFiles: PlaylistFiles? = null, equalizerFiles: EqualizerFiles? = null, folderPicker: FolderPicker? = null,
     audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null, backupFiles: BackupFiles? = null, shortcuts: AppShortcuts? = null) {
+    // The layout follows the space the app gets, which on the desktop and in tests is not always the whole screen.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalWindowLayout provides windowLayout(maxWidth, maxHeight)) {
+            MusicPlayerScreen(controller, onAddMusic, artworkPicker, playlistFiles, equalizerFiles, folderPicker, audioWaveforms,
+                backupFiles, shortcuts, nowPlayingPaneWidth(maxWidth))
+        }
+    }
+}
+
+@Composable
+private fun MusicPlayerScreen(controller: MusicController, onAddMusic: (() -> Unit)?, artworkPicker: ArtworkPicker?,
+    playlistFiles: PlaylistFiles?, equalizerFiles: EqualizerFiles?, folderPicker: FolderPicker?,
+    audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms?, backupFiles: BackupFiles?, shortcuts: AppShortcuts?, paneWidth: androidx.compose.ui.unit.Dp) {
     val picker = artworkPicker ?: rememberArtworkPicker()
     val files = playlistFiles ?: rememberPlaylistFiles()
     val equalizerDocuments = equalizerFiles ?: rememberEqualizerFiles()
@@ -96,6 +110,18 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
 
     val hasPlayer = state.playback.trackId != null || state.queue.currentTrackId != null
     val playerSheet = rememberSaveable(saver = AnchoredDraggableState.Saver<PlayerPanel>()) { AnchoredDraggableState(PlayerPanel.MINI) }
+    // Expanded windows dock the player beside the pages, where it switches between Now Playing and the queue.
+    val dockedSheet = rememberSaveable(saver = AnchoredDraggableState.Saver<PlayerPanel>()) { AnchoredDraggableState(PlayerPanel.PLAYING) }
+    val docked = hasPlayer && LocalWindowLayout.current == WindowLayout.EXPANDED
+    // Only the mini player covers the pages; the docked player takes its own space.
+    val miniPlayer = hasPlayer && !docked
+    LaunchedEffect(docked) {
+        // Widening the window while the player is open keeps the open panel in the docked player.
+        if (docked && playerSheet.targetValue != PlayerPanel.MINI) {
+            dockedSheet.snapTo(if (playerSheet.targetValue == PlayerPanel.QUEUE) PlayerPanel.QUEUE else PlayerPanel.PLAYING)
+            playerSheet.snapTo(PlayerPanel.MINI)
+        }
+    }
     val libraryState by remember(controller) { derivedStateOf(structuralEqualityPolicy()) {
         state.copy(playback = PlaybackStatus(), queue = QueueSnapshot())
     } }
@@ -142,8 +168,11 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         fun openNotice(destination: ActionDestination) {
             when (destination) {
                 ActionDestination.QUEUE -> {
-                    if (page != AppPage.SEARCH) page = AppPage.LIBRARY
-                    scope.launch { playerSheet.animateTo(PlayerPanel.QUEUE, spring()) }
+                    if (docked) scope.launch { dockedSheet.animateTo(PlayerPanel.QUEUE, spring()) }
+                    else {
+                        if (page != AppPage.SEARCH) page = AppPage.LIBRARY
+                        scope.launch { playerSheet.animateTo(PlayerPanel.QUEUE, spring()) }
+                    }
                 }
                 ActionDestination.FAVORITES -> openLibrary(me.d3sox.nevumi.library.LibraryTab.FAVORITES, null)
                 ActionDestination.PLAYLISTS -> openLibrary(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, null)
@@ -190,15 +219,16 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
         Surface(Modifier.fillMaxSize().testTag("app-window")) {
             TrackMenuHost {
             // Screens handle IME padding themselves so keyboard dismissal cannot resize page transitions.
-            Box(Modifier.windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+            Row(Modifier.windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
                 .fillMaxSize().testTag("app-navigation")) {
+                Box(Modifier.weight(1f).fillMaxHeight()) {
                 AnimatedNavigation(page, if (page == AppPage.SETTINGS || !returnToSettings) AppPage.LIBRARY else AppPage.SETTINGS,
                     canGoBack = page != AppPage.LIBRARY, onBack = { if (page == AppPage.SETTINGS) page = AppPage.LIBRARY else closePage() },
                     depth = { when (it) { AppPage.LIBRARY -> 0; AppPage.SETTINGS -> 1; else -> 2 } }) { destination ->
                 when (destination) {
                     AppPage.SEARCH -> Box(Modifier.fillMaxSize()) {
-                        Box(Modifier.fillMaxSize().then(if (hasPlayer && playerSheet.targetValue != PlayerPanel.MINI) Modifier.clearAndSetSemantics {} else Modifier)) {
-                            LibrarySearchScreen(libraryState, controller, if (hasPlayer) 96.dp else 0.dp, ::closePage, focusRequest = searchFocus,
+                        Box(Modifier.fillMaxSize().then(if (miniPlayer && playerSheet.targetValue != PlayerPanel.MINI) Modifier.clearAndSetSemantics {} else Modifier)) {
+                            LibrarySearchScreen(libraryState, controller, if (miniPlayer) 96.dp else 0.dp, ::closePage, focusRequest = searchFocus,
                                 youTubePage = youTubePage, onYouTubePageShown = { youTubePage = null })
                         }
                     }
@@ -219,14 +249,14 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                         savedQueues = { openPage(AppPage.SAVED_QUEUES) }, fileRecovery = { openPage(AppPage.FILE_RECOVERY) },
                         categoryState = settingsCategory, onAddMusic = onAddMusic, folderPicker = folders) { page = AppPage.LIBRARY }
                     AppPage.LIBRARY -> {
-                        Column(Modifier.fillMaxSize().then(if (hasPlayer && playerSheet.targetValue != PlayerPanel.MINI) Modifier.clearAndSetSemantics {} else Modifier)) {
+                        Column(Modifier.fillMaxSize().then(if (miniPlayer && playerSheet.targetValue != PlayerPanel.MINI) Modifier.clearAndSetSemantics {} else Modifier)) {
                             val refresh = state.serverRefresh
                             if (refresh != null) ServerRefreshStatus(refresh, controller::cancelServerRefresh, controller::dismissServerRefresh,
                                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                             else if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                             if (state.libraryReady) LibraryScreens(libraryState, controller, Modifier.weight(1f), destination = libraryDestination,
-                                backEnabled = LocalNavigationActive.current && (!hasPlayer || playerSheet.targetValue == PlayerPanel.MINI),
-                                miniPlayerSpace = if (hasPlayer) 96.dp else 0.dp,
+                                backEnabled = LocalNavigationActive.current && (!miniPlayer || playerSheet.targetValue == PlayerPanel.MINI),
+                                miniPlayerSpace = if (miniPlayer) 96.dp else 0.dp,
                                 onNavigationHeight = { navigationHeight = with(density) { it.toDp() } },
                                 initialTab = sessionLibraryTab?.let { me.d3sox.nevumi.library.LibraryTab.valueOf(it) },
                                 onTabSelected = { sessionLibraryTab = it.name },
@@ -239,14 +269,14 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                 val playerNavigationHeight = if (page == AppPage.LIBRARY) navigationHeight else 0.dp
                 // The keyboard covers the library navigation, so the mini player only rises once the keyboard is taller.
                 Box(Modifier.fillMaxSize().consumeWindowInsets(PaddingValues(bottom = playerNavigationHeight)).imePadding()) {
-                if (page == AppPage.LIBRARY || page == AppPage.SEARCH) {
+                if (!docked && (page == AppPage.LIBRARY || page == AppPage.SEARCH)) {
                     PlayerPanels(state, controller, playerSheet, playerNavigationHeight,
                         onPairedDevices = { returnToSettings = false; page = AppPage.PAIRED_DEVICES },
                         onAudioEffects = { returnToSettings = false; page = AppPage.AUDIO_EFFECTS }) { returnToSettings = false; page = AppPage.SAVED_QUEUES }
                 }
                 val noticeInset by animateDpAsState(when (page) {
-                    AppPage.LIBRARY -> navigationHeight + if (hasPlayer) 96.dp else 0.dp
-                    AppPage.SEARCH -> if (hasPlayer) 96.dp else 0.dp
+                    AppPage.LIBRARY -> navigationHeight + if (miniPlayer) 96.dp else 0.dp
+                    AppPage.SEARCH -> if (miniPlayer) 96.dp else 0.dp
                     else -> 0.dp
                 }, tween(250))
                 val pageNoticeTop by animateFloatAsState(if (page != AppPage.LIBRARY && page != AppPage.SEARCH) 1f else 0f, tween(250))
@@ -257,14 +287,23 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
                         val offset = playerSheet.offset
                         val mini = playerSheet.anchors.positionOf(PlayerPanel.MINI)
                         val queue = playerSheet.anchors.positionOf(PlayerPanel.QUEUE)
-                        val playingProgress = if (!hasPlayer || !offset.isFinite()) 0f else if (offset >= 0f)
+                        val playingProgress = if (!miniPlayer || !offset.isFinite()) 0f else if (offset >= 0f)
                             (1f - offset / mini).coerceIn(0f, 1f) else (1f - offset / queue).coerceIn(0f, 1f)
-                        val queueProgress = if (hasPlayer && offset.isFinite() && offset < 0f) (offset / queue).coerceIn(0f, 1f) else 0f
+                        val queueProgress = if (miniPlayer && offset.isFinite() && offset < 0f) (offset / queue).coerceIn(0f, 1f) else 0f
                         val topProgress = pageNoticeTop + (1f - pageNoticeTop) * playingProgress
                         val bottom = constraints.maxHeight - toast.height - 8.dp.roundToPx() - noticeInset.toPx() * (1f - queueProgress)
                         toast.placeRelative((constraints.maxWidth - toast.width) / 2, (bottom + (64.dp.toPx() - bottom) * topProgress).roundToInt())
                     }
                 }.testTag("action-snackbar").padding(horizontal = 16.dp)) { data -> ActionSnackbar(data, ::openNotice) }
+                }
+                }
+                if (docked) {
+                    VerticalDivider()
+                    Box(Modifier.width(paneWidth).fillMaxHeight().testTag("now-playing-pane")) {
+                        PlayerPanels(state, controller, dockedSheet, 0.dp, docked = true,
+                            onPairedDevices = { returnToSettings = false; page = AppPage.PAIRED_DEVICES },
+                            onAudioEffects = { returnToSettings = false; page = AppPage.AUDIO_EFFECTS }) { returnToSettings = false; page = AppPage.SAVED_QUEUES }
+                    }
                 }
             }
         }
