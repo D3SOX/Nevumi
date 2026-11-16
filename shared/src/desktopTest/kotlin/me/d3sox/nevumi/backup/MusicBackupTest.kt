@@ -19,6 +19,7 @@ import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.playback.AudioEffects
 import me.d3sox.nevumi.playback.AutoEqProfiles
+import me.d3sox.nevumi.playlists.PlaylistServer
 import me.d3sox.nevumi.playlists.PlaylistSort
 import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.queue.PlaybackQueue
@@ -379,6 +380,35 @@ class MusicBackupTest {
         // A second restore matches each playlist once instead of adding more.
         target.backup.restore(text)
         assertEquals(3, target.playlists.all().count { it.name == "Road" })
+    }
+
+    @Test
+    fun aPlaylistNoneOfWhoseSongsAreHereYetIsReportedInsteadOfRestoredEmpty() = devices { source, target ->
+        source.fill()
+        val text = source.backup.export()
+        // A fresh install whose library has not been indexed yet.
+        val early = target.backup.restore(text)
+        assertEquals(listOf("Loved"), target.playlists.all().map { it.name })
+        assertEquals(listOf(1, 2), listOf(early.playlistsAdded, early.playlistsSkipped))
+        target.sameSongs()
+        val later = target.backup.restore(text)
+        assertEquals(listOf(2, 0), listOf(later.playlistsAdded, later.playlistsSkipped))
+        assertEquals(listOf("Loved", "Music ▸ Night", "Road"), target.playlists.all().map { it.name }.sorted())
+        assertEquals(listOf(nightWalk.title), target.titles(target.playlists.all().single { it.name == "Music ▸ Night" }.trackIds))
+    }
+
+    @Test
+    fun aSameNamedServerPlaylistStandsInForTheBackedUpOneEvenWhenItLacksSongs() = devices { source, target ->
+        source.fill()
+        val text = source.backup.export()
+        target.sameSongs()
+        val road = target.playlists.create("Road", listOf(target.id(nightWalk.title)))
+            .copy(server = PlaylistServer("abc", "road", "Road", listOf("song-3"), "nico"))
+        target.store.put("playlist:${road.id}", "playlists", road)
+        val summary = target.backup.restore(text)
+        assertEquals(listOf(road.id), target.playlists.all().filter { it.name == "Road" }.map { it.id })
+        assertEquals(listOf(nightWalk.title), target.titles(target.playlists.get(road.id)!!.trackIds))
+        assertEquals(listOf(2, 0, 1), listOf(summary.playlistsAdded, summary.playlistsMerged, summary.serverPlaylistsLackingSongs))
     }
 
     @Test
