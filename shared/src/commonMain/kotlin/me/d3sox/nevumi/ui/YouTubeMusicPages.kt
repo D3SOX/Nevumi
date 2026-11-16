@@ -418,9 +418,13 @@ private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowse
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (page.description.isNotEmpty()) {
                 var expanded by remember { mutableStateOf(false) }
-                Text(page.description, Modifier.clickable { expanded = !expanded }, style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis)
-                Text(stringResource(if (expanded) Res.string.discovery_show_less else Res.string.discovery_show_more),
+                // Only a description cut short by the line limit offers to expand.
+                var truncated by remember(page.description) { mutableStateOf(false) }
+                val toggle = expanded || truncated
+                Text(page.description, Modifier.clickable(enabled = toggle) { expanded = !expanded }, style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { if (!expanded) truncated = it.hasVisualOverflow })
+                if (toggle) Text(stringResource(if (expanded) Res.string.discovery_show_less else Res.string.discovery_show_more),
                     Modifier.clickable { expanded = !expanded }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             // Like a library album: its options on the left, shuffle and play on the right when it has songs.
@@ -478,6 +482,8 @@ private fun YouTubeCardContent(item: YouTubeItem, controller: MusicController, m
     Column((modifier ?: Modifier.width(if (wide) 256.dp else 160.dp)).clip(RoundedCornerShape(12.dp))
         .combinedClickable(onClick = { if (item is YouTubeTrack) controller.playYouTube(item, page = page) else open(item as YouTubeCollection) },
             onLongClick = openMenu)
+        // The press highlight is rounded; space below the text keeps its corners from clipping the subtitle's first letter.
+        .padding(bottom = 8.dp)
         .semantics(mergeDescendants = true) { contentDescription = description }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val kind = (item as? YouTubeCollection)?.kind
         YouTubeImage(item.artworkUrl()?.let { sizedArtwork(it, 400) }, controller, Modifier.fillMaxWidth().aspectRatio(if (wide) 16 / 9f else 1f),

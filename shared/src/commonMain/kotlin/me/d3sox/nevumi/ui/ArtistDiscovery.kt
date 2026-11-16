@@ -51,10 +51,12 @@ internal fun ArtistDiscovery(artist: String, tab: LibraryTab, state: AppState, c
         discovery?.let { info ->
             if (info.biography.isNotBlank()) {
                 Text(stringResource(Res.string.discovery_about), style = MaterialTheme.typography.titleMedium)
+                // Only a biography cut short by the line limit offers to expand.
+                var truncated by remember(info.biography) { mutableStateOf(false) }
                 Text(info.biography, style = MaterialTheme.typography.bodyMedium, maxLines = if (expanded) Int.MAX_VALUE else 4,
-                    overflow = TextOverflow.Ellipsis)
+                    overflow = TextOverflow.Ellipsis, onTextLayout = { if (!expanded) truncated = it.hasVisualOverflow })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton({ expanded = !expanded }) {
+                    if (expanded || truncated) TextButton({ expanded = !expanded }) {
                         Text(stringResource(if (expanded) Res.string.discovery_show_less else Res.string.discovery_show_more))
                     }
                     info.lastFmUrl?.let { url ->
