@@ -159,6 +159,7 @@ internal enum class AppIcon(val vector: ImageVector) {
     QUEUE(Icons.Rounded.QueueMusic),
     SAVE(Icons.Rounded.Save),
     PLAYLIST_MEMBER(Icons.Rounded.LibraryAddCheck),
+    LIBRARY_ADD(Icons.Rounded.LibraryAdd),
     PLAYLIST_PLUS(Icons.Rounded.AddCircleOutline),
     PLAYLIST_CHECK(Icons.Rounded.CheckCircle),
     CLEAR_QUEUE(Icons.Rounded.ClearAll),

@@ -74,6 +74,8 @@ import me.d3sox.nevumi.resources.sources_open_artist
 import me.d3sox.nevumi.resources.sources_open_on_youtube_music
 import me.d3sox.nevumi.resources.sources_open_playlist
 import me.d3sox.nevumi.resources.sources_open_youtube_list
+import me.d3sox.nevumi.resources.sources_remove_from_library
+import me.d3sox.nevumi.resources.sources_save_to_library
 import me.d3sox.nevumi.resources.sources_see_all
 import me.d3sox.nevumi.resources.sources_show_more
 import me.d3sox.nevumi.resources.sources_youtube_page_empty
@@ -374,6 +376,11 @@ private fun YouTubeCollectionMenuHost(collection: YouTubeCollection, state: AppS
                         sftp.libraryName) { actions.download(YouTubeDestination.SERVER) }
                 }
             }
+            if (collection.kind == YouTubeCollectionKind.PLAYLIST) {
+                val followed = state.followedPlaylist(collection.link)
+                if (followed == null) option(stringResource(Res.string.sources_save_to_library), AppIcon.LIBRARY_ADD) { controller.followYouTubePlaylist(collection) }
+                else option(stringResource(Res.string.sources_remove_from_library), AppIcon.PLAYLIST_MEMBER) { controller.unfollowYouTubePlaylist(followed.id) }
+            }
             option(stringResource(Res.string.sources_open_on_youtube_music), AppIcon.OPEN_EXTERNAL) { runCatching { browser.openUri(collection.link.url) } }
         }
         val artist = collection.kind == YouTubeCollectionKind.ARTIST
@@ -428,6 +435,7 @@ private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowse
                 var shuffle by remember { mutableStateOf(false) }
                 val shuffleDescription = stringResource(Res.string.library_shuffle_collection)
                 YouTubeCollectionMenuButton(collection.link, state, controller, actions)
+                if (collection.kind == YouTubeCollectionKind.PLAYLIST) YouTubeFollowButton(collection, state, controller)
                 Spacer(Modifier.weight(1f))
                 if (actions != null) IconToggleButton(shuffle, { shuffle = it }, Modifier.semantics { contentDescription = shuffleDescription; selected = shuffle },
                     colors = IconButtonDefaults.iconToggleButtonColors(checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -438,6 +446,26 @@ private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowse
                 }
             }
         }
+    }
+}
+
+/** The saved playlist that follows the YouTube Music playlist at [link], if it is in the library. */
+internal fun AppState.followedPlaylist(link: YouTubeLink) = playlists.firstOrNull { it.youTube?.browseId == link.browseId }
+
+/** Saves a YouTube Music playlist to the library, where it follows the playlist, or removes it again. */
+@Composable
+private fun YouTubeFollowButton(collection: YouTubeCollection, state: AppState, controller: MusicController) {
+    val followed = state.followedPlaylist(collection.link)
+    val description = stringResource(if (followed == null) Res.string.sources_save_to_library else Res.string.sources_remove_from_library)
+    val scope = rememberCoroutineScope()
+    // Saving loads all of the playlist's songs first, which takes a moment for a long one.
+    var saving by remember(collection.link) { mutableStateOf(false) }
+    IconToggleButton(followed != null, { save ->
+        val job = if (save) controller.followYouTubePlaylist(collection) else followed?.let { controller.unfollowYouTubePlaylist(it.id) }
+        if (job != null) scope.launch { saving = true; try { job.join() } finally { saving = false } }
+    }, Modifier.testTag("youtube-follow").semantics { contentDescription = description }, enabled = !saving) {
+        if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        else Icon((if (followed == null) AppIcon.LIBRARY_ADD else AppIcon.PLAYLIST_MEMBER).vector, null)
     }
 }
 

@@ -509,5 +509,7 @@
     <string name="sources_youtube_page_empty">YouTube Music shows nothing on this page</string>
     <string name="sources_open_youtube_list">Open %1$s</string>
     <string name="sources_open_on_youtube_music">Open on YouTube Music</string>
+    <string name="sources_save_to_library">Save to library</string>
+    <string name="sources_remove_from_library">Remove from library</string>
     <string name="sources_youtube_disabled">Turn on YouTube in Settings to search it</string>
 </resources>

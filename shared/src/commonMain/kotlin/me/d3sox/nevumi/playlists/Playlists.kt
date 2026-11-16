@@ -20,6 +20,7 @@ import me.d3sox.nevumi.library.filterTracks
 import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.history.Listen
 import me.d3sox.nevumi.history.listeningStatistics
+import me.d3sox.nevumi.youtube.YouTubeLink
 
 @Serializable
 data class PlaylistServer(val serverId: String, val id: String?, val baselineName: String,
@@ -41,7 +42,9 @@ data class Playlist(val id: String, val name: String, val trackIds: List<String>
     val conflict: PlaylistConflict? = null, val rule: LibraryQuery? = null, val description: String = "",
     val shuffle: Boolean = false, val sort: PlaylistSort = PlaylistSort.CUSTOM, val descending: Boolean = false,
     /** Local times in epoch milliseconds; 0 when unknown, such as for playlists saved before they were recorded. */
-    val createdAt: Long = 0, val updatedAt: Long = 0, val playedAt: Long = 0)
+    val createdAt: Long = 0, val updatedAt: Long = 0, val playedAt: Long = 0,
+    /** The YouTube Music playlist this one follows; its name, description and songs are YouTube Music's, so only YouTube Music changes them. */
+    val youTube: YouTubeLink? = null)
 
 // Navidrome has no playlist folders, so names like "Folder ▸ Playlist" group playlists. Keyboards cannot type the
 // separator, so existing names with slashes or other punctuation are left alone.
@@ -95,6 +98,25 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         require(playlist.name.isNotEmpty()) { "Name the playlist" }
         store.put("playlist:${playlist.id}", "playlists", playlist)
         return playlist
+    }
+    /** Saves the YouTube Music playlist at [link] with its current name, description and songs, or updates the one already saved. */
+    suspend fun follow(link: YouTubeLink, name: String, description: String, trackIds: List<String>): Playlist = store.transaction {
+        val existing = followed(link)
+        if (existing != null) return@transaction updateFollowed(existing.id, name, description, trackIds)
+        val playlist = clock().let { Playlist(Uuid.random().toString(), name.trim().ifEmpty { "YouTube Music" }, trackIds, description = description.trim(),
+            youTube = link, createdAt = it, updatedAt = it) }
+        store.put("playlist:${playlist.id}", "playlists", playlist)
+        playlist
+    }
+    /** The saved playlist that follows [link], if any. */
+    suspend fun followed(link: YouTubeLink): Playlist? = store.list<Playlist>("playlists").firstOrNull { it.youTube?.browseId == link.browseId }
+    /** Takes over what YouTube Music shows now; an unchanged playlist is left as it is, so it does not count as updated. */
+    suspend fun updateFollowed(id: String, name: String, description: String, trackIds: List<String>): Playlist = store.transaction {
+        val playlist = requireNotNull(store.read<Playlist>("playlist:$id")) { "Playlist is missing" }
+        requireNotNull(playlist.youTube) { "This playlist does not follow YouTube Music" }
+        val updated = playlist.copy(name = name.trim().ifEmpty { playlist.name }, description = description.trim(), trackIds = trackIds)
+        if (updated == playlist) return@transaction playlist
+        updated.copy(updatedAt = clock(), revision = Uuid.random().toString()).also { store.put("playlist:$id", "playlists", it) }
     }
     internal suspend fun restore(playlist: Playlist) = store.transaction {
         require(store.read<Playlist>("playlist:${playlist.id}") == null) { "This playlist already exists" }
@@ -166,6 +188,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         require(name.isNotBlank()) { "Name the playlist" }
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
         requireMetadataEditable(playlist)
+        requireNotFollowed(playlist)
         store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(), updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
@@ -182,6 +205,7 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
         require(name.isNotBlank()) { "Name the playlist" }
         val playlist = requireNotNull(get(id)) { "Playlist is missing" }
         requireMetadataEditable(playlist)
+        requireNotFollowed(playlist)
         store.put("playlist:$id", "playlists", playlist.copy(name = name.trim(), description = description.trim(), updatedAt = clock(),
             pendingSync = playlist.server != null, revision = Uuid.random().toString()))
     }
@@ -236,8 +260,12 @@ class Playlists(private val store: MusicStore, private val clock: () -> Long = {
     }
     private fun requireEditable(playlist: Playlist) {
         require(playlist.server?.readOnly != true) { "Only the owner can edit this Navidrome playlist" }
+        requireNotFollowed(playlist)
     }
     private suspend fun requireMetadataEditable(playlist: Playlist) {
         require(playlist.server?.canEditMetadata(store.read<ServerProfile>("server:navidrome")) != false) { "Only the owner can edit this Navidrome playlist" }
+    }
+    private fun requireNotFollowed(playlist: Playlist) {
+        require(playlist.youTube == null) { "Only YouTube Music changes a playlist you follow" }
     }
 }

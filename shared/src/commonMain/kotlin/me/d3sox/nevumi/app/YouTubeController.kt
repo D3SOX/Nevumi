@@ -15,6 +15,8 @@ import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.library.youTubeVideoId
 import me.d3sox.nevumi.library.inLibrary
+import me.d3sox.nevumi.playlists.Playlist
+import me.d3sox.nevumi.playlists.Playlists
 import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.queue.QueueOrigin
 import me.d3sox.nevumi.resources.Res
@@ -24,13 +26,15 @@ import me.d3sox.nevumi.resources.notice_soundcloud_downloading
 import me.d3sox.nevumi.resources.notice_soundcloud_failed
 import me.d3sox.nevumi.resources.notice_soundcloud_saved_outside
 import me.d3sox.nevumi.resources.notice_youtube_downloading_songs
+import me.d3sox.nevumi.resources.notice_youtube_playlist_removed
+import me.d3sox.nevumi.resources.notice_youtube_playlist_saved
 import me.d3sox.nevumi.soundcloud.ScGateTagChoice
 import me.d3sox.nevumi.youtube.*
 
 /** Searches and streams YouTube on this device, and follows its downloads until the songs join the library. */
 class YouTubeController internal constructor(private val context: ControllerContext, private val library: MusicLibrary,
     private val libraryController: LibraryController, private val queueController: QueueController, private val artwork: ArtworkLibrary?,
-    private val source: YouTubeSource?, private val downloads: YouTubeDownloads?) {
+    private val source: YouTubeSource?, private val downloads: YouTubeDownloads?, private val playlists: Playlists?) {
     val youTubeAvailable: Boolean get() = source != null
     val youTubeDeviceDownloads: Boolean get() = downloads?.deviceDownloads == true
     val youTubeServerUploads: Boolean get() = downloads?.serverUploads == true
@@ -76,6 +80,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
 
     private fun source() = requireNotNull(source) { "YouTube is unavailable" }
     private fun downloads() = requireNotNull(downloads) { "YouTube downloads are unavailable" }
+    private fun playlists() = requireNotNull(playlists) { "Playlists are unavailable" }
     private fun requireEnabled() = check(context.state.value.preferences.youTube) { "Turn on YouTube in Settings first" }
 
     suspend fun searchYouTube(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation? = null): YouTubePage {
@@ -163,11 +168,11 @@ class YouTubeController internal constructor(private val context: ControllerCont
         saveArtwork(tracks, ids) { queueController.enqueue(ids, action, origin(page)).join() }
     }
 
-    /**
-     * The songs of the page at [link] that its play button plays, and the page's name. A list that continues, such as a long playlist,
-     * gives up to 1,000 songs.
-     */
-    private suspend fun collectionTracks(collection: YouTubeCollection): Pair<String, List<YouTubeTrack>> {
+    /** The songs of a page that its play button plays, with the page's name, and the [page] itself. */
+    private data class CollectionTracks(val name: String, val tracks: List<YouTubeTrack>, val page: YouTubeBrowsePage)
+
+    /** The songs of [collection]'s page that its play button plays. A list that continues, such as a long playlist, gives up to 1,000 songs. */
+    private suspend fun collectionTracks(collection: YouTubeCollection): CollectionTracks {
         val page = source().browse(collection.link)
         val index = page.shelves.indexOfFirst { shelf -> shelf.layout == YouTubeShelfLayout.ROWS && shelf.items.any { it is YouTubeTrack } }
         require(index >= 0) { "There is nothing to play" }
@@ -183,7 +188,7 @@ class YouTubeController internal constructor(private val context: ControllerCont
             }
         }
         val name = if (collection.kind == YouTubeCollectionKind.LIST) collection.title else page.title.ifEmpty { collection.title }
-        return name to items.filterIsInstance<YouTubeTrack>().take(1_000)
+        return CollectionTracks(name, items.filterIsInstance<YouTubeTrack>().take(1_000), page)
     }
 
     /** Plays the songs of [collection], such as an album shown as a card, loading its page first. */
@@ -198,13 +203,102 @@ class YouTubeController internal constructor(private val context: ControllerCont
 
     fun enqueueYouTube(collection: YouTubeCollection, action: QueueAction) = context.action(serialized = false) {
         requireEnabled()
-        enqueueYouTube(collectionTracks(collection).second, action, collection).join()
+        enqueueYouTube(collectionTracks(collection).tracks, action, collection).join()
     }
 
     fun downloadFromYouTube(collection: YouTubeCollection, destination: YouTubeDestination, reviewTags: Boolean) = context.action(serialized = false) {
         requireEnabled()
         val (name, tracks) = collectionTracks(collection)
         downloadFromYouTube(tracks, name, destination, reviewTags).join()
+    }
+
+    /**
+     * Saves the YouTube Music playlist [collection] to the Playlists tab, where it keeps following the playlist's songs on YouTube Music.
+     * A playlist saved before is brought up to date instead.
+     */
+    fun followYouTubePlaylist(collection: YouTubeCollection) = context.action(serialized = false) {
+        require(collection.kind == YouTubeCollectionKind.PLAYLIST) { "Only YouTube Music playlists can be saved" }
+        val collections = playlists()
+        val before = collections.followed(collection.link)
+        val playlist = saveFollowed(collection.link, collection.title)
+        refreshes.withLock { refreshed[playlist.id] = now() }
+        if (before == null) context.confirm(Res.string.notice_youtube_playlist_saved, ActionDestination.PLAYLISTS, arguments = listOf(playlist.name),
+            undo = { collections.delete(playlist.id); publishPlaylists() },
+            redo = { collections.restore(playlist); publishPlaylists() })
+    }
+
+    /** Removes a followed YouTube Music playlist from the library; its songs stay on YouTube Music. */
+    fun unfollowYouTubePlaylist(playlistId: String) = context.action(serialized = false) {
+        val collections = playlists()
+        val playlist = requireNotNull(collections.get(playlistId)) { "Playlist is missing" }
+        require(playlist.youTube != null) { "This playlist does not follow YouTube Music" }
+        collections.delete(playlistId)
+        publishPlaylists()
+        context.confirm(Res.string.notice_youtube_playlist_removed, ActionDestination.PLAYLISTS, arguments = listOf(playlist.name),
+            undo = { collections.restore(playlist); publishPlaylists() }, redo = { collections.delete(playlistId); publishPlaylists() })
+    }
+
+    // When each followed playlist was last brought up to date in this session, so opening it again soon reuses its songs.
+    private val refreshed = mutableMapOf<String, Long>()
+    private val refreshes = kotlinx.coroutines.sync.Mutex()
+    private fun now() = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+    /**
+     * Brings a followed playlist up to date with YouTube Music, at most every few minutes. Without a connection it keeps the songs it had;
+     * only a playlist YouTube no longer offers, such as one made private, says why.
+     */
+    fun refreshYouTubePlaylist(playlistId: String) = context.scope.launch {
+        if (source == null || !context.state.value.preferences.youTube) return@launch
+        val now = now()
+        // Claimed before loading, so opening the playlist again while it loads starts no second request.
+        val recent = refreshes.withLock {
+            (refreshed[playlistId]?.let { now - it in 0..<10 * 60_000L } == true).also { if (!it) refreshed[playlistId] = now }
+        }
+        if (recent) return@launch
+        try {
+            val playlist = playlists().get(playlistId) ?: return@launch
+            saveFollowed(playlist.youTube ?: return@launch, playlist.name, playlistId)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            // A failed update is tried again the next time the playlist opens.
+            refreshes.withLock { refreshed.remove(playlistId) }
+            if (error is YouTubeException && !error.retryable) context.update { it.copy(error = error.message ?: "YouTube Music no longer offers this playlist") }
+        }
+    }
+
+    /**
+     * Loads the playlist at [link] and saves it with its songs and cover; the songs' own covers follow afterwards. With [playlistId] it only
+     * updates that playlist, so one removed while it loaded stays removed.
+     */
+    private suspend fun saveFollowed(link: YouTubeLink, title: String, playlistId: String? = null): Playlist {
+        requireEnabled()
+        val (name, tracks, page) = collectionTracks(YouTubeCollection(link, YouTubeCollectionKind.PLAYLIST, title))
+        val ids = libraryTracks(tracks)
+        lateinit var saved: Playlist
+        saveArtwork(tracks, ids) {
+            saved = if (playlistId != null) playlists().updateFollowed(playlistId, name, page.description, ids)
+                else playlists().follow(link, name, page.description, ids)
+            publishPlaylists()
+            page.artworkUrl?.let { url -> saveCover(saved.id, url) }
+        }
+        return saved
+    }
+
+    /** Saves a followed playlist's cover once; YouTube Music rarely changes it, so later updates keep it. */
+    private suspend fun saveCover(playlistId: String, url: String) {
+        val key = "playlist:$playlistId"
+        if (artwork == null || context.state.value.artwork[key] != null) return
+        try {
+            artwork.save(key, source().artwork(largeArtwork(url)))
+            val path = artwork.path(key) ?: return
+            context.update { it.copy(artwork = it.artwork + (key to path)) }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { /* The playlist shows its first song's cover instead. */ }
+    }
+
+    private suspend fun publishPlaylists() {
+        val all = playlists().all()
+        context.update { it.copy(playlists = all) }
     }
 
     /** The library songs that stream [tracks], kept out of the library views; the same video always maps to the same song. */

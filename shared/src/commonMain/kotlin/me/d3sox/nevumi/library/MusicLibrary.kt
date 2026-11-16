@@ -323,8 +323,10 @@ class MusicLibrary(private val store: MusicStore) {
     internal suspend fun removeUnusedYouTubeTracks(now: Long = Clock.System.now().toEpochMilliseconds()): Set<String> = store.transaction {
         if (now - (store.read<Long>("youtube-cleanup") ?: 0) in 0..<7 * 24 * 3_600_000L) return@transaction emptySet()
         store.put("youtube-cleanup", "maintenance", now)
-        // A favorite or rating is kept in the song itself.
-        val candidates = loadTracks().filter { track -> track.sources.all { it.kind == SourceKind.YOUTUBE } && !track.favorite && track.rating == 0 }
+        // A favorite or rating is kept in the song itself. A play or a saved playlist imports its songs a moment before it refers to them,
+        // so songs from the last day wait for a later cleanup.
+        val candidates = loadTracks().filter { track -> track.sources.all { it.kind == SourceKind.YOUTUBE } && !track.favorite && track.rating == 0 &&
+            now - track.addedAt !in 0..<24 * 3_600_000L }
         if (candidates.isEmpty()) return@transaction emptySet()
         val referenced = HashSet<String>()
         // Collecting every ID in a record is much faster than searching it for each song; other IDs are searched for directly.

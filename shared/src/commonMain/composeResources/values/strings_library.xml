@@ -155,6 +155,8 @@
     <string name="library_play_playlist">Play playlist</string>
     <string name="library_changes_waiting_to_sync">Changes waiting to sync</string>
     <string name="library_server_playlist">Server playlist</string>
+    <string name="library_youtube_playlist">YouTube Music playlist</string>
+    <string name="library_youtube_playlist_follows">Follows YouTube Music, which updates its songs</string>
     <string name="library_playlist_cover_preview">Playlist cover preview</string>
     <string name="library_artwork_open_failed">Could not open this artwork</string>
     <string name="library_change_cover">Change cover</string>

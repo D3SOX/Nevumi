@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.input.pointer.*
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
@@ -23,6 +24,8 @@ import me.d3sox.nevumi.resources.library_add_to_favorites
 import me.d3sox.nevumi.resources.library_choose_version_named
 import me.d3sox.nevumi.resources.library_delete_named
 import me.d3sox.nevumi.resources.library_delete_playlist
+import me.d3sox.nevumi.resources.sources_open_on_youtube_music
+import me.d3sox.nevumi.resources.sources_remove_from_library
 import me.d3sox.nevumi.resources.library_edit_playlist
 import me.d3sox.nevumi.resources.library_keep_this_device
 import me.d3sox.nevumi.resources.library_open
@@ -112,7 +115,14 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
                 AppMenuItem(text = { Text(stringResource(Res.string.download)) }, leadingIcon = { Icon(AppIcon.DOWNLOAD.vector, null) }, onClick = { close { controller.downloadTracks(trackIds) } })
             if (playlist != null) {
                 HorizontalDivider()
-                if (playlist.server?.canEditMetadata(state.server) != false) {
+                val youTube = playlist.youTube
+                if (youTube != null) {
+                    val browser = LocalUriHandler.current
+                    AppMenuItem(text = { Text(stringResource(Res.string.sources_open_on_youtube_music)) }, leadingIcon = { Icon(AppIcon.OPEN_EXTERNAL.vector, null) },
+                        onClick = { close { runCatching { browser.openUri(youTube.url) } } })
+                    AppMenuItem(text = { Text(stringResource(Res.string.sources_remove_from_library)) }, leadingIcon = { Icon(AppIcon.REMOVE.vector, null) },
+                        onClick = { close { controller.unfollowYouTubePlaylist(playlist.id) } })
+                } else if (playlist.server?.canEditMetadata(state.server) != false) {
                     AppMenuItem(text = { Text(stringResource(Res.string.library_edit_playlist)) }, leadingIcon = { Icon(AppIcon.EDIT.vector, null) }, onClick = { close { editing = true } })
                     if (playlist.rule != null) AppMenuItem(text = { Text(stringResource(Res.string.edit_rules)) }, onClick = { close { rules = true } })
                     AppMenuItem(text = { Text(stringResource(Res.string.library_delete_playlist)) }, leadingIcon = { Icon(AppIcon.REMOVE.vector, null) }, onClick = { close { deleting = true } })
@@ -129,7 +139,7 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
                     }
                 } })
                 val server = state.server
-                if (playlist.server == null && playlist.rule == null && server != null && controller.serverPlaylistPublishingAvailable &&
+                if (playlist.server == null && playlist.rule == null && youTube == null && server != null && controller.serverPlaylistPublishingAvailable &&
                     tracks.all { track -> track.sources.any { it.kind == SourceKind.SERVER && it.id.startsWith("server:${server.serverId}:") } })
                     AppMenuItem(text = { Text(stringResource(Res.string.library_publish_to_server)) }, onClick = { close { publishing = true } })
                 if (playlist.conflict != null) AppMenuItem(text = { Text(stringResource(Res.string.library_resolve_conflict)) }, onClick = { close { resolving = true } })

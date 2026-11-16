@@ -31,6 +31,85 @@ class YouTubeControllerTest {
         override suspend fun artwork(url: String) = ByteArray(0)
     }
 
+    /** A playlist page whose songs and name are whatever the test last set. */
+    private class PlaylistSource(var name: String, var tracks: List<YouTubeTrack>) : YouTubeSource by Source {
+        var browsed = 0
+        override suspend fun browse(link: YouTubeLink): YouTubeBrowsePage { browsed++
+            return YouTubeBrowsePage(name, description = "About", shelves = listOf(YouTubeShelf("", tracks, YouTubeShelfLayout.ROWS)))
+        }
+    }
+
+    @Test fun aSavedYouTubeMusicPlaylistStreamsItsSongsAndCatchesUpWhenOpened() = runBlocking {
+        val directory = Files.createTempDirectory("youtube-follow")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val preferences = MusicPreferences(store)
+        preferences.update { it.copy(youTube = true) }
+        val playlists = Playlists(store, library = library)
+        val source = PlaylistSource("Road Mix", listOf(YouTubeTrack("aaaaaaaaaaa", "Song A", "Artist", song = true),
+            YouTubeTrack("bbbbbbbbbbb", "Song B", "Artist", song = true)))
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences, youTube = source,
+            playlists = playlists)
+        try {
+            withTimeout(5_000) { controller.state.first { it.libraryReady && it.preferences.youTube } }
+            val link = YouTubeLink("VLPLroad")
+            controller.followYouTubePlaylist(YouTubeCollection(link, YouTubeCollectionKind.PLAYLIST, "Road Mix")).join()
+            val saved = withTimeout(5_000) { controller.state.first { state -> state.playlists.any { it.youTube == link } } }.playlists.single()
+            assertEquals("Road Mix", saved.name)
+            assertEquals("About", saved.description)
+            assertEquals(listOf("youtube:aaaaaaaaaaa", "youtube:bbbbbbbbbbb"), saved.trackIds.map { library.findTrack(it)!!.sources.single().id })
+            // Just saved, so opening it right away does not load it again.
+            controller.refreshYouTubePlaylist(saved.id).join()
+            assertEquals(1, source.browsed)
+            // The songs stay with the playlist through the weekly cleanup of unused YouTube songs.
+            assertEquals(emptySet(), library.removeUnusedYouTubeTracks(System.currentTimeMillis() + 8 * 24 * 3_600_000L))
+
+            // The playlist changed on YouTube Music since this device last saw it.
+            source.name = "Road Mix 2"
+            source.tracks = listOf(YouTubeTrack("bbbbbbbbbbb", "Song B", "Artist", song = true), YouTubeTrack("ccccccccccc", "Song C", "Artist", song = true))
+            val other = playlists.follow(YouTubeLink("VLPLother"), "Other", "", emptyList())
+            controller.refreshYouTubePlaylist(other.id).join()
+            assertEquals(listOf("youtube:bbbbbbbbbbb", "youtube:ccccccccccc"),
+                playlists.get(other.id)!!.trackIds.map { library.findTrack(it)!!.sources.single().id })
+            assertEquals("Road Mix 2", playlists.get(other.id)!!.name)
+
+            controller.unfollowYouTubePlaylist(saved.id).join()
+            assertNull(playlists.followed(link))
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun aPlaylistRemovedWhileItsUpdateLoadsStaysRemoved() = runBlocking {
+        val directory = Files.createTempDirectory("youtube-follow-removed")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val preferences = MusicPreferences(store)
+        preferences.update { it.copy(youTube = true) }
+        val playlists = Playlists(store, library = library)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val source = object : YouTubeSource by PlaylistSource("Mix", listOf(YouTubeTrack("aaaaaaaaaaa", "Song A", "Artist", song = true))) {
+            var browsed = 0
+            override suspend fun browse(link: YouTubeLink): YouTubeBrowsePage { browsed++; gate.await()
+                return YouTubeBrowsePage("Mix", shelves = listOf(YouTubeShelf("", listOf(YouTubeTrack("aaaaaaaaaaa", "Song A", "Artist", song = true)),
+                    YouTubeShelfLayout.ROWS)))
+            }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences, youTube = source,
+            playlists = playlists)
+        try {
+            withTimeout(5_000) { controller.state.first { it.libraryReady && it.preferences.youTube } }
+            val followed = playlists.follow(YouTubeLink("VLPLmix"), "Mix", "", emptyList())
+            val refresh = controller.refreshYouTubePlaylist(followed.id)
+            withTimeout(5_000) { while (source.browsed == 0) kotlinx.coroutines.yield() }
+            // Opening it again while it loads starts no second request.
+            controller.refreshYouTubePlaylist(followed.id).join()
+            controller.unfollowYouTubePlaylist(followed.id).join()
+            gate.complete(Unit)
+            refresh.join()
+            assertEquals(1, source.browsed)
+            assertEquals(emptyList(), playlists.all())
+        } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun aSlowVideoLookupDoesNotReplaceASongPlayedMeanwhile() = runBlocking {
         val directory = Files.createTempDirectory("youtube-controller")
         val store = openMusicStore(directory.resolve("library.db").toString())
@@ -89,7 +168,9 @@ class YouTubeControllerTest {
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
         val artwork = ArtworkLibrary(directory.resolve("artwork").toString())
+        // Imported two days ago, so the cleanup no longer waits for something to refer to them.
         suspend fun video(id: String) = library.importTrack(TrackMetadata("Video $id"), TrackSource("youtube:$id", SourceKind.YOUTUBE, id))
+            .copy(addedAt = System.currentTimeMillis() - 2 * 24 * 3_600_000L).also { store.put("track:${it.id}", "tracks", it) }
         val cover = java.io.ByteArrayOutputStream().also {
             javax.imageio.ImageIO.write(java.awt.image.BufferedImage(8, 8, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", it)
         }.toByteArray()
@@ -115,6 +196,21 @@ class YouTubeControllerTest {
             assertEquals(emptySet(), library.removeUnusedYouTubeTracks())
             assertEquals(setOf(later.id), library.removeUnusedYouTubeTracks(System.currentTimeMillis() + 8 * 24 * 3_600_000L))
         } finally { controller.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun theCleanupKeepsYouTubeSongsImportedMomentsAgoThatNothingRefersToYet() = runBlocking {
+        val directory = Files.createTempDirectory("youtube-cleanup-race")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        try {
+            // A play or a saved playlist imports its songs first and refers to them a moment later, which the cleanup may run between.
+            val fresh = library.importTrack(TrackMetadata("Video"), TrackSource("youtube:aaaaaaaaaaa", SourceKind.YOUTUBE, "aaaaaaaaaaa"))
+            val now = System.currentTimeMillis()
+            assertEquals(emptySet(), library.removeUnusedYouTubeTracks(now))
+            assertEquals(fresh.id, library.trackForSource("youtube:aaaaaaaaaaa")?.id)
+            // Still unused a week later, it goes.
+            assertEquals(setOf(fresh.id), library.removeUnusedYouTubeTracks(now + 8 * 24 * 3_600_000L))
+        } finally { store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test fun queueingAVideoAgainKeepsTheTagsOfTheSongItIsLinkedTo() = runBlocking {

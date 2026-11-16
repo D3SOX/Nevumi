@@ -146,7 +146,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val playlistController = PlaylistController(context, serverController, library, playlists, artwork, navidrome, serverChanges, offline)
     val downloadController = DownloadController(context, loader, playbackController, library, queue, engine, offline)
     val soundCloudController = SoundCloudController(context, serverController, libraryController, queueController, soundCloud)
-    val youTubeController = YouTubeController(context, library, libraryController, queueController, artwork, youTube, youTubeDownloads)
+    val youTubeController = YouTubeController(context, library, libraryController, queueController, artwork, youTube, youTubeDownloads, playlists)
     val discoveryController = DiscoveryController(context, queueController, discovery)
     val backupController = BackupController(context, loader, playbackController, fileEditController, queue, engine, backup)
     val lyricsController = LyricsController(context, lyrics)
@@ -314,6 +314,9 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun retryYouTubeDownload(id: String) = youTubeController.retryYouTubeDownload(id)
     fun dismissYouTubeDownload(id: String) = youTubeController.dismissYouTubeDownload(id)
     fun addYouTubeFolder(id: String) = youTubeController.addYouTubeFolder(id)
+    fun followYouTubePlaylist(collection: me.d3sox.nevumi.youtube.YouTubeCollection) = youTubeController.followYouTubePlaylist(collection)
+    fun unfollowYouTubePlaylist(playlistId: String) = youTubeController.unfollowYouTubePlaylist(playlistId)
+    fun refreshYouTubePlaylist(playlistId: String) = youTubeController.refreshYouTubePlaylist(playlistId)
 
     // Listening history and scrobbling
     fun clearListeningHistory() = historyController.clearListeningHistory()

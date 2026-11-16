@@ -105,7 +105,7 @@ class NavidromeChanges(private val store: MusicStore, private val library: Music
         val connection = requireNotNull(client()) { "Connect to your music server before publishing a playlist" }
         store.transaction {
             val playlist = requireNotNull(playlists.get(id)) { "Playlist is missing" }
-            require(playlist.server == null && playlist.rule == null) { "Publish a regular app playlist" }
+            require(playlist.server == null && playlist.rule == null && playlist.youTube == null) { "Publish a regular app playlist" }
             require(playlist.trackIds.all { trackId -> library.findTrack(trackId)?.sources?.any {
                 it.kind == SourceKind.SERVER && it.id.startsWith("server:${connection.serverId}:")
             } == true }) { "Server playlists can only contain tracks from their server" }

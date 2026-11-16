@@ -90,8 +90,11 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val listened = read.listens
         val playlists = if (BackupSection.PLAYLISTS in sections) storedPlaylists.map { playlist ->
             val rule = playlist.rule
+            // A followed playlist's songs stream from YouTube Music, which gives them again.
+            if (playlist.youTube != null) BackupPlaylist(playlist.name, description = playlist.description, shuffle = playlist.shuffle,
+                sort = playlist.sort, descending = playlist.descending, youTube = playlist.youTube)
             // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
-            if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name, playlist.trackIds, null,
+            else if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name, playlist.trackIds, null,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
             else BackupPlaylist(playlist.name, if (rule == null) playlist.trackIds else emptyList(), rule,
                 playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
@@ -163,12 +166,21 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val restoredPlaylists = mutableMapOf<String, String>()
         for ((index, backup) in document.playlists.withIndex()) {
             val name = backup.name.trim().takeIf { it.isNotEmpty() } ?: continue
+            backup.youTube?.let { link ->
+                val followed = playlists.followed(link) ?: playlists.follow(link, name, backup.description, emptyList()).also { created ->
+                    if (backup.shuffle) playlists.setShuffle(created.id, true)
+                    if (backup.sort != PlaylistSort.CUSTOM || backup.descending) playlists.setSort(created.id, backup.sort, backup.descending)
+                    playlistsAdded++
+                }
+                restoredPlaylists["$BACKUP_PLAYLIST$index"] = followed.id
+                continue
+            }
             val songs = if (backup.rule == null) backup.trackKeys.mapNotNull(::localId) else emptyList()
             // Among several candidates, the one with the same description and then the most shared songs is the same playlist.
             val existing = existingPlaylists.filter { playlist ->
                 playlist.id !in matched && playlist.name.trim() == name && when {
                     backup.rule != null -> playlist.rule == backup.rule
-                    playlist.rule != null -> false
+                    playlist.rule != null || playlist.youTube != null -> false
                     playlist.server != null -> playlist.trackIds.containsAll(songs)
                     else -> true
                 }

@@ -79,6 +79,56 @@ class YouTubeArtistPageUiTest {
         override suspend fun artwork(url: String) = ByteArray(0)
     }
 
+    @Test fun aYouTubeMusicPlaylistSavedToTheLibraryOpensInPlaylistsAndCanBeRemoved() {
+        val directory = Files.createTempDirectory("youtube-follow-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val preferences = MusicPreferences(store)
+        runBlocking { preferences.update { it.copy(youTube = true) } }
+        val playlists = me.d3sox.nevumi.playlists.Playlists(store, library = library)
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences, youTube = FakeYouTube(),
+            playlists = playlists, sourceAccessible = { true })
+        try {
+            runSkikoComposeUiTest(size = Size(420f, 900f)) {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.libraryReady && controller.state.value.preferences.youTube }
+                onNodeWithContentDescription("Search").performClick()
+                onNodeWithContentDescription("Search your library").performTextInput("Taylor")
+                onNodeWithTag("search-youtube").performScrollTo().performClick()
+                pickFilter("youtube-kind:ARTISTS")
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Open artist: Taylor Swift").fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithContentDescription("Open artist: Taylor Swift").performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Top songs").fetchSemanticsNodes().isNotEmpty() }
+                // An artist is no playlist, so it has nothing to save.
+                onAllNodesWithTag("youtube-follow").assertCountEquals(0)
+                onNodeWithTag("youtube-page-shelves").performScrollToNode(hasText("Top songs"))
+                onAllNodesWithText("See all")[0].performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("150 songs", substring = true).fetchSemanticsNodes().isNotEmpty() }
+
+                onNodeWithContentDescription("Save to library").performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.playlists.any { it.youTube != null } }
+                val saved = controller.state.value.playlists.single()
+                assertTrue(saved.trackIds.isNotEmpty())
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Remove from library").fetchSemanticsNodes().isNotEmpty() }
+                snapshot("youtube-playlist-saved")
+
+                // The notice leads to Playlists, where it sits with the songs it streams, which only YouTube Music changes.
+                onNodeWithContentDescription("Open playlists").performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText(saved.name).fetchSemanticsNodes().isNotEmpty() }
+                snapshot("followed-playlist-card")
+                onNodeWithText(saved.name).performClick()
+                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("YouTube Music playlist", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                snapshot("followed-playlist")
+                onNodeWithContentDescription("Playlist options").performClick()
+                onAllNodesWithText("Edit playlist").assertCountEquals(0)
+                onNodeWithText("Open on YouTube Music").assertExists()
+                snapshot("followed-playlist-options")
+                onNodeWithText("Remove from library").performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.playlists.isEmpty() }
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun anArtistFoundOnYouTubeOpensWithItsShelvesAndItsAlbumsPlayInOrder() {
         val directory = Files.createTempDirectory("youtube-artist-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())

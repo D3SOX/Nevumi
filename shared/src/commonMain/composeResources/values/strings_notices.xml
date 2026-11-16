@@ -11,6 +11,8 @@
     <string name="notice_rated_stars">Rated %1$s stars</string>
     <string name="notice_playlist_created">Playlist created</string>
     <string name="notice_added_to_playlist">Added to playlist</string>
+    <string name="notice_youtube_playlist_saved">Saved “%1$s” to your library</string>
+    <string name="notice_youtube_playlist_removed">Removed “%1$s” from your library</string>
     <string name="notice_playlists_updated">Playlists updated</string>
     <string name="notice_playlist_updated">Playlist updated</string>
     <string name="notice_playlist_edit_discarded">“%1$s” is read-only on the server, so your edit was undone</string>

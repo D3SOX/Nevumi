@@ -153,6 +153,24 @@ class MusicBackupTest {
     }
 
     @Test
+    fun aFollowedYouTubeMusicPlaylistIsRestoredAsFollowedOnce() = devices { source, target ->
+        val link = me.d3sox.nevumi.youtube.YouTubeLink("VLPLmix")
+        val video = source.library.importTrack(TrackMetadata("Video"), TrackSource("youtube:aaaaaaaaaaa", SourceKind.YOUTUBE, "aaaaaaaaaaa"))
+        source.playlists.follow(link, "Mix", "Fresh songs", listOf(video.id))
+        source.playlists.setShuffle(source.playlists.followed(link)!!.id, true)
+        val exported = source.backup.export(sections = setOf(BackupSection.PLAYLISTS))
+        assertEquals(1, target.backup.restore(exported).playlistsAdded)
+        // Its songs come back from YouTube Music when it opens.
+        val restored = target.playlists.followed(link)!!
+        assertEquals("Mix", restored.name)
+        assertEquals("Fresh songs", restored.description)
+        assertTrue(restored.shuffle)
+        assertTrue(restored.trackIds.isEmpty())
+        assertEquals(0, target.backup.restore(exported).playlistsAdded)
+        assertEquals(1, target.playlists.all().size)
+    }
+
+    @Test
     fun restoringOnlyPlaylistsLeavesSettingsFavoritesRatingsAndHistoryAlone() = devices { source, target ->
         source.fill()
         target.sameSongs()

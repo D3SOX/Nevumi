@@ -8,6 +8,7 @@ import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.navidrome.ServerProfile
 import me.d3sox.nevumi.playback.EqualizerProfile
 import me.d3sox.nevumi.playlists.PlaylistSort
+import me.d3sox.nevumi.youtube.YouTubeLink
 import me.d3sox.nevumi.queue.QueueSnapshot
 import me.d3sox.nevumi.queue.SavedQueueKind
 import me.d3sox.nevumi.settings.MusicSettings
@@ -54,11 +55,14 @@ data class BackupTrack(val title: String, val artist: String = "", val album: St
     val serverSources: List<String> = emptyList(),
     val favorite: Boolean = false, val rating: Int = 0)
 
-/** A playlist; folders are part of [name]. Smart playlists keep their [rule] and no songs. */
+/**
+ * A playlist; folders are part of [name]. Smart playlists keep their [rule] and no songs, and followed YouTube Music playlists keep
+ * their [youTube] link, which brings their songs back when opened.
+ */
 @Serializable
 data class BackupPlaylist(val name: String, val trackKeys: List<String> = emptyList(), val rule: LibraryQuery? = null,
     val description: String = "", val shuffle: Boolean = false, val sort: PlaylistSort = PlaylistSort.CUSTOM,
-    val descending: Boolean = false)
+    val descending: Boolean = false, val youTube: YouTubeLink? = null)
 
 /** A saved queue whose entries' track IDs are keys of [BackupDocument.tracks]. */
 @Serializable
