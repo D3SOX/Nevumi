@@ -163,8 +163,8 @@ private fun RestoreSummaryContent(summary: RestoreSummary) {
         if (summary.soundCloud) Res.string.backup_summary_soundcloud to stringResource(Res.string.backup_summary_soundcloud_restored) else null,
     )
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Playlists left out or kept without some songs mean the backup is not all here.
-        if (rows.isEmpty() && summary.playlistsSkipped == 0 && summary.serverPlaylistsLackingSongs == 0)
+        // Playlists left out, or kept or restored without some songs, mean the backup is not all here.
+        if (rows.isEmpty() && summary.playlistsSkipped == 0 && summary.serverPlaylistsLackingSongs == 0 && summary.unmatchedTracks == 0)
             Text(stringResource(Res.string.backup_summary_nothing))
         rows.forEach { (label, value) -> SummaryRow(stringResource(label), value) }
         ExplainedRow(Res.string.backup_summary_playlists_skipped, Res.string.backup_summary_playlists_skipped_description, summary.playlistsSkipped)
