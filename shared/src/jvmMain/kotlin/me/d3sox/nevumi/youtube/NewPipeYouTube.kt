@@ -109,8 +109,8 @@ class NewPipeYouTube : YouTubeSource, AutoCloseable {
         val text = query.trim()
         require(text.isNotEmpty()) { "Enter something to search for" }
         if (accepts(text)) return@extract YouTubePage(listOf(track(StreamInfo.getInfo(service, text))), null)
-        // NewPipe Extractor finds artists and albums but cannot open their YouTube Music pages, so they come from those pages' own search.
-        if (kind == YouTubeSearchKind.ARTISTS || kind == YouTubeSearchKind.ALBUMS) return@extract YouTubeMusicPages.search(text, kind)
+        // NewPipe Extractor finds artists, albums and playlists but cannot open their YouTube Music pages, so they come from those pages' own search.
+        if (kind != YouTubeSearchKind.SONGS && kind != YouTubeSearchKind.VIDEOS) return@extract YouTubeMusicPages.search(text, kind)
         val filter = if (kind == YouTubeSearchKind.SONGS) YoutubeSearchQueryHandlerFactory.MUSIC_SONGS else YoutubeSearchQueryHandlerFactory.VIDEOS
         val extractor = service.getSearchExtractor(service.searchQHFactory.fromQuery(text, listOf(filter), ""))
         extractor.fetchPage()

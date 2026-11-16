@@ -31,7 +31,7 @@ class YouTubeSearchUiTest {
         javax.imageio.ImageIO.write(image, "png", Path.of(directory).also(Files::createDirectories).resolve("$name.png").toFile())
     }
 
-    /** Fails the first search of every kind like a lost connection, then finds two songs, a video and four artists. */
+    /** Fails the first search of every kind like a lost connection, then finds two songs, a video, four artists and a playlist. */
     private class FakeYouTube : YouTubeSource {
         val searches = Collections.synchronizedList(mutableListOf<Pair<String, YouTubeSearchKind>>())
         override suspend fun search(query: String, kind: YouTubeSearchKind, continuation: YouTubeContinuation?): YouTubePage {
@@ -44,6 +44,7 @@ class YouTubeSearchUiTest {
                 YouTubeSearchKind.VIDEOS -> listOf(YouTubeTrack("bbbbbbbbbbb", "Other - Night Swim (Official Video)", "OtherVEVO", 180_000))
                 YouTubeSearchKind.ARTISTS -> (1..4).map { YouTubeCollection(YouTubeLink("UC$it"), YouTubeCollectionKind.ARTIST, "Night Artist $it") }
                 YouTubeSearchKind.ALBUMS -> emptyList()
+                YouTubeSearchKind.PLAYLISTS -> listOf(YouTubeCollection(YouTubeLink("VLPLnight"), YouTubeCollectionKind.PLAYLIST, "Night Mix", "Someone · 1k views"))
             }, null)
         }
         override suspend fun browse(link: YouTubeLink) = YouTubeBrowsePage("")
@@ -83,6 +84,8 @@ class YouTubeSearchUiTest {
                 onNodeWithText("Night Artist 3").assertExists()
                 onAllNodesWithText("Night Artist 4").assertCountEquals(0)
                 onAllNodesWithTag("youtube-section:ALBUMS").assertCountEquals(0)
+                onNodeWithTag("youtube-section:PLAYLISTS").assertExists()
+                onNodeWithText("Night Mix").assertExists()
                 onAllNodesWithText("See all").assertCountEquals(1)
                 onAllNodesWithText("In library", useUnmergedTree = true).assertCountEquals(1)
                 onAllNodesWithContentDescription("YouTube song: Night Drive by Artist").assertCountEquals(1)

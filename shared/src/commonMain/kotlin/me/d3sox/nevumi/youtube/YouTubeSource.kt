@@ -51,8 +51,8 @@ class YouTubeBrowsePage(val title: String, val subtitle: String = "", val descri
     val banner: Boolean = false, val artist: YouTubeCollection? = null, val shelves: List<YouTubeShelf> = emptyList(),
     val next: YouTubeContinuation? = null)
 
-/** What a search looks for: songs, artists or albums on YouTube Music, or any video on YouTube. */
-enum class YouTubeSearchKind { SONGS, ARTISTS, ALBUMS, VIDEOS }
+/** What a search looks for: songs, artists, albums or playlists on YouTube Music, or any video on YouTube. */
+enum class YouTubeSearchKind { SONGS, ARTISTS, ALBUMS, PLAYLISTS, VIDEOS }
 
 /** Where a search or page continues; only the source that returned it reads it. */
 class YouTubeContinuation(internal val value: Any)

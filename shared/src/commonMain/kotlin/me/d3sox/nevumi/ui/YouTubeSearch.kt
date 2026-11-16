@@ -47,6 +47,7 @@ import me.d3sox.nevumi.resources.retry
 import me.d3sox.nevumi.resources.search_type_all
 import me.d3sox.nevumi.resources.search_type_albums
 import me.d3sox.nevumi.resources.search_type_artists
+import me.d3sox.nevumi.resources.search_type_playlists
 import me.d3sox.nevumi.resources.search_type_songs
 import me.d3sox.nevumi.resources.sources_in_library
 import me.d3sox.nevumi.resources.sources_go_to_youtube_music_album
@@ -148,7 +149,8 @@ internal fun YouTubeSearchResults(query: String, state: AppState, controller: Mu
     val owned = rememberOwnedSongs(state)
     val selection = remember(search) { YouTubeSelection() }
     val labels = mapOf(YouTubeSearchKind.SONGS to Res.string.search_type_songs, YouTubeSearchKind.ARTISTS to Res.string.search_type_artists,
-        YouTubeSearchKind.ALBUMS to Res.string.search_type_albums, YouTubeSearchKind.VIDEOS to Res.string.sources_youtube_videos)
+        YouTubeSearchKind.ALBUMS to Res.string.search_type_albums, YouTubeSearchKind.PLAYLISTS to Res.string.search_type_playlists,
+        YouTubeSearchKind.VIDEOS to Res.string.sources_youtube_videos)
     // Every kind shows its first results, each heading offering the rest.
     fun limit(section: YouTubeSearchSection) = if (section.kind == YouTubeSearchKind.SONGS) 5 else 3
     val tracks by remember(search) { derivedStateOf {

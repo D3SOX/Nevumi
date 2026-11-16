@@ -20,6 +20,8 @@ internal object YouTubeMusicPages {
     private const val API = "https://music.youtube.com/youtubei/v1/"
     private const val ARTIST_SEARCH = "Eg-KAQwIABAAGAAgASgAMABqChAEEAUQAxAKEAk%3D"
     private const val ALBUM_SEARCH = "Eg-KAQwIABAAGAEgACgAMABqChAEEAUQAxAKEAk%3D"
+    private const val FEATURED_PLAYLIST_SEARCH = "EgeKAQQoADgBagwQDhAKEAMQBBAJEAU%3D"
+    private const val COMMUNITY_PLAYLIST_SEARCH = "EgeKAQQoAEABagwQDhAKEAMQBBAJEAU%3D"
 
     /**
      * A continuation token; search continues through the request address, pages through the request body. Some tokens, such as a
@@ -27,14 +29,21 @@ internal object YouTubeMusicPages {
      */
     internal data class Next(val search: Boolean, val token: String, val visitor: String?)
 
-    /** Finds artists or albums, whose results open as pages. */
+    /**
+     * Finds artists, albums or playlists, whose results open as pages. Playlists start with YouTube Music's own, which are few, and
+     * continue with the community's.
+     */
     fun search(query: String, kind: YouTubeSearchKind): YouTubePage {
-        val params = when (kind) {
-            YouTubeSearchKind.ARTISTS -> ARTIST_SEARCH
-            YouTubeSearchKind.ALBUMS -> ALBUM_SEARCH
+        fun search(params: String) = searchResults(request("search", mapOf("query" to query, "params" to params)))
+        return when (kind) {
+            YouTubeSearchKind.ARTISTS -> search(ARTIST_SEARCH)
+            YouTubeSearchKind.ALBUMS -> search(ALBUM_SEARCH)
+            YouTubeSearchKind.PLAYLISTS -> {
+                val community = search(COMMUNITY_PLAYLIST_SEARCH)
+                YouTubePage((search(FEATURED_PLAYLIST_SEARCH).results + community.results).distinctBy { it.key }, community.next)
+            }
             else -> throw IllegalArgumentException("YouTube Music pages cannot search for $kind")
         }
-        return searchResults(request("search", mapOf("query" to query, "params" to params)))
     }
 
     fun searchResults(response: JsonObject): YouTubePage {
