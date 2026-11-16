@@ -86,17 +86,10 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, focus
     var appliedFocus by rememberSaveable { mutableIntStateOf(focus?.revision ?: 0) }
     if (focus != null && focus.revision != appliedFocus) { appliedFocus = focus.revision; selected = focus.group; tagging = null }
     val taggedJob = tagging?.let { id -> state.soundCloudJobs.firstOrNull { it.id == id && it.state == SoundCloudJobState.NEEDS_TAGS } }
-    if (taggedJob != null) {
-        SoundCloudTagEditor(taggedJob, controller) { tagging = null }
-        return
-    }
     val taggedVideo = tagging?.let { id -> state.youTubeJobs.firstOrNull { it.id == id && it.state == YouTubeJobState.NEEDS_TAGS } }
-    if (taggedVideo != null) {
-        YouTubeTagEditor(taggedVideo, controller) { tagging = null }
-        return
-    }
+    val editing = tagging?.takeIf { taggedJob != null || taggedVideo != null }
     // The tags were written or the download was canceled elsewhere, so a later wait for tags does not open the editor by itself.
-    if (tagging != null) SideEffect { tagging = null }
+    if (tagging != null && editing == null) SideEffect { tagging = null }
     val paused = state.preferences.downloadsPaused
     val playlists = state.playlistDownloads
     val batch = state.downloadBatch
@@ -116,7 +109,13 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, focus
     // Remember the group on screen, so groups that appear later do not take over the page.
     if (group != selected) SideEffect { selected = group }
     val waiting = state.downloads.values.any { it.status != DownloadStatus.COMPLETE } || batch.total > 0
-    SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.downloads)) }, text = {
+    AnimatedNavigation(editing, null, canGoBack = editing != null, onBack = { tagging = null }, depth = { if (it == null) 0 else 1 }) { editedId ->
+    // An editor that slides away after its tags were written still shows the job it edited.
+    val editedJob = editedId?.let { id -> state.soundCloudJobs.firstOrNull { it.id == id } }
+    val editedVideo = editedId?.let { id -> state.youTubeJobs.firstOrNull { it.id == id } }
+    if (editedJob != null) SoundCloudTagEditor(editedJob, controller) { tagging = null }
+    else if (editedVideo != null) YouTubeTagEditor(editedVideo, controller) { tagging = null }
+    else if (editedId == null) SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.downloads)) }, text = {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(when {
                 paused -> stringResource(Res.string.sources_downloads_paused)
@@ -167,6 +166,7 @@ internal fun DownloadsScreen(state: AppState, controller: MusicController, focus
             }
         }
     }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })
+    }
 }
 
 internal enum class DownloadGroup(val label: StringResource) {

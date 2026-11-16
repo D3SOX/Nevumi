@@ -1,12 +1,5 @@
 package me.d3sox.nevumi.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -29,11 +22,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -129,23 +117,16 @@ internal fun YouTubePageHost(state: AppState, controller: MusicController, botto
     val open: (YouTubeCollection) -> Unit = { collection -> focus.clearFocus(); pages = pages + OpenedYouTubePage(collection, pages.size) }
     val openLinked = rememberYouTubeLinkedPageOpener(controller, open)
     val active = LocalNavigationActive.current
-    Box(Modifier.fillMaxSize().onKeyEvent {
-        // Escape leaves only the top page, not the search the pages were opened from.
-        if (active && pages.isNotEmpty() && it.key == Key.Escape && it.type == KeyEventType.KeyUp) { pages = pages.dropLast(1); true } else false
-    }) {
+    Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().then(if (pages.isEmpty()) Modifier else Modifier.clearAndSetSemantics {})) {
             CompositionLocalProvider(LocalOpenYouTubePage provides open, LocalOpenYouTubeLinkedPage provides openLinked,
                 LocalNavigationActive provides (active && pages.isEmpty()), content = content)
         }
-        AnimatedContent(pages.lastOrNull(), transitionSpec = {
-            val forward = (targetState?.depth ?: -1) > (initialState?.depth ?: -1)
-            val enter = slideInHorizontally(tween(250)) { if (forward) it else -it / 4 } + fadeIn(tween(180))
-            val exit = slideOutHorizontally(tween(250)) { if (forward) -it / 4 else it } + fadeOut(tween(180))
-            (enter togetherWith exit).apply { targetContentZIndex = if (forward) 1f else -1f }
-        }, label = "YouTube pages") { opened ->
+        // Without a page, the navigation shows nothing and leaves [content] in view; Back previews the page or content below.
+        AnimatedNavigation(pages.lastOrNull(), pages.getOrNull(pages.size - 2), canGoBack = pages.isNotEmpty(), onBack = { pages = pages.dropLast(1) },
+            depth = { it?.depth ?: -1 }) { opened ->
             if (opened != null) Surface(Modifier.fillMaxSize()) {
-                CompositionLocalProvider(LocalOpenYouTubePage provides open, LocalOpenYouTubeLinkedPage provides openLinked,
-                    LocalNavigationActive provides (active && opened == pages.lastOrNull())) {
+                CompositionLocalProvider(LocalOpenYouTubePage provides open, LocalOpenYouTubeLinkedPage provides openLinked) {
                     YouTubeBrowseScreen(opened, state, controller, bottomSpace) { pages = pages.filter { it.depth < opened.depth } }
                 }
             }
@@ -157,7 +138,6 @@ internal fun YouTubePageHost(state: AppState, controller: MusicController, botto
 
 @Composable
 private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, controller: MusicController, bottomSpace: Dp, back: () -> Unit) {
-    PlatformBackHandler(back)
     var loading by remember(opened) { mutableStateOf(false) }
     var error by remember(opened) { mutableStateOf<String?>(null) }
     var permanent by remember(opened) { mutableStateOf(false) }
@@ -219,7 +199,9 @@ private fun YouTubeBrowseScreen(opened: OpenedYouTubePage, state: AppState, cont
     val content = opened.page
     // Holding focus lets keys such as Escape reach the pages instead of the search field below.
     val focus = remember { FocusRequester() }
-    LaunchedEffect(opened) { focus.requestFocus() }
+    // Not while Back previews this page below the one on top.
+    val shown = LocalNavigationActive.current
+    LaunchedEffect(opened, shown) { if (shown) focus.requestFocus() }
     val selection = remember(opened) { YouTubeSelection() }
     val playable = content?.let { loaded ->
         loaded.page.shelves.indices.firstOrNull { index ->

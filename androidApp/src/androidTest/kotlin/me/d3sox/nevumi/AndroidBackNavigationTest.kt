@@ -165,6 +165,38 @@ class AndroidBackNavigationTest {
     }
 
     @Test
+    fun searchCollectionBackPreviewsCancelsAndReturnsToTheResults(): Unit = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
+        val track = app.controller.library.importTrack(TrackMetadata("Search back song", album = "Search back album"),
+            TrackSource("search-back", SourceKind.LOCAL, "/missing.flac"))
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.waitForLibrary(app.controller)
+            compose.onNodeWithContentDescription("Search").performClick()
+            compose.onNodeWithContentDescription("Search your library").performTextInput("Search back")
+            compose.onNodeWithTag("search-type:ALBUMS").performClick()
+            compose.onNodeWithContentDescription("Open album: Search back album").performClick()
+            val row = compose.onNodeWithTag("track-row:${track.id}")
+            val original = row.fetchSemanticsNode().boundsInRoot.left
+            scenario.onActivity {
+                it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
+                it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
+            }
+            compose.waitForIdle()
+            assertTrue("The opened album must follow the back gesture", row.fetchSemanticsNode().boundsInRoot.left > original + 50)
+            scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
+            compose.waitForIdle()
+            assertTrue(kotlin.math.abs(row.fetchSemanticsNode().boundsInRoot.left - original) < 2)
+            scenario.onActivity {
+                it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
+                it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(500f, 800f, .7f, BackEventCompat.EDGE_LEFT))
+                it.onBackPressedDispatcher.onBackPressed()
+            }
+            compose.onNodeWithTag("track-row:${track.id}").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Open album: Search back album").assertIsDisplayed()
+        }
+    }
+
+    @Test
     fun playerBackFollowsGestureProgressAndCancellationRestoresThePanel(): Unit = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as MusicApplication

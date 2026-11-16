@@ -109,9 +109,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     LaunchedEffect(active) { if (!active) selection.clear() }
     // Restore the search field before its focus effect runs, including while the selection header replaces it.
     LaunchedEffect(focusRequest) { selection.clear() }
-    if (active && (selection.active || opened != null)) PlatformBackHandler {
-        if (selection.active) selection.clear() else openedId = null
-    }
+    // Back ends a selection first; the opened collection's page navigation below waits for it.
+    if (active && selection.active) PlatformBackHandler(selection::clear)
     CompositionLocalProvider(LocalSongSelection provides selection, LocalLibraryOrigin provides QueueOrigin(LibraryTab.SONGS),
         LocalLibraryScrollKey provides "global-search:${type.name}") {
         YouTubePageHost(state, controller, bottomSpace, youTubePage, onYouTubePageShown) {
@@ -128,7 +127,19 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 // Each new request, such as Ctrl+F while search is open, puts the cursor back in the field.
                 LaunchedEffect(focusRequest) { focus.requestFocus() }
             }
-            if (opened == null) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // An opened collection slides over the results like a library page, so Back previews the way back to them.
+            val openedPage = opened?.let { requireNotNull(openedType) to it.id }
+            AnimatedNavigation(openedPage, null, canGoBack = active && openedPage != null && !selection.active, onBack = { openedId = null },
+                Modifier.weight(1f).fillMaxWidth(), depth = { if (it == null) 0 else 1 }) { page ->
+            val shown = page?.let { (pageType, id) -> results.collections[pageType].orEmpty().firstOrNull { it.id == id } }
+            if (page != null) {
+                if (shown != null) CompositionLocalProvider(LocalLibraryOrigin provides QueueOrigin(requireNotNull(page.first.tab), shown.id),
+                    LocalLibraryScrollKey provides "search-detail:${page.first.name}:${shown.id}") {
+                    SongList(shown.tracks, controller, playlistId = shown.id.takeIf { page.first == SearchType.PLAYLISTS }, contextName = shown.title,
+                        header = { CollectionHero(shown, requireNotNull(page.first.tab), state, controller) })
+                }
+            } else Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val sources = SearchSource.entries.filter {
                     (it != SearchSource.SOUNDCLOUD || state.soundCloud != null) && (it != SearchSource.YOUTUBE || youTube)
                 }
@@ -144,11 +155,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (opened != null) CompositionLocalProvider(LocalLibraryOrigin provides QueueOrigin(requireNotNull(openedType?.tab), opened.id),
-                    LocalLibraryScrollKey provides "search-detail:${openedType?.name}:${opened.id}") {
-                    SongList(opened.tracks, controller, playlistId = opened.id.takeIf { openedType == SearchType.PLAYLISTS }, contextName = opened.title,
-                        header = { CollectionHero(opened, requireNotNull(openedType?.tab), state, controller) })
-                } else if (query.isBlank()) {
+                if (query.isBlank()) {
                     if (type == SearchType.SOUNDCLOUD) SearchPrompt(AppIcon.CLOUD, stringResource(Res.string.sources_search_soundcloud_prompt), Modifier.align(Alignment.Center))
                     else if (type == SearchType.YOUTUBE) SearchPrompt(AppIcon.YOUTUBE, stringResource(Res.string.sources_search_youtube_prompt), Modifier.align(Alignment.Center))
                     else SearchPrompt(AppIcon.MUSIC, stringResource(Res.string.sources_enter_search_term), Modifier.align(Alignment.Center))
@@ -206,6 +213,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     }
                     }
                 }
+            }
+            }
             }
             Spacer(Modifier.height(bottomSpace))
         }
