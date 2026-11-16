@@ -128,6 +128,7 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     }
     CompositionLocalProvider(LocalSteadyState provides steadyState, LocalAudioWaveforms provides waveforms, LocalArtworkPicker provides picker, LocalPlaylistFiles provides files, LocalEqualizerFiles provides equalizerDocuments,
         LocalBackupFiles provides backups,
+        LocalArtworkPending provides !state.started,
         LocalMarqueeSpeed provides state.preferences.marqueeSpeed.toFloat(),
         LocalLibraryNavigate provides { tab, id -> openLibrary(tab, id) },
         LocalOpenYouTubeLinkedPage provides openYouTubeLinkedPage,

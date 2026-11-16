@@ -200,6 +200,38 @@ class ArtworkUiTest {
     }
 
     @Test
+    fun coversShowAsLoadingUntilStartupKnowsWhichCoversExist() {
+        val directory = Files.createTempDirectory("startup-artwork")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val artwork = ArtworkLibrary(directory.resolve("artwork").toString())
+        runBlocking {
+            val track = library.importTrack(TrackMetadata("Night Drive"), TrackSource("startup-cover", SourceKind.LOCAL, directory.resolve("song.flac").toString()))
+            artwork.save(track.id, image(0xE05040))
+        }
+        // Startup applies the audio effects after it shows the songs and before it looks up their covers, so it waits here.
+        val startup = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val real = MpvPlaybackEngine("null")
+        val engine = object : me.d3sox.nevumi.playback.PlaybackEngine by real {
+            override suspend fun setAudioEffects(effects: me.d3sox.nevumi.playback.AudioEffects) { startup.await(); real.setAudioEffects(effects) }
+        }
+        val controller = MusicController(library, PlaybackQueue(store), engine, preferences = MusicPreferences(store), artwork = artwork)
+        val loading = SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Loading cover")
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithContentDescription("Song artwork: Night Drive", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+                onNodeWithContentDescription("Song artwork: Night Drive", useUnmergedTree = true).assert(loading)
+                startup.complete(Unit)
+                waitUntil(timeoutMillis = 3_000) {
+                    onNodeWithContentDescription("Song artwork: Night Drive", useUnmergedTree = true).captureToImage().toPixelMap()
+                        .let { it[it.width / 2, it.height / 2] } == Color(0xFFE05040)
+                }
+            }
+        } finally { startup.complete(Unit); runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun aCoverThatIsStillLoadingShowsALoadingIndicatorInsteadOfTheMissingCoverIcon() {
         val directory = Files.createTempDirectory("loading-artwork")
         val store = openMusicStore(directory.resolve("library.db").toString())
