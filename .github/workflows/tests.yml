@@ -106,8 +106,8 @@ jobs:
     needs: android-shards
     name: android (${{ matrix.device.api }}, shard ${{ matrix.shard.index }}/${{ matrix.shard.total }})
     runs-on: ubuntu-24.04
-    # Leaves room for a second emulator when the first one stops.
-    timeout-minutes: 50
+    # Leaves room for two more emulators when the first ones stop.
+    timeout-minutes: 70
     strategy:
       fail-fast: false
       matrix:
@@ -184,10 +184,19 @@ jobs:
       - id: resume
         if: steps.suite.outcome == 'failure' && hashFiles('.test-environment/android-unfinished-classes') != ''
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        continue-on-error: true
+        timeout-minutes: 20
+        with: *emulator
+      # The replacement occasionally stops as well; only then does a third emulator run what it left.
+      - id: resume-again
+        if: steps.resume.outcome == 'failure' && hashFiles('.test-environment/android-unfinished-classes') != ''
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         timeout-minutes: 20
         with: *emulator
       - name: Fail when the Android suite failed
-        if: steps.suite.outcome == 'failure' && steps.resume.outcome != 'success'
+        if: >-
+          steps.suite.outcome == 'failure' && steps.resume.outcome != 'success'
+          && steps.resume-again.outcome != 'success'
         run: exit 1
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -75,20 +75,23 @@ if arguments.matrix:
     print(json.dumps([{"index": index, "total": count} for index in range(1, count + 1)]))
     raise SystemExit(0)
 
-# Classes that had not passed when the emulator stopped, for a second emulator to run.
+# Classes that had not passed when the emulator stopped, for a new emulator to run, and how many emulators ran before.
 unfinished = ROOT / ".test-environment/android-unfinished-classes"
+emulators = ROOT / ".test-environment/android-emulators"
 if arguments.resume:
     classes = unfinished.read_text().split()
     unfinished.unlink()
+    emulator = int(emulators.read_text()) + 1
 else:
     classes = distribute(int(shard[2]))[0][int(shard[1]) - 1]
+    emulator = 1
 serial = os.environ["ANDROID_SERIAL"]
 if not re.fullmatch(r"emulator-[0-9]{4}", serial):
     raise SystemExit("Run this suite on an owned emulator")
 reports = ROOT / "androidApp/build/outputs/androidTest-results/connected/debug"
 output = ROOT / ".test-environment/android-class-results"
-if arguments.resume:
-    output /= "new-emulator"
+if emulator > 1:
+    output /= f"emulator-{emulator}"
 shutil.rmtree(output, ignore_errors=True)
 output.mkdir(parents=True)
 api = int(subprocess.run(["adb", "-s", serial, "shell", "getprop", "ro.build.version.sdk"],
@@ -184,12 +187,15 @@ def device_lost():
         return True
 
 
-def hand_over(remaining, message):
-    """Leave classes for a new emulator, once: hosted emulators sometimes freeze and exit mid-suite, and some fresh
-    API 36 emulators never give the app input focus, so their keyboard and Back tests fail on every attempt."""
-    if arguments.resume:
-        raise SystemExit(f"Android suite failed on a second emulator: {message}; failed: {failed}; not run: {remaining}")
+def hand_over(remaining, message, stopped):
+    """Leave classes for a new emulator: hosted emulators sometimes freeze and exit mid-suite, occasionally the
+    replacement too, and some fresh API 36 emulators never give the app input focus, so their keyboard and Back tests
+    fail on every attempt. Only a stopped emulator gets a third one; classes that fail twice again fail the shard."""
+    if emulator == 3 or (emulator == 2 and not stopped):
+        raise SystemExit(f"Android suite failed on a {['second', 'third'][emulator - 2]} emulator: {message}; "
+                         f"failed: {failed}; not run: {remaining}")
     unfinished.write_text("\n".join(remaining) + "\n")
+    emulators.write_text(f"{emulator}\n")
     print(f"::warning title=Android emulator replaced::{message}; {len(remaining)} classes will run on a new emulator",
           flush=True)
     raise SystemExit(f"Android suite stopped: {message}; unfinished classes: {remaining}")
@@ -201,7 +207,7 @@ for index, name in enumerate(classes):
     cases = run(name, 1)
     if cases is None:
         if device_lost():
-            hand_over(retry + classes[index:], lost)
+            hand_over(retry + classes[index:], lost, True)
         retry.append(name)
     else:
         executed += len(cases)
@@ -212,12 +218,12 @@ for index, name in enumerate(retry):
     cases = run(name, 2)
     if cases is None:
         if device_lost():
-            hand_over(failed + retry[index:], lost)
+            hand_over(failed + retry[index:], lost, True)
         failed.append(name)
         continue
     flaky.append(name)
     print(f"::warning title=Flaky Android test::{name} failed once and passed on retry", flush=True)
     executed += len(cases)
 if failed:
-    hand_over(failed, f"{failed} failed twice on {serial}; passed on retry: {flaky}")
+    hand_over(failed, f"{failed} failed twice on {serial}; passed on retry: {flaky}", False)
 print(f"Passed {executed} Android checks across {len(classes)} classes; passed on retry: {flaky or 'none'}")

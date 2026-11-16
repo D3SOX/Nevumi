@@ -49,7 +49,7 @@ if [[ "$mode" == desktop ]]; then
     xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24 -nolisten tcp' ./gradlew --configure-on-demand :shared:desktopTest --console=plain
 else
     export ANDROID_SERIAL=emulator-5554
-    # A second emulator gets a new fixture, so do not reuse the ports the previous one wrote.
+    # A replacement emulator gets a new fixture, so do not reuse the ports the previous one wrote.
     rm -rf .test-environment/paired-fixture
     setsid ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx512m --max-workers=2 \
         -Pkotlin.compiler.execution.strategy=in-process :shared:pairedFixture --console=plain > .test-environment/pairing.log 2>&1 &
