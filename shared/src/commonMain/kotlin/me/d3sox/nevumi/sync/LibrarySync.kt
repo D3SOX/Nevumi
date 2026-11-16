@@ -206,7 +206,8 @@ class LibrarySync(private val store: MusicStore, private val library: MusicLibra
             }
         }
         val recordedPlaylists = store.list<SyncPlaylist>("sync-playlists").associateBy { it.id }
-        val currentPlaylists = store.list<Playlist>("playlists").filter { it.server == null }
+        // Followed YouTube Music playlists stay on this device, whose songs stream from YouTube rather than from a shared library.
+        val currentPlaylists = store.list<Playlist>("playlists").filter { it.server == null && it.youTube == null }
         val playlists = currentPlaylists.map { playlist ->
             val previous = recordedPlaylists[playlist.id]
             val folderToken = playlist.rule?.folder?.let { folder ->

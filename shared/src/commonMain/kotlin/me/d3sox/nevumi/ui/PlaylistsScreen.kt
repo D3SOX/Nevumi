@@ -99,6 +99,7 @@ import me.d3sox.nevumi.resources.library_selected_songs_partial
 import me.d3sox.nevumi.resources.library_server_version
 import me.d3sox.nevumi.resources.library_smart
 import me.d3sox.nevumi.resources.library_smart_playlist
+import me.d3sox.nevumi.resources.library_youtube_playlist
 import me.d3sox.nevumi.resources.library_smart_playlist_hint
 import me.d3sox.nevumi.resources.library_sort_by
 import me.d3sox.nevumi.resources.library_unresolved_entries
@@ -164,6 +165,7 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         trackIds = collection.trackIds, describe = {
             listOfNotNull(countLabel(collection.trackIds.size, Res.plurals.songs),
                 if (collection.rule != null) stringResource(Res.string.library_smart_playlist) else null,
+                if (collection.youTube != null) stringResource(Res.string.library_youtube_playlist) else null,
                 if (collection.autoDownload) stringResource(Res.string.library_automatic_downloads) else null).joinToString(" · ")
         })
     fun collections(page: String?) = visiblePlaylists.filter { it.folder == page }.map(::entry) + visiblePlaylists.mapNotNull { playlist ->
@@ -232,13 +234,18 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
             val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
             val ordered = remember(playlist, catalog) { playlist.orderedTracks(catalog) }
             val server = state.server
-            val publishable = playlist.server == null && playlist.rule == null && server != null && controller.serverPlaylistPublishingAvailable &&
+            val publishable = playlist.server == null && playlist.rule == null && playlist.youTube == null && server != null && controller.serverPlaylistPublishingAvailable &&
                 playlist.trackIds.all { id -> catalog[id]?.sources?.any {
                     it.kind == SourceKind.SERVER && it.id.startsWith("server:${server.serverId}:")
                 } == true }
-            val editable = playlist.rule == null && playlist.server?.readOnly != true
+            val editable = playlist.rule == null && playlist.server?.readOnly != true && playlist.youTube == null
+            // A followed YouTube Music playlist catches up with YouTube Music each time it opens.
+            LaunchedEffect(playlist.id) { if (playlist.youTube != null) controller.refreshYouTubePlaylist(playlist.id) }
             val header: @Composable () -> Unit = {
-                    PlaylistHero(playlist, state, controller, ordered.map { it.value.id }, edit = { renaming = true }, delete = { deleting = true }, export = {
+                    PlaylistHero(playlist, state, controller, ordered.map { it.value.id }, edit = { renaming = true }, delete = {
+                        // Removing a followed playlist offers to undo it instead of asking first; YouTube Music keeps it either way.
+                        if (playlist.youTube != null) { controller.unfollowYouTubePlaylist(playlist.id); closePlaylist() } else deleting = true
+                    }, export = {
                         scope.launch {
                             fileBusy = true; fileMessage = null
                             try {
@@ -449,7 +456,7 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
                     val eligible = playlist.server == null || selected.all { id -> catalog[id]?.sources?.any {
                         it.kind == SourceKind.SERVER && it.id.startsWith("server:${playlist.server.serverId}:")
                     } == true }
-                    val editable = playlist.rule == null && playlist.server?.readOnly != true && eligible
+                    val editable = playlist.rule == null && playlist.server?.readOnly != true && playlist.youTube == null && eligible
                     val membershipDescription = stringResource(Res.string.library_playlist_membership, playlist.name)
                     val artworkDescription = stringResource(Res.string.library_playlist_artwork, playlist.name)
                     Row(indent.fillMaxWidth().triStateToggleable(checked, enabled = editable, role = Role.Checkbox,
@@ -468,6 +475,7 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
                             Text(row.label, style = MaterialTheme.typography.titleSmall)
                             Text(when {
                                 playlist.rule != null -> stringResource(Res.string.library_smart_playlist)
+                                playlist.youTube != null -> stringResource(Res.string.library_youtube_playlist)
                                 playlist.server?.readOnly == true -> stringResource(Res.string.library_read_only)
                                 !eligible -> stringResource(Res.string.library_only_server_songs)
                                 contained in 1 until selected.size -> stringResource(Res.string.library_selected_songs_partial, contained, selected.size)

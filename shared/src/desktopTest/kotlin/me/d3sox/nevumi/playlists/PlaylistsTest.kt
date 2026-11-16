@@ -14,6 +14,35 @@ import kotlinx.coroutines.flow.first
 
 class PlaylistsTest {
     @Test
+    fun aFollowedYouTubePlaylistTakesItsSongsAndNameOnlyFromYouTubeMusic() = runBlocking {
+        val directory = Files.createTempDirectory("followed-playlist")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            var now = 1_000L
+            val playlists = Playlists(store, clock = { now })
+            val link = me.d3sox.nevumi.youtube.YouTubeLink("VLPLmix")
+            val followed = playlists.follow(link, "Mix", "Fresh songs", listOf("first", "second"))
+            assertEquals(link, followed.youTube)
+            assertFailsWith<IllegalArgumentException> { playlists.append(followed.id, listOf("third")) }
+            assertFailsWith<IllegalArgumentException> { playlists.moveTrack(followed.id, 0, 1) }
+            assertFailsWith<IllegalArgumentException> { playlists.rename(followed.id, "Mine") }
+            assertFailsWith<IllegalArgumentException> { playlists.edit(followed.id, "Mine", "") }
+            assertFailsWith<IllegalArgumentException> { playlists.updateMembership(listOf("third"), mapOf(followed.id to true)) }
+            // Following again brings the same playlist up to date; nothing new leaves it as it was.
+            now = 2_000
+            assertEquals(followed, playlists.follow(link, "Mix", "Fresh songs", listOf("first", "second")))
+            val updated = playlists.follow(link, "Mix 2", "", listOf("second", "third"))
+            assertEquals(followed.id, updated.id)
+            assertEquals(listOf("second", "third"), playlists.get(followed.id)!!.trackIds)
+            assertEquals("Mix 2", updated.name)
+            assertEquals(2_000, updated.updatedAt)
+            assertEquals(1, playlists.all().size)
+            playlists.delete(followed.id)
+            assertEquals(null, playlists.followed(link))
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun addingSeveralSongsKeepsTheirOrderAndRepeatedOccurrences() = runBlocking {
         val directory = Files.createTempDirectory("batch-playlist")
         val store = openMusicStore(directory.resolve("library.db").toString())

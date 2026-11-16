@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -80,6 +81,10 @@ import me.d3sox.nevumi.resources.library_server_playlist
 import me.d3sox.nevumi.resources.library_shuffle_playlist
 import me.d3sox.nevumi.resources.library_smart_playlist
 import me.d3sox.nevumi.resources.library_smart_playlist_in_folder
+import me.d3sox.nevumi.resources.library_youtube_playlist
+import me.d3sox.nevumi.resources.library_youtube_playlist_follows
+import me.d3sox.nevumi.resources.sources_open_on_youtube_music
+import me.d3sox.nevumi.resources.sources_remove_from_library
 import me.d3sox.nevumi.resources.library_use_generated_cover
 import me.d3sox.nevumi.resources.library_use_song_artwork
 import me.d3sox.nevumi.resources.recently_added
@@ -122,7 +127,7 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
                 Modifier.size(200.dp).align(Alignment.Center).semantics { contentDescription = artworkDescription })
         }
         Text(playlist.title, style = MaterialTheme.typography.headlineMedium)
-        val kind = playlist.folder?.let { stringResource(if (playlist.rule == null) Res.string.library_playlist_in_folder else Res.string.library_smart_playlist_in_folder, it) }
+        val kind = if (playlist.youTube != null) stringResource(Res.string.library_youtube_playlist) else playlist.folder?.let { stringResource(if (playlist.rule == null) Res.string.library_playlist_in_folder else Res.string.library_smart_playlist_in_folder, it) }
             ?: stringResource(if (playlist.rule == null) Res.string.library_playlist else Res.string.library_smart_playlist)
         Text("$kind · ${countLabel(playlist.trackIds.size, Res.plurals.songs)}",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -135,7 +140,13 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
                     fun close(action: () -> Unit) { options = false; action() }
                     QueueActionMenuItems(orderedIds, controller) { options = false }
                     HorizontalDivider()
-                    if (playlist.server?.canEditMetadata(state.server) != false) {
+                    val youTube = playlist.youTube
+                    if (youTube != null) {
+                        val browser = LocalUriHandler.current
+                        AppMenuItem({ Text(stringResource(Res.string.sources_open_on_youtube_music)) }, { close { runCatching { browser.openUri(youTube.url) } } },
+                            leadingIcon = { Icon(AppIcon.OPEN_EXTERNAL.vector, null) })
+                        AppMenuItem({ Text(stringResource(Res.string.sources_remove_from_library)) }, { close(delete) }, leadingIcon = { Icon(AppIcon.REMOVE.vector, null) })
+                    } else if (playlist.server?.canEditMetadata(state.server) != false) {
                         AppMenuItem({ Text(stringResource(Res.string.library_edit_playlist)) }, { close(edit) }, leadingIcon = { Icon(AppIcon.EDIT.vector, null) })
                         AppMenuItem({ Text(stringResource(Res.string.library_delete_playlist)) }, { close(delete) }, leadingIcon = { Icon(AppIcon.REMOVE.vector, null) })
                     }
@@ -146,7 +157,8 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
                     if (playlist.conflict != null) AppMenuItem({ Text(stringResource(Res.string.library_resolve_conflict)) }, { close(resolve) }, leadingIcon = { Icon(AppIcon.UNDO.vector, null) })
                 }
             }
-            IconToggleButton(playlist.autoDownload, { controller.setPlaylistDownload(playlist.id, it) },
+            // Songs streamed from YouTube are saved one by one from their own menus instead.
+            if (playlist.youTube == null) IconToggleButton(playlist.autoDownload, { controller.setPlaylistDownload(playlist.id, it) },
                 modifier = Modifier.semantics {
                     contentDescription = autoDownloadDescription
                     stateDescription = autoDownloadState
@@ -193,6 +205,8 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
                 Icon(AppIcon.PLAY.vector, stringResource(Res.string.library_play_playlist), Modifier.size(32.dp))
             }
         }
+        if (playlist.youTube != null) Text(stringResource(Res.string.library_youtube_playlist_follows),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (playlist.server != null) Text(stringResource(if (playlist.pendingSync) Res.string.library_changes_waiting_to_sync else Res.string.library_server_playlist),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
