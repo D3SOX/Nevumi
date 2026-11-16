@@ -232,7 +232,10 @@ private class HeldAudioServer(private val audio: ByteArray) : AutoCloseable {
             return
         }
         val song = "{\"id\":\"download\",\"title\":\"Notification download\",\"suffix\":\"flac\",\"size\":${audio.size}}"
+        // Connecting asks what else the server offers; this fixture answers like a server without radio, podcasts or shares.
+        val unsupported = listOf("getUser.view", "getInternetRadioStations.view", "getPodcasts.view", "getShares.view")
         val body = when {
+            unsupported.any { uri.path.endsWith(it) } -> null
             uri.path.endsWith("ping.view") -> "\"type\":\"fixture\""
             uri.path.endsWith("getSong.view") -> "\"song\":$song"
             uri.path.endsWith("search3.view") -> if (uri.query.contains("songOffset=0")) "\"searchResult3\":{\"song\":[$song]}"
@@ -240,7 +243,8 @@ private class HeldAudioServer(private val audio: ByteArray) : AutoCloseable {
             uri.path.endsWith("getPlaylists.view") -> "\"playlists\":{}"
             else -> error("Unexpected fixture endpoint ${uri.path}")
         }
-        val json = "{\"subsonic-response\":{\"status\":\"ok\",$body}}".toByteArray()
+        val json = (if (body == null) "{\"subsonic-response\":{\"status\":\"failed\",\"error\":{\"code\":70,\"message\":\"Not found\"}}}"
+            else "{\"subsonic-response\":{\"status\":\"ok\",$body}}").toByteArray()
         output.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${json.size}\r\nConnection: close\r\n\r\n".toByteArray())
         output.write(json); output.flush()
     }
