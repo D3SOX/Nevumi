@@ -31,7 +31,7 @@ android {
         keyAlias = "androiddebugkey"
         keyPassword = "android"
     }
-    externalNativeBuild { cmake { path = rootProject.file("native/CMakeLists.txt"); version = "3.22.1" } }
+    externalNativeBuild { cmake { path = rootProject.file("native/CMakeLists.txt"); version = "4.1.2" } }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = true
