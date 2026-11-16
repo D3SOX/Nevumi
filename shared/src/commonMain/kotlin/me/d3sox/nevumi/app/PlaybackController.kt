@@ -477,23 +477,25 @@ class PlaybackController internal constructor(private val context: ControllerCon
         // Turning YouTube off in Settings also stops this device from streaming the YouTube songs still queued.
         val streams = youTube != null && context.state.value.preferences.youTube
         val sources = track.sources.filterNot { it.id in failedSources[entry.id].orEmpty() || it.kind == SourceKind.YOUTUBE && !streams }.map { source ->
-            if (source.kind == SourceKind.SERVER || source.kind == SourceKind.YOUTUBE) source
+            if (source.kind.streams) source
             else source.copy(available = source.available && ((!checkAllSources && entry.id != snapshot.currentEntryId) || withContext(Dispatchers.IO) { sourceAccessible(source.location) }))
         }
         var source = SourceResolver.resolve(sources, context.state.value.preferences.sourcePriority) ?: return null
-        val location = if (source.kind == SourceKind.SERVER) {
+        // Server songs, stations and episodes belong to one server, so only the connected server's sources can play.
+        fun SourceKind.onServer() = this == SourceKind.SERVER || this == SourceKind.RADIO || this == SourceKind.PODCAST
+        val location = if (source.kind.onServer()) {
             val connection = lookup.connection()
             val connectedSources = sources.filter { candidate ->
-                candidate.kind != SourceKind.SERVER || connection != null && candidate.id.startsWith("server:${connection.serverId}:")
+                !candidate.kind.onServer() || connection != null && candidate.id.startsWith("${candidate.kind.name.lowercase()}:${connection.serverId}:")
             }
             source = SourceResolver.resolve(connectedSources, context.state.value.preferences.sourcePriority) ?: return null
             when (source.kind) {
-                SourceKind.SERVER -> requireNotNull(connection).streamUrl(source.location)
+                SourceKind.SERVER, SourceKind.PODCAST -> requireNotNull(connection).streamUrl(source.location)
                 SourceKind.YOUTUBE -> requireNotNull(youTube).playbackLocation(source.location)
                 else -> source.location
             }
         } else if (source.kind == SourceKind.YOUTUBE) requireNotNull(youTube).playbackLocation(source.location) else source.location
-        return PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id)
+        return PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id, live = source.kind == SourceKind.RADIO)
     }
 
     private suspend fun publishSeek(positionMs: Long) {

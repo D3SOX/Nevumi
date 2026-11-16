@@ -26,6 +26,8 @@ python scripts/test-listenbrainz.py > .test-environment/listenbrainz.log 2>&1 &
 services+=("$!")
 python scripts/test-sc-gate.py > .test-environment/sc-gate.log 2>&1 &
 services+=("$!")
+python scripts/test-radio-stream.py > .test-environment/radio-stream.log 2>&1 &
+services+=("$!")
 if [[ "$mode" == desktop ]]; then
     # Hosted runners have no desktop session or unlocked credential collection.
     keyring_environment="$(printf 'nevumi-ci-only' | gnome-keyring-daemon --unlock --components=secrets)"

@@ -76,6 +76,10 @@ import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Podcasts
+import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Sensors
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.LibraryMusic
@@ -266,7 +270,11 @@ internal enum class AppIcon(val vector: ImageVector) {
     FOLLOW(Icons.Rounded.PersonAdd),
     FOLLOWING(Icons.Rounded.HowToReg),
     NOTIFICATIONS(Icons.Rounded.Notifications),
-    DESKTOP(Icons.Rounded.DesktopWindows);
+    DESKTOP(Icons.Rounded.DesktopWindows),
+    RADIO(Icons.Rounded.Radio),
+    PODCAST(Icons.Rounded.Podcasts),
+    LIVE(Icons.Rounded.Sensors),
+    SHARE(Icons.Rounded.Share);
 }
 
 internal fun me.d3sox.nevumi.queue.QueueAction.icon() = when (this) {

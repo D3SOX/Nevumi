@@ -587,7 +587,8 @@ private fun <T> SettingChoice(label: String, key: StringResource?, icon: AppIcon
             me.d3sox.nevumi.soundcloud.SoundCloudDestination.SERVER -> AppIcon.SERVER
             me.d3sox.nevumi.soundcloud.SoundCloudDestination.DEVICE -> AppIcon.DEVICE
         }
-        is SourceKind -> when (value) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD; SourceKind.YOUTUBE -> AppIcon.YOUTUBE }
+        is SourceKind -> when (value) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD; SourceKind.YOUTUBE -> AppIcon.YOUTUBE
+            SourceKind.RADIO -> AppIcon.RADIO; SourceKind.PODCAST -> AppIcon.PODCAST }
         is List<*> -> when (value.firstOrNull()) { SourceKind.LOCAL -> AppIcon.DEVICE; SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD; SourceKind.SERVER -> AppIcon.CLOUD; else -> null }
         is Boolean -> if (key == Res.string.download_network) { if (value) AppIcon.NETWORK else AppIcon.WIFI }
             else if (value) AppIcon.CHECK else AppIcon.CLOSE

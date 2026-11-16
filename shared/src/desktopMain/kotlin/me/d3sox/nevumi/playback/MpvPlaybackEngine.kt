@@ -132,7 +132,10 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                     if (!closed) {
                         drainEvents()
                         if (pendingLoad != null) return@synchronized
-                        val duration = doubleProperty("duration")
+                        val failure = failedLoad
+                        val currentTrack = failure?.track ?: tracks.getOrNull(longProperty("playlist-pos").toInt())
+                        // mpv estimates the length of the stream it has buffered so far, which a live stream does not have.
+                        val duration = if (currentTrack?.live == true) 0.0 else doubleProperty("duration")
                         val idle = flagProperty("idle-active")
                         val paused = flagProperty("pause")
                         val audioPts = doublePropertyOrNull("audio-pts")
@@ -152,8 +155,6 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                             (duration <= 0 || pausedSeekPosition == null || pausedSeekPosition!! / 1_000.0 >= duration - 0.002)
                         if (!paused) pausedSeekPosition = null
                         busy = !paused || playWhenReady || System.nanoTime() - commandedAtNanos < 500_000_000L
-                        val failure = failedLoad
-                        val currentTrack = failure?.track ?: tracks.getOrNull(longProperty("playlist-pos").toInt())
                         if (repeatPlays != null && currentTrack != null) {
                             if (repeatedEntryId == null) repeatedEntryId = currentTrack.entryId
                             if (currentTrack.entryId != repeatedEntryId || atEnd) {
@@ -184,7 +185,10 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
                                 AudioInfo(it, longProperty("current-tracks/audio/demux-bitrate").takeIf { bits -> bits > 0 }
                                     ?: doubleProperty("audio-bitrate").toLong().takeIf { bits -> bits > 0 },
                                     longProperty("audio-params/samplerate").toInt().takeIf { rate -> rate > 0 })
-                            } else null)
+                            } else null,
+                            // mpv reads the ICY titles of an internet radio stream into its metadata.
+                            streamTitle = if (failure == null && currentTrack != null)
+                                stringProperty("metadata/by-key/icy-title")?.trim()?.takeIf { it.isNotEmpty() } else null)
                     }
                 } }
                 catch (cancelled: CancellationException) { throw cancelled }

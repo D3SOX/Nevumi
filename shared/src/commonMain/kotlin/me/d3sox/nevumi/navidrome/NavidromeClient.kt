@@ -814,6 +814,94 @@ class NavidromeClient(
         }
     }
 
+    // Internet radio, podcasts and shares are optional too: each list is null when the server does not offer it.
+
+    suspend fun radioStations(): List<RadioStation>? = serverRequest {
+        optionalCatalogueRequest("getInternetRadioStations")?.let(::parseRadioStations)
+    }
+
+    suspend fun createRadioStation(name: String, streamUrl: String, homepageUrl: String = "") {
+        request("createInternetRadioStation", radioParameters(name, streamUrl, homepageUrl))
+    }
+
+    suspend fun updateRadioStation(id: String, name: String, streamUrl: String, homepageUrl: String = "") {
+        request("updateInternetRadioStation", listOf("id" to id) + radioParameters(name, streamUrl, homepageUrl))
+    }
+
+    suspend fun deleteRadioStation(id: String) { request("deleteInternetRadioStation", listOf("id" to id)) }
+
+    private fun radioParameters(name: String, streamUrl: String, homepageUrl: String): List<Pair<String, String>> {
+        fun web(address: String) = address.startsWith("http://", ignoreCase = true) || address.startsWith("https://", ignoreCase = true)
+        require(name.isNotBlank()) { "Name the station" }
+        require(web(streamUrl.trim())) { "Enter the stream's HTTP or HTTPS address" }
+        require(homepageUrl.isBlank() || web(homepageUrl.trim())) { "Enter the homepage's HTTP or HTTPS address" }
+        return buildList {
+            add("streamUrl" to streamUrl.trim()); add("name" to name.trim())
+            if (homepageUrl.isNotBlank()) add("homepageUrl" to homepageUrl.trim())
+        }
+    }
+
+    /** Every podcast channel with its episodes, newest first. */
+    suspend fun podcasts(): List<PodcastChannel>? = serverRequest {
+        optionalCatalogueRequest("getPodcasts", listOf("includeEpisodes" to "true"))?.let(::parsePodcasts)
+    }
+
+    suspend fun newestPodcasts(count: Int = 20, channels: List<PodcastChannel> = emptyList()): List<PodcastEpisode>? = serverRequest {
+        optionalCatalogueRequest("getNewestPodcasts", listOf("count" to count.toString()))?.let { parseNewestPodcasts(it, channels) }
+    }
+
+    /** Subscribes to the podcast feed at [url]; the server reads the feed and lists its episodes. */
+    suspend fun subscribePodcast(url: String) {
+        require(url.trim().startsWith("http://", ignoreCase = true) || url.trim().startsWith("https://", ignoreCase = true)) {
+            "Enter the feed's HTTP or HTTPS address"
+        }
+        request("createPodcastChannel", listOf("url" to url.trim()))
+    }
+
+    suspend fun deletePodcastChannel(id: String) { request("deletePodcastChannel", listOf("id" to id)) }
+
+    /** Asks the server to check every channel for new episodes. */
+    suspend fun refreshPodcasts() { request("refreshPodcasts") }
+
+    /** Asks the server to download an episode, which it streams once the download completes. */
+    suspend fun downloadPodcastEpisode(id: String) { request("downloadPodcastEpisode", listOf("id" to id)) }
+
+    suspend fun deletePodcastEpisode(id: String) { request("deletePodcastEpisode", listOf("id" to id)) }
+
+    /** The account's share links; null where the server cannot share, such as Navidrome with sharing turned off. */
+    suspend fun shares(): List<ServerShare>? = serverRequest { optionalCatalogueRequest("getShares")?.let(::parseShares) }
+
+    /** Creates a public link to [ids], which are songs, or a single album or playlist. */
+    suspend fun createShare(ids: List<String>, description: String = ""): ServerShare = serverRequest {
+        require(ids.isNotEmpty()) { "Choose something to share" }
+        val response = request("createShare", ids.map { "id" to it } + listOfNotNull(description.takeIf { it.isNotBlank() }?.let { "description" to it }))
+        parseShares(response).firstOrNull() ?: throw NavidromeRequestException("The music server created no share link")
+    }
+
+    suspend fun deleteShare(id: String) { request("deleteShare", listOf("id" to id)) }
+
+    /** Saved playback positions by song or episode stream ID, which servers keep so any client can resume. */
+    suspend fun bookmarks(): Map<String, Long>? = serverRequest {
+        optionalCatalogueRequest("getBookmarks")?.let(::parseBookmarks)
+    }
+
+    suspend fun saveBookmark(id: String, positionMs: Long) {
+        require(positionMs >= 0) { "The position cannot be negative" }
+        request("createBookmark", listOf("id" to id, "position" to positionMs.toString()))
+    }
+
+    suspend fun deleteBookmark(id: String) {
+        // A bookmark that is already gone is just as deleted.
+        try { request("deleteBookmark", listOf("id" to id)) } catch (missing: NavidromeException) { if (missing.code != 70) throw missing }
+    }
+
+    /** What this account may do; servers that do not answer are assumed to allow everything they offer. */
+    suspend fun roles(): ServerRoles = serverRequest {
+        // Some servers only let administrators look up accounts.
+        try { optionalCatalogueRequest("getUser", listOf("username" to username))?.let(::parseRoles) ?: ServerRoles() }
+        catch (_: NavidromeException) { ServerRoles() }
+    }
+
     // Discovery: these endpoints are optional, so each returns null when the server does not offer it.
 
     /** Finds the server's ID for the artist named [name], falling back to the artist of one of their songs, [songId]. */

@@ -1,6 +1,8 @@
 package me.d3sox.nevumi.history
 
 import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.isPodcastEpisode
+import me.d3sox.nevumi.library.isRadio
 import me.d3sox.nevumi.library.TrackMetadata
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.playback.PlaybackStatus
@@ -98,7 +100,8 @@ class ListeningHistory(private val store: MusicStore, private val library: Music
         }
         for ((id, current) in observed) {
             if (id !in sessions && enabled && current.playing && !current.ended && current.error == null) {
-                library.findTrack(requireNotNull(current.trackId))?.let { track ->
+                // A station never ends and an episode is no song, so neither counts as a listen or a scrobble.
+                library.findTrack(requireNotNull(current.trackId))?.takeUnless { it.isRadio || it.isPodcastEpisode }?.let { track ->
                     val event = Listen(Uuid.random().toString(), track.id, id, wallClock(), track.metadata.copy(folder = ""),
                         durationMs = current.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs)
                     sessions[id] = Recording(persist(event), current, now, now)

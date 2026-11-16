@@ -253,7 +253,7 @@ class MusicLibrary(private val store: MusicStore) {
         val counterpart = when (source.kind) {
             SourceKind.LOCAL -> SourceKind.SERVER
             SourceKind.SERVER -> SourceKind.LOCAL
-            SourceKind.DOWNLOAD, SourceKind.YOUTUBE -> return null
+            SourceKind.DOWNLOAD, SourceKind.YOUTUBE, SourceKind.RADIO, SourceKind.PODCAST -> return null
         }
         fun identified(value: TrackMetadata) = value.recordingId.matches(musicBrainzId) && value.releaseId.matches(musicBrainzId) &&
             value.trackNumber > 0 && value.discNumber > 0 && value.durationMs > 0
@@ -325,7 +325,8 @@ class MusicLibrary(private val store: MusicStore) {
         store.put("youtube-cleanup", "maintenance", now)
         // A favorite or rating is kept in the song itself. A play or a saved playlist imports its songs a moment before it refers to them,
         // so songs from the last day wait for a later cleanup.
-        val candidates = loadTracks().filter { track -> track.sources.all { it.kind == SourceKind.YOUTUBE } && !track.favorite && track.rating == 0 &&
+        // Radio stations and podcast episodes that were played are kept outside the library the same way.
+        val candidates = loadTracks().filter { track -> !track.inLibrary && !track.favorite && track.rating == 0 &&
             now - track.addedAt >= 24 * 3_600_000L }
         if (candidates.isEmpty()) return@transaction emptySet()
         val referenced = HashSet<String>()
