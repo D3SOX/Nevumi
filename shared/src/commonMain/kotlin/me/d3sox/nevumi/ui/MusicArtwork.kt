@@ -26,6 +26,9 @@ internal expect fun decodeArtwork(bytes: ByteArray, maxDimension: Int): ImageBit
 /** A cover as far as it is read: [loading] until [image] is decoded, which stays null for a missing or unreadable cover. */
 internal data class ArtworkImage(val image: ImageBitmap?, val loading: Boolean)
 
+/** True at startup until the app knows which covers it has, so a slot without a cover path shows as loading rather than missing. */
+internal val LocalArtworkPending = compositionLocalOf { false }
+
 @Composable
 internal fun rememberArtwork(path: String?, maxDimension: Int = 256): ImageBitmap? = rememberArtworkImage(path, maxDimension).image
 
@@ -51,7 +54,7 @@ internal fun MusicArtwork(path: String?, title: String, description: String? = n
     Box(Modifier.fillMaxSize()) {
         val artwork = rememberArtworkImage(path, maxDimension)
         if (artwork.image != null) Image(artwork.image, description, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else ArtworkPlaceholder(artwork.loading || path == null && downloading, AppIcon.MUSIC, description, Modifier.fillMaxSize(.45f))
+        else ArtworkPlaceholder(artwork.loading || path == null && (downloading || LocalArtworkPending.current), AppIcon.MUSIC, description, Modifier.fillMaxSize(.45f))
     }
 }
 

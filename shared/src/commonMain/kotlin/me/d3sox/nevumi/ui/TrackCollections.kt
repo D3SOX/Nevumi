@@ -78,7 +78,7 @@ internal fun CollectionArtwork(path: String?, title: String, icon: AppIcon, modi
             }
         }
         else if (path != null) MusicArtwork(path, title)
-        else Box(contentAlignment = Alignment.Center) { Icon(icon.vector, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer) }
+        else ArtworkPlaceholder(LocalArtworkPending.current, icon, null, Modifier.size(28.dp))
         // Artwork hides the collection's own icon, so a corner badge keeps it recognizable, such as a folder among playlists.
         // The top start cell always has a cover because covers come first, so the badge never hides a placeholder.
         if (badge != null && (path != null || covers.size >= 4)) BoxWithConstraints(Modifier.fillMaxSize()) {
