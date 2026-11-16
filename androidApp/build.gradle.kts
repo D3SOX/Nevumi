@@ -9,7 +9,7 @@ plugins {
 android {
     namespace = "me.d3sox.nevumi"
     compileSdk = 37
-    ndkVersion = "28.2.13676358"
+    ndkVersion = "30.0.16248370"
     defaultConfig {
         applicationId = "me.d3sox.nevumi"
         minSdk = 31
