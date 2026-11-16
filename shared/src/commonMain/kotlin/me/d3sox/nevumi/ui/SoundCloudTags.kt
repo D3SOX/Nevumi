@@ -145,6 +145,8 @@ internal fun DownloadTagEditor(review: DownloadTagReview, dismiss: () -> Unit) {
         dismiss()
     }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    // Registered after the page's back gesture, so a save in progress keeps the editor open.
+    if (busy) PlatformBackHandler {}
     SettingsScreen(onDismissRequest = { if (!busy) dismiss() }, title = { Text(stringResource(Res.string.sources_check_the_tags)) }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(review.intro)

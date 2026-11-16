@@ -39,12 +39,11 @@ internal fun AboutNevumi(dismiss: () -> Unit) {
     LaunchedEffect(showLicense) {
         if (showLicense) license = Res.readBytes("files/LICENSE").decodeToString()
     }
-    if (showLicense) {
+    AnimatedNavigation(showLicense, false, canGoBack = showLicense, onBack = { showLicense = false }, depth = { if (it) 1 else 0 }) { licenseShown ->
+    if (licenseShown) {
         SettingsScreen(onDismissRequest = { showLicense = false }, title = { Text(stringResource(Res.string.settings_license)) },
             text = { Text(license, Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) })
-        return
-    }
-    SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.about_nevumi)) }, text = {
+    } else SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.about_nevumi)) }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Image(painterResource(Res.drawable.nevumi_logo), stringResource(Res.string.settings_nevumi_logo), Modifier.size(144.dp))
@@ -62,4 +61,5 @@ internal fun AboutNevumi(dismiss: () -> Unit) {
             }
         }
     }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })
+    }
 }
