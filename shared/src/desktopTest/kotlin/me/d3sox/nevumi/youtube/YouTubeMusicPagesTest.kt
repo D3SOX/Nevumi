@@ -109,6 +109,14 @@ class YouTubeMusicPagesTest {
         assertNotNull(page.next)
     }
 
+    @Test fun aPlaylistSearchFindsPlaylistsWithTheirAuthorAndContinues() {
+        val page = YouTubeMusicPages.searchResults(response("playlists"))
+        assertEquals(YouTubeCollection(YouTubeLink("VLPLOzDu-MXXLlg5384VEAWMzgXSdU8HFwbS"), YouTubeCollectionKind.PLAYLIST, "lofi songs for slow days",
+            "the bootleg boy · 350k views", (page.results[1] as YouTubeCollection).artworkUrl), page.results[1])
+        assertEquals(3, page.results.size)
+        assertNotNull(page.next)
+    }
+
     @Test fun aVideosArtistAndASongsAlbumAreReadFromTheQueueItStarts() {
         val response = response("next")
         assertEquals(YouTubeCollection(YouTubeLink("UCRr1xG_2WIDs18a6cIiCxeA"), YouTubeCollectionKind.ARTIST, "Daft Punk"),
