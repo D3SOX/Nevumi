@@ -69,9 +69,24 @@ internal fun TrackCollections(collections: List<TrackCollection>, tab: LibraryTa
 }
 
 @Composable
-internal fun CollectionArtwork(path: String?, title: String, icon: AppIcon, modifier: Modifier) {
+internal fun CollectionArtwork(path: String?, title: String, icon: AppIcon, modifier: Modifier, covers: List<String?> = emptyList(), badge: AppIcon? = null) {
     Surface(modifier, color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
-        if (path != null) MusicArtwork(path, title)
+        // Four covers make a 2×2 mosaic; a cell without artwork shows the music placeholder.
+        if (covers.size >= 4) Column {
+            covers.take(4).chunked(2).forEach { row ->
+                Row(Modifier.weight(1f)) { row.forEach { cover -> Box(Modifier.weight(1f).fillMaxHeight()) { MusicArtwork(cover, title) } } }
+            }
+        }
+        else if (path != null) MusicArtwork(path, title)
         else Box(contentAlignment = Alignment.Center) { Icon(icon.vector, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer) }
+        // Artwork hides the collection's own icon, so a corner badge keeps it recognizable, such as a folder among playlists.
+        // The top start cell always has a cover because covers come first, so the badge never hides a placeholder.
+        if (badge != null && (path != null || covers.size >= 4)) BoxWithConstraints(Modifier.fillMaxSize()) {
+            val size = (maxWidth * .3f).coerceIn(18.dp, 36.dp)
+            Surface(Modifier.align(Alignment.TopStart).padding(maxWidth * .05f).size(size), shape = RoundedCornerShape(size / 3),
+                color = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(badge.vector, null, Modifier.padding(size * .2f), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+        }
     }
 }

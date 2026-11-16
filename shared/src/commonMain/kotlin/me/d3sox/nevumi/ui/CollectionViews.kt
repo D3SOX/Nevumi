@@ -82,7 +82,7 @@ import org.jetbrains.compose.resources.PluralStringResource
  */
 internal data class CollectionItem(val id: String, val title: String, val subtitle: String,
     val artwork: String?, val icon: AppIcon, val songCount: Int = 0, val artist: String = "", val year: Int = 0, val recentAt: Long = 0,
-    val trackIds: List<String> = emptyList(), val describe: (@Composable () -> String)? = null)
+    val trackIds: List<String> = emptyList(), val describe: (@Composable () -> String)? = null, val covers: List<String?> = emptyList())
 
 /** How a collection tab names one of its collections and counts them, without deriving singulars from the tab label. */
 internal class CollectionNouns(val kind: StringResource, val count: PluralStringResource, val options: StringResource, val scroll: StringResource)
@@ -110,6 +110,11 @@ internal fun CollectionLayout.comparator(): Comparator<CollectionItem> {
     }.thenBy { it.title.lowercase() }
     return if (descending) comparator.reversed() else comparator
 }
+
+/** Playlist folders sit among playlists, so their artwork keeps a folder badge. */
+@Composable
+private fun CollectionArtwork(entry: CollectionItem, modifier: Modifier) = CollectionArtwork(entry.artwork, entry.title, entry.icon, modifier,
+    entry.covers, AppIcon.FOLDER.takeIf { entry.id.startsWith(PLAYLIST_FOLDER_PREFIX) })
 
 @Composable
 internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, state: AppState, controller: MusicController,
@@ -207,7 +212,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
             items(sortedEntries, key = { it.id }) { entry ->
                 ReorderableItem(reorder, entry.id) { _ ->
                     ListItem(headlineContent = { Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        leadingContent = { CollectionArtwork(entry.artwork, entry.title, entry.icon, Modifier.size(40.dp)) },
+                        leadingContent = { CollectionArtwork(entry, Modifier.size(40.dp)) },
                         trailingContent = { DragHandle(entry) })
                 }
             }
@@ -216,7 +221,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                 CollectionActionHost(entry, tab, state, controller, { open(entry.id) }) { menu ->
                 ListItem(modifier = Modifier.combinedClickable(onClick = { open(entry.id) }, onLongClick = menu),
                     headlineContent = { Text(entry.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                    leadingContent = { CollectionArtwork(entry.artwork, entry.title, entry.icon, Modifier.size(48.dp)) },
+                    leadingContent = { CollectionArtwork(entry, Modifier.size(48.dp)) },
                     supportingContent = { Text(entry.describe?.invoke() ?: entry.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(nouns.options, entry.title), onClick = menu) })
                 }
@@ -228,7 +233,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                 ElevatedCard(modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
                     .combinedClickable(onClick = { open(entry.id) }, onLongClick = menu)) {
                     Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CollectionArtwork(entry.artwork, entry.title, entry.icon, Modifier.fillMaxWidth().aspectRatio(1f))
+                        CollectionArtwork(entry, Modifier.fillMaxWidth().aspectRatio(1f))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(entry.title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(nouns.options, entry.title), onClick = menu)
