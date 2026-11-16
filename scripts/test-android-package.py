@@ -63,7 +63,9 @@ class AndroidPackageTest(unittest.TestCase):
                     adb("shell", "uiautomator", "dump", "/data/local/tmp/nevumi-package-ui.xml")
                     return ET.fromstring(adb("shell", "cat", "/data/local/tmp/nevumi-package-ui.xml"))
                 def click(label, last=False):
-                    deadline = time.monotonic() + 15
+                    # A loaded emulator can take seconds per UI dump, which leaves time for only a few swipes towards
+                    # About Nevumi at the end of Settings.
+                    deadline = time.monotonic() + 45
                     while time.monotonic() < deadline:
                         root = tree()
                         # Answer permission prompts, and "isn't responding" dialogs that slow emulators show for system apps.
