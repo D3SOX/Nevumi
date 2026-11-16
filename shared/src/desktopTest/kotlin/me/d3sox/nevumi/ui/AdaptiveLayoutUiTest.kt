@@ -28,9 +28,11 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class AdaptiveLayoutUiTest {
     private var width by mutableStateOf(400.dp)
+    private var height by mutableStateOf(800.dp)
 
     private fun withApp(startWidth: Dp, test: ComposeUiTest.(MusicController, List<Track>) -> Unit) {
         width = startWidth
+        height = 800.dp
         val directory = Files.createTempDirectory("adaptive-layout-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
@@ -40,7 +42,7 @@ class AdaptiveLayoutUiTest {
         try {
             // Large enough for the widest layout, so each test's box sets the space the app gets.
             runSkikoComposeUiTest(size = Size(1400f, 900f)) {
-                setContent { Box(Modifier.size(width, 800.dp)) { MusicPlayerApp(controller) } }
+                setContent { Box(Modifier.size(width, height)) { MusicPlayerApp(controller) } }
                 waitForLibrary(controller)
                 test(controller, tracks)
             }
@@ -61,6 +63,15 @@ class AdaptiveLayoutUiTest {
         assertTrue(navigation.top >= pager.bottom, "The bottom bar sits below the library")
         assertEquals(with(density) { 400.dp.toPx() }, navigation.width, 1f)
         onNodeWithTag("mini-player").assertIsDisplayed()
+        onNodeWithTag("now-playing-pane").assertDoesNotExist()
+    }
+
+    @Test fun shortWideWindowsSuchAsPhonesInLandscapeKeepTheBottomBar() = withApp(900.dp) { controller, tracks ->
+        height = 420.dp
+        play(controller, tracks)
+        val navigation = bounds("library-navigation")
+        assertTrue(navigation.top >= bounds("library-pager").bottom, "The bottom bar sits below the library")
+        assertEquals(with(density) { 900.dp.toPx() }, navigation.width, 1f)
         onNodeWithTag("now-playing-pane").assertDoesNotExist()
     }
 

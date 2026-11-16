@@ -21,11 +21,15 @@ private val NowPlayingPaneMaxWidth = 440.dp
 private val NavigationRailWidth = 80.dp
 /** The pane appears once the rail, the narrowest pane and a medium-width library fit side by side. */
 private val ExpandedWindowWidth = NavigationRailWidth + NowPlayingPaneMinWidth + MediumWindowWidth
-/** Below Material's compact height the pane could not fit the artwork above the controls. */
-private val ExpandedWindowHeight = 480.dp
+/**
+ * Material's compact height. Below it the pane could not fit the artwork above the controls, and a rail would fit fewer pages than
+ * the wide bottom bar of a phone in landscape.
+ */
+private val CompactWindowHeight = 480.dp
 
 internal fun windowLayout(width: Dp, height: Dp) = when {
-    width >= ExpandedWindowWidth && height >= ExpandedWindowHeight -> WindowLayout.EXPANDED
+    height < CompactWindowHeight -> WindowLayout.COMPACT
+    width >= ExpandedWindowWidth -> WindowLayout.EXPANDED
     width >= MediumWindowWidth -> WindowLayout.MEDIUM
     else -> WindowLayout.COMPACT
 }
