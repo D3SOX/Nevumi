@@ -2,6 +2,7 @@ package me.d3sox.nevumi.app
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import me.d3sox.nevumi.backup.BackupSection
 import me.d3sox.nevumi.backup.MusicBackup
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
@@ -81,7 +82,11 @@ class BackupControllerTest {
 
             playlists.delete(playlists.all().single().id)
             MusicPreferences(store).update { it.copy(themeMode = ThemeMode.LIGHT) }
-            assertEquals(Res.string.backup_notice_restored, notice { player.backupController.restore(files) }.message)
+            player.backupController.open(files).join()
+            val opened = assertNotNull(player.backupController.status.value.opened)
+            assertEquals(setOf(BackupSection.SETTINGS, BackupSection.PLAYLISTS), opened.sections)
+            assertEquals(Res.string.backup_notice_restored, notice { player.backupController.restore(opened.sections) }.message)
+            assertNull(player.backupController.status.value.opened)
             val summary = assertNotNull(player.backupController.status.value.summary)
             assertEquals(1 to true, summary.playlistsAdded to summary.settings)
             assertEquals(ThemeMode.DARK, player.state.value.preferences.themeMode)
@@ -93,7 +98,8 @@ class BackupControllerTest {
             player.backupController.dismissSummary()
             assertNull(player.backupController.status.value.summary)
 
-            player.backupController.restore(MemoryFiles("""{"format":"nevumi-backup","version":9,"createdAt":0}""")).join()
+            player.backupController.open(MemoryFiles("""{"format":"nevumi-backup","version":9,"createdAt":0}""")).join()
+            assertNull(player.backupController.status.value.opened)
             assertEquals("This backup uses format 9, which this version of Nevumi cannot read. Update Nevumi and try again.", player.state.value.error)
             assertNull(player.backupController.status.value.summary)
         } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }

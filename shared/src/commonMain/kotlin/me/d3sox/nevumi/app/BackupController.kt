@@ -28,8 +28,14 @@ import me.d3sox.nevumi.ui.BackupFiles
 import org.jetbrains.compose.resources.getString
 import kotlin.time.Clock
 
-/** Whether a backup is being written or restored, and what the last restore changed until it is dismissed. */
-data class BackupStatus(val working: Boolean = false, val summary: RestoreSummary? = null)
+/**
+ * Whether a backup is being written or restored, the opened backup waiting for the user to choose what to restore, and what the
+ * last restore changed until it is dismissed.
+ */
+data class BackupStatus(val working: Boolean = false, val summary: RestoreSummary? = null, val opened: OpenedBackup? = null)
+
+/** A backup file read for restoring, with the sections it holds data for. */
+class OpenedBackup internal constructor(internal val text: String, val sections: Set<BackupSection>)
 
 /** Writes the app's data to a backup file and merges a backup file back, through the file picker. */
 class BackupController internal constructor(private val context: ControllerContext, private val loader: AppStateLoader,
@@ -49,16 +55,26 @@ class BackupController internal constructor(private val context: ControllerConte
         }
     }
 
-    fun restore(files: BackupFiles) = run(Res.string.backup_error_restore) {
+    /** Reads a backup file through the picker, so the user can choose which of its sections to restore. */
+    fun open(files: BackupFiles) = run(Res.string.backup_error_restore) {
         val text = files.open() ?: return@run
-        // The merge takes several steps, so it holds the operation lock against other changes, but only once the picker closed.
+        val sections = requireNotNull(backup).sections(text)
+        mutableStatus.update { it.copy(opened = OpenedBackup(text, sections)) }
+    }
+
+    fun cancelRestore() = mutableStatus.update { it.copy(opened = null) }
+
+    /** Merges the [sections] of the opened backup. */
+    fun restore(sections: Set<BackupSection>) = run(Res.string.backup_error_restore) {
+        val text = mutableStatus.getAndUpdate { it.copy(opened = null) }.opened?.text ?: return@run
+        // The merge takes several steps, so it holds the operation lock against other changes, but only once the user chose what to restore.
         val summary = context.operations.withLock {
-            // An import may have started while the picker was open.
+            // An import may have started while the picker or the choice was open.
             checkNotImporting()
             // Settings are not observed; reload them with the library and apply them as changing them in Settings does,
             // also after a failure, because each restored part is saved as it goes.
             val previous = context.state.value.preferences
-            try { requireNotNull(backup).restore(text) } finally {
+            try { requireNotNull(backup).restore(text, sections) } finally {
                 withContext(NonCancellable) {
                     loader.refresh()
                     playback.applyPreferences()

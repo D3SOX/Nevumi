@@ -117,7 +117,7 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
             pairedDevices = me.d3sox.nevumi.sync.JvmPairedDevices(store,
                 me.d3sox.nevumi.sync.LibrarySync(store, library, serverChanges), credentials, "Linux desktop"),
             tunnel = tunnel, soundCloud = soundCloud, youTube = youTube, youTubeDownloads = youTubeDownloads, discovery = me.d3sox.nevumi.navidrome.ServerDiscovery(store, connection::client),
-            backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles),
+            backup = me.d3sox.nevumi.backup.MusicBackup(store, library, serverChanges, scrobbling, soundCloud, equalizerProfiles, offline),
             lyrics = me.d3sox.nevumi.lyrics.LyricsSources(store, me.d3sox.nevumi.lyrics.FileLyrics(), connection::client,
                 listOf(me.d3sox.nevumi.lyrics.LrcLibClient(http, me.d3sox.nevumi.ui.NEVUMI_VERSION),
                     me.d3sox.nevumi.lyrics.NetEaseClient(http, me.d3sox.nevumi.ui.NEVUMI_VERSION))),

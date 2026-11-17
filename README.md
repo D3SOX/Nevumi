@@ -40,7 +40,7 @@ I started it because I couldn't find a music player with all the features I want
 - **Scrobbling.** Nevumi keeps a listening history and scrobbles to your music server, Last.fm or ListenBrainz.
 - **Tailscale.** The built-in client reaches servers on your tailnet without the Tailscale app or a VPN. Headscale works too.
 - **Device sync.** Pair devices with a QR code to sync playlists, favorites, ratings, history and saved queues.
-- **Backup.** Export settings, playlists, favorites, history and connection profiles to one file and restore it on another device. Backups never include passwords or keys.
+- **Backup.** Export settings, playlists, favorites, history, downloads and connection profiles to one file and restore all or part of it on another device, which downloads the same playlists and songs again. Backups never include passwords or keys.
 - **Themes.** Pick light, dark or system mode, and system, artwork-based or custom colors.
 - **Linux.** Nevumi has MPRIS media controls and an optional tray icon that keeps music playing after you close the window.
 - **Android.** Nevumi has a home screen widget, a quick settings tile and launcher shortcuts to shuffle, search or resume. It can resume the paused song when you connect headphones.

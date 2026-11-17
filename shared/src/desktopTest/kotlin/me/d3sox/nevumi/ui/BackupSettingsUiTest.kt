@@ -46,7 +46,7 @@ class BackupSettingsUiTest {
                 onNodeWithText("Export backup").performClick()
                 onNodeWithText("Choose what to export").assertIsDisplayed()
                 captureUiSnapshot("backup-export-selection", onNode(isDialog()))
-                val choices = listOf("Settings", "Playlists", "Saved queues", "Favorites", "Ratings", "Listening history", "Service profiles", "Equalizer profiles")
+                val choices = listOf("Settings", "Playlists", "Saved queues", "Favorites", "Ratings", "Listening history", "Service profiles", "Equalizer profiles", "Downloads")
                 for (label in choices) onNodeWithText(label).performScrollTo().assertIsOn().performClick()
                 onNode(hasText("Export backup") and hasAnyAncestor(isDialog())).assertIsNotEnabled()
                 assertNull(files.saved)
@@ -69,7 +69,7 @@ class BackupSettingsUiTest {
     }
 
     @Test
-    fun restoringAsksFirstAndThenSummarizesWhatWasAdded() {
+    fun restoringOffersTheBackupsSectionsAndThenSummarizesWhatWasAdded() {
         val directory = Files.createTempDirectory("nevumi-backup-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
@@ -79,8 +79,8 @@ class BackupSettingsUiTest {
         val files = object : BackupFiles {
             var opened = 0
             // The second backup only names a song this library lacks, in a playlist that is already here.
-            override suspend fun open(): String = if (++opened == 1)
-                """{"format":"nevumi-backup","version":1,"createdAt":0,"playlists":[{"name":"Road"},{"name":"Gone","trackKeys":["missing"]}]}"""
+            override suspend fun open(): String = if (++opened <= 2)
+                """{"format":"nevumi-backup","version":1,"createdAt":0,"settings":{"speed":1.5},"playlists":[{"name":"Road"},{"name":"Gone","trackKeys":["missing"]}]}"""
             else """{"format":"nevumi-backup","version":1,"createdAt":0,"playlists":[{"name":"Road","trackKeys":["missing"]}]}"""
             override suspend fun save(name: String, text: String) = false
         }
@@ -101,13 +101,27 @@ class BackupSettingsUiTest {
                 onNodeWithContentDescription("Search settings").performClick()
                 onNodeWithContentDescription("Search settings query").performTextInput("restore backup")
                 onNodeWithText("Restore backup").performClick()
+                val speed = controller.state.value.preferences.speed
+                // Cancelling the choice restores nothing.
                 onNodeWithText("Restore backup").performScrollTo().performClick()
-                onNodeWithText("Restore a backup?").assertIsDisplayed()
-                onNodeWithText("Cancel").performClick()
-                assertEquals(0, files.opened)
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Choose what to restore").fetchSemanticsNodes().isNotEmpty() }
+                onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).performClick()
+                waitForIdle()
+                assertEquals(1, files.opened)
+                assertTrue(runBlocking { playlists.all().isEmpty() })
+                // Only the sections the file holds are offered; leaving out Settings keeps them.
                 onNodeWithText("Restore backup").performScrollTo().performClick()
-                onNodeWithText("Choose file").performClick()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Choose what to restore").fetchSemanticsNodes().isNotEmpty() }
+                onNode(hasText("Favorites") and hasAnyAncestor(isDialog())).assertDoesNotExist()
+                onNode(hasText("Settings") and hasAnyAncestor(isDialog())).assertIsOn().performClick()
+                onNode(hasText("Playlists") and hasAnyAncestor(isDialog())).performClick()
+                onNode(hasText("Restore backup") and hasAnyAncestor(isDialog())).assertIsNotEnabled()
+                onNodeWithText("Choose at least one item to restore").assertIsDisplayed()
+                onNode(hasText("Playlists") and hasAnyAncestor(isDialog())).performClick()
+                captureUiSnapshot("backup-restore-selection", onNode(isDialog()))
+                onNode(hasText("Restore backup") and hasAnyAncestor(isDialog())).assertIsEnabled().performClick()
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Backup restored").fetchSemanticsNodes().isNotEmpty() }
+                assertEquals(speed, controller.state.value.preferences.speed)
                 onNodeWithText("New playlists").assertIsDisplayed()
                 onNodeWithText("Playlists not restored").assertIsDisplayed()
                 onNodeWithText("Everything in this backup is already here.").assertDoesNotExist()
@@ -117,7 +131,8 @@ class BackupSettingsUiTest {
                 onNodeWithText("New playlists").assertDoesNotExist()
                 assertEquals(listOf("Road"), runBlocking { playlists.all().map { it.name } })
                 onNodeWithText("Restore backup").performScrollTo().performClick()
-                onNodeWithText("Choose file").performClick()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Choose what to restore").fetchSemanticsNodes().isNotEmpty() }
+                onNode(hasText("Restore backup") and hasAnyAncestor(isDialog())).performClick()
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Songs not found in this library").fetchSemanticsNodes().isNotEmpty() }
                 onNodeWithText("Everything in this backup is already here.").assertDoesNotExist()
             }
