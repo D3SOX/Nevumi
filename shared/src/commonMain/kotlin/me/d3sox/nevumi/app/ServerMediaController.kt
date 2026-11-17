@@ -248,8 +248,10 @@ class ServerMediaController internal constructor(private val context: Controller
         try {
             val client = client()?.takeIf { episode.id.startsWith("podcast:${it.serverId}:") } ?: return
             if (positionMs == null) client.deleteBookmark(streamId) else client.saveBookmark(streamId, positionMs)
+            // The answer can arrive after a switch to another server, whose bookmarks it must not change.
             mutableMedia.update { media ->
-                media.copy(bookmarks = if (positionMs == null) media.bookmarks - streamId else media.bookmarks + (streamId to positionMs))
+                if (media.serverId != client.serverId) media
+                else media.copy(bookmarks = if (positionMs == null) media.bookmarks - streamId else media.bookmarks + (streamId to positionMs))
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         // A position that could not be saved only means the episode starts earlier next time.
