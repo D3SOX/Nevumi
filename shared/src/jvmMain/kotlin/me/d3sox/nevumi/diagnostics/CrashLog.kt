@@ -14,6 +14,8 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
     private val clock: () -> Long = System::currentTimeMillis) : CrashReports {
     private val seenFile = File(directory, "seen")
     private val sequenceFile = File(directory, "sequence")
+    /** Reports already offered; kept in memory too, so an unwritable marker still holds for this run. */
+    private var seen: Set<String> = runCatching { seenFile.readLines().toSet() }.getOrDefault(emptySet())
     private val mutableReports = MutableStateFlow(read())
     override val reports: StateFlow<List<CrashReport>> = mutableReports.asStateFlow()
     private val mutableUnseen = MutableStateFlow(unseenReport())
@@ -44,7 +46,8 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
     /** Remembers the reports by name, not time, so a crash after the clock went back is still offered. */
     @Synchronized override fun markSeen() {
         // The marker only spares the next launch the prompt; failing to write it must not fail the dismissal.
-        try { directory.mkdirs(); seenFile.writeText(reports.value.joinToString("\n") { it.id }) }
+        seen = seen + reports.value.map { it.id }
+        try { directory.mkdirs(); seenFile.writeText(seen.joinToString("\n")) }
         catch (_: java.io.IOException) { }
         mutableUnseen.value = null
     }
@@ -57,6 +60,7 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
     @Synchronized override fun deleteAll() {
         files().forEach { it.delete() }
         seenFile.delete()
+        seen = emptySet()
         refresh()
     }
 
@@ -74,10 +78,7 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
         runCatching { CrashReport(file.name, requireNotNull(reportName.matchEntire(file.name)).groupValues[2].toLong(), file.readText()) }.getOrNull()
     }
 
-    private fun unseenReport(): CrashReport? {
-        val seen = runCatching { seenFile.readLines().toSet() }.getOrDefault(emptySet())
-        return mutableReports.value.firstOrNull { it.id !in seen }
-    }
+    private fun unseenReport(): CrashReport? = mutableReports.value.firstOrNull { it.id !in seen }
 
     private companion object { val reportName = Regex("crash-(\\d+)-(\\d+)\\.txt") }
 }

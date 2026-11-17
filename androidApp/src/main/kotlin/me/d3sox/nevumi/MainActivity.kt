@@ -18,8 +18,8 @@ import kotlinx.coroutines.launch
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
-import me.d3sox.nevumi.app.resumeQueue
-import me.d3sox.nevumi.app.shuffleLibrary
+import me.d3sox.nevumi.app.libraryShuffle
+import me.d3sox.nevumi.app.queueResume
 import me.d3sox.nevumi.ui.AppShortcuts
 import me.d3sox.nevumi.ui.MusicPlayerApp
 
@@ -141,17 +141,23 @@ class MainActivity : ComponentActivity() {
         runShortcut(action)
     }
 
-    /** Runs [action] once startup allows it; until then it is kept, so a recreated activity, such as after rotating, still runs it. */
+    /**
+     * Runs [action] once startup allows it. Until then it is kept, so a recreated activity, such as after rotating, still runs it;
+     * once the controller has it, the controller finishes it, so a recreated activity must not start it again.
+     */
     private fun runShortcut(action: String) {
         pendingShortcut = action
         val controller = (application as MusicApplication).controller
         lifecycleScope.launch {
-            when (action) {
-                SHUFFLE_SHORTCUT -> controller.shuffleLibrary()
-                SEARCH_SHORTCUT -> shortcuts.openSearch()
-                RESUME_SHORTCUT -> controller.resumeQueue()
+            val dispatch = when (action) {
+                SHUFFLE_SHORTCUT -> controller.libraryShuffle()
+                RESUME_SHORTCUT -> controller.queueResume()
+                // Search belongs to this activity, and opening it twice does no harm.
+                else -> { shortcuts.openSearch(); null }
             }
+            // Nothing suspends between these two lines, so a recreation either repeats the waiting or finds the action handed over.
             pendingShortcut = null
+            dispatch?.invoke()
         }
     }
 

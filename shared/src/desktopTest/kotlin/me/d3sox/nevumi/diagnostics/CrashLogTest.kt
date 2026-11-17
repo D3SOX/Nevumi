@@ -66,10 +66,14 @@ class CrashLogTest {
         val directory = Files.createTempDirectory("crash-log-marker").toFile()
         try {
             val log = CrashLog(directory, { "Nevumi 1.0 on Test" })
-            log.record("main", IllegalStateException("crash"))
+            log.record("main", IllegalStateException("older"))
+            log.record("main", IllegalStateException("newer"))
             // A directory where the marker file belongs makes writing it fail.
             File(directory, "seen").mkdir()
             log.markSeen()
+            assertNull(log.unseen.value)
+            // Deleting a report refreshes the list; the dismissed one must not come back for lack of a marker.
+            log.delete(log.reports.value.last().id)
             assertNull(log.unseen.value)
         } finally { directory.deleteRecursively() }
     }
