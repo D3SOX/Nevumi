@@ -524,7 +524,8 @@ class PlayerUiTest {
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
         try {
             runComposeUiTest {
-                setContent { MusicPlayerApp(controller) }
+                // The mini player floats above the bottom bar of a compact window; wider windows move navigation to a rail.
+                setContent { Box(Modifier.width(400.dp).height(740.dp)) { MusicPlayerApp(controller) } }
                 waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
                 val song = controller.state.value.tracks.first { it.metadata.title == "Northern Light" }
                 runBlocking { controller.playTrack(song.id, listOf(song.id, song.id), 1).join(); controller.pause().join() }
