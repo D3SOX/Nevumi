@@ -11,6 +11,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import me.d3sox.nevumi.app.MusicController
 
 /**
@@ -50,6 +51,12 @@ class AppShortcuts(private val controller: MusicController, private val quit: ((
             else -> return false
         }
         return true
+    }
+
+    /** Opens search, waiting until the app shows, such as for a launcher shortcut that started it. */
+    suspend fun openSearch() {
+        searches.subscriptionCount.first { it > 0 }
+        searches.emit(Unit)
     }
 
     private fun seekBy(offsetMs: Long) {

@@ -30,7 +30,7 @@ I started it because I couldn't find a music player with all the features I want
 - **Lyrics.** Nevumi shows synced and plain lyrics from tags, `.lrc` files and your music server. It can also [look them up online](#online-lyrics).
 - **Waveforms.** Nevumi draws each song's waveform from its audio.
 - **Visualizer.** Nevumi plays MilkDrop visualizations through projectM and ships with over 10,000 presets.
-- **Offline.** Download music from your server. Local and server copies of the same song show up as one song.
+- **Offline.** Download music from your server. Local and server copies of the same song show up as one song. Set a lower streaming bitrate for Wi-Fi or mobile data, and downloads keep the original files.
 - **Discovery.** Artist pages show the biography, similar artists and top songs. Play similar songs from any server song or artist.
 - **Radio, podcasts and share links.** Play your server's internet radio stations and see the title each station announces. Accounts that may manage stations can add, edit and delete them. On servers with podcasts, such as gonic and Airsonic, subscribe to feeds and have the server download episodes. Each episode resumes where you paused it, on any device. Share songs, albums and playlists as links. Android opens the share sheet, and Linux copies the link. Nevumi only shows what your server supports.
 - **New releases.** Follow artists, or import them from Last.fm or a MusicBrainz collection. Home lists their recent and upcoming releases, and Nevumi can notify you about new ones. It contacts MusicBrainz only after you follow or import an artist.
@@ -43,7 +43,7 @@ I started it because I couldn't find a music player with all the features I want
 - **Backup.** Export settings, playlists, favorites, history and connection profiles to one file and restore it on another device. Backups never include passwords or keys.
 - **Themes.** Pick light, dark or system mode, and system, artwork-based or custom colors.
 - **Linux.** Nevumi has MPRIS media controls and an optional tray icon that keeps music playing after you close the window.
-- **Android.** Nevumi has a home screen widget and a quick settings tile.
+- **Android.** Nevumi has a home screen widget, a quick settings tile and launcher shortcuts to shuffle, search or resume. It can resume the paused song when you connect headphones.
 
 ## Screenshots
 

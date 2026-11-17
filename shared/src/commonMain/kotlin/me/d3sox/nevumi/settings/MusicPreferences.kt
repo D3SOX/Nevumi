@@ -68,6 +68,10 @@ data class MusicSettings(
     val cacheBytes: Long = 2L * 1024 * 1024 * 1024,
     val downloadsPaused: Boolean = false,
     val downloadOnMetered: Boolean = false,
+    /** The highest bitrate in kbit/s the server streams on an unmetered network; 0 streams the original file. Downloads always keep the original. */
+    val streamBitRate: Int = 0,
+    /** The same limit on a metered network, such as mobile data. */
+    val meteredStreamBitRate: Int = 0,
     val speed: Double = 1.0,
     val pitch: Double = 1.0,
     val audioEffects: AudioEffects = AudioEffects(),
@@ -101,6 +105,8 @@ data class MusicSettings(
     val keepPlayingInBackground: Boolean = false,
     /** Linux: a system tray icon with playback controls; closing the window then hides it to the tray. */
     val trayIcon: Boolean = false,
+    /** Android: connecting headphones, a USB headset or Bluetooth audio resumes the paused song. */
+    val resumeOnHeadphones: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,
@@ -131,6 +137,9 @@ data class MusicSettings(
     })
 }
 
+/** Streaming bitrate limits in kbit/s that Settings offers; 0 is the original file. */
+val STREAM_BIT_RATES = listOf(0, 320, 256, 192, 128, 96)
+
 class MusicPreferences(private val store: MusicStore) {
     // Settings saved by an older version lack the Home sections added since; they keep their order and gain the new ones.
     suspend fun load(): MusicSettings = (store.read("settings:music") ?: MusicSettings()).let { settings ->
@@ -156,6 +165,7 @@ class MusicPreferences(private val store: MusicStore) {
         val settings = change(load())
         require(settings.customColor in 0xFF000000..0xFFFFFFFF) { "Choose an opaque RGB color" }
         require(settings.cacheBytes >= 0) { "Cache size cannot be negative" }
+        require(settings.streamBitRate in STREAM_BIT_RATES && settings.meteredStreamBitRate in STREAM_BIT_RATES) { "Choose a listed streaming quality" }
         require(settings.libraryTabs.isNotEmpty() && settings.libraryTabs.distinct().size == settings.libraryTabs.size) {
             "Choose at least one library tab and include each tab once"
         }

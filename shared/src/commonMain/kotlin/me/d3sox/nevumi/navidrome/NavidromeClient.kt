@@ -416,7 +416,8 @@ class NavidromeClient(
 
     // One salt per client keeps a song's URL stable, so queue updates can tell an unchanged stream from a new route.
     private val streamSalt = Uuid.random().toString()
-    fun streamUrl(songId: String): String {
+    /** A [maxBitRate] above 0 kbit/s lets the server transcode songs above it to its default format; 0 streams the original file. */
+    fun streamUrl(songId: String, maxBitRate: Int = 0): String {
         val salt = streamSalt
         return URLBuilder("${baseUrl.trimEnd('/')}/rest/stream.view").apply {
             parameters.append("u", credentials.username)
@@ -426,8 +427,14 @@ class NavidromeClient(
             parameters.append("c", "Nevumi")
             parameters.append("f", "json")
             parameters.append("id", songId)
-            parameters.append("format", "raw")
-            parameters.append("maxBitRate", "0")
+            if (maxBitRate > 0) {
+                parameters.append("maxBitRate", maxBitRate.toString())
+                // Navidrome sends a length for transcoded streams only when asked, and players need one to seek.
+                parameters.append("estimateContentLength", "true")
+            } else {
+                parameters.append("format", "raw")
+                parameters.append("maxBitRate", "0")
+            }
         }.buildString()
     }
     private suspend fun nativeSession(nativeHttp: HttpClient): String {

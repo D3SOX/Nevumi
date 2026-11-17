@@ -13,6 +13,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.sources_gate_browser
+import me.d3sox.nevumi.resources.settings_stream_quality
+import me.d3sox.nevumi.resources.settings_stream_quality_metered
 import me.d3sox.nevumi.resources.sources_when_you_pick_a_song
 import me.d3sox.nevumi.resources.sources_download_format
 import me.d3sox.nevumi.resources.colors
@@ -108,6 +110,8 @@ internal fun settingsIcon(label: StringResource): AppIcon = when (label) {
     Res.string.playback_cache -> AppIcon.CACHE
     Res.string.undo_backup_storage -> AppIcon.BACKUP_FILES
     Res.string.download_network -> AppIcon.NETWORK
+    Res.string.settings_stream_quality -> AppIcon.WIFI
+    Res.string.settings_stream_quality_metered -> AppIcon.MOBILE_DATA
     Res.string.record_listening_history -> AppIcon.HISTORY
     Res.string.keep_undo_backups -> AppIcon.UNDO
     Res.string.statistics_grouping -> AppIcon.STATISTICS

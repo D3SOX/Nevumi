@@ -210,6 +210,27 @@ class SettingsUiTest {
     }
 
     @Test
+    fun streamingQualityIsChosenSeparatelyForMeteredNetworks() {
+        val directory = Files.createTempDirectory("stream-quality-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val preferences = MusicPreferences(store)
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                onNodeWithContentDescription("Settings").performClick()
+                onNodeWithText("Downloads & cache").performScrollTo().performClick()
+                onNodeWithContentDescription("Streaming quality on metered networks").performScrollTo().performClick()
+                onNode(hasText("Up to 128 kbit/s") and hasAnyAncestor(isPopup())).performClick()
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.meteredStreamBitRate == 128 }
+                assertEquals(0, runBlocking { preferences.load() }.streamBitRate)
+            }
+            kotlin.test.assertFailsWith<IllegalArgumentException> { runBlocking { preferences.update { it.copy(streamBitRate = 100) } } }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun amoledTitleScrollSpeedAndPlayAfterSwipeSettingsSurviveAnAppRestart() {
         val directory = Files.createTempDirectory("settings-ui")
         val database = directory.resolve("library.db").toString()

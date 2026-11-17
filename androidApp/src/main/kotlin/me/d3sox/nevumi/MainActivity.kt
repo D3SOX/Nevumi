@@ -15,6 +15,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
+import me.d3sox.nevumi.app.libraryShuffle
+import me.d3sox.nevumi.app.queueResume
+import me.d3sox.nevumi.ui.AppShortcuts
 import me.d3sox.nevumi.ui.MusicPlayerApp
 
 class MainActivity : ComponentActivity() {
@@ -25,6 +31,9 @@ class MainActivity : ComponentActivity() {
     /** A song another app opened while Nevumi asks for the audio permission it needs to find the song. */
     private var songAwaitingPermission: String? = null
     private lateinit var openSongPermission: ActivityResultLauncher<String>
+    private lateinit var shortcuts: AppShortcuts
+    /** A launcher shortcut still waiting for startup. */
+    private var pendingShortcut: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,10 +104,13 @@ class MainActivity : ComponentActivity() {
             songAwaitingPermission?.let(controller::openSong)
             songAwaitingPermission = null
         }
-        // A recreated activity, or one reopened from recents, already handled its song.
-        if (savedInstanceState == null) openSong(intent)
+        shortcuts = AppShortcuts(controller)
+        publishLauncherShortcuts()
+        // A recreated activity, or one reopened from recents, already handled its song or shortcut.
+        if (savedInstanceState == null) { openSong(intent); openShortcut(intent) }
+        else savedInstanceState.getString("pending-shortcut")?.let(::runShortcut)
         setContent {
-            MusicPlayerApp(controller, onAddMusic = {
+            MusicPlayerApp(controller, shortcuts = shortcuts, crashReports = app.crashLog, onAddMusic = {
                 if (checkSelfPermission(audioPermission) == PackageManager.PERMISSION_GRANTED) controller.importSource("device")
                 else request.launch(audioPermission)
             })
@@ -108,6 +120,47 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openSong(intent)
+        openShortcut(intent)
+    }
+
+    /** Offers Shuffle, Search and Resume when the launcher icon is held. Published at runtime so each build's application ID works. */
+    private fun publishLauncherShortcuts() {
+        fun shortcut(id: String, label: Int, longLabel: Int, icon: Int) = ShortcutInfo.Builder(this, id)
+            .setShortLabel(getString(label)).setLongLabel(getString(longLabel)).setIcon(Icon.createWithResource(this, icon))
+            .setIntent(Intent(this, MainActivity::class.java).setAction(id)).build()
+        getSystemService(ShortcutManager::class.java)?.dynamicShortcuts = listOf(
+            shortcut(SHUFFLE_SHORTCUT, R.string.shortcut_shuffle, R.string.shortcut_shuffle_long, R.drawable.ic_shortcut_shuffle),
+            shortcut(SEARCH_SHORTCUT, R.string.shortcut_search, R.string.shortcut_search_long, R.drawable.ic_shortcut_search),
+            shortcut(RESUME_SHORTCUT, R.string.shortcut_resume, R.string.shortcut_resume_long, R.drawable.ic_shortcut_resume))
+    }
+
+    private fun openShortcut(intent: Intent) {
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val action = intent.action?.takeIf { it in setOf(SHUFFLE_SHORTCUT, SEARCH_SHORTCUT, RESUME_SHORTCUT) } ?: return
+        getSystemService(ShortcutManager::class.java)?.reportShortcutUsed(action)
+        runShortcut("$action#${java.util.UUID.randomUUID()}")
+    }
+
+    /**
+     * Runs [request], a shortcut action with an ID for this launch, once startup allows it. Until then it is kept, so a recreated
+     * activity, such as after rotating, still runs it. Once the controller has it, the controller finishes it, and the application
+     * remembers it: the state a recreated activity restores may have been saved before that.
+     */
+    private fun runShortcut(request: String) {
+        pendingShortcut = request
+        val app = application as MusicApplication
+        val controller = app.controller
+        val action = request.substringBefore('#')
+        lifecycleScope.launch {
+            val dispatch = when (action) {
+                SHUFFLE_SHORTCUT -> controller.libraryShuffle()
+                RESUME_SHORTCUT -> controller.queueResume()
+                // Search belongs to this activity, and opening it twice does no harm.
+                else -> { shortcuts.openSearch(); null }
+            }
+            pendingShortcut = null
+            if (app.dispatchedShortcuts.add(request)) dispatch?.invoke()
+        }
     }
 
     /** Plays a song another app opened in Nevumi. */
@@ -125,6 +178,13 @@ class MainActivity : ComponentActivity() {
         outState.putString("launched-write-request", launchedWriteRequest)
         outState.putString("launched-network-request", launchedNetworkRequest)
         outState.putString("song-awaiting-permission", songAwaitingPermission)
+        outState.putString("pending-shortcut", pendingShortcut)
         super.onSaveInstanceState(outState)
+    }
+
+    private companion object {
+        const val SHUFFLE_SHORTCUT = "me.d3sox.nevumi.shortcut.SHUFFLE"
+        const val SEARCH_SHORTCUT = "me.d3sox.nevumi.shortcut.SEARCH"
+        const val RESUME_SHORTCUT = "me.d3sox.nevumi.shortcut.RESUME"
     }
 }

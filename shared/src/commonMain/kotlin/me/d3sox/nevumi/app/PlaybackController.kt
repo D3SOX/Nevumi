@@ -5,7 +5,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -69,6 +72,16 @@ class PlaybackController internal constructor(private val context: ControllerCon
     private val lastResolved = mutableMapOf<String, PlayableTrack>()
 
     init {
+        // Upcoming server songs pick up a changed streaming quality; the playing song keeps its stream.
+        context.scope.launch {
+            context.state.map { state -> if (state.downloadNetwork.metered) state.preferences.meteredStreamBitRate else state.preferences.streamBitRate }
+                .distinctUntilChanged().drop(1).collect {
+                    // A song that cannot resolve now, such as a YouTube stream, must not end the refreshes that follow.
+                    try { context.operations.withLock { if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot())) } }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { }
+                }
+        }
         pairedDevices?.setPlaybackReceiver(object : PlaybackReceiver {
             override suspend fun receive(peerId: String, playback: PlaybackTransfer) = context.operations.withLock {
                 require(playback.id.isNotBlank() && playback.queue.entries.isNotEmpty() && playback.queue.currentIndex >= 0 &&
@@ -494,7 +507,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
             }
             source = SourceResolver.resolve(connectedSources, context.state.value.preferences.sourcePriority) ?: return null
             when (source.kind) {
-                SourceKind.SERVER, SourceKind.PODCAST -> requireNotNull(connection).streamUrl(source.location)
+                SourceKind.SERVER, SourceKind.PODCAST -> requireNotNull(connection).streamUrl(source.location, context.state.value.let { state ->
+                    if (state.downloadNetwork.metered) state.preferences.meteredStreamBitRate else state.preferences.streamBitRate
+                })
                 SourceKind.YOUTUBE -> requireNotNull(youTube).playbackLocation(source.location)
                 else -> source.location
             }

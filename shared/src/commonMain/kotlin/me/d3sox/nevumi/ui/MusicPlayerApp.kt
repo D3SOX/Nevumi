@@ -58,10 +58,11 @@ private enum class AppPage { LIBRARY, SETTINGS, SERVER, DOWNLOADS, SAVED_QUEUES,
 @Composable
 fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null, artworkPicker: ArtworkPicker? = null,
     playlistFiles: PlaylistFiles? = null, equalizerFiles: EqualizerFiles? = null, folderPicker: FolderPicker? = null,
-    audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null, backupFiles: BackupFiles? = null, shortcuts: AppShortcuts? = null) {
+    audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null, backupFiles: BackupFiles? = null, shortcuts: AppShortcuts? = null,
+    crashReports: me.d3sox.nevumi.diagnostics.CrashReports? = null) {
     // The layout follows the space the app gets, which on the desktop and in tests is not always the whole screen.
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalWindowLayout provides windowLayout(maxWidth, maxHeight)) {
+        CompositionLocalProvider(LocalWindowLayout provides windowLayout(maxWidth, maxHeight), LocalCrashReports provides crashReports) {
             MusicPlayerScreen(controller, onAddMusic, artworkPicker, playlistFiles, equalizerFiles, folderPicker, audioWaveforms,
                 backupFiles, shortcuts, nowPlayingPaneWidth(maxWidth))
         }
@@ -164,6 +165,7 @@ private fun MusicPlayerScreen(controller: MusicController, onAddMusic: (() -> Un
             origin.youTube?.let(::openYouTubePage) ?: openLibrary(origin.tab, origin.collectionId, track)
         }) {
     MusicTheme(state.preferences, artworkColor) {
+        CrashReportPrompt()
         val messages = remember { SnackbarHostState() }
         fun openNotice(destination: ActionDestination) {
             when (destination) {

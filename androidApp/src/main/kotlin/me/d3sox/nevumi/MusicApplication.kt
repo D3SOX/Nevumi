@@ -56,12 +56,21 @@ class MusicApplication : Application() {
         private set
     lateinit var localNetworkRequests: LocalNetworkRequests
         private set
+    lateinit var crashLog: me.d3sox.nevumi.diagnostics.CrashLog
+        private set
+    /** Launcher shortcut requests already handed to the controller; it outlives activities, so a restored request runs once. */
+    val dispatchedShortcuts = mutableSetOf<String>()
     private val mutableDownloadNotifications = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val downloadNotificationsRequested = mutableDownloadNotifications.asSharedFlow()
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        // Installed first, so a crash while the app starts is recorded too.
+        crashLog = me.d3sox.nevumi.diagnostics.CrashLog(File(filesDir, "crashes"), {
+            "Nevumi ${packageManager.getPackageInfo(packageName, 0).versionName} on Android ${android.os.Build.VERSION.RELEASE} " +
+                "(API ${android.os.Build.VERSION.SDK_INT}, ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL})"
+        }).apply { install() }
         mediaWriteRequests = MediaWriteRequests(this)
         localNetworkRequests = LocalNetworkRequests(this)
         store = openMusicStore(this)
@@ -124,6 +133,7 @@ class MusicApplication : Application() {
             releases = me.d3sox.nevumi.releases.ArtistReleases(store, me.d3sox.nevumi.releases.MusicBrainzClient(http, version)),
             releaseNotifier = AndroidReleaseNotifier(this))
         widgetUpdates = NowPlayingWidgetUpdates(this, controller).apply { resume() }
+        HeadphoneResume(this, controller).start()
         ReleaseJobService.scheduleWhileNeeded(this, controller)
     }
 
