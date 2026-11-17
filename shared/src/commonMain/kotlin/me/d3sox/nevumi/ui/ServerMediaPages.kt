@@ -194,7 +194,7 @@ private fun StationDialog(station: RadioStation?, serverId: String?, controller:
                 OutlinedTextField(homepage, { homepage = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.radio_homepage)) }, singleLine = true)
             }
         },
-        confirmButton = { TextButton(enabled = valid, onClick = {
+        confirmButton = { TextButton(enabled = valid && serverId != null, onClick = {
             val radio = controller.serverMediaController
             if (station == null) radio.addStation(serverId, name, stream, homepage) else radio.updateStation(serverId, station.id, name, stream, homepage)
             dismiss()
@@ -256,7 +256,7 @@ private fun SubscribeDialog(serverId: String?, controller: MusicController, dism
                 OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth().testTag("podcast-feed"), label = { Text(stringResource(Res.string.podcasts_feed_address)) }, singleLine = true)
             }
         },
-        confirmButton = { TextButton(enabled = valid, onClick = { controller.serverMediaController.subscribe(serverId, url); dismiss() }) {
+        confirmButton = { TextButton(enabled = valid && serverId != null, onClick = { controller.serverMediaController.subscribe(serverId, url); dismiss() }) {
             Text(stringResource(Res.string.podcasts_subscribe))
         } },
         dismissButton = { TextButton(dismiss) { Text(stringResource(Res.string.cancel)) } })

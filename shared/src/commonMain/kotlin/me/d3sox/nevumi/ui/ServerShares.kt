@@ -23,9 +23,11 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun rememberShareLink(controller: MusicController, ids: List<String>, title: String): (() -> Unit)? {
     val media by controller.serverMediaController.media.collectAsState()
+    // shareIds took [ids] from this server, so the link goes there or nowhere.
+    val serverId = controller.state.collectAsState().value.server?.serverId
     val sharer = rememberLinkSharer()
     if (!media.sharingAvailable || ids.isEmpty()) return null
-    return { controller.serverMediaController.share(ids, title) { share -> sharer.share(title, share.url); sharer.copies } }
+    return { controller.serverMediaController.share(serverId, ids, title) { share -> sharer.share(title, share.url); sharer.copies } }
 }
 
 /**
