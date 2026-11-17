@@ -44,7 +44,7 @@ internal fun shareIds(controller: MusicController, tracks: List<Track>, playlist
 @Composable
 internal fun SharesPage(controller: MusicController, back: () -> Unit) {
     val media by controller.serverMediaController.media.collectAsState()
-    var deleting by remember { mutableStateOf<ServerShare?>(null) }
+    var deleting by remember(media.serverId) { mutableStateOf<ServerShare?>(null) }
     val sharer = rememberLinkSharer()
     val browser = LocalUriHandler.current
     val untitled = stringResource(Res.string.shares_untitled)
@@ -88,7 +88,7 @@ internal fun SharesPage(controller: MusicController, back: () -> Unit) {
     deleting?.let { share ->
         AlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(Res.string.shares_delete_named, share.title())) },
             text = { Text(stringResource(Res.string.shares_delete_description)) },
-            confirmButton = { TextButton({ controller.serverMediaController.deleteShare(share.id); deleting = null }) { Text(stringResource(Res.string.delete)) } },
+            confirmButton = { TextButton({ controller.serverMediaController.deleteShare(media.serverId, share.id); deleting = null }) { Text(stringResource(Res.string.delete)) } },
             dismissButton = { TextButton({ deleting = null }) { Text(stringResource(Res.string.cancel)) } })
     }
 }

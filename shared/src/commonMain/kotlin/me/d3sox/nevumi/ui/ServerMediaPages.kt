@@ -124,9 +124,10 @@ private fun MediaProgress(media: ServerMedia) {
 @Composable
 internal fun RadioPage(state: AppState, media: ServerMedia, controller: MusicController, back: () -> Unit) {
     val radio = controller.serverMediaController
-    var editing by remember { mutableStateOf<RadioStation?>(null) }
+    // Dialogs belong to the server that listed their station, so another server closes them.
+    var editing by remember(media.serverId) { mutableStateOf<RadioStation?>(null) }
     var adding by remember { mutableStateOf(false) }
-    var deleting by remember { mutableStateOf<RadioStation?>(null) }
+    var deleting by remember(media.serverId) { mutableStateOf<RadioStation?>(null) }
     val playing = playingSource(controller, SourceKind.RADIO)
     val browser = LocalUriHandler.current
     SettingsScreen(back, title = { Text(stringResource(Res.string.radio_title)) }, actions = {
@@ -168,17 +169,17 @@ internal fun RadioPage(state: AppState, media: ServerMedia, controller: MusicCon
             }
         }
     })
-    if (adding || editing != null) StationDialog(editing, controller) { adding = false; editing = null }
+    if (adding || editing != null) StationDialog(editing, media.serverId, controller) { adding = false; editing = null }
     deleting?.let { station ->
         AlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(Res.string.radio_delete_named, station.name)) },
             text = { Text(stringResource(Res.string.radio_delete_description)) },
-            confirmButton = { TextButton({ radio.deleteStation(station.id); deleting = null }) { Text(stringResource(Res.string.delete)) } },
+            confirmButton = { TextButton({ radio.deleteStation(media.serverId, station.id); deleting = null }) { Text(stringResource(Res.string.delete)) } },
             dismissButton = { TextButton({ deleting = null }) { Text(stringResource(Res.string.cancel)) } })
     }
 }
 
 @Composable
-private fun StationDialog(station: RadioStation?, controller: MusicController, dismiss: () -> Unit) {
+private fun StationDialog(station: RadioStation?, serverId: String?, controller: MusicController, dismiss: () -> Unit) {
     var name by remember { mutableStateOf(station?.name.orEmpty()) }
     var stream by remember { mutableStateOf(station?.streamUrl.orEmpty()) }
     var homepage by remember { mutableStateOf(station?.homepageUrl.orEmpty()) }
@@ -195,7 +196,7 @@ private fun StationDialog(station: RadioStation?, controller: MusicController, d
         },
         confirmButton = { TextButton(enabled = valid, onClick = {
             val radio = controller.serverMediaController
-            if (station == null) radio.addStation(name, stream, homepage) else radio.updateStation(station.id, name, stream, homepage)
+            if (station == null) radio.addStation(name, stream, homepage) else radio.updateStation(serverId, station.id, name, stream, homepage)
             dismiss()
         }) { Text(stringResource(if (station == null) Res.string.library_create else Res.string.save)) } },
         dismissButton = { TextButton(dismiss) { Text(stringResource(Res.string.cancel)) } })
@@ -264,7 +265,7 @@ private fun SubscribeDialog(controller: MusicController, dismiss: () -> Unit) {
 /** One podcast's description and episodes. */
 @Composable
 internal fun PodcastChannelPage(state: AppState, media: ServerMedia, channel: PodcastChannel, controller: MusicController, back: () -> Unit) {
-    var unsubscribing by remember { mutableStateOf(false) }
+    var unsubscribing by remember(media.serverId) { mutableStateOf(false) }
     SettingsScreen(back, title = { Text(channel.title, maxLines = 1, overflow = TextOverflow.Ellipsis) }, actions = {
         if (media.roles.podcast) AppIconButton(AppIcon.REMOVE, stringResource(Res.string.podcasts_unsubscribe)) { unsubscribing = true }
     }, text = {
@@ -290,7 +291,7 @@ internal fun PodcastChannelPage(state: AppState, media: ServerMedia, channel: Po
     })
     if (unsubscribing) AlertDialog(onDismissRequest = { unsubscribing = false }, title = { Text(stringResource(Res.string.podcasts_unsubscribe_named, channel.title)) },
         text = { Text(stringResource(Res.string.podcasts_unsubscribe_description)) },
-        confirmButton = { TextButton({ controller.serverMediaController.unsubscribe(channel.id); unsubscribing = false; back() }) {
+        confirmButton = { TextButton({ controller.serverMediaController.unsubscribe(media.serverId, channel.id); unsubscribing = false; back() }) {
             Text(stringResource(Res.string.podcasts_unsubscribe))
         } },
         dismissButton = { TextButton({ unsubscribing = false }) { Text(stringResource(Res.string.cancel)) } })
@@ -330,7 +331,7 @@ private fun EpisodeRow(episode: PodcastEpisode, state: AppState, media: ServerMe
                     episode.playable -> FilledTonalIconButton({ podcasts.playEpisode(episode) }) {
                         Icon((if (current) AppIcon.EQUALIZER else AppIcon.PLAY).vector, stringResource(Res.string.podcasts_play_episode))
                     }
-                    media.roles.podcast -> AppIconButton(AppIcon.DOWNLOAD, stringResource(Res.string.podcasts_download_episode)) { podcasts.downloadEpisode(episode.id) }
+                    media.roles.podcast -> AppIconButton(AppIcon.DOWNLOAD, stringResource(Res.string.podcasts_download_episode)) { podcasts.downloadEpisode(media.serverId, episode.id) }
                     else -> Icon(AppIcon.PODCAST.vector, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -342,9 +343,9 @@ private fun EpisodeRow(episode: PodcastEpisode, state: AppState, media: ServerMe
                     if (episode.playable) AppMenuItem(text = { Text(stringResource(Res.string.podcasts_play_episode)) }, leadingIcon = { Icon(AppIcon.PLAY.vector, null) },
                         onClick = { menu = false; podcasts.playEpisode(episode) })
                     if (!episode.playable && episode.status != PodcastStatus.DOWNLOADING) AppMenuItem(text = { Text(stringResource(Res.string.podcasts_download_episode)) },
-                        leadingIcon = { Icon(AppIcon.DOWNLOAD.vector, null) }, onClick = { menu = false; podcasts.downloadEpisode(episode.id) })
+                        leadingIcon = { Icon(AppIcon.DOWNLOAD.vector, null) }, onClick = { menu = false; podcasts.downloadEpisode(media.serverId, episode.id) })
                     if (episode.status == PodcastStatus.COMPLETED || episode.status == PodcastStatus.ERROR) AppMenuItem(text = { Text(stringResource(Res.string.podcasts_delete_episode)) },
-                        leadingIcon = { Icon(AppIcon.REMOVE.vector, null) }, onClick = { menu = false; podcasts.deleteEpisode(episode.id) })
+                        leadingIcon = { Icon(AppIcon.REMOVE.vector, null) }, onClick = { menu = false; podcasts.deleteEpisode(media.serverId, episode.id) })
                 }
             }
         } } else null)

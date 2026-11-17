@@ -116,20 +116,25 @@ class ServerMediaController internal constructor(private val context: Controller
     /** Asks the server again for its stations, podcasts and share links. */
     fun refresh() = context.action(serialized = false) { context.state.value.server?.serverId?.let { load(it) } }
 
-    /** Runs a change on the server, then reads what it offers again; a failure becomes the app's error, like other actions. */
-    private fun change(block: suspend (NavidromeClient) -> Unit) = context.action(serialized = false) {
+    /**
+     * Runs a change on the server, then reads what it offers again; a failure becomes the app's error, like other actions. A change
+     * to an item names [itemServer], the server that listed it, as another server may use the same ID for something else.
+     */
+    private fun change(itemServer: String? = null, block: suspend (NavidromeClient) -> Unit) = context.action(serialized = false) {
         val client = requireClient()
-        // A page can still show the previous server's stations or podcasts while the connection already moved on.
-        require(client.serverId == context.state.value.server?.serverId) { "The music server changed. Open the page again." }
+        // A page or dialog can still show the previous server's items while the connection already moved on.
+        require(client.serverId == context.state.value.server?.serverId && (itemServer == null || itemServer == client.serverId)) {
+            "The music server changed. Open the page again."
+        }
         try { block(client) } finally { load(client.serverId) }
     }
 
     // Internet radio
 
     fun addStation(name: String, streamUrl: String, homepageUrl: String) = change { it.createRadioStation(name, streamUrl, homepageUrl) }
-    fun updateStation(id: String, name: String, streamUrl: String, homepageUrl: String) =
-        change { it.updateRadioStation(id, name, streamUrl, homepageUrl) }
-    fun deleteStation(id: String) = change { it.deleteRadioStation(id) }
+    fun updateStation(serverId: String?, id: String, name: String, streamUrl: String, homepageUrl: String) =
+        change(requireNotNull(serverId)) { it.updateRadioStation(id, name, streamUrl, homepageUrl) }
+    fun deleteStation(serverId: String?, id: String) = change(requireNotNull(serverId)) { it.deleteRadioStation(id) }
 
     /** Plays [station] with the other stations as the queue, so skipping changes the station. */
     fun playStation(station: RadioStation): Job = context.action(serialized = false) {
@@ -153,10 +158,10 @@ class ServerMediaController internal constructor(private val context: Controller
         // Servers download the feed while they answer, so a slow feed can outlast the request; the next refresh shows it.
         catch (slow: NavidromeRequestException) { if (!slow.connectionFailure || slow.unreachable) throw slow }
     }
-    fun unsubscribe(channelId: String) = change { it.deletePodcastChannel(channelId) }
+    fun unsubscribe(serverId: String?, channelId: String) = change(requireNotNull(serverId)) { it.deletePodcastChannel(channelId) }
     fun refreshPodcasts() = change { it.refreshPodcasts(); pollPodcasts() }
-    fun downloadEpisode(episodeId: String) = change { it.downloadPodcastEpisode(episodeId); pollPodcasts() }
-    fun deleteEpisode(episodeId: String) = change { it.deletePodcastEpisode(episodeId) }
+    fun downloadEpisode(serverId: String?, episodeId: String) = change(requireNotNull(serverId)) { it.downloadPodcastEpisode(episodeId); pollPodcasts() }
+    fun deleteEpisode(serverId: String?, episodeId: String) = change(requireNotNull(serverId)) { it.deletePodcastEpisode(episodeId) }
 
     /** Reads the podcasts again every few seconds while the server downloads episodes or checks feeds, for up to five minutes. */
     private fun pollPodcasts() {
@@ -270,7 +275,7 @@ class ServerMediaController internal constructor(private val context: Controller
         if (deliver(share)) context.confirm(Res.string.notice_share_link_copied)
     }
 
-    fun deleteShare(id: String) = change { it.deleteShare(id) }
+    fun deleteShare(serverId: String?, id: String) = change(requireNotNull(serverId)) { it.deleteShare(id) }
 
     /** Confirms that a link went to the clipboard. */
     fun announceCopied() = context.confirm(Res.string.notice_share_link_copied)

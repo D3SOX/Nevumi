@@ -149,6 +149,12 @@ class ServerMediaIntegrationTest {
                 media.media.first { it.stations.orEmpty().count { station -> station.streamUrl == radioStream } == 2 && it.bookmarks[streamId] != null }
             }
             assertTrue(loaded.radioAvailable && loaded.podcastsAvailable && !loaded.sharingAvailable)
+            // A dialog still showing another server's station must not change one with the same ID here.
+            val listed = loaded.stations.orEmpty().first { it.streamUrl == radioStream }
+            media.deleteStation("another-server", listed.id).join()
+            assertTrue(client.radioStations().orEmpty().any { it.id == listed.id })
+            assertEquals("The music server changed. Open the page again.", player.state.value.error)
+            player.dismissError("The music server changed. Open the page again.")
 
             media.playStation(loaded.stations.orEmpty().last { it.streamUrl == radioStream }).join()
             val live = withTimeout(10_000) { player.state.first { it.playback.playing && it.playback.streamTitle != null } }
