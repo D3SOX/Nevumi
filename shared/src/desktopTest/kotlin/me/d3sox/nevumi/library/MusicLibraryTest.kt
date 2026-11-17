@@ -10,6 +10,22 @@ import kotlin.test.assertSame
 
 class MusicLibraryTest {
     @Test
+    fun stationsAndEpisodesCannotBeLinkedToSongs() = runBlocking {
+        val directory = Files.createTempDirectory("link-live")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val library = MusicLibrary(store)
+            val song = library.importTrack(TrackMetadata("Song"), TrackSource("local:song", SourceKind.LOCAL, "/music/song.flac"))
+            val station = library.importTrack(TrackMetadata("Station"), TrackSource("radio:server:1", SourceKind.RADIO, "https://radio.test/stream"))
+            val episode = library.importTrack(TrackMetadata("Episode"), TrackSource("podcast:server:2", SourceKind.PODCAST, "stream-2"))
+            for ((keep, other) in listOf(song to station, episode to song)) {
+                assertFailsWith<IllegalArgumentException> { library.linkTracks(keep.id, other.id) }
+            }
+            assertEquals(3, library.tracks().size)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun ratingsCanFilterAndSortTheLibraryIncludingUnratedSongsAndCombinedConditions() = runBlocking {
         val directory = Files.createTempDirectory("rating-query")
         val store = openMusicStore(directory.resolve("library.db").toString())

@@ -35,7 +35,8 @@ internal fun shareIds(controller: MusicController, tracks: List<Track>, playlist
     val server = controller.state.collectAsState().value.server
     return remember(tracks, playlist, server) {
         playlist?.server?.takeIf { it.serverId == server?.serverId }?.id?.let(::listOf)
-            ?: controller.serverMediaController.serverSongIds(tracks)
+            // A link named after a collection must hold all of it, so songs only on this device rule out a link.
+            ?: controller.serverMediaController.serverSongIds(tracks).takeIf { it.size == tracks.size }.orEmpty()
     }
 }
 
@@ -55,6 +56,7 @@ internal fun SharesPage(controller: MusicController, back: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize().testTag("shares-page"), contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             item(key = "progress") { if (media.loading) LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            media.error?.let { error -> item(key = "error") { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) } }
             val shares = media.shares
             if (shares == null) item(key = "unsupported") { Text(stringResource(Res.string.shares_unsupported), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             else if (shares.isEmpty()) item(key = "none") { Text(stringResource(Res.string.shares_none), color = MaterialTheme.colorScheme.onSurfaceVariant) }

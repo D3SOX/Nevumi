@@ -30,6 +30,14 @@ class ServerMediaTest {
             RadioStation("ir-2", "https://news.test/stream", "https://news.test/stream", "https://news.test")), stations)
     }
 
+    @Test fun onlyWebAddressesFromTheServerReachThePlayerOrTheBrowser() {
+        val stations = parseRadioStations(envelope(""""internetRadioStations":{"internetRadioStation":[
+            {"id":"1","name":"Web","streamUrl":"https://web.test/stream","homePageUrl":"javascript:alert(1)"},
+            {"id":"2","name":"File","streamUrl":"file:///etc/passwd","homePageUrl":"https://file.test"}]}"""))
+        assertEquals(listOf(RadioStation("1", "Web", "https://web.test/stream", "")), stations)
+        assertEquals(emptyList(), parseShares(envelope(""""shares":{"share":[{"id":"s1","url":"intent://share/s1"}]}""")))
+    }
+
     @Test fun emptyListsAreEmptyHoweverTheServerWritesThem() {
         assertEquals(emptyList(), parseRadioStations(envelope(""""internetRadioStations":{}""")))
         assertEquals(emptyList(), parsePodcasts(envelope(""""podcasts":{"channel":null}""")))

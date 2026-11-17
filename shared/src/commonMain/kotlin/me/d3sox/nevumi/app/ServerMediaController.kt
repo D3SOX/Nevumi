@@ -6,6 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -75,7 +76,8 @@ class ServerMediaController internal constructor(private val context: Controller
     init {
         if (navidrome != null) {
             context.scope.launch {
-                context.state.map { it.server?.serverId }.distinctUntilChanged().collect { serverId ->
+                // A new server cancels a load still waiting on the previous one, such as one behind an unreachable address.
+                context.state.map { it.server?.serverId }.distinctUntilChanged().collectLatest { serverId ->
                     if (serverId == null) mutableMedia.value = ServerMedia() else load(serverId)
                 }
             }
@@ -117,6 +119,8 @@ class ServerMediaController internal constructor(private val context: Controller
     /** Runs a change on the server, then reads what it offers again; a failure becomes the app's error, like other actions. */
     private fun change(block: suspend (NavidromeClient) -> Unit) = context.action(serialized = false) {
         val client = requireClient()
+        // A page can still show the previous server's stations or podcasts while the connection already moved on.
+        require(client.serverId == context.state.value.server?.serverId) { "The music server changed. Open the page again." }
         try { block(client) } finally { load(client.serverId) }
     }
 
@@ -147,7 +151,7 @@ class ServerMediaController internal constructor(private val context: Controller
     fun subscribe(url: String) = change { client ->
         try { client.subscribePodcast(url) }
         // Servers download the feed while they answer, so a slow feed can outlast the request; the next refresh shows it.
-        catch (slow: NavidromeRequestException) { if (!slow.connectionFailure) throw slow }
+        catch (slow: NavidromeRequestException) { if (!slow.connectionFailure || slow.unreachable) throw slow }
     }
     fun unsubscribe(channelId: String) = change { it.deletePodcastChannel(channelId) }
     fun refreshPodcasts() = change { it.refreshPodcasts(); pollPodcasts() }
@@ -209,6 +213,8 @@ class ServerMediaController internal constructor(private val context: Controller
             val now = clock.elapsedNow().inWholeMilliseconds
             val periodic = current.playing && !changed && now - savedAt >= 30_000
             if (!changed && !paused && !periodic && !current.ended) return@collect
+            // Ordinary songs reach here every half minute too, so the lookup below runs at most that often for them.
+            if (periodic) savedAt = now
             val status = if (changed) last else current
             val track = context.state.value.tracks.firstOrNull { it.id == status.trackId } ?: library.findTrack(status.trackId ?: return@collect)
             val episode = track?.sources?.firstOrNull { it.kind == SourceKind.PODCAST } ?: return@collect

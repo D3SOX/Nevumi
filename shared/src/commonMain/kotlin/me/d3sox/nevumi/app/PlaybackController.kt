@@ -373,7 +373,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
         engine.setSpeed(playback.speed); engine.setPitch(playback.pitch)
         queue.restore(playback.queue)
         loadSnapshot(playback.queue, playback.playWhenReady)
-        val ready = withTimeoutOrNull(10_000) { engine.status.first { it.entryId == playback.queue.currentEntryId && (it.durationMs > 0 || it.error != null) } }
+        // A live station never reports a length, so loading it is enough.
+        val live = playback.queue.currentEntryId?.let { lastResolved[it] }?.live == true
+        val ready = withTimeoutOrNull(10_000) { engine.status.first { it.entryId == playback.queue.currentEntryId && (it.durationMs > 0 || live || it.error != null) } }
             ?: error("Playback did not start in time")
         require(ready.error == null) { ready.error ?: "Playback could not start" }
         preferences?.update { it.copy(speed = playback.speed, pitch = playback.pitch) }?.let { settings ->

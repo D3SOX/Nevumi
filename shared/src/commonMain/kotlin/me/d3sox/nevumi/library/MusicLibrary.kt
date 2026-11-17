@@ -351,6 +351,10 @@ class MusicLibrary(private val store: MusicStore) {
 
     suspend fun linkTracks(keepId: String, otherId: String): Track = store.transaction {
         require(keepId != otherId) { "Choose another song to link" }
+        // A station or episode linked into a song would make that song live or an episode, hiding seeking and library controls.
+        require(listOf(keepId, otherId).none { id -> findTrack(id)?.let { it.isRadio || it.isPodcastEpisode } == true }) {
+            "Stations and podcast episodes cannot be linked to songs"
+        }
         merge(keepId, otherId, store.list("file-edits")).also { remapReferences(mapOf(otherId to keepId)) }
     }
 

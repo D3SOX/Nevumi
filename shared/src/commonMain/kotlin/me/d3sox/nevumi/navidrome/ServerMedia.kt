@@ -47,12 +47,16 @@ private fun JsonElement?.entries(name: String): List<JsonObject> = when (val val
     else -> emptyList()
 }
 
+/** Stations and shares come from any client of the server, so only web addresses reach the player or the browser. */
+private fun String.webAddress(): String? = trim().takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+
 internal fun parseRadioStations(envelope: JsonObject): List<RadioStation> =
     envelope["internetRadioStations"].entries("internetRadioStation").mapNotNull { station ->
         val id = station.string("id").ifBlank { return@mapNotNull null }
-        val stream = station.string("streamUrl").ifBlank { return@mapNotNull null }
+        val stream = station.string("streamUrl").webAddress() ?: return@mapNotNull null
         // The API documents homePageUrl; some servers write homepageUrl, as the request parameter is named.
-        RadioStation(id, station.string("name").ifBlank { stream }, stream, station.string("homePageUrl").ifBlank { station.string("homepageUrl") })
+        RadioStation(id, station.string("name").ifBlank { stream }, stream,
+            station.string("homePageUrl").ifBlank { station.string("homepageUrl") }.webAddress().orEmpty())
     }
 
 private fun parseEpisode(episode: JsonObject, channel: JsonObject? = null): PodcastEpisode? {
@@ -82,7 +86,7 @@ internal fun parseShares(envelope: JsonObject): List<ServerShare> = envelope["sh
 
 internal fun parseShare(share: JsonObject): ServerShare? {
     val id = share.string("id").ifBlank { return null }
-    val url = share.string("url").ifBlank { return null }
+    val url = share.string("url").webAddress() ?: return null
     return ServerShare(id, url, share.string("description"), share.string("created"), share.string("expires").ifBlank { null },
         (share["visitCount"] as? JsonPrimitive)?.longOrNull?.toInt() ?: 0,
         share.entries("entry").map { it.string("title").ifBlank { it.string("name") } }.filter { it.isNotBlank() })

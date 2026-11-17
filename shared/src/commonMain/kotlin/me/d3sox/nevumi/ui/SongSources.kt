@@ -93,7 +93,8 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
                     Text(source.location, style = MaterialTheme.typography.bodySmall)
                     if (!source.available) Text(stringResource(Res.string.player_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                ActionButton(stringResource(Res.string.player_link_another_copy), AppIcon.LINK, style = ActionStyle.OUTLINED) { choosing = true }
+                if (!track.isRadio && !track.isPodcastEpisode)
+                    ActionButton(stringResource(Res.string.player_link_another_copy), AppIcon.LINK, style = ActionStyle.OUTLINED) { choosing = true }
             }
         }
     }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })
