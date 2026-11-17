@@ -268,6 +268,12 @@ class MusicBackupTest {
     }
 
     @Test
+    fun aPlaylistOnlyBackupWithoutPlaylistsStillOffersItsPlaylistOrder() = devices { source, target ->
+        val text = source.backup.export(sections = setOf(BackupSection.PLAYLISTS))
+        assertEquals(setOf(BackupSection.PLAYLISTS), target.backup.sections(text))
+    }
+
+    @Test
     fun exportingNothingIsRejected() = devices { source, _ ->
         assertFailsWith<IllegalArgumentException> { source.backup.export(sections = emptySet()) }
     }

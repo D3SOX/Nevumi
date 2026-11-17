@@ -93,7 +93,8 @@ data class RestoreSummary(val settings: Boolean = false, val favorites: Int = 0,
 /** The sections this backup holds data for. */
 fun BackupDocument.sections(): Set<BackupSection> = buildSet {
     if (settings != null) add(BackupSection.SETTINGS)
-    if (playlists.isNotEmpty()) add(BackupSection.PLAYLISTS)
+    // An empty Playlists order still clears the destination's.
+    if (playlists.isNotEmpty() || playlistOrder != null) add(BackupSection.PLAYLISTS)
     if (savedQueues.isNotEmpty()) add(BackupSection.SAVED_QUEUES)
     if (tracks.values.any { it.favorite }) add(BackupSection.FAVORITES)
     if (tracks.values.any { it.rating != 0 }) add(BackupSection.RATINGS)
