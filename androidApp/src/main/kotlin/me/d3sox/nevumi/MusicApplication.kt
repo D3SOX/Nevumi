@@ -58,6 +58,8 @@ class MusicApplication : Application() {
         private set
     lateinit var crashLog: me.d3sox.nevumi.diagnostics.CrashLog
         private set
+    /** Launcher shortcut requests already handed to the controller; it outlives activities, so a restored request runs once. */
+    val dispatchedShortcuts = mutableSetOf<String>()
     private val mutableDownloadNotifications = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val downloadNotificationsRequested = mutableDownloadNotifications.asSharedFlow()
 

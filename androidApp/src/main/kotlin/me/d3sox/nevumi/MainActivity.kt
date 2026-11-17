@@ -138,16 +138,19 @@ class MainActivity : ComponentActivity() {
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
         val action = intent.action?.takeIf { it in setOf(SHUFFLE_SHORTCUT, SEARCH_SHORTCUT, RESUME_SHORTCUT) } ?: return
         getSystemService(ShortcutManager::class.java)?.reportShortcutUsed(action)
-        runShortcut(action)
+        runShortcut("$action#${java.util.UUID.randomUUID()}")
     }
 
     /**
-     * Runs [action] once startup allows it. Until then it is kept, so a recreated activity, such as after rotating, still runs it;
-     * once the controller has it, the controller finishes it, so a recreated activity must not start it again.
+     * Runs [request], a shortcut action with an ID for this launch, once startup allows it. Until then it is kept, so a recreated
+     * activity, such as after rotating, still runs it. Once the controller has it, the controller finishes it, and the application
+     * remembers it: the state a recreated activity restores may have been saved before that.
      */
-    private fun runShortcut(action: String) {
-        pendingShortcut = action
-        val controller = (application as MusicApplication).controller
+    private fun runShortcut(request: String) {
+        pendingShortcut = request
+        val app = application as MusicApplication
+        val controller = app.controller
+        val action = request.substringBefore('#')
         lifecycleScope.launch {
             val dispatch = when (action) {
                 SHUFFLE_SHORTCUT -> controller.libraryShuffle()
@@ -155,9 +158,8 @@ class MainActivity : ComponentActivity() {
                 // Search belongs to this activity, and opening it twice does no harm.
                 else -> { shortcuts.openSearch(); null }
             }
-            // Nothing suspends between these two lines, so a recreation either repeats the waiting or finds the action handed over.
             pendingShortcut = null
-            dispatch?.invoke()
+            if (app.dispatchedShortcuts.add(request)) dispatch?.invoke()
         }
     }
 
