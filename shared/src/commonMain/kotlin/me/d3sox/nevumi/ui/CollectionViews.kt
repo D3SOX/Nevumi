@@ -15,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -47,6 +49,7 @@ import me.d3sox.nevumi.resources.library_album_artist_options
 import me.d3sox.nevumi.resources.library_album_options
 import me.d3sox.nevumi.resources.library_artist_options
 import me.d3sox.nevumi.resources.library_automatic
+import me.d3sox.nevumi.resources.library_automatic_downloads
 import me.d3sox.nevumi.resources.library_collection_view
 import me.d3sox.nevumi.resources.library_column_count
 import me.d3sox.nevumi.resources.library_columns
@@ -82,7 +85,8 @@ import org.jetbrains.compose.resources.PluralStringResource
  */
 internal data class CollectionItem(val id: String, val title: String, val subtitle: String,
     val artwork: String?, val icon: AppIcon, val songCount: Int = 0, val artist: String = "", val year: Int = 0, val recentAt: Long = 0,
-    val trackIds: List<String> = emptyList(), val describe: (@Composable () -> String)? = null, val covers: List<String?> = emptyList())
+    val trackIds: List<String> = emptyList(), val describe: (@Composable () -> String)? = null, val covers: List<String?> = emptyList(),
+    val downloaded: Boolean = false)
 
 /** How a collection tab names one of its collections and counts them, without deriving singulars from the tab label. */
 internal class CollectionNouns(val kind: StringResource, val count: PluralStringResource, val options: StringResource, val scroll: StringResource)
@@ -115,6 +119,16 @@ internal fun CollectionLayout.comparator(): Comparator<CollectionItem> {
 @Composable
 private fun CollectionArtwork(entry: CollectionItem, modifier: Modifier) = CollectionArtwork(entry.artwork, entry.title, entry.icon, modifier,
     entry.covers, AppIcon.FOLDER.takeIf { entry.id.startsWith(PLAYLIST_FOLDER_PREFIX) })
+
+/** The collection's description, led by a download badge when it downloads automatically, like a downloaded song's. */
+@Composable
+private fun CollectionDescription(entry: CollectionItem, style: TextStyle = LocalTextStyle.current, color: Color = Color.Unspecified) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (entry.downloaded) Icon(AppIcon.AVAILABLE_OFFLINE.vector, stringResource(Res.string.library_automatic_downloads), Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.primary)
+        Text(entry.describe?.invoke() ?: entry.subtitle, style = style, maxLines = 2, overflow = TextOverflow.Ellipsis, color = color)
+    }
+}
 
 @Composable
 internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, state: AppState, controller: MusicController,
@@ -222,7 +236,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                 ListItem(modifier = Modifier.combinedClickable(onClick = { open(entry.id) }, onLongClick = menu),
                     headlineContent = { Text(entry.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     leadingContent = { CollectionArtwork(entry, Modifier.size(48.dp)) },
-                    supportingContent = { Text(entry.describe?.invoke() ?: entry.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = { CollectionDescription(entry) },
                     trailingContent = { if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(nouns.options, entry.title), onClick = menu) })
                 }
             }
@@ -238,8 +252,7 @@ internal fun CollectionBrowser(entries: List<CollectionItem>, tab: LibraryTab, s
                             Text(entry.title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (state.preferences.showMoreButtons) AppIconButton(AppIcon.MORE, stringResource(nouns.options, entry.title), onClick = menu)
                         }
-                        Text(entry.describe?.invoke() ?: entry.subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 2,
-                            overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        CollectionDescription(entry, MaterialTheme.typography.bodySmall, MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 }
