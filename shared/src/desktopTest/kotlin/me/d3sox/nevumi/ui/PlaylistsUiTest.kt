@@ -26,6 +26,34 @@ import io.ktor.client.engine.mock.respond
 @OptIn(ExperimentalTestApi::class)
 class PlaylistsUiTest {
     @Test
+    fun aDownloadingPlaylistShowsADownloadBadgeInsteadOfText() {
+        val directory = Files.createTempDirectory("playlist-download-badge-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        runBlocking {
+            val song = library.importTrack(TrackMetadata("Song"), TrackSource("/music/song.flac", SourceKind.LOCAL, "/music/song.flac"))
+            playlists.setAutoDownload(playlists.create("Downloaded", listOf(song.id)).id, true)
+            playlists.create("Streamed", listOf(song.id))
+        }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists, preferences = MusicPreferences(store))
+        try {
+            androidx.compose.ui.test.v2.runSkikoComposeUiTest(size = androidx.compose.ui.geometry.Size(420f, 900f)) {
+                setContent { MusicPlayerApp(controller) }
+                waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.size == 2 }
+                openLibraryPage("Playlists")
+                for (view in me.d3sox.nevumi.settings.CollectionView.entries) {
+                    runBlocking { controller.updatePreferences { it.copy(collectionLayouts = mapOf(LibraryTab.PLAYLISTS to me.d3sox.nevumi.settings.CollectionLayout(view))) }.join() }
+                    waitForIdle()
+                    onAllNodesWithContentDescription("Automatic downloads").assertCountEquals(1)
+                    onNodeWithText("Automatic downloads", substring = true).assertDoesNotExist()
+                    captureUiSnapshot("playlist-download-badge-${view.name.lowercase()}")
+                }
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun anOwnedServerPlaylistWithReadOnlyTracksStillOffersEditingAndDeletion() {
         val directory = Files.createTempDirectory("owned-read-only-playlist-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())

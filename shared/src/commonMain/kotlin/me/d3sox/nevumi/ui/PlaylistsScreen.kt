@@ -58,7 +58,6 @@ import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.edit_rules
 import me.d3sox.nevumi.resources.library_added_to
 import me.d3sox.nevumi.resources.library_alphabetical
-import me.d3sox.nevumi.resources.library_automatic_downloads
 import me.d3sox.nevumi.resources.library_choose_version
 import me.d3sox.nevumi.resources.library_clear_search
 import me.d3sox.nevumi.resources.library_contains_selected_songs
@@ -165,9 +164,8 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
         trackIds = collection.trackIds, describe = {
             listOfNotNull(countLabel(collection.trackIds.size, Res.plurals.songs),
                 if (collection.rule != null) stringResource(Res.string.library_smart_playlist) else null,
-                if (collection.youTube != null) stringResource(Res.string.library_youtube_playlist) else null,
-                if (collection.autoDownload) stringResource(Res.string.library_automatic_downloads) else null).joinToString(" · ")
-        })
+                if (collection.youTube != null) stringResource(Res.string.library_youtube_playlist) else null).joinToString(" · ")
+        }, downloaded = collection.autoDownload)
     fun collections(page: String?) = visiblePlaylists.filter { it.folder == page }.map(::entry) + visiblePlaylists.mapNotNull { playlist ->
         // Group everything below this page by the subfolder it sits in.
         val path = playlist.folder?.takeIf { it != page && (page == null || isInFolder(it, page)) } ?: return@mapNotNull null
