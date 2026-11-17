@@ -131,7 +131,9 @@ class ServerMediaController internal constructor(private val context: Controller
 
     // Internet radio
 
-    fun addStation(name: String, streamUrl: String, homepageUrl: String) = change { it.createRadioStation(name, streamUrl, homepageUrl) }
+    /** Adds a station on [serverId], the server whose page opened the dialog. */
+    fun addStation(serverId: String?, name: String, streamUrl: String, homepageUrl: String) =
+        change(requireNotNull(serverId)) { it.createRadioStation(name, streamUrl, homepageUrl) }
     fun updateStation(serverId: String?, id: String, name: String, streamUrl: String, homepageUrl: String) =
         change(requireNotNull(serverId)) { it.updateRadioStation(id, name, streamUrl, homepageUrl) }
     fun deleteStation(serverId: String?, id: String) = change(requireNotNull(serverId)) { it.deleteRadioStation(id) }
@@ -153,7 +155,8 @@ class ServerMediaController internal constructor(private val context: Controller
 
     // Podcasts
 
-    fun subscribe(url: String) = change { client ->
+    /** Subscribes on [serverId], the server whose page opened the dialog. */
+    fun subscribe(serverId: String?, url: String) = change(requireNotNull(serverId)) { client ->
         try { client.subscribePodcast(url) }
         // Servers download the feed while they answer, so a slow feed can outlast the request; the next refresh shows it.
         catch (slow: NavidromeRequestException) { if (!slow.connectionFailure || slow.unreachable) throw slow }

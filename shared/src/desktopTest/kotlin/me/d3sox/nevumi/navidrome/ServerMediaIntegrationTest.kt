@@ -155,6 +155,10 @@ class ServerMediaIntegrationTest {
             assertTrue(client.radioStations().orEmpty().any { it.id == listed.id })
             assertEquals("The music server changed. Open the page again.", player.state.value.error)
             player.dismissError("The music server changed. Open the page again.")
+            media.addStation("another-server", "Stale dialog", radioStream, "").join()
+            assertTrue(client.radioStations().orEmpty().none { it.name == "Stale dialog" })
+            assertEquals("The music server changed. Open the page again.", player.state.value.error)
+            player.dismissError("The music server changed. Open the page again.")
 
             media.playStation(loaded.stations.orEmpty().last { it.streamUrl == radioStream }).join()
             val live = withTimeout(10_000) { player.state.first { it.playback.playing && it.playback.streamTitle != null } }

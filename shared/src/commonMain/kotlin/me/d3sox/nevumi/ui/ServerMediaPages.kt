@@ -126,7 +126,7 @@ internal fun RadioPage(state: AppState, media: ServerMedia, controller: MusicCon
     val radio = controller.serverMediaController
     // Dialogs belong to the server that listed their station, so another server closes them.
     var editing by remember(media.serverId) { mutableStateOf<RadioStation?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    var adding by remember(media.serverId) { mutableStateOf(false) }
     var deleting by remember(media.serverId) { mutableStateOf<RadioStation?>(null) }
     val playing = playingSource(controller, SourceKind.RADIO)
     val browser = LocalUriHandler.current
@@ -196,7 +196,7 @@ private fun StationDialog(station: RadioStation?, serverId: String?, controller:
         },
         confirmButton = { TextButton(enabled = valid, onClick = {
             val radio = controller.serverMediaController
-            if (station == null) radio.addStation(name, stream, homepage) else radio.updateStation(serverId, station.id, name, stream, homepage)
+            if (station == null) radio.addStation(serverId, name, stream, homepage) else radio.updateStation(serverId, station.id, name, stream, homepage)
             dismiss()
         }) { Text(stringResource(if (station == null) Res.string.library_create else Res.string.save)) } },
         dismissButton = { TextButton(dismiss) { Text(stringResource(Res.string.cancel)) } })
@@ -206,7 +206,7 @@ private fun StationDialog(station: RadioStation?, serverId: String?, controller:
 @Composable
 internal fun PodcastsPage(state: AppState, media: ServerMedia, controller: MusicController, back: () -> Unit, open: (String) -> Unit) {
     val podcasts = controller.serverMediaController
-    var subscribing by remember { mutableStateOf(false) }
+    var subscribing by remember(media.serverId) { mutableStateOf(false) }
     val channels = media.podcasts.orEmpty()
     SettingsScreen(back, title = { Text(stringResource(Res.string.podcasts_title)) }, actions = {
         // Checking the feeds reads the podcasts again too, so an account that may check them needs no second refresh.
@@ -241,11 +241,11 @@ internal fun PodcastsPage(state: AppState, media: ServerMedia, controller: Music
             }
         }
     })
-    if (subscribing) SubscribeDialog(controller) { subscribing = false }
+    if (subscribing) SubscribeDialog(media.serverId, controller) { subscribing = false }
 }
 
 @Composable
-private fun SubscribeDialog(controller: MusicController, dismiss: () -> Unit) {
+private fun SubscribeDialog(serverId: String?, controller: MusicController, dismiss: () -> Unit) {
     var url by remember { mutableStateOf("") }
     val valid = url.trim().let { it.startsWith("http://", true) || it.startsWith("https://", true) }
     KeyboardAlertDialog(onDismissRequest = dismiss, modifier = Modifier.testTag("podcast-subscribe"),
@@ -256,7 +256,7 @@ private fun SubscribeDialog(controller: MusicController, dismiss: () -> Unit) {
                 OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth().testTag("podcast-feed"), label = { Text(stringResource(Res.string.podcasts_feed_address)) }, singleLine = true)
             }
         },
-        confirmButton = { TextButton(enabled = valid, onClick = { controller.serverMediaController.subscribe(url); dismiss() }) {
+        confirmButton = { TextButton(enabled = valid, onClick = { controller.serverMediaController.subscribe(serverId, url); dismiss() }) {
             Text(stringResource(Res.string.podcasts_subscribe))
         } },
         dismissButton = { TextButton(dismiss) { Text(stringResource(Res.string.cancel)) } })
