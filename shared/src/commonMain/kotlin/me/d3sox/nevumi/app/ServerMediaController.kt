@@ -282,7 +282,11 @@ class ServerMediaController internal constructor(private val context: Controller
                 if (refused.code != 50) throw refused
                 throw NavidromeRequestException("This account may not share. Ask the server's administrator to allow sharing.")
             }
-        mutableMedia.update { it.copy(shares = listOf(share) + it.shares.orEmpty().filterNot { old -> old.id == share.id }) }
+        // A link that arrives after a switch to another server must not join, or replace, that server's links.
+        mutableMedia.update { media ->
+            if (media.serverId != client.serverId) media
+            else media.copy(shares = listOf(share) + media.shares.orEmpty().filterNot { old -> old.id == share.id })
+        }
         if (deliver(share)) context.confirm(Res.string.notice_share_link_copied)
     }
 
@@ -292,10 +296,8 @@ class ServerMediaController internal constructor(private val context: Controller
     fun announceCopied() = context.confirm(Res.string.notice_share_link_copied)
 
     /** The server's IDs of [tracks] on the connected server, in order; songs from elsewhere cannot be shared. */
-    fun serverSongIds(tracks: List<Track>): List<String> {
-        val serverId = context.state.value.server?.serverId ?: return emptyList()
-        return tracks.mapNotNull { track -> track.sources.firstOrNull { it.kind == SourceKind.SERVER && it.id.startsWith("server:$serverId:") }?.location }
-    }
+    fun serverSongIds(serverId: String, tracks: List<Track>): List<String> =
+        tracks.mapNotNull { track -> track.sources.firstOrNull { it.kind == SourceKind.SERVER && it.id.startsWith("server:$serverId:") }?.location }
 
     // Shared helpers
 

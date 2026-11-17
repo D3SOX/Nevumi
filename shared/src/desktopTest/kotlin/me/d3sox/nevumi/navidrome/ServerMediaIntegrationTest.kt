@@ -120,6 +120,43 @@ class ServerMediaIntegrationTest {
         } finally { http.close() }
     }
 
+    @Test fun theAppSharesOnlyOnTheServerThatSuppliedTheSongs() = runBlocking {
+        val directory = Files.createTempDirectory("server-media-share")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val http = HttpClient(OkHttp)
+        val secrets = mutableMapOf<String, String>()
+        val connection = NavidromeConnection(store, http, object : CredentialVault {
+            override suspend fun save(key: String, secret: String) { secrets[key] = secret }
+            override suspend fun read(key: String) = secrets[key]
+            override suspend fun delete(key: String) { secrets.remove(key) }
+        })
+        val navidrome = "http://127.0.0.1:14533"
+        val client = NavidromeClient(http, navidrome, ServerCredentials("fixture", "fixture-password"))
+        var controller: MusicController? = null
+        try {
+            connection.connect(navidrome, ServerCredentials("fixture", "fixture-password"))
+            val player = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), connection)
+            controller = player
+            val media = player.serverMediaController
+            val serverId = withTimeout(10_000) { media.media.first { it.sharingAvailable } }.serverId
+            val song = client.songs().first()
+            var delivered: ServerShare? = null
+            // Song IDs taken from another server must not become a link here.
+            media.share("another-server", listOf(song.id), "Wrong server") { delivered = it; false }.join()
+            assertNull(delivered)
+            assertEquals("The music server changed. Open the page again.", player.state.value.error)
+            player.dismissError("The music server changed. Open the page again.")
+            media.share(serverId, listOf(song.id), "Nevumi controller share") { delivered = it; false }.join()
+            val share = requireNotNull(delivered)
+            try { assertTrue(media.media.value.shares.orEmpty().any { it.id == share.id }) }
+            finally { client.deleteShare(share.id) }
+        } finally {
+            controller?.closeAndJoin()
+            connection.disconnect(); http.close(); store.close()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     @Test fun aStationPlaysLiveWithItsStreamTitleAndAnEpisodeResumesFromItsBookmark() = runBlocking {
         val directory = Files.createTempDirectory("server-media-playback")
         val store = openMusicStore(directory.resolve("library.db").toString())

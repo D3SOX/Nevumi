@@ -16,30 +16,32 @@ import me.d3sox.nevumi.navidrome.ServerShare
 import me.d3sox.nevumi.resources.*
 import org.jetbrains.compose.resources.stringResource
 
+/** Song IDs to share together with the server they belong to, read in one go so a server switch cannot pair them up wrongly. */
+internal data class ShareTarget(val serverId: String, val ids: List<String>)
+
 /**
  * Shares server music by link: Android offers the share sheet and Linux copies the link. Null while the server cannot share, or
- * when [ids] holds nothing from the connected server.
+ * when [target] holds nothing from the connected server.
  */
 @Composable
-internal fun rememberShareLink(controller: MusicController, ids: List<String>, title: String): (() -> Unit)? {
+internal fun rememberShareLink(controller: MusicController, target: ShareTarget?, title: String): (() -> Unit)? {
     val media by controller.serverMediaController.media.collectAsState()
-    // shareIds took [ids] from this server, so the link goes there or nowhere.
-    val serverId = controller.state.collectAsState().value.server?.serverId
     val sharer = rememberLinkSharer()
-    if (!media.sharingAvailable || ids.isEmpty()) return null
-    return { controller.serverMediaController.share(serverId, ids, title) { share -> sharer.share(title, share.url); sharer.copies } }
+    if (!media.sharingAvailable || target == null) return null
+    return { controller.serverMediaController.share(target.serverId, target.ids, title) { share -> sharer.share(title, share.url); sharer.copies } }
 }
 
 /**
- * The server's song IDs a link to [tracks] shares. Playlists share their songs too, as Subsonic's `createShare` reads song, album
- * and video IDs, and a server other than Navidrome could take a playlist ID for an unrelated song.
+ * The connected server's song IDs a link to [tracks] shares. Playlists share their songs too, as Subsonic's `createShare` reads song,
+ * album and video IDs, and a server other than Navidrome could take a playlist ID for an unrelated song.
  */
 @Composable
-internal fun shareIds(controller: MusicController, tracks: List<Track>): List<String> {
-    val server = controller.state.collectAsState().value.server
-    return remember(tracks, server) {
+internal fun shareIds(controller: MusicController, tracks: List<Track>): ShareTarget? {
+    val serverId = controller.state.collectAsState().value.server?.serverId
+    return remember(tracks, serverId) {
         // A link named after a collection must hold all of it, so songs only on this device rule out a link.
-        controller.serverMediaController.serverSongIds(tracks).takeIf { it.size == tracks.size }.orEmpty()
+        serverId?.let { server -> controller.serverMediaController.serverSongIds(server, tracks).takeIf { it.isNotEmpty() && it.size == tracks.size }
+            ?.let { ShareTarget(server, it) } }
     }
 }
 
