@@ -113,7 +113,7 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
                     onClick = { close { controller.setFavorite(trackIds, !favorite) } })
             }
             // Albums and playlists share as links; artists, genres and folders are no single item to share.
-            if (tab == LibraryTab.ALBUMS || playlist != null) rememberShareLink(controller, shareIds(controller, tracks, playlist), entry.title)?.let { share ->
+            if (tab == LibraryTab.ALBUMS || playlist != null) rememberShareLink(controller, shareIds(controller, tracks), entry.title)?.let { share ->
                 AppMenuItem(text = { Text(stringResource(Res.string.shares_share_link)) }, leadingIcon = { Icon(AppIcon.SHARE.vector, null) },
                     onClick = { close(share) })
             }

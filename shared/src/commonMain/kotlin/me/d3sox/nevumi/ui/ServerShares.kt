@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.navidrome.ServerShare
-import me.d3sox.nevumi.playlists.Playlist
 import me.d3sox.nevumi.resources.*
 import org.jetbrains.compose.resources.stringResource
 
@@ -29,14 +28,16 @@ internal fun rememberShareLink(controller: MusicController, ids: List<String>, t
     return { controller.serverMediaController.share(ids, title) { share -> sharer.share(title, share.url); sharer.copies } }
 }
 
-/** The server IDs a link to [tracks] shares: the server's own playlist where [playlist] has one, otherwise its songs. */
+/**
+ * The server's song IDs a link to [tracks] shares. Playlists share their songs too, as Subsonic's `createShare` reads song, album
+ * and video IDs, and a server other than Navidrome could take a playlist ID for an unrelated song.
+ */
 @Composable
-internal fun shareIds(controller: MusicController, tracks: List<Track>, playlist: Playlist? = null): List<String> {
+internal fun shareIds(controller: MusicController, tracks: List<Track>): List<String> {
     val server = controller.state.collectAsState().value.server
-    return remember(tracks, playlist, server) {
-        playlist?.server?.takeIf { it.serverId == server?.serverId }?.id?.let(::listOf)
-            // A link named after a collection must hold all of it, so songs only on this device rule out a link.
-            ?: controller.serverMediaController.serverSongIds(tracks).takeIf { it.size == tracks.size }.orEmpty()
+    return remember(tracks, server) {
+        // A link named after a collection must hold all of it, so songs only on this device rule out a link.
+        controller.serverMediaController.serverSongIds(tracks).takeIf { it.size == tracks.size }.orEmpty()
     }
 }
 
