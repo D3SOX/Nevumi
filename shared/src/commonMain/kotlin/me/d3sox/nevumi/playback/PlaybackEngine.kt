@@ -29,10 +29,13 @@ data class PlaybackStatus(
     val fadingOut: PlaybackStatus? = null,
     val crossfadeDurationMs: Long = 0,
     val audioInfo: AudioInfo? = null,
+    /** The title a live stream announces for what it plays now, such as an internet radio station's ICY title. */
+    val streamTitle: String? = null,
 )
 
+/** [live] marks an endless stream, such as internet radio, whose engines report no length even where they estimate one. */
 data class PlayableTrack(val id: String, val location: String, val title: String = "", val artist: String = "",
-    val entryId: String = id, val sourceId: String? = null)
+    val entryId: String = id, val sourceId: String? = null, val live: Boolean = false)
 
 private val silentAudioLevel = MutableStateFlow(0f).asStateFlow()
 

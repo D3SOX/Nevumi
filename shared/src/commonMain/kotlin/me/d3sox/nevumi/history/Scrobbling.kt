@@ -2,6 +2,8 @@ package me.d3sox.nevumi.history
 
 import me.d3sox.nevumi.downloads.DownloadNetwork
 import me.d3sox.nevumi.library.MusicLibrary
+import me.d3sox.nevumi.library.isPodcastEpisode
+import me.d3sox.nevumi.library.isRadio
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.navidrome.NavidromeClient
 import me.d3sox.nevumi.navidrome.NavidromeException
@@ -315,6 +317,7 @@ class Scrobbling(private val store: MusicStore, private val library: MusicLibrar
         if (!current.playing) return@withLock null
         val playbackId = current.playbackId ?: return@withLock null
         val track = current.trackId?.let { library.findTrack(it) } ?: return@withLock null
+        if (track.isRadio || track.isPodcastEpisode) return@withLock null
         val profiles = profiles().filter { it.enabled }
         val enabled = profiles.map { it.id }.toSet()
         nowPlayingSent.keys.retainAll(enabled); nowPlayingRetryAt.keys.retainAll(enabled)

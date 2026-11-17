@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
+import me.d3sox.nevumi.app.PODCAST_ORIGIN
+import me.d3sox.nevumi.app.RADIO_ORIGIN
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.queue.QueueOrigin
 import kotlin.random.Random
@@ -68,13 +70,23 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     }
     val feed = loadedFeed ?: HomeFeed()
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    // A podcast opened from the podcasts page returns to it; one opened from Home returns to Home.
+    var mediaParent by rememberSaveable { mutableStateOf<String?>(null) }
+    val media by controller.serverMediaController.media.collectAsState()
     var handled by rememberSaveable { mutableIntStateOf(-1) }
     LaunchedEffect(destination) {
         if (destination?.tab == LibraryTab.HOME && destination.revision != handled) {
-            selected = destination.collectionId; handled = destination.revision
+            selected = destination.collectionId; handled = destination.revision; mediaParent = null
         }
     }
     OnLibraryTabReselected { selected = null }
+    // Radio and podcast pages close once the server turns out not to offer them, such as after switching servers.
+    LaunchedEffect(selected, media, state.server) {
+        val page = selected ?: return@LaunchedEffect
+        if (state.server != null && (media.serverId == null || media.loading)) return@LaunchedEffect
+        if (page == RADIO_ORIGIN && !media.radioAvailable || (page == PODCASTS || page.startsWith(PODCAST_ORIGIN)) && !media.podcastsAvailable)
+            selected = null
+    }
     val navigate = LocalLibraryNavigate.current
     val homeQueues = remember(state.savedQueues) { state.savedQueues.filter { it.kind != me.d3sox.nevumi.queue.SavedQueueKind.RECOVERY } }
     val catalog = rememberDerived("home-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
@@ -90,13 +102,23 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
     // A SoundCloud or YouTube search for a release returns to the page it was opened from.
     var searchParent by rememberSaveable { mutableStateOf<String?>(null) }
     val searching = selected?.startsWith(RELEASE_SEARCH) == true
-    AnimatedNavigation(selected, if (searching) searchParent else null, canGoBack = backEnabled && selected != null,
-        onBack = { selected = if (searching) searchParent else null },
-        depth = { when { it == null -> 0; it.startsWith(RELEASE_SEARCH) && searchParent != null -> 2; else -> 1 } }) { mixId ->
+    val inPodcast = selected?.startsWith(PODCAST_ORIGIN) == true
+    AnimatedNavigation(selected, if (searching) searchParent else if (inPodcast) mediaParent else null, canGoBack = backEnabled && selected != null,
+        onBack = { selected = if (searching) searchParent else if (inPodcast) mediaParent else null },
+        depth = { when { it == null -> 0; it.startsWith(RELEASE_SEARCH) && searchParent != null -> 2
+            it.startsWith(PODCAST_ORIGIN) && mediaParent != null -> 2; else -> 1 } }) { mixId ->
         val mix = feed.mixes.firstOrNull { it.id == mixId }
         val search = mixId?.takeIf { it.startsWith(RELEASE_SEARCH) }?.removePrefix(RELEASE_SEARCH)
         val searchedRelease = search?.removePrefix(YOUTUBE_SEARCH)?.let { id -> state.releases.firstOrNull { it.id == id } }
+        val channel = mixId?.takeIf { it.startsWith(PODCAST_ORIGIN) }?.removePrefix(PODCAST_ORIGIN)
+            ?.let { id -> media.podcasts?.firstOrNull { it.id == id } }
         if (mixId == "customize-home") HomeCustomization(state.preferences.homeSections, controller) { selected = null }
+        else if (mixId == RADIO_ORIGIN) RadioPage(state, media, controller) { selected = null }
+        else if (channel != null) PodcastChannelPage(state, media, channel, controller) { selected = mediaParent }
+        // A podcast that is gone, or not loaded yet, shows every podcast instead.
+        else if (mixId == PODCASTS || mixId?.startsWith(PODCAST_ORIGIN) == true) PodcastsPage(state, media, controller, { selected = null }) {
+            mediaParent = PODCASTS; selected = PODCAST_ORIGIN + it
+        }
         else if (mixId == RELEASES) ReleaseFeedPage(state, releases, releaseAlbums, controller, { selected = null }) { releaseOptions = it }
         else if (searchedRelease != null) ReleaseSearch(searchedRelease, search.startsWith(YOUTUBE_SEARCH), state, controller) { selected = searchParent }
         else if (mix != null) Column(Modifier.fillMaxSize()) {
@@ -209,6 +231,12 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
                     HomeSectionId.NEW_RELEASES -> if (controller.releasesController.available) item(key = "new-releases") {
                 HomeReleases(stringResource(section.label), state, releases, releaseAlbums, controller, { selected = RELEASES }) { releaseOptions = it }
             }
+                    HomeSectionId.RADIO -> if (section.offered(media)) item(key = "radio") {
+                HomeRadio(stringResource(section.label), state, media, controller) { selected = RADIO_ORIGIN }
+            }
+                    HomeSectionId.PODCASTS -> if (section.offered(media)) item(key = "podcasts") {
+                HomePodcasts(stringResource(section.label), state, media, { selected = PODCASTS }) { mediaParent = null; selected = PODCAST_ORIGIN + it }
+            }
                 }
             }
         }
@@ -223,6 +251,7 @@ internal fun HomeScreen(state: AppState, controller: MusicController, tracks: Li
 }
 
 private const val RELEASES = "releases"
+private const val PODCASTS = "podcasts"
 private const val RELEASE_SEARCH = "release-search:"
 private const val YOUTUBE_SEARCH = "youtube:"
 

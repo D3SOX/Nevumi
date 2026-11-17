@@ -10,6 +10,8 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Metadata
+import androidx.media3.extractor.metadata.icy.IcyInfo
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
@@ -48,8 +50,16 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
     private var repeatPlays: Int? = null
     private var repeatedEntry: String? = null
     private var repeatStarted = false
+    /** The ICY title an internet radio stream announced last; ExoPlayer requests these titles for every progressive stream. */
+    private var streamTitle: String? = null
     private val listener = object : Player.Listener {
+        override fun onMetadata(metadata: Metadata) {
+            val title = (0 until metadata.length()).firstNotNullOfOrNull { (metadata[it] as? IcyInfo)?.title?.trim() } ?: return
+            streamTitle = title.takeIf { it.isNotEmpty() }
+            player?.let(::publish)
+        }
         override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+            streamTitle = null
             val entry = item?.mediaId
             if (entry != playbackEntry || reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
                 playbackEntry = entry
@@ -129,12 +139,13 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
         mutableAudioLevel.value = if (meter.enabled && player.isPlaying) meter.levelAt(player.currentPosition) else 0f
         mutableStatus.value = PlaybackStatus(trackId = item?.mediaMetadata?.extras?.getString("trackId"),
             playing = player.isPlaying, positionMs = player.currentPosition.coerceAtLeast(0),
-            durationMs = player.duration.takeUnless { it == C.TIME_UNSET } ?: 0,
+            durationMs = player.duration.takeUnless { it == C.TIME_UNSET || item?.mediaMetadata?.extras?.getBoolean("live") == true } ?: 0,
             ended = player.playbackState == Player.STATE_ENDED, error = player.playerError?.errorCodeName,
             entryId = item?.mediaId, sourceId = item?.mediaMetadata?.extras?.getString("sourceId"),
             volume = player.volume.toDouble(), speed = player.playbackParameters.speed.toDouble(),
             pitch = player.playbackParameters.pitch.toDouble(), playWhenReady = player.playWhenReady,
-            repeatMode = repeatMode, repeatPlays = repeatPlays, playbackId = playbackId, audioEffects = effects.get(), audioInfo = info)
+            repeatMode = repeatMode, repeatPlays = repeatPlays, playbackId = playbackId, audioEffects = effects.get(), audioInfo = info,
+            streamTitle = streamTitle)
     }
 
     private fun readFileAudioInfo(uri: Uri): AudioInfo? {
@@ -151,7 +162,7 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
 
     private fun mediaItem(track: PlayableTrack) = MediaItem.Builder().setMediaId(track.entryId).setUri(track.location)
         .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
-            .setExtras(Bundle().apply { putString("trackId", track.id); putString("sourceId", track.sourceId) }).build()).build()
+            .setExtras(Bundle().apply { putString("trackId", track.id); putString("sourceId", track.sourceId); putBoolean("live", track.live) }).build()).build()
 
     override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
     override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
@@ -165,6 +176,7 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
             playbackId = previous.playbackId.takeIf { previous.entryId == selected.entryId && previous.sourceId != selected.sourceId }
                 ?: Uuid.random().toString()
             playbackEntry = selected.entryId
+            streamTitle = null
             repeatedEntry = selected.entryId.takeIf { repeatPlays != null }
             repeatStarted = false
             setMediaItems(tracks.map(::mediaItem), startIndex, positionMs.coerceAtLeast(0))
@@ -183,7 +195,7 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
             val sourceId = if (current.localConfiguration?.uri.toString() != track.location)
                 current.mediaMetadata.extras?.getString("sourceId") else track.sourceId
             val metadata = current.mediaMetadata.buildUpon().setTitle(track.title).setArtist(track.artist)
-                .setExtras(Bundle().apply { putString("trackId", track.id); putString("sourceId", sourceId) }).build()
+                .setExtras(Bundle().apply { putString("trackId", track.id); putString("sourceId", sourceId); putBoolean("live", track.live) }).build()
             // Keep the current media source and decoder; replace each surrounding range in one operation.
             replaceMediaItem(currentMediaItemIndex, current.buildUpon().setMediaMetadata(metadata).build())
             replaceMediaItems(0, currentMediaItemIndex, updated.take(destination))

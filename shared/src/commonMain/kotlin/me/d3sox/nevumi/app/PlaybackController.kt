@@ -271,7 +271,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
     fun skip(direction: Int, restartPrevious: Boolean = true) = context.action {
         val snapshot = queue.snapshot()
         val playing = engine.status.value.playRequested
-        if (restartPrevious && direction < 0 && engine.status.value.positionMs > 3_000) {
+        // A live station has no start to return to, so Previous goes to the previous station.
+        val live = snapshot.currentEntryId?.let { lastResolved[it] }?.live == true
+        if (restartPrevious && direction < 0 && engine.status.value.positionMs > 3_000 && !live) {
             queue.setPosition(0); engine.seek(0)
             publishSeek(0)
         } else {
@@ -371,7 +373,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
         engine.setSpeed(playback.speed); engine.setPitch(playback.pitch)
         queue.restore(playback.queue)
         loadSnapshot(playback.queue, playback.playWhenReady)
-        val ready = withTimeoutOrNull(10_000) { engine.status.first { it.entryId == playback.queue.currentEntryId && (it.durationMs > 0 || it.error != null) } }
+        // A live station never reports a length, so loading it is enough.
+        val live = playback.queue.currentEntryId?.let { lastResolved[it] }?.live == true
+        val ready = withTimeoutOrNull(10_000) { engine.status.first { it.entryId == playback.queue.currentEntryId && (it.durationMs > 0 || live || it.error != null) } }
             ?: error("Playback did not start in time")
         require(ready.error == null) { ready.error ?: "Playback could not start" }
         preferences?.update { it.copy(speed = playback.speed, pitch = playback.pitch) }?.let { settings ->
@@ -477,23 +481,25 @@ class PlaybackController internal constructor(private val context: ControllerCon
         // Turning YouTube off in Settings also stops this device from streaming the YouTube songs still queued.
         val streams = youTube != null && context.state.value.preferences.youTube
         val sources = track.sources.filterNot { it.id in failedSources[entry.id].orEmpty() || it.kind == SourceKind.YOUTUBE && !streams }.map { source ->
-            if (source.kind == SourceKind.SERVER || source.kind == SourceKind.YOUTUBE) source
+            if (source.kind.streams) source
             else source.copy(available = source.available && ((!checkAllSources && entry.id != snapshot.currentEntryId) || withContext(Dispatchers.IO) { sourceAccessible(source.location) }))
         }
         var source = SourceResolver.resolve(sources, context.state.value.preferences.sourcePriority) ?: return null
-        val location = if (source.kind == SourceKind.SERVER) {
+        // Server songs, stations and episodes belong to one server, so only the connected server's sources can play.
+        fun SourceKind.onServer() = this == SourceKind.SERVER || this == SourceKind.RADIO || this == SourceKind.PODCAST
+        val location = if (source.kind.onServer()) {
             val connection = lookup.connection()
             val connectedSources = sources.filter { candidate ->
-                candidate.kind != SourceKind.SERVER || connection != null && candidate.id.startsWith("server:${connection.serverId}:")
+                !candidate.kind.onServer() || connection != null && candidate.id.startsWith("${candidate.kind.name.lowercase()}:${connection.serverId}:")
             }
             source = SourceResolver.resolve(connectedSources, context.state.value.preferences.sourcePriority) ?: return null
             when (source.kind) {
-                SourceKind.SERVER -> requireNotNull(connection).streamUrl(source.location)
+                SourceKind.SERVER, SourceKind.PODCAST -> requireNotNull(connection).streamUrl(source.location)
                 SourceKind.YOUTUBE -> requireNotNull(youTube).playbackLocation(source.location)
                 else -> source.location
             }
         } else if (source.kind == SourceKind.YOUTUBE) requireNotNull(youTube).playbackLocation(source.location) else source.location
-        return PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id)
+        return PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id, live = source.kind == SourceKind.RADIO)
     }
 
     private suspend fun publishSeek(positionMs: Long) {

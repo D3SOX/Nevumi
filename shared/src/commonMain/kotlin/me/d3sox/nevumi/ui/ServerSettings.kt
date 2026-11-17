@@ -31,6 +31,8 @@ import me.d3sox.nevumi.resources.sources_sync_play_queue
 import me.d3sox.nevumi.resources.sources_sync_play_queue_description
 import me.d3sox.nevumi.resources.sources_user_on_server
 import me.d3sox.nevumi.resources.sources_username
+import me.d3sox.nevumi.resources.shares_description
+import me.d3sox.nevumi.resources.shares_title
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -41,6 +43,9 @@ internal fun ServerSettings(state: AppState, controller: MusicController, onClos
     var submitted by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(state.server == null) }
     var disconnecting by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    val media by controller.serverMediaController.media.collectAsState()
+    if (sharing) { SharesPage(controller) { sharing = false }; return }
     LaunchedEffect(state.serverRefresh, state.server) {
         if (submitted && state.serverRefresh?.stage == ServerRefreshStage.COMPLETE && state.server != null) onClose()
     }
@@ -60,6 +65,8 @@ internal fun ServerSettings(state: AppState, controller: MusicController, onClos
                     stringResource(Res.string.sources_sync_play_queue_description), state.preferences.syncPlayQueue) { enabled ->
                     controller.updatePreferences { it.copy(syncPlayQueue = enabled) }
                 }
+                if (media.sharingAvailable) SettingsLink(stringResource(Res.string.shares_title), AppIcon.LINK,
+                    stringResource(Res.string.shares_description)) { sharing = true }
             } else {
                 Text(stringResource(Res.string.sources_server_intro))
                 OutlinedTextField(address, { address = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(Res.string.sources_server_address)) }, leadingIcon = { Icon(AppIcon.CLOUD.vector, null) }, singleLine = true,

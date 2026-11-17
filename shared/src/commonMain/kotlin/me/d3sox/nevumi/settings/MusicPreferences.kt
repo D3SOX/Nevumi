@@ -45,7 +45,7 @@ enum class HomeSectionId(val label: StringResource) {
     TOP_ALBUMS(Res.string.home_section_top_albums), TOP_ARTISTS(Res.string.home_section_top_artists),
     REDISCOVER(Res.string.home_section_rediscover), PLAYLISTS(Res.string.home_section_playlists),
     SAVED_QUEUES(Res.string.home_section_saved_queues), ADDED(Res.string.home_section_added),
-    NEW_RELEASES(Res.string.home_section_new_releases)
+    NEW_RELEASES(Res.string.home_section_new_releases), RADIO(Res.string.home_section_radio), PODCASTS(Res.string.home_section_podcasts)
 }
 
 @Serializable

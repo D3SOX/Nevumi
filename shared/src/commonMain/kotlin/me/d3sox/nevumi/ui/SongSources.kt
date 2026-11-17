@@ -16,6 +16,8 @@ import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.music_server
+import me.d3sox.nevumi.resources.podcasts_title
+import me.d3sox.nevumi.resources.radio_title
 import me.d3sox.nevumi.resources.youtube
 import me.d3sox.nevumi.resources.player_downloaded_audio
 import me.d3sox.nevumi.resources.player_link_another_copy
@@ -85,12 +87,14 @@ internal fun SongSources(track: Track, controller: MusicController, dismiss: () 
                 }
             } else {
                 track.sources.forEach { source ->
-                    Text(stringResource(when (source.kind) { SourceKind.LOCAL -> Res.string.player_local_file; SourceKind.DOWNLOAD -> Res.string.player_downloaded_audio; SourceKind.SERVER -> Res.string.music_server; SourceKind.YOUTUBE -> Res.string.youtube }),
+                    Text(stringResource(when (source.kind) { SourceKind.LOCAL -> Res.string.player_local_file; SourceKind.DOWNLOAD -> Res.string.player_downloaded_audio; SourceKind.SERVER -> Res.string.music_server; SourceKind.YOUTUBE -> Res.string.youtube
+                        SourceKind.RADIO -> Res.string.radio_title; SourceKind.PODCAST -> Res.string.podcasts_title }),
                         style = MaterialTheme.typography.titleSmall)
                     Text(source.location, style = MaterialTheme.typography.bodySmall)
                     if (!source.available) Text(stringResource(Res.string.player_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                ActionButton(stringResource(Res.string.player_link_another_copy), AppIcon.LINK, style = ActionStyle.OUTLINED) { choosing = true }
+                if (!track.isRadio && !track.isPodcastEpisode)
+                    ActionButton(stringResource(Res.string.player_link_another_copy), AppIcon.LINK, style = ActionStyle.OUTLINED) { choosing = true }
             }
         }
     }, confirmButton = { PageAction(stringResource(Res.string.done), onClick = dismiss) })

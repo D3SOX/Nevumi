@@ -16,6 +16,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.done
+import me.d3sox.nevumi.resources.shares_share_link
 import me.d3sox.nevumi.resources.edit_server_tags
 import me.d3sox.nevumi.resources.edit_tags
 import me.d3sox.nevumi.resources.player_artwork_not_changed
@@ -108,6 +109,8 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
         TrackAction.GO_GENRE -> track.metadata.genres.isNotEmpty() && inLibrary { track.metadata.genres.first() in it.metadata.genres }
         TrackAction.GO_FOLDER -> track.metadata.folder.isNotBlank()
         TrackAction.SELECT -> onSelect != null
+        // Stations and episodes stay outside the library, so they are neither rated nor kept in playlists.
+        TrackAction.FAVORITE, TrackAction.RATE, TrackAction.ADD_TO_PLAYLIST -> !track.isRadio && !track.isPodcastEpisode
         else -> true
     }
     fun perform(action: TrackAction): Boolean {
@@ -140,6 +143,8 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     }
     if (menu) {
         val imageUnavailable = stringResource(Res.string.player_image_unavailable)
+        val shareLink = rememberShareLink(controller, shareIds(controller, listOf(track)), track.metadata.title)
+        val shareLabel = stringResource(Res.string.shares_share_link)
         fun MutableList<TrackOption>.option(label: String, icon: AppIcon, detail: String? = null, click: () -> Unit) {
             add(TrackOption(label, icon, detail) { menu = false; click() })
         }
@@ -189,6 +194,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
                 }
             }
             playSimilarOption(track, state, controller) { menu = false }
+            shareLink?.let { share -> option(shareLabel, AppIcon.SHARE, click = share) }
             val playlistIndex = playlistPosition ?: contextIndex
             if (playlistId != null && playlistIndex != null) {
                 option(stringResource(Res.string.player_remove_from_playlist), AppIcon.REMOVE) { controller.removePlaylistTrack(playlistId, playlistIndex) }

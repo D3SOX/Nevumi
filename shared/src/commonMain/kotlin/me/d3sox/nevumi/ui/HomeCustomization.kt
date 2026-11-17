@@ -33,6 +33,10 @@ internal fun HomeCustomization(initial: List<HomeSectionId>, controller: MusicCo
     var sections by remember { mutableStateOf(initial) }
     var disabled by remember { mutableStateOf(controller.state.value.preferences.disabledHomeSections) }
     val scroll = rememberLazyListState()
+    // Sections of what the music server does not offer stay in the saved order but out of sight.
+    val media by controller.serverMediaController.media.collectAsState()
+    val shown = sections.filter { it.offered(media) }
+    fun neighbour(section: HomeSectionId, offset: Int) = shown.getOrNull(shown.indexOf(section) + offset)?.let(sections::indexOf) ?: -1
     fun move(from: Int, to: Int) {
         if (from in sections.indices && to in sections.indices) sections = sections.toMutableList().apply { add(to, removeAt(from)) }
     }
@@ -45,7 +49,7 @@ internal fun HomeCustomization(initial: List<HomeSectionId>, controller: MusicCo
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             LazyColumn(Modifier.weight(1f).testTag("home-section-order"), state = scroll,
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(sections, key = { it.name }) { section ->
+                items(shown, key = { it.name }) { section ->
                     ReorderableItem(reorderable, section.name) { _ ->
                         val sectionLabel = stringResource(section.label)
                         val showDescription = stringResource(Res.string.settings_show_home_section, sectionLabel)
@@ -61,11 +65,11 @@ internal fun HomeCustomization(initial: List<HomeSectionId>, controller: MusicCo
                             }
                             Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                AppIconButton(AppIcon.UP, stringResource(Res.string.settings_move_section_up, sectionLabel), enabled = sections.first() != section) {
-                                    move(sections.indexOf(section), sections.indexOf(section) - 1)
+                                AppIconButton(AppIcon.UP, stringResource(Res.string.settings_move_section_up, sectionLabel), enabled = shown.first() != section) {
+                                    move(sections.indexOf(section), neighbour(section, -1))
                                 }
-                                AppIconButton(AppIcon.DOWN, stringResource(Res.string.settings_move_section_down, sectionLabel), enabled = sections.last() != section) {
-                                    move(sections.indexOf(section), sections.indexOf(section) + 1)
+                                AppIconButton(AppIcon.DOWN, stringResource(Res.string.settings_move_section_down, sectionLabel), enabled = shown.last() != section) {
+                                    move(sections.indexOf(section), neighbour(section, 1))
                                 }
                                 Box(Modifier.size(48.dp).draggableHandle().testTag("home-reorder:${section.name}")
                                     .semantics { contentDescription = reorderDescription }, contentAlignment = Alignment.Center) {
@@ -85,6 +89,13 @@ internal fun HomeCustomization(initial: List<HomeSectionId>, controller: MusicCo
         dismissButton = { PageAction(stringResource(Res.string.cancel), AppIcon.CLOSE, secondary = true, onClick = dismiss) })
 }
 
+/** Whether Home can show this section: radio and podcasts only appear where the music server offers them. */
+internal fun HomeSectionId.offered(media: me.d3sox.nevumi.app.ServerMedia): Boolean = when (this) {
+    HomeSectionId.RADIO -> media.radioAvailable
+    HomeSectionId.PODCASTS -> media.podcastsAvailable
+    else -> true
+}
+
 private fun HomeSectionId.icon(): AppIcon = when (this) {
     HomeSectionId.MIXES, HomeSectionId.REDISCOVER -> AppIcon.SHUFFLE
     HomeSectionId.RECENT -> AppIcon.HISTORY
@@ -94,4 +105,6 @@ private fun HomeSectionId.icon(): AppIcon = when (this) {
     HomeSectionId.PLAYLISTS, HomeSectionId.SAVED_QUEUES -> AppIcon.QUEUE
     HomeSectionId.ADDED -> AppIcon.RECENT
     HomeSectionId.NEW_RELEASES -> AppIcon.NEW_RELEASES
+    HomeSectionId.RADIO -> AppIcon.RADIO
+    HomeSectionId.PODCASTS -> AppIcon.PODCAST
 }

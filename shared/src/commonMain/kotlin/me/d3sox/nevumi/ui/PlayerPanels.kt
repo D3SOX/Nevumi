@@ -44,6 +44,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.inLibrary
+import me.d3sox.nevumi.library.isRadio
 import me.d3sox.nevumi.library.youTubeVideoId
 import me.d3sox.nevumi.youtube.YouTubeCollectionKind
 import me.d3sox.nevumi.playback.RepeatMode
@@ -136,7 +137,6 @@ import me.d3sox.nevumi.resources.previous_track
 import me.d3sox.nevumi.resources.queue
 import me.d3sox.nevumi.resources.saved_queues
 import me.d3sox.nevumi.resources.songs
-import me.d3sox.nevumi.resources.unknown_artist
 import org.jetbrains.compose.resources.stringResource
 
 internal enum class PlayerPanel { MINI, PLAYING, QUEUE }
@@ -462,7 +462,8 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                         shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                         Box {
                             MiniPlayerCarousel(state, controller, current, buffering, motion, collapsed) { show(PlayerPanel.PLAYING) }
-                            MiniPlayerSeekBar(controller, Modifier.align(Alignment.BottomCenter).offset(y = 6.dp))
+                            // A live station has no length to show or seek in.
+                            if (!current.isRadio) MiniPlayerSeekBar(controller, Modifier.align(Alignment.BottomCenter).offset(y = 6.dp))
                         }
                     }
                 }
@@ -481,9 +482,9 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             PlayerMarquee(current.metadata.title, MaterialTheme.typography.titleSmall,
                                 motion.anchor(PlayerPanel.QUEUE, PlayerElement.TITLE, queueProgress >= .999f),
                                 marqueeState = motion.marquee(PlayerElement.TITLE, current.metadata.title), active = queueProgress >= .999f)
-                            PlayerMarquee(current.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, MaterialTheme.typography.bodySmall,
+                            PlayerMarquee(artistLine(current, state), MaterialTheme.typography.bodySmall,
                                 motion.anchor(PlayerPanel.QUEUE, PlayerElement.ARTIST, queueProgress >= .999f), color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                marqueeState = motion.marquee(PlayerElement.ARTIST, current.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }), active = queueProgress >= .999f)
+                                marqueeState = motion.marquee(PlayerElement.ARTIST, artistLine(current, state)), active = queueProgress >= .999f)
                         }
                         // The docked player is too narrow for a second volume slider; its controls have one.
                         if (!docked) AppVolume(controller, Modifier.width(240.dp))
@@ -721,9 +722,9 @@ internal fun MiniTrackInformation(state: AppState, track: Track, modifier: Modif
             PlayerMarquee(track.metadata.title, MaterialTheme.typography.titleSmall,
                 if (preview == null) motion?.anchor(PlayerPanel.MINI, PlayerElement.TITLE, visible) ?: Modifier else Modifier.testTag("mini-preview-title"),
                 marqueeState = if (preview == null) motion?.marquee(PlayerElement.TITLE, track.metadata.title) else null, active = visible)
-            PlayerMarquee(track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }, MaterialTheme.typography.bodySmall,
+            PlayerMarquee(artistLine(track, state), MaterialTheme.typography.bodySmall,
                 motion?.anchor(PlayerPanel.MINI, PlayerElement.ARTIST, visible) ?: Modifier, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                marqueeState = if (preview == null) motion?.marquee(PlayerElement.ARTIST, track.metadata.artist.ifBlank { stringResource(Res.string.unknown_artist) }) else null, active = visible)
+                marqueeState = if (preview == null) motion?.marquee(PlayerElement.ARTIST, artistLine(track, state)) else null, active = visible)
         }
     }
 }
@@ -751,8 +752,8 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
     val durationMs = state.playback.durationMs.takeIf { it > 0 } ?: current.metadata.durationMs
     val duration = durationMs.coerceAtLeast(1).toFloat()
     val waveforms = LocalAudioWaveforms.current ?: rememberAudioWaveforms()
-    val source = current.sources.firstOrNull { it.id == state.playback.sourceId && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER && it.kind != me.d3sox.nevumi.library.SourceKind.YOUTUBE }
-        ?: current.sources.firstOrNull { it.available && it.kind != me.d3sox.nevumi.library.SourceKind.SERVER && it.kind != me.d3sox.nevumi.library.SourceKind.YOUTUBE }
+    val source = current.sources.firstOrNull { it.id == state.playback.sourceId && !it.kind.streams }
+        ?: current.sources.firstOrNull { it.available && !it.kind.streams }
     val peaks by produceState<List<Float>>(emptyList(), source, durationMs > 0) {
         value = emptyList()
         if (source != null) value = waveforms.load(source, durationMs)
@@ -770,7 +771,8 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
     Column(modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(controlsScroll, enabled = controlsScroll.maxValue > 0), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe, onTitle)
-        Column(Modifier.fillMaxWidth()) {
+        if (current.isRadio) LiveIndicator(Modifier.fillMaxWidth())
+        else Column(Modifier.fillMaxWidth()) {
             val playbackPosition = stringResource(Res.string.player_playback_position)
             Slider(value = (seeking ?: positionMs.toFloat()).coerceIn(0f, duration), valueRange = 0f..duration, colors = sliderColors,
                 enabled = durationMs > 0 && state.playback.entryId != null, onValueChange = { seekRequest++; seeking = it },

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.isPodcastEpisode
+import me.d3sox.nevumi.library.isRadio
 import me.d3sox.nevumi.lyrics.Lyrics
 import me.d3sox.nevumi.lyrics.LyricsLibrary
 import me.d3sox.nevumi.lyrics.LyricsQuery
@@ -56,7 +58,8 @@ class LyricsController internal constructor(private val context: ControllerConte
         .transformLatest { request ->
             last?.takeIf { it.first == request }?.let { emit(it.second); return@transformLatest }
             val track = request.track
-            if (track == null || library == null) { emit(LyricsState.None); return@transformLatest }
+            // A station's name or an episode's title would only find another song's lyrics.
+            if (track == null || library == null || track.isRadio || track.isPodcastEpisode) { emit(LyricsState.None); return@transformLatest }
             emit(LyricsState.Loading)
             val found = try { library.lyrics(track, request.online, request.query) }
                 catch (cancelled: CancellationException) { throw cancelled }

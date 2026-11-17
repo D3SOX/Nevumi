@@ -331,7 +331,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
 
     private fun pendingStatus(current: PlaybackStatus, pending: PendingLoad) = current.copy(trackId = pending.track.id,
         entryId = pending.track.entryId, sourceId = pending.track.sourceId, positionMs = pending.positionMs, durationMs = 0,
-        playing = false, ended = false, error = null, playbackId = null, fadingOut = null, audioInfo = null)
+        playing = false, ended = false, error = null, playbackId = null, fadingOut = null, audioInfo = null, streamTitle = null)
 
     private fun applyGains() {
         if (outgoing == null) active.setVolume(masterVolume)

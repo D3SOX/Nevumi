@@ -20,6 +20,8 @@ import me.d3sox.nevumi.history.listeningStatistics
 import me.d3sox.nevumi.playlists.playlistedTrackIds
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.album
+import me.d3sox.nevumi.resources.podcasts_title
+import me.d3sox.nevumi.resources.radio_title
 import me.d3sox.nevumi.resources.album_artist
 import me.d3sox.nevumi.resources.artist
 import me.d3sox.nevumi.resources.cancel
@@ -156,6 +158,8 @@ internal fun SourceKind?.sourceName(): StringResource = when (this) {
     SourceKind.SERVER -> Res.string.server
     SourceKind.DOWNLOAD -> Res.string.downloads
     SourceKind.YOUTUBE -> Res.string.youtube
+    SourceKind.RADIO -> Res.string.radio_title
+    SourceKind.PODCAST -> Res.string.podcasts_title
     null -> Res.string.library_all_sources
 }
 
@@ -164,6 +168,8 @@ internal fun SourceKind?.sourceIcon(): AppIcon = when (this) {
     SourceKind.SERVER -> AppIcon.CLOUD
     SourceKind.DOWNLOAD -> AppIcon.DOWNLOAD
     SourceKind.YOUTUBE -> AppIcon.YOUTUBE
+    SourceKind.RADIO -> AppIcon.RADIO
+    SourceKind.PODCAST -> AppIcon.PODCAST
     null -> AppIcon.LIBRARY
 }
 

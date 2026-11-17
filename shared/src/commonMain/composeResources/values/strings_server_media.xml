@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The music server's internet radio stations, podcasts and share links. -->
+<resources>
+    <string name="home_section_radio">Radio</string>
+    <string name="home_section_podcasts">Podcasts</string>
+
+    <string name="radio_title">Internet radio</string>
+    <string name="radio_live">Live</string>
+    <string name="radio_live_stream">Live stream</string>
+    <string name="radio_add_station">Add station</string>
+    <string name="radio_edit_station">Edit station</string>
+    <string name="radio_delete_station">Delete station</string>
+    <string name="radio_delete_named">Delete %1$s?</string>
+    <string name="radio_delete_description">The station is removed from the music server for every account.</string>
+    <string name="radio_station_name">Name</string>
+    <string name="radio_stream_address">Stream address</string>
+    <string name="radio_homepage">Homepage (optional)</string>
+    <string name="radio_open_homepage">Open homepage</string>
+    <string name="radio_play_named">Play %1$s</string>
+    <string name="radio_station_options">Options for %1$s</string>
+    <string name="radio_none">The music server has no radio stations yet.</string>
+    <string name="radio_none_admin">The music server has no radio stations yet. Add one with its stream address.</string>
+    <string name="radio_refresh">Refresh stations</string>
+
+    <string name="podcasts_title">Podcasts</string>
+    <string name="podcasts_subscribe">Subscribe</string>
+    <string name="podcasts_subscribe_title">Subscribe to a podcast</string>
+    <string name="podcasts_feed_address">Feed address</string>
+    <string name="podcasts_subscribe_description">The music server downloads the feed and lists its episodes. It can take a moment to show up.</string>
+    <string name="podcasts_check_feeds">Check for new episodes</string>
+    <string name="podcasts_refresh">Refresh podcasts</string>
+    <string name="podcasts_new_episodes">New episodes</string>
+    <string name="podcasts_subscriptions">Subscriptions</string>
+    <string name="podcasts_none">No podcasts yet.</string>
+    <string name="podcasts_none_manage">No podcasts yet. Subscribe with a podcast's feed address.</string>
+    <string name="podcasts_open_named">Open %1$s</string>
+    <string name="podcasts_unsubscribe">Unsubscribe</string>
+    <string name="podcasts_unsubscribe_named">Unsubscribe from %1$s?</string>
+    <string name="podcasts_unsubscribe_description">The music server deletes the podcast and its downloaded episodes.</string>
+    <string name="podcasts_episode_options">Options for %1$s</string>
+    <string name="podcasts_play_episode">Play episode</string>
+    <string name="podcasts_download_episode">Download to server</string>
+    <string name="podcasts_delete_episode">Delete from server</string>
+    <string name="podcasts_status_downloading">Downloading on server</string>
+    <string name="podcasts_status_not_downloaded">Not downloaded</string>
+    <string name="podcasts_status_error">Download failed</string>
+    <string name="podcasts_resume_at">Resume at %1$s</string>
+    <string name="podcasts_channel_error">The feed could not be read: %1$s</string>
+    <string name="podcasts_no_episodes">This podcast has no episodes.</string>
+    <plurals name="podcasts_episodes">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
+
+    <string name="shares_share_link">Share link</string>
+    <string name="shares_title">Share links</string>
+    <string name="shares_description">Links to songs, albums and playlists that anyone can listen to</string>
+    <string name="shares_refresh">Refresh share links</string>
+    <string name="shares_none">You haven't shared anything yet. Choose Share link in a song, album or playlist menu.</string>
+    <string name="shares_copy">Copy link</string>
+    <string name="shares_share">Share</string>
+    <string name="shares_open">Open link</string>
+    <string name="shares_delete">Delete link</string>
+    <string name="shares_delete_named">Delete the link to %1$s?</string>
+    <string name="shares_delete_description">People who have the link can no longer listen.</string>
+    <string name="shares_visits">Opened %1$d times</string>
+    <string name="shares_expires">Expires %1$s</string>
+    <string name="shares_untitled">Shared music</string>
+    <string name="shares_unsupported">This music server can't share links, or sharing is turned off in its settings.</string>
+    <string name="notice_share_link_copied">Link copied</string>
+</resources>

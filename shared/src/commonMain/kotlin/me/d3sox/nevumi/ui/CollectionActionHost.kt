@@ -49,6 +49,7 @@ import me.d3sox.nevumi.resources.library_songs_remain_server
 import me.d3sox.nevumi.resources.library_use_server
 import me.d3sox.nevumi.resources.manage_playlists
 import me.d3sox.nevumi.resources.play
+import me.d3sox.nevumi.resources.shares_share_link
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.getString
 
@@ -110,6 +111,11 @@ internal fun CollectionActionHost(entry: CollectionItem, tab: LibraryTab, state:
                 AppMenuItem(text = { Text(stringResource(if (favorite) Res.string.library_remove_favorites else Res.string.library_add_to_favorites)) },
                     leadingIcon = { Icon((if (favorite) AppIcon.FAVORITE_FILLED else AppIcon.FAVORITE).vector, null) },
                     onClick = { close { controller.setFavorite(trackIds, !favorite) } })
+            }
+            // Albums and playlists share as links; artists, genres and folders are no single item to share.
+            if (tab == LibraryTab.ALBUMS || playlist != null) rememberShareLink(controller, shareIds(controller, tracks), entry.title)?.let { share ->
+                AppMenuItem(text = { Text(stringResource(Res.string.shares_share_link)) }, leadingIcon = { Icon(AppIcon.SHARE.vector, null) },
+                    onClick = { close(share) })
             }
             if (tracks.any { it.sources.any { source -> source.kind == SourceKind.SERVER } })
                 AppMenuItem(text = { Text(stringResource(Res.string.download)) }, leadingIcon = { Icon(AppIcon.DOWNLOAD.vector, null) }, onClick = { close { controller.downloadTracks(trackIds) } })
