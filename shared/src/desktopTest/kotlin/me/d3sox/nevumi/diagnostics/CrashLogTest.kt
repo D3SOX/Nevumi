@@ -50,6 +50,14 @@ class CrashLogTest {
             assertEquals("after", log.unseen.value?.summary?.substringAfter(": "))
             log.markSeen()
             assertNull(CrashLog(directory, { "" }).unseen.value)
+            // The same moment again names a new report instead of overwriting one that was already offered.
+            log.record("main", IllegalStateException("same moment"))
+            assertEquals("same moment", log.unseen.value?.summary?.substringAfter(": "))
+            assertEquals(3, log.reports.value.size)
+            // With the limit reached, a crash at an earlier time is still the newest report and is kept.
+            val limited = CrashLog(directory, { "" }, limit = 3, clock = { 0 })
+            limited.record("main", IllegalStateException("earliest clock"))
+            assertEquals(listOf("earliest clock", "same moment", "after"), limited.reports.value.map { it.summary.substringAfter(": ") })
         } finally { directory.deleteRecursively() }
     }
 

@@ -13,6 +13,7 @@ import java.time.Instant
 class CrashLog(private val directory: File, private val describe: () -> String, private val limit: Int = 10,
     private val clock: () -> Long = System::currentTimeMillis) : CrashReports {
     private val seenFile = File(directory, "seen")
+    private val sequenceFile = File(directory, "sequence")
     private val mutableReports = MutableStateFlow(read())
     override val reports: StateFlow<List<CrashReport>> = mutableReports.asStateFlow()
     private val mutableUnseen = MutableStateFlow(unseenReport())
@@ -31,7 +32,11 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
         directory.mkdirs()
         val time = clock()
         val header = listOf("Nevumi crash report", describe(), "Time: ${Instant.ofEpochMilli(time)}", "Thread: $threadName")
-        File(directory, "crash-$time.txt").writeText(header.joinToString("") { "${CrashReport.HEADER_PREFIX}$it\n" } + "\n" + error.stackTraceToString())
+        // A sequence number, not the clock, names and orders reports, so a clock change neither reuses a name nor sorts a new crash
+        // behind old ones; the counter outlives deleted reports, so a new crash never takes a name that was already offered.
+        val sequence = maxOf(runCatching { sequenceFile.readText().trim().toLong() }.getOrDefault(0), files().maxOfOrNull(::sequenceOf) ?: 0) + 1
+        try { sequenceFile.writeText(sequence.toString()) } catch (_: java.io.IOException) { }
+        File(directory, "crash-$sequence-$time.txt").writeText(header.joinToString("") { "${CrashReport.HEADER_PREFIX}$it\n" } + "\n" + error.stackTraceToString())
         files().drop(limit).forEach { it.delete() }
         refresh()
     }
@@ -61,10 +66,12 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
     }
 
     private fun files(): List<File> = directory.listFiles { file -> file.isFile && file.name.matches(reportName) }.orEmpty()
-        .sortedByDescending { it.name.removePrefix("crash-").removeSuffix(".txt").toLong() }
+        .sortedByDescending(::sequenceOf)
+
+    private fun sequenceOf(file: File) = requireNotNull(reportName.matchEntire(file.name)).groupValues[1].toLong()
 
     private fun read(): List<CrashReport> = files().mapNotNull { file ->
-        runCatching { CrashReport(file.name, file.name.removePrefix("crash-").removeSuffix(".txt").toLong(), file.readText()) }.getOrNull()
+        runCatching { CrashReport(file.name, requireNotNull(reportName.matchEntire(file.name)).groupValues[2].toLong(), file.readText()) }.getOrNull()
     }
 
     private fun unseenReport(): CrashReport? {
@@ -72,5 +79,5 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
         return mutableReports.value.firstOrNull { it.id !in seen }
     }
 
-    private companion object { val reportName = Regex("crash-\\d+\\.txt") }
+    private companion object { val reportName = Regex("crash-(\\d+)-(\\d+)\\.txt") }
 }
