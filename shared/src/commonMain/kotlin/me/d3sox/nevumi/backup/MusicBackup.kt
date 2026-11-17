@@ -31,6 +31,8 @@ import me.d3sox.nevumi.queue.SavedQueueKind
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.settings.MusicSettings
 import me.d3sox.nevumi.sftp.SftpConfiguration
+import me.d3sox.nevumi.downloads.OfflineMusic
+import me.d3sox.nevumi.downloads.TrackPins
 import me.d3sox.nevumi.soundcloud.SoundCloudDownloads
 import me.d3sox.nevumi.soundcloud.SoundCloudProfile
 import me.d3sox.nevumi.storage.MusicStore
@@ -39,12 +41,13 @@ import kotlin.math.abs
 import kotlin.time.Clock
 
 /**
- * Writes the user's settings, playlists, saved queues, listening history, song flags and service profiles to one JSON
+ * Writes the user's settings, playlists, saved queues, listening history, song flags, downloads and service profiles to one JSON
  * document and merges such a document back. A restore only adds and updates: it never removes anything.
  */
 class MusicBackup(private val store: MusicStore, private val library: MusicLibrary = MusicLibrary(store),
     private val serverChanges: NavidromeChanges? = null, private val scrobbling: Scrobbling? = null,
     private val soundCloud: SoundCloudDownloads? = null, private val equalizer: AutoEqProfiles? = null,
+    private val offline: OfflineMusic? = null,
     private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() }) {
     private val preferences = MusicPreferences(store)
     private val playlists = Playlists(store)
@@ -63,7 +66,9 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         // One transaction, so a server import or device sync cannot add a playlist whose songs are missing from the song list read before it.
         val read = store.transaction { ExportRead(library.tracks(), playlists.all(), preferences.load(),
             if (BackupSection.LISTENING_HISTORY in sections) history.all() else emptyList(),
-            if (BackupSection.SAVED_QUEUES in sections) queue.saved() else emptyList()) }
+            if (BackupSection.SAVED_QUEUES in sections) queue.saved() else emptyList(),
+            if (BackupSection.DOWNLOADS in sections) store.list<TrackPins>("pins").filter { MANUAL_DOWNLOAD in it.owners }.map { it.trackId }.toSet()
+            else emptySet()) }
         val tracks = read.tracks.associateBy { it.id }
         // Android names local folders relative to its storage, like "Music/Sky", which looks like a server folder; a folder that
         // holds a song from this device is local however it is written.
@@ -88,16 +93,18 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             }) }
             else null
         val listened = read.listens
+        val downloads = BackupSection.DOWNLOADS in sections
         val playlists = if (BackupSection.PLAYLISTS in sections) storedPlaylists.map { playlist ->
             val rule = playlist.rule
+            val autoDownload = downloads && playlist.autoDownload
             // A followed playlist's songs stream from YouTube Music, which gives them again.
             if (playlist.youTube != null) BackupPlaylist(playlist.name, description = playlist.description, shuffle = playlist.shuffle,
                 sort = playlist.sort, descending = playlist.descending, youTube = playlist.youTube)
             // A rule on a local folder names a path on this device and matches nothing elsewhere, so it is kept as its current songs.
             else if (rule?.folder?.let(::isDeviceFolder) == true) BackupPlaylist(playlist.name, playlist.trackIds, null,
-                playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
+                playlist.description, playlist.shuffle, playlist.sort, playlist.descending, autoDownload = autoDownload)
             else BackupPlaylist(playlist.name, if (rule == null) playlist.trackIds else emptyList(), rule,
-                playlist.description, playlist.shuffle, playlist.sort, playlist.descending)
+                playlist.description, playlist.shuffle, playlist.sort, playlist.descending, autoDownload = autoDownload)
         } else emptyList()
         val savedQueues = if (BackupSection.SAVED_QUEUES in sections) read.savedQueues.filter { it.kind != SavedQueueKind.RECOVERY }.map { saved ->
             // A queue played from a local folder is named after its path, which device sync also replaces.
@@ -109,12 +116,13 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         val listens = if (BackupSection.LISTENING_HISTORY in sections) listened.map { it.copy(importedAt = null, metadata = it.metadata.copy(folder = "")) } else emptyList()
         val referenced = (tracks.values.filter { (BackupSection.FAVORITES in sections && it.favorite) ||
             (BackupSection.RATINGS in sections && it.rating != 0) }.map { it.id } + playlists.flatMap { it.trackKeys } +
-            savedQueues.flatMap { saved -> saved.snapshot.entries.map { it.trackId } } + listens.map { it.trackId }).toSet()
+            savedQueues.flatMap { saved -> saved.snapshot.entries.map { it.trackId } } + listens.map { it.trackId } + read.downloaded).toSet()
         val profiles = BackupSection.SERVICE_PROFILES in sections
         val document = BackupDocument(createdAt = clock(), appVersion = appVersion, settings = settings,
             playlistOrder = playlistOrder,
             tracks = referenced.mapNotNull { tracks[it] }.associate { it.id to it.toBackup().copy(
-                favorite = BackupSection.FAVORITES in sections && it.favorite, rating = if (BackupSection.RATINGS in sections) it.rating else 0) },
+                favorite = BackupSection.FAVORITES in sections && it.favorite, rating = if (BackupSection.RATINGS in sections) it.rating else 0,
+                downloaded = it.id in read.downloaded) },
             playlists = playlists, savedQueues = savedQueues, listens = listens,
             scrobblingProfiles = if (profiles) scrobbling?.profiles().orEmpty() else emptyList(),
             server = if (profiles) store.read<ServerProfile>("server:navidrome") else null,
@@ -125,8 +133,12 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         return json.encodeToString(document)
     }
 
-    suspend fun restore(text: String): RestoreSummary {
-        val document = decode(text)
+    /** The sections [text] holds data for; throws [BackupFormatException] when it is not a backup this version can read. */
+    fun sections(text: String): Set<BackupSection> = decode(text).sections()
+
+    /** Merges the data of [sections] from [text]; the backup's other data is left out. */
+    suspend fun restore(text: String, sections: Set<BackupSection> = BackupSection.entries.toSet()): RestoreSummary {
+        val document = decode(text).only(sections)
         val matches = TrackMatcher(library.tracks())
         val local = document.tracks.mapNotNull { (key, track) -> matches.find(track)?.let { key to it } }.toMap()
         // A song missing here may be in several playlists, queues and listens; the summary counts it once.
@@ -160,6 +172,11 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
         var playlistsMerged = 0
         var playlistsSkipped = 0
         var serverPlaylistsLackingSongs = 0
+        var playlistDownloads = 0
+        // Like a favorite, a backed-up automatic download turns the playlist's on, and one the backup lacks leaves it as it is.
+        suspend fun restoreAutoDownload(backup: BackupPlaylist, playlist: Playlist) {
+            if (backup.autoDownload && !playlist.autoDownload) { playlists.setAutoDownload(playlist.id, true); playlistDownloads++ }
+        }
         val existingPlaylists = playlists.all()
         // Each compatible playlist already here stands in for one backed-up playlist of its name, so same-named playlists stay separate.
         // A smart playlist is compatible with the same rule. A server playlist is kept as the server has it, because adding to it
@@ -189,6 +206,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             if (existing != null) {
                 matched += existing.id
                 restoredPlaylists["$BACKUP_PLAYLIST$index"] = existing.id
+                restoreAutoDownload(backup, existing)
                 if (existing.server != null) {
                     if (!existing.trackIds.containsAll(songs)) serverPlaylistsLackingSongs++
                     continue
@@ -218,6 +236,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
             if (backup.description.isNotBlank()) playlists.edit(created.id, name, backup.description)
             if (backup.shuffle) playlists.setShuffle(created.id, true)
             if (backup.sort != PlaylistSort.CUSTOM || backup.descending) playlists.setSort(created.id, backup.sort, backup.descending)
+            restoreAutoDownload(backup, created)
             restoredPlaylists["$BACKUP_PLAYLIST$index"] = created.id
             playlistsAdded++
         }
@@ -262,6 +281,17 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
                 ?.let { listen.copy(trackId = it, originDeviceId = listen.originDeviceId ?: BACKUP_ORIGIN, importedAt = clock()) }
         })
 
+        // Songs already on this device or already downloaded on their own need no download.
+        val songDownloads = offline?.let { downloads ->
+            val pinned = store.list<TrackPins>("pins").filter { MANUAL_DOWNLOAD in it.owners }.map { it.trackId }.toSet()
+            val requested = document.tracks.filterValues { it.downloaded }.keys.mapNotNull(::localId).distinct().filter { id ->
+                id !in pinned && current[id]?.sources?.none { it.kind == SourceKind.LOCAL && it.available } == true
+            }
+            if (requested.isNotEmpty()) downloads.request(requested)
+            else if (playlistDownloads > 0) downloads.downloadPlaylists()
+            requested.size
+        } ?: 0
+
         val equalizerProfiles = equalizer?.let { profiles -> document.equalizerProfiles.count { profiles.restore(it) } } ?: 0
 
         val signIn = mutableListOf<SignInRequired>()
@@ -289,7 +319,7 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
 
         return RestoreSummary(settings, favorites.size, ratings.size, playlistsAdded, playlistsMerged, savedQueues, listens,
             equalizerProfiles, scrobblingProfiles, soundCloud, unmatched.size, signIn, playlistsSkipped,
-            serverPlaylistsLackingSongs)
+            serverPlaylistsLackingSongs, playlistDownloads, songDownloads)
     }
 
     private fun decode(text: String): BackupDocument {
@@ -304,10 +334,14 @@ class MusicBackup(private val store: MusicStore, private val library: MusicLibra
     }
 }
 
-/** Prefixes a playlist's place in the backup inside a backed-up custom Playlists order. */
+/** What an export reads in one transaction; [downloaded] holds the songs downloaded on their own. */
 private class ExportRead(val tracks: List<Track>, val playlists: List<Playlist>, val settings: MusicSettings, val listens: List<Listen>,
-    val savedQueues: List<SavedQueue>)
+    val savedQueues: List<SavedQueue>, val downloaded: Set<String>)
 
+/** The pin owner of a song downloaded on its own rather than through a playlist. */
+private const val MANUAL_DOWNLOAD = "manual"
+
+/** Prefixes a playlist's place in the backup inside a backed-up custom Playlists order. */
 private const val BACKUP_PLAYLIST = "backup-playlist:"
 
 /** The origin of listens restored from a backup, which were already scrobbled where they were played. */

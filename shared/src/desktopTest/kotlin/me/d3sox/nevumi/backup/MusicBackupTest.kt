@@ -11,6 +11,8 @@ import me.d3sox.nevumi.history.ListeningHistory
 import me.d3sox.nevumi.history.Scrobbling
 import me.d3sox.nevumi.history.ScrobblingProfile
 import me.d3sox.nevumi.history.ScrobblingService
+import me.d3sox.nevumi.downloads.OfflineMusic
+import me.d3sox.nevumi.downloads.TrackPins
 import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.SourceKind
@@ -64,28 +66,30 @@ class MusicBackupTest {
     }
 
     /** One device's store with the services a backup reads and writes. */
-    private class Device(val store: MusicStore) : AutoCloseable {
+    private class Device(val store: MusicStore, audio: String) : AutoCloseable {
         val http = HttpClient(MockEngine { error("No network in backup tests") })
         val vault = Vault()
         val library = MusicLibrary(store)
         val scrobbling = Scrobbling(store, library, http, vault)
         val soundCloud = SoundCloudDownloads(store, http)
         val equalizer = AutoEqProfiles(store, http)
-        val backup = MusicBackup(store, library, scrobbling = scrobbling, soundCloud = soundCloud, equalizer = equalizer)
         val playlists = Playlists(store)
+        val offline = OfflineMusic(store, library, { null }, audio, playlists)
+        val backup = MusicBackup(store, library, scrobbling = scrobbling, soundCloud = soundCloud, equalizer = equalizer, offline = offline)
         val queue = PlaybackQueue(store)
         val history = ListeningHistory(store, library)
         val preferences = MusicPreferences(store)
         suspend fun id(title: String) = library.tracks().single { it.metadata.title == title }.id
         suspend fun titles(ids: List<String>) = ids.map { id -> library.findTrack(id)!!.metadata.title }
-        override fun close() = runBlocking { soundCloud.closeAndJoin(); scrobbling.closeAndJoin(); http.close(); store.close() }
+        suspend fun pinOwners(title: String) = store.read<TrackPins>("pins:${id(title)}")?.owners.orEmpty()
+        override fun close() = runBlocking { offline.closeAndJoin(); soundCloud.closeAndJoin(); scrobbling.closeAndJoin(); http.close(); store.close() }
     }
 
     private fun devices(block: suspend (Device, Device) -> Unit) = runBlocking {
         val directory = Files.createTempDirectory("backup")
         try {
-            Device(openMusicStore(directory.resolve("source.db").toString())).use { source ->
-                Device(openMusicStore(directory.resolve("target.db").toString())).use { target -> block(source, target) }
+            Device(openMusicStore(directory.resolve("source.db").toString()), directory.resolve("source-audio").toString()).use { source ->
+                Device(openMusicStore(directory.resolve("target.db").toString()), directory.resolve("target-audio").toString()).use { target -> block(source, target) }
             }
         } finally { directory.toFile().deleteRecursively() }
     }
@@ -101,6 +105,9 @@ class MusicBackupTest {
         val road = playlists.create("Road", listOf(northernId, longWayId, nightWalkId, missingId))
         playlists.edit(road.id, "Road", "Driving songs")
         playlists.setSort(road.id, PlaylistSort.ARTIST, descending = true)
+        playlists.setAutoDownload(road.id, true)
+        // Downloaded on their own; Northern Light is a local file on the other device.
+        for (id in listOf(northernId, longWayId)) store.put("pins:$id", "pins", TrackPins(id, setOf("manual")))
         playlists.create("Music ▸ Night", listOf(nightWalkId))
         playlists.createSmart("Loved", LibraryQuery(favoritesOnly = true))
         queue.addSaved("Evening", QueueSnapshot(listOf(QueueEntry("e1", northernId), QueueEntry("e2", missingId), QueueEntry("e3", nightWalkId)),
@@ -135,22 +142,33 @@ class MusicBackupTest {
     fun exportingOneSectionExcludesEveryOtherSection() {
         for (section in BackupSection.entries) devices { source, _ ->
             source.fill()
-            val document = Json.decodeFromString<BackupDocument>(source.backup.export(sections = setOf(section)))
-            val included = buildSet {
-                if (document.settings != null) add(BackupSection.SETTINGS)
-                if (document.playlists.isNotEmpty()) add(BackupSection.PLAYLISTS)
-                if (document.savedQueues.isNotEmpty()) add(BackupSection.SAVED_QUEUES)
-                if (document.tracks.values.any { it.favorite }) add(BackupSection.FAVORITES)
-                if (document.tracks.values.any { it.rating != 0 }) add(BackupSection.RATINGS)
-                if (document.listens.isNotEmpty()) add(BackupSection.LISTENING_HISTORY)
-                if (document.scrobblingProfiles.isNotEmpty() || document.server != null || document.sftpProfiles.isNotEmpty() || document.soundCloud != null)
-                    add(BackupSection.SERVICE_PROFILES)
-                if (document.equalizerProfiles.isNotEmpty()) add(BackupSection.EQUALIZER_PROFILES)
-            }
-            assertEquals(setOf(section), included, "Exporting $section included other data")
+            val text = source.backup.export(sections = setOf(section))
+            val document = Json.decodeFromString<BackupDocument>(text)
+            assertEquals(setOf(section), source.backup.sections(text), "Exporting $section included other data")
             if (section in setOf(BackupSection.SETTINGS, BackupSection.SERVICE_PROFILES, BackupSection.EQUALIZER_PROFILES))
                 assertTrue(document.tracks.isEmpty())
         }
+    }
+
+    @Test
+    fun restoringChosenSectionsOfAFullBackupLeavesTheOthersOut() = devices { source, target ->
+        source.fill()
+        target.sameSongs()
+        val text = source.backup.export()
+        assertEquals(BackupSection.entries.toSet(), target.backup.sections(text))
+        val settings = target.preferences.load()
+        val summary = target.backup.restore(text, setOf(BackupSection.FAVORITES, BackupSection.DOWNLOADS))
+        assertEquals(1, summary.favorites)
+        assertEquals(1, summary.songDownloads)
+        // Without playlists, the playlist download choices have nothing to apply to.
+        assertEquals(listOf(0, 0, 0, 0, 0, 0), listOf(summary.ratings, summary.playlistsAdded, summary.savedQueues, summary.listens,
+            summary.equalizerProfiles, summary.playlistDownloads))
+        assertFalse(summary.settings)
+        assertTrue(summary.signInRequired.isEmpty())
+        assertEquals(settings, target.preferences.load())
+        assertTrue(target.playlists.all().isEmpty())
+        assertTrue(target.library.findTrack(target.id(northern.title))!!.favorite)
+        assertEquals(0, target.library.findTrack(target.id(longWay.title))!!.rating)
     }
 
     @Test
@@ -284,7 +302,7 @@ class MusicBackupTest {
         assertEquals(SoundCloudProfile("https://gate.test"), target.store.read<SoundCloudProfile>("soundcloud:profile"))
 
         assertEquals(RestoreSummary(settings = true, favorites = 1, ratings = 1, playlistsAdded = 3, savedQueues = 1, listens = 1,
-            equalizerProfiles = 1, soundCloud = true,
+            equalizerProfiles = 1, soundCloud = true, playlistDownloads = 1, songDownloads = 1,
             // The song missing here is referenced by its flags, the Road playlist, the saved queue and a listen.
             unmatchedTracks = 1,
             signInRequired = listOf(SignInRequired(BackupService.LISTENBRAINZ, "listener"),
@@ -409,6 +427,35 @@ class MusicBackupTest {
         assertEquals(listOf(road.id), target.playlists.all().filter { it.name == "Road" }.map { it.id })
         assertEquals(listOf(nightWalk.title), target.titles(target.playlists.get(road.id)!!.trackIds))
         assertEquals(listOf(2, 0, 1), listOf(summary.playlistsAdded, summary.playlistsMerged, summary.serverPlaylistsLackingSongs))
+        // The server keeps the playlist's songs, but downloading it is this device's choice.
+        assertTrue(target.playlists.get(road.id)!!.autoDownload)
+    }
+
+    @Test
+    fun downloadedPlaylistsAndSongsDownloadAgainOnAnotherDevice() = devices { source, target ->
+        source.fill()
+        target.sameSongs()
+        val text = source.backup.export()
+        val summary = target.backup.restore(text)
+        assertEquals(1, summary.playlistDownloads)
+        assertEquals(mapOf("Loved" to false, "Music ▸ Night" to false, "Road" to true),
+            target.playlists.all().associate { it.name to it.autoDownload })
+        // Northern Light is already on this device.
+        assertEquals(1, summary.songDownloads)
+        assertTrue("manual" in target.pinOwners(longWay.title))
+        assertFalse("manual" in target.pinOwners(northern.title))
+        val again = target.backup.restore(text)
+        assertEquals(listOf(0, 0), listOf(again.playlistDownloads, again.songDownloads))
+    }
+
+    @Test
+    fun aBackupWithoutDownloadsLeavesThemAlone() = devices { source, target ->
+        source.fill()
+        target.sameSongs()
+        val summary = target.backup.restore(source.backup.export(sections = BackupSection.entries.toSet() - BackupSection.DOWNLOADS))
+        assertEquals(listOf(0, 0), listOf(summary.playlistDownloads, summary.songDownloads))
+        assertTrue(target.playlists.all().none { it.autoDownload })
+        assertFalse("manual" in target.pinOwners(longWay.title))
     }
 
     @Test

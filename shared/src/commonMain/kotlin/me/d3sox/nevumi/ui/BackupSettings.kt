@@ -29,11 +29,15 @@ import me.d3sox.nevumi.resources.backup_section_ratings
 import me.d3sox.nevumi.resources.backup_section_listening_history
 import me.d3sox.nevumi.resources.backup_section_service_profiles
 import me.d3sox.nevumi.resources.backup_section_equalizer_profiles
+import me.d3sox.nevumi.resources.backup_section_downloads
+import me.d3sox.nevumi.resources.backup_summary_playlist_downloads
+import me.d3sox.nevumi.resources.backup_summary_song_downloads
 import me.d3sox.nevumi.resources.backup_in_progress
 import me.d3sox.nevumi.resources.backup_restore
-import me.d3sox.nevumi.resources.backup_restore_confirm
-import me.d3sox.nevumi.resources.backup_restore_confirm_text
-import me.d3sox.nevumi.resources.backup_restore_confirm_title
+import me.d3sox.nevumi.resources.backup_choose_restore
+import me.d3sox.nevumi.resources.backup_restore_empty
+import me.d3sox.nevumi.resources.backup_restore_nothing
+import me.d3sox.nevumi.resources.backup_restore_text
 import me.d3sox.nevumi.resources.backup_restore_description
 import me.d3sox.nevumi.resources.backup_service_lastfm
 import me.d3sox.nevumi.resources.backup_service_listenbrainz
@@ -65,7 +69,7 @@ import me.d3sox.nevumi.resources.done
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The Backup settings group: exporting a backup file and restoring one, with a confirmation before and a summary after. */
+/** The Backup settings group: exporting a backup file and restoring one, each choosing which sections to include, with a summary after a restore. */
 @Composable
 internal fun BackupSettings(controller: MusicController) {
     val backups = controller.backupController
@@ -74,7 +78,6 @@ internal fun BackupSettings(controller: MusicController) {
     val version = appVersion()
     val status by backups.status.collectAsState()
     val lastExportedAt by backups.lastExportedAt.collectAsState(initial = null)
-    var confirming by remember { mutableStateOf(false) }
     var choosingExport by remember { mutableStateOf(false) }
     val working = stringResource(Res.string.backup_in_progress)
     SettingsGroup {
@@ -93,18 +96,18 @@ internal fun BackupSettings(controller: MusicController) {
         }
         SettingsLink(stringResource(Res.string.backup_restore), AppIcon.BACKUP_FILES,
             if (status.working) working else stringResource(Res.string.backup_restore_description)) {
-            if (!status.working) confirming = true
+            if (!status.working) backups.open(files)
         }
     }
-    if (choosingExport) BackupExportDialog(onDismiss = { choosingExport = false }) { sections ->
+    if (choosingExport) BackupSectionsDialog(Res.string.backup_choose_export, BackupSection.entries.toSet(), Res.string.backup_export,
+        Res.string.backup_export_empty, onDismiss = { choosingExport = false }) { sections ->
         choosingExport = false
         backups.export(files, version, sections)
     }
-    if (confirming) AlertDialog(onDismissRequest = { confirming = false },
-        title = { Text(stringResource(Res.string.backup_restore_confirm_title)) },
-        text = { Text(stringResource(Res.string.backup_restore_confirm_text)) },
-        confirmButton = { TextButton(onClick = { confirming = false; backups.restore(files) }) { Text(stringResource(Res.string.backup_restore_confirm)) } },
-        dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(Res.string.cancel)) } })
+    status.opened?.let { opened ->
+        BackupSectionsDialog(Res.string.backup_choose_restore, opened.sections, Res.string.backup_restore, Res.string.backup_restore_empty,
+            description = Res.string.backup_restore_text, onDismiss = backups::cancelRestore, onConfirm = backups::restore)
+    }
     status.summary?.let { summary ->
         AlertDialog(onDismissRequest = backups::dismissSummary,
             title = { Text(stringResource(Res.string.backup_summary_title)) },
@@ -113,14 +116,18 @@ internal fun BackupSettings(controller: MusicController) {
     }
 }
 
+/** Chooses which of [available] to export or restore, all of them at first. */
 @Composable
-private fun BackupExportDialog(onDismiss: () -> Unit, onExport: (Set<BackupSection>) -> Unit) {
-    var selected by remember { mutableStateOf(BackupSection.entries.toSet()) }
+private fun BackupSectionsDialog(title: StringResource, available: Set<BackupSection>, confirm: StringResource, empty: StringResource,
+    description: StringResource? = null, onDismiss: () -> Unit, onConfirm: (Set<BackupSection>) -> Unit) {
+    var selected by remember(available) { mutableStateOf(available) }
     AlertDialog(onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.backup_choose_export)) },
+        title = { Text(stringResource(title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                BackupSection.entries.forEach { section ->
+                description?.let { Text(stringResource(it), Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodyMedium) }
+                if (available.isEmpty()) Text(stringResource(Res.string.backup_restore_nothing))
+                BackupSection.entries.filter { it in available }.forEach { section ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(
                         value = section in selected, role = Role.Checkbox,
                         onValueChange = { checked -> selected = if (checked) selected + section else selected - section }),
@@ -129,11 +136,11 @@ private fun BackupExportDialog(onDismiss: () -> Unit, onExport: (Set<BackupSecti
                         Checkbox(section in selected, onCheckedChange = null)
                     }
                 }
-                if (selected.isEmpty()) Text(stringResource(Res.string.backup_export_empty),
+                if (selected.isEmpty() && available.isNotEmpty()) Text(stringResource(empty),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        confirmButton = { TextButton(enabled = selected.isNotEmpty(), onClick = { onExport(selected) }) { Text(stringResource(Res.string.backup_export)) } },
+        confirmButton = { TextButton(enabled = selected.isNotEmpty(), onClick = { onConfirm(selected) }) { Text(stringResource(confirm)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } })
 }
 
@@ -146,6 +153,7 @@ private fun BackupSection.label() = when (this) {
     BackupSection.LISTENING_HISTORY -> Res.string.backup_section_listening_history
     BackupSection.SERVICE_PROFILES -> Res.string.backup_section_service_profiles
     BackupSection.EQUALIZER_PROFILES -> Res.string.backup_section_equalizer_profiles
+    BackupSection.DOWNLOADS -> Res.string.backup_section_downloads
 }
 
 @Composable
@@ -160,6 +168,8 @@ private fun RestoreSummaryContent(summary: RestoreSummary) {
         count(Res.string.backup_summary_listens, summary.listens),
         count(Res.string.backup_summary_equalizer, summary.equalizerProfiles),
         count(Res.string.backup_summary_scrobbling, summary.scrobblingProfiles),
+        count(Res.string.backup_summary_playlist_downloads, summary.playlistDownloads),
+        count(Res.string.backup_summary_song_downloads, summary.songDownloads),
         if (summary.soundCloud) Res.string.backup_summary_soundcloud to stringResource(Res.string.backup_summary_soundcloud_restored) else null,
     )
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
