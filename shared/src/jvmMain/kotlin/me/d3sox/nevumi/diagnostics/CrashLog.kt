@@ -36,8 +36,11 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
         refresh()
     }
 
+    /** Remembers the reports by name, not time, so a crash after the clock went back is still offered. */
     @Synchronized override fun markSeen() {
-        reports.value.firstOrNull()?.let { newest -> directory.mkdirs(); seenFile.writeText(newest.time.toString()) }
+        // The marker only spares the next launch the prompt; failing to write it must not fail the dismissal.
+        try { directory.mkdirs(); seenFile.writeText(reports.value.joinToString("\n") { it.id }) }
+        catch (_: java.io.IOException) { }
         mutableUnseen.value = null
     }
 
@@ -65,8 +68,8 @@ class CrashLog(private val directory: File, private val describe: () -> String, 
     }
 
     private fun unseenReport(): CrashReport? {
-        val seen = runCatching { seenFile.readText().trim().toLong() }.getOrDefault(Long.MIN_VALUE)
-        return mutableReports.value.firstOrNull()?.takeIf { it.time > seen }
+        val seen = runCatching { seenFile.readLines().toSet() }.getOrDefault(emptySet())
+        return mutableReports.value.firstOrNull { it.id !in seen }
     }
 
     private companion object { val reportName = Regex("crash-\\d+\\.txt") }

@@ -29,7 +29,9 @@ class HeadphoneResume(context: Context, private val controller: MusicController)
 
     private fun resumeIfPaused() {
         val state = controller.state.value
-        if (state.preferences.resumeOnHeadphones && state.queue.currentEntryId != null && !state.playback.playWhenReady) controller.play()
+        if (state.preferences.resumeOnHeadphones && state.queue.currentEntryId != null && !state.playback.playWhenReady &&
+            // A finished queue would start its last song again.
+            !state.playback.ended) controller.play()
     }
 
     private companion object {

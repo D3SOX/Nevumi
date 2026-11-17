@@ -76,7 +76,10 @@ class PlaybackController internal constructor(private val context: ControllerCon
         context.scope.launch {
             context.state.map { state -> if (state.downloadNetwork.metered) state.preferences.meteredStreamBitRate else state.preferences.streamBitRate }
                 .distinctUntilChanged().drop(1).collect {
-                    context.operations.withLock { if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot())) }
+                    // A song that cannot resolve now, such as a YouTube stream, must not end the refreshes that follow.
+                    try { context.operations.withLock { if (queueLoaded) engine.updateQueue(playableQueue(queue.snapshot())) } }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { }
                 }
         }
         pairedDevices?.setPlaybackReceiver(object : PlaybackReceiver {

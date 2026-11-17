@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.diagnostics
 
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.*
 
@@ -33,6 +34,35 @@ class CrashLogTest {
             assertEquals(listOf("second"), reopened.reports.value.map { it.summary.substringAfter(": ") })
             reopened.deleteAll()
             assertTrue(reopened.reports.value.isEmpty())
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test
+    fun aCrashAfterTheClockWentBackIsStillOffered() {
+        val directory = Files.createTempDirectory("crash-log-clock").toFile()
+        try {
+            var now = 5_000L
+            val log = CrashLog(directory, { "Nevumi 1.0 on Test" }, clock = { now })
+            log.record("main", IllegalStateException("before"))
+            log.markSeen()
+            now = 1_000L
+            log.record("main", IllegalStateException("after"))
+            assertEquals("after", log.unseen.value?.summary?.substringAfter(": "))
+            log.markSeen()
+            assertNull(CrashLog(directory, { "" }).unseen.value)
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test
+    fun dismissingThePromptWorksWhenTheMarkerCannotBeWritten() {
+        val directory = Files.createTempDirectory("crash-log-marker").toFile()
+        try {
+            val log = CrashLog(directory, { "Nevumi 1.0 on Test" })
+            log.record("main", IllegalStateException("crash"))
+            // A directory where the marker file belongs makes writing it fail.
+            File(directory, "seen").mkdir()
+            log.markSeen()
+            assertNull(log.unseen.value)
         } finally { directory.deleteRecursively() }
     }
 }
