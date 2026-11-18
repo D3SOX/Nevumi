@@ -95,8 +95,11 @@ class LinuxPlaybackSettingsTest {
                 "sink_properties=\"device.description=Nevumi_test priority.session=0\"").trim()
             if (command("pactl", "get-default-sink").trim() == sink) command("pactl", "set-default-sink", previousSink)
             val song = PlayableTrack("tone", wave(directory.resolve("tone.wav"), 440 to 6.0))
-            /** Counts the 10 ms windows that are neither silent nor at the tone's full level: the fades. */
-            suspend fun rampWindows(fade: Boolean): Int {
+            /**
+             * Plays twice and pauses after each, then counts, at the start and at the end of each stretch of sound, the 10 ms
+             * windows that are neither silent nor at the tone's full level: the fades.
+             */
+            suspend fun rampWindows(fade: Boolean): List<Pair<Int, Int>> {
                 val output = directory.resolve("$fade.pcm")
                 val capture = ProcessBuilder("parec", "--device=$sink.monitor", "--format=float32le", "--rate=48000", "--channels=1",
                     "--latency-msec=10").redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.INHERIT).start()
@@ -126,14 +129,24 @@ class LinuxPlaybackSettingsTest {
                 }
                 val full = levels.max()
                 assertTrue(full > 0.05, "The tone was not captured")
-                return levels.count { it > full * 0.1 && it < full * 0.85 }
+                // Stretches of sound, split where at least 100 ms stay silent.
+                val sounding = levels.indices.filter { levels[it] > full * 0.02 }
+                val stretches = sounding.fold(mutableListOf<MutableList<Int>>()) { runs, window ->
+                    if (runs.isEmpty() || window - runs.last().last() > 10) runs += mutableListOf(window) else runs.last() += window
+                    runs
+                }.filter { it.size > 50 }
+                assertEquals(2, stretches.size, "Expected two stretches of playback")
+                fun ramp(windows: List<Int>) = windows.count { levels[it] > full * 0.1 && levels[it] < full * 0.85 }
+                return stretches.map { ramp(it.take(40)) to ramp(it.takeLast(40)) }
             }
+            // Each start and each pause fades over 250 ms, about 25 windows, of which mpv's volume steps leave some at full level.
             val faded = rampWindows(true)
+            faded.forEachIndexed { index, (start, pause) ->
+                assertTrue(start >= 6, "Start ${index + 1} faded in only $start windows: $faded")
+                assertTrue(pause >= 6, "Pause ${index + 1} faded out only $pause windows: $faded")
+            }
             val plain = rampWindows(false)
-            // Two starts and two pauses fade for 250 ms each, which measured about 50 windows. Fading only the starts or only the
-            // pauses would leave about half, so the threshold fails unless both fade.
-            assertTrue(faded >= 38, "Only $faded windows faded")
-            assertTrue(plain <= 6, "Playback without the fade still ramped in $plain windows")
+            assertTrue(plain.all { (start, pause) -> start <= 2 && pause <= 2 }, "Playback without the fade still ramped: $plain")
         } finally {
             // Each step runs even when an earlier one fails, so the test never leaves its sink behind.
             runCatching { if (command("pactl", "get-default-sink").trim() == sink) command("pactl", "set-default-sink", previousSink) }
