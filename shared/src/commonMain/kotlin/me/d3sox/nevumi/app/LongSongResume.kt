@@ -29,6 +29,9 @@ internal class LongSongResume(private val context: ControllerContext, private va
         context.state.map { it.playback }.distinctUntilChanged().collect { current ->
             val last = previous
             previous = current
+            // Read before the setting: turning it off saves the setting first and then forgets the positions under a new generation,
+            // so a save that saw the setting on always carries a generation that forgetting replaces.
+            val generation = library.songPositionGeneration
             val minimumMs = context.state.value.preferences.resumeLongSongsMinutes * 60_000L
             if (last == null || minimumMs <= 0) return@collect
             // One failed lookup or write must not end the saving for the rest of the session.
@@ -43,7 +46,7 @@ internal class LongSongResume(private val context: ControllerContext, private va
                 if (changed || repeated || paused || periodic || current.ended) {
                     savedAt = now
                     // The song being left saves first: the same song queued twice must not resume from the position it just finished.
-                    checkpoint(if (changed || repeated) last else current, repeated, minimumMs)
+                    checkpoint(if (changed || repeated) last else current, repeated, minimumMs, generation)
                 }
                 if (changed) awaitingDuration = if (resume(current, minimumMs)) null else current.entryId
                 else if (current.entryId == awaitingDuration && current.durationMs > 0) {
@@ -55,8 +58,7 @@ internal class LongSongResume(private val context: ControllerContext, private va
         }
     }
 
-    private suspend fun checkpoint(status: PlaybackStatus, repeated: Boolean, minimumMs: Long) {
-        val generation = library.songPositionGeneration
+    private suspend fun checkpoint(status: PlaybackStatus, repeated: Boolean, minimumMs: Long, generation: Long) {
         val track = findTrack(status.trackId ?: return)?.takeIf { qualifies(it, status, minimumMs) } ?: return
         val duration = status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs
         val finished = repeated || status.ended || duration > 0 && status.positionMs >= duration - FINISHED_WITHIN_MS
