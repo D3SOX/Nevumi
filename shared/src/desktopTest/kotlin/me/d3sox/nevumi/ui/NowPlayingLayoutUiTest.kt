@@ -1,7 +1,17 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LocalFiles
 import me.d3sox.nevumi.library.MusicLibrary
@@ -12,7 +22,9 @@ import me.d3sox.nevumi.storage.openMusicStore
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.math.roundToInt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -103,6 +115,40 @@ class NowPlayingLayoutUiTest {
                 onNodeWithText("Total plays").performTextReplacement("3")
                 onNodeWithText("Set repeat count").performClick()
                 waitUntil(timeoutMillis = 3_000) { player.state.value.queue.repeatMode == RepeatMode.ONE && player.state.value.queue.repeatPlays == 3 }
+            }
+        } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun splitScreenWindowsKeepTheTransportWholeAndTheRestReachable() {
+        val directory = Files.createTempDirectory("now-playing-split")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val songs = runBlocking { LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music").toString()) }
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
+        try {
+            runComposeUiTest {
+                var window by mutableStateOf(DpSize(560.dp, 420.dp))
+                setContent { Box(Modifier.size(window).testTag("window")) { MusicPlayerApp(player) } }
+                waitForLibrary(player)
+                runBlocking { player.playTrack(songs[0].id, songs.map { it.id }).join(); player.pause().join() }
+                // The narrow mini-player has its volume slider in the middle.
+                onNodeWithTag("mini-player").performTouchInput { click(Offset(width * .15f, centerY)) }
+                // A wide window keeps the cover beside controls wide enough for the transport row; a squarer one gives the cover up.
+                listOf(DpSize(560.dp, 420.dp) to true, DpSize(384.dp, 380.dp) to false).forEach { (size, cover) ->
+                    window = size
+                    waitForIdle()
+                    val bounds = onNodeWithTag("window").fetchSemanticsNode().boundsInRoot
+                    listOf("Shuffle", "Previous track", "Play", "Next track", "Repeat").forEach { label ->
+                        val node = onNodeWithContentDescription(label).fetchSemanticsNode()
+                        val visible = node.boundsInRoot
+                        assertTrue(minOf(node.size.width, node.size.height) >= with(density) { 48.dp.roundToPx() } &&
+                            visible.width.roundToInt() == node.size.width && visible.height.roundToInt() == node.size.height &&
+                            visible.left >= bounds.left && visible.right <= bounds.right && visible.bottom <= bounds.bottom, "$label is cut off at $size")
+                    }
+                    assertEquals(cover, onAllNodesWithContentDescription("Album artwork: ${songs[0].metadata.title}").fetchSemanticsNodes().any { it.size.width > 0 }, "Cover at $size")
+                    onNodeWithContentDescription("Queue").performScrollTo().assertIsDisplayed()
+                }
             }
         } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
