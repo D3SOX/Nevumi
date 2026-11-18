@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import me.d3sox.nevumi.settings.bitPerfect
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -55,9 +56,11 @@ internal fun PlaybackQuickSettings(state: AppState, controller: MusicController,
                 Spacer(Modifier.width(12.dp))
                 Text(stringResource(Res.string.audio_effects))
             }
-            SettingsSlider(stringResource(Res.string.crossfade), AppIcon.CROSSFADE, state.preferences.crossfadeDurationMs / 1_000f, 0f..12f, 11,
-                { if (it == 0f) off else crossfadeSeconds[it.roundToInt()] }) { seconds ->
-                controller.updatePreferences { it.copy(crossfadeDurationMs = seconds.roundToInt() * 1_000L) }
+            if (!state.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput)) {
+                SettingsSlider(stringResource(Res.string.crossfade), AppIcon.CROSSFADE, state.preferences.crossfadeDurationMs / 1_000f, 0f..12f, 11,
+                    { if (it == 0f) off else crossfadeSeconds[it.roundToInt()] }) { seconds ->
+                    controller.updatePreferences { it.copy(crossfadeDurationMs = seconds.roundToInt() * 1_000L) }
+                }
             }
             SettingsToggle(stringResource(Res.string.player_gapless_playback), AppIcon.MUSIC, stringResource(Res.string.player_gapless_playback_text),
                 state.preferences.gaplessPlayback) { enabled -> controller.updatePreferences { it.copy(gaplessPlayback = enabled) } }

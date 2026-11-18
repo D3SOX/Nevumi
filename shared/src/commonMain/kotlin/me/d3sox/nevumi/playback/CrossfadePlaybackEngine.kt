@@ -36,12 +36,15 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     // Set by callers and cleared by the worker once the decoder reports the requested entry.
     @kotlin.concurrent.Volatile private var pendingLoad: PendingLoad? = null
     private var crossfadeMs = 0L
+    /** Bit-perfect output plays one decoder at a time, so it keeps the chosen crossfade for later and plays without it. */
+    private val activeCrossfadeMs get() = if (bitPerfect) 0L else crossfadeMs
     private var gapless = true
     private var masterVolume = 1.0
     private var speed = 1.0
     private var pitch = 1.0
     private var effects = AudioEffects()
     private var replayGain = ReplayGain()
+    private var bitPerfect = false
     private var playPauseFade = false
     private var skipSilence = false
     /** The play/pause fade's share of the volume: 0 while paused with the fade on, otherwise 1 once a fade-in finishes. */
@@ -104,18 +107,27 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         command {
             cancelFade()
             crossfadeMs = milliseconds
-            val index = currentIndex()
-            if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
-            applyRepeat()
+            applyCrossfade()
         }
     }
 
-    private fun nativeQueue() = crossfadeMs == 0L && gapless
+    /** Gives the playing decoder the whole queue when it plays without crossfade, and only the current song when it crossfades. */
+    private suspend fun applyCrossfade() {
+        val index = currentIndex()
+        if (index >= 0) {
+            // A native queue may have moved on without the worker, so a single song becomes the selected one again.
+            if (!nativeQueue()) selectedEntry = tracks[index].entryId
+            active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
+        }
+        applyRepeat()
+    }
+
+    private fun nativeQueue() = activeCrossfadeMs == 0L && gapless
 
     override fun setGaplessPlayback(enabled: Boolean) = command {
         if (gapless != enabled) {
             gapless = enabled
-            if (crossfadeMs > 0) return@command
+            if (activeCrossfadeMs > 0) return@command
             cancelFade()
             val index = currentIndex()
             if (index >= 0) {
@@ -129,6 +141,22 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     override fun setReplayGain(replayGain: ReplayGain) {
         replayGain.validate()
         command { this.replayGain = replayGain; engines().forEach { it.setReplayGain(replayGain) } }
+    }
+
+    override fun setBitPerfectOutput(enabled: Boolean) = command {
+        bitPerfect = enabled
+        if (enabled) {
+            // Android reserves a bit-perfect mixer for the app, not for one decoder, so a waiting decoder must not claim it.
+            cancelFade()
+            standby?.close()
+            standby = null
+            prepared = null
+            speed = 1.0
+            pitch = 1.0
+            engines().forEach { it.setSpeed(1.0); it.setPitch(1.0) }
+        }
+        engines().forEach { it.setBitPerfectOutput(enabled) }
+        if (crossfadeMs > 0) applyCrossfade()
     }
 
     override fun setPlayPauseFade(enabled: Boolean) = command {
@@ -258,12 +286,13 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
 
     override fun setSpeed(speed: Double) {
         require(speed in 0.5..2.0) { "Playback speed must be between 0.5 and 2" }
-        command { this.speed = speed; engines().forEach { it.setSpeed(speed) } }
+        // A headset or watch reaches the engine without the app's settings, so bit-perfect output keeps the neutral speed here.
+        command { if (!bitPerfect) { this.speed = speed; engines().forEach { it.setSpeed(speed) } } }
     }
 
     override fun setPitch(pitch: Double) {
         require(pitch in 0.5..2.0) { "Playback pitch must be between 0.5 and 2" }
-        command { this.pitch = pitch; engines().forEach { it.setPitch(pitch) } }
+        command { if (!bitPerfect) { this.pitch = pitch; engines().forEach { it.setPitch(pitch) } } }
     }
 
     override suspend fun setAudioEffects(effects: AudioEffects) {
@@ -344,7 +373,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             repeatPlays = null
             repeatMode = RepeatMode.OFF
         } else if (repeatPlays != null) repeatPlays = current.repeatPlays
-        if (crossfadeMs > 0 && current.error == null) {
+        if (activeCrossfadeMs > 0 && current.error == null) {
             if (outgoing != null) {
                 if (requestedPlaying.value && current.playing) fadeElapsedMs += elapsed
                 applyGains()
@@ -361,6 +390,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                     waiting.setPitch(pitch)
                     waiting.setAudioEffects(effects)
                     waiting.setReplayGain(replayGain)
+                    waiting.setBitPerfectOutput(bitPerfect)
                     waiting.setSkipSilence(skipSilence)
                     waiting.setRepeat(RepeatMode.OFF)
                     waiting.load(next, play = false)
@@ -368,7 +398,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                 }
                 val remaining = (current.durationMs - current.positionMs).coerceAtLeast(0) / speed
                 val waiting = standby
-                val fadeLimit = minOf(crossfadeMs.toDouble(), current.durationMs / speed / 2,
+                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), current.durationMs / speed / 2,
                     (waiting?.status?.value?.durationMs ?: 0) / speed / 2)
                 if (next != null && waiting != null && prepared == next && requestedPlaying.value &&
                     waiting.status.value.entryId == next.entryId && waiting.status.value.durationMs > 0 &&
@@ -389,7 +419,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                 }
             }
         }
-        if (!gapless && crossfadeMs == 0L && current.ended && current.entryId == selectedEntry && requestedPlaying.value) {
+        if (!gapless && activeCrossfadeMs == 0L && current.ended && current.entryId == selectedEntry && requestedPlaying.value) {
             nextTrack()?.let(::loadNext)
         }
         val requested = pendingLoad
@@ -404,7 +434,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         } else 0f
         mutableStatus.value = playback.copy(volume = masterVolume, speed = speed, pitch = pitch, audioEffects = effects,
             playWhenReady = requestedPlaying.value, playing = playback.playing && requestedPlaying.value,
-            repeatMode = repeatMode, repeatPlays = repeatPlays, fadingOut = tail, crossfadeDurationMs = crossfadeMs)
+            repeatMode = repeatMode, repeatPlays = repeatPlays, fadingOut = tail, crossfadeDurationMs = activeCrossfadeMs)
     }
 
     private fun pendingStatus(current: PlaybackStatus, pending: PendingLoad) = current.copy(trackId = pending.track.id,

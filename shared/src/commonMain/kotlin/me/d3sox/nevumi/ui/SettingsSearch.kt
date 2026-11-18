@@ -11,6 +11,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import me.d3sox.nevumi.settings.bitPerfect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.settings_split_artists
@@ -48,6 +51,8 @@ import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption
 import me.d3sox.nevumi.resources.settings_exclude_folders
 import me.d3sox.nevumi.resources.settings_include_folders
 import me.d3sox.nevumi.resources.settings_keep_playing
+import me.d3sox.nevumi.resources.settings_bit_perfect
+import me.d3sox.nevumi.resources.settings_keywords_bit_perfect
 import me.d3sox.nevumi.resources.settings_resume_on_headphones
 import me.d3sox.nevumi.resources.settings_fade_play_pause
 import me.d3sox.nevumi.resources.settings_keywords_fade_play_pause
@@ -157,6 +162,9 @@ internal data class SettingResult(val title: String, val category: String, val i
 private class SettingEntry(val title: StringResource, val category: String, val icon: AppIcon,
     val keywords: StringResource, val destination: String = category)
 
+private val soundChangingSettings = setOf(Res.string.settings_playback_speed, Res.string.settings_playback_pitch, Res.string.crossfade,
+    Res.string.settings_replay_gain, Res.string.settings_fade_play_pause, Res.string.settings_skip_silence)
+
 @Composable
 internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -> Unit,
     controller: MusicController, open: (SettingResult) -> Unit) {
@@ -200,6 +208,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_previous_track_limit to Res.string.settings_keywords_previous_track_limit,
                 Res.string.settings_confirm_queue_jumps to Res.string.settings_keywords_confirm_queue_jumps,
                 Res.string.settings_confirm_up_next_interruption to Res.string.settings_keywords_confirm_up_next_interruption)
+            if (controller.engine.supportsBitPerfectOutput) add(SettingEntry(Res.string.settings_bit_perfect, "Playback", AppIcon.USB, Res.string.settings_keywords_bit_perfect))
             if (deviceAudioSettings) {
                 add(SettingEntry(Res.string.settings_resume_on_headphones, "Playback", AppIcon.HEADPHONES, Res.string.settings_keywords_resume_on_headphones))
                 add(SettingEntry(Res.string.settings_pause_at_zero_volume, "Playback", AppIcon.MUTE, Res.string.settings_keywords_pause_at_zero_volume))
@@ -250,8 +259,13 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             add(SettingEntry(Res.string.about_nevumi, "About Nevumi", AppIcon.INFO, Res.string.settings_keywords_about_nevumi))
         }
     }
+    // Bit-perfect output hides the Playback controls that change the sound, so search leaves them out too.
+    val bitPerfect by remember(controller) {
+        controller.state.map { it.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput) }.distinctUntilChanged()
+    }.collectAsState(controller.state.value.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput))
+    val shown = if (!bitPerfect) entries else entries.filter { it.title !in soundChangingSettings }
     // Search the displayed, localized names together with the localized keywords.
-    val index = entries.map { entry ->
+    val index = shown.map { entry ->
         SettingResult(stringResource(entry.title), settingsPageTitle(entry.category), entry.icon, stringResource(entry.keywords), entry.destination)
     }
     val terms = query.trim().lowercase().split(' ').filter { it.isNotBlank() }

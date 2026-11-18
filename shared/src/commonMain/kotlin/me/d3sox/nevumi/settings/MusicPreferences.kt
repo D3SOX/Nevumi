@@ -53,6 +53,17 @@ enum class QueueRecoveryMode(val label: StringResource) {
     BEFORE_REPLACE(Res.string.queue_recovery_before_replace), ON_CHANGE(Res.string.queue_recovery_on_change), TIMER(Res.string.queue_recovery_timer)
 }
 
+/** Whether bit-perfect output is on and the engine can provide it. A backup from another device may turn it on where it can't. */
+fun MusicSettings.bitPerfect(supported: Boolean) = bitPerfectOutput && supported
+
+/** The playback values the engine gets: bit-perfect output plays files unchanged, while the settings keep the listener's choices. */
+fun MusicSettings.forEngine(bitPerfectSupported: Boolean): MusicSettings = when {
+    !bitPerfectOutput -> this
+    !bitPerfectSupported -> copy(bitPerfectOutput = false)
+    else -> copy(speed = 1.0, pitch = 1.0, audioEffects = AudioEffects(), crossfadeDurationMs = 0, replayGain = ReplayGain(),
+        fadePlayPause = false, skipSilence = false)
+}
+
 @Serializable
 data class MusicSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -113,6 +124,12 @@ data class MusicSettings(
     val trayIcon: Boolean = false,
     /** Android: connecting headphones, a USB headset or Bluetooth audio resumes the paused song. */
     val resumeOnHeadphones: Boolean = false,
+    /**
+     * Android 14+: sends each file's samples unchanged to a USB DAC whose bit-perfect mixer takes the song's format, after a 20 ms
+     * fade-in when playback starts or seeks; other songs play through Android's mixer. Speed, pitch, effects, crossfade, fades,
+     * skipping silence and ReplayGain stay off.
+     */
+    val bitPerfectOutput: Boolean = false,
     /** Android: turning the media volume down to zero pauses, and turning it up again resumes what this paused. */
     val pauseAtZeroVolume: Boolean = false,
     val previousQueueTrackLimit: Int = 5,

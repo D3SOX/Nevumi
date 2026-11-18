@@ -60,6 +60,10 @@ interface PlaybackEngine : AutoCloseable {
     fun setCrossfadeDuration(milliseconds: Long) { require(milliseconds == 0L) { "This decoder does not support crossfade" } }
     fun setGaplessPlayback(enabled: Boolean) {}
     fun setReplayGain(replayGain: ReplayGain) {}
+    /** Whether [setBitPerfectOutput] can reach a bit-perfect output on this device. */
+    val supportsBitPerfectOutput: Boolean get() = false
+    /** Sends decoded samples unprocessed to an output that can take them bit for bit. */
+    fun setBitPerfectOutput(enabled: Boolean) {}
     fun setPlayPauseFade(enabled: Boolean) {}
     /** Shortens silent stretches; positions stay those of the file, so they jump over what was skipped. */
     fun setSkipSilence(enabled: Boolean) {}

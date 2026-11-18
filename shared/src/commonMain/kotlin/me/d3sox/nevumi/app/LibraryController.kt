@@ -31,6 +31,7 @@ import me.d3sox.nevumi.resources.notice_removed_from_favorites
 import me.d3sox.nevumi.settings.LibraryPosition
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.settings.MusicSettings
+import me.d3sox.nevumi.settings.forEngine
 import org.jetbrains.compose.resources.getString
 
 /** Keeps the library in the app state: local music scans, linked songs, favorites, ratings, covers and the preferences. */
@@ -139,12 +140,19 @@ class LibraryController internal constructor(private val context: ControllerCont
         if (settings.recordListeningHistory != previous.recordListeningHistory)
             listeningHistory?.record(engine.status.value, enabled = settings.recordListeningHistory)
         context.update { it.copy(preferences = settings) }
-        if (settings.audioEffects != previous.audioEffects) engine.setAudioEffects(settings.audioEffects)
-        if (settings.crossfadeDurationMs != previous.crossfadeDurationMs) engine.setCrossfadeDuration(settings.crossfadeDurationMs)
+        val playing = settings.forEngine(engine.supportsBitPerfectOutput)
+        val played = previous.forEngine(engine.supportsBitPerfectOutput)
+        // Bit-perfect output starts before the neutral values reach the engine and stops before the listener's return, so a
+        // setting the engine rejects can't keep it on.
+        if (playing.bitPerfectOutput != played.bitPerfectOutput) engine.setBitPerfectOutput(playing.bitPerfectOutput)
+        if (playing.speed != played.speed) engine.setSpeed(playing.speed)
+        if (playing.pitch != played.pitch) engine.setPitch(playing.pitch)
+        if (playing.audioEffects != played.audioEffects) engine.setAudioEffects(playing.audioEffects)
+        if (playing.crossfadeDurationMs != played.crossfadeDurationMs) engine.setCrossfadeDuration(playing.crossfadeDurationMs)
         if (settings.gaplessPlayback != previous.gaplessPlayback) engine.setGaplessPlayback(settings.gaplessPlayback)
-        if (settings.replayGain != previous.replayGain) engine.setReplayGain(settings.replayGain)
-        if (settings.fadePlayPause != previous.fadePlayPause) engine.setPlayPauseFade(settings.fadePlayPause)
-        if (settings.skipSilence != previous.skipSilence) engine.setSkipSilence(settings.skipSilence)
+        if (playing.replayGain != played.replayGain) engine.setReplayGain(playing.replayGain)
+        if (playing.fadePlayPause != played.fadePlayPause) engine.setPlayPauseFade(playing.fadePlayPause)
+        if (playing.skipSilence != played.skipSilence) engine.setSkipSilence(playing.skipSilence)
         if (settings.resumeLongSongsMinutes == 0 && previous.resumeLongSongsMinutes != 0) library.forgetSongPositions()
         if (playback.queueLoaded && (settings.sourcePriority != previous.sourcePriority || settings.youTube != previous.youTube))
             engine.updateQueue(playback.playableQueue(queue.snapshot()))

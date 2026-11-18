@@ -11,10 +11,11 @@ object SessionPlaybackCommands {
     const val GAPLESS = "me.d3sox.nevumi.GAPLESS"
     const val REPEAT = "me.d3sox.nevumi.REPEAT"
     const val REPLAY_GAIN = "me.d3sox.nevumi.REPLAY_GAIN"
+    const val BIT_PERFECT = "me.d3sox.nevumi.BIT_PERFECT"
     const val PLAY_PAUSE_FADE = "me.d3sox.nevumi.PLAY_PAUSE_FADE"
     const val SKIP_SILENCE = "me.d3sox.nevumi.SKIP_SILENCE"
     const val RESUME = "me.d3sox.nevumi.RESUME"
-    val actions = listOf(STATUS, CROSSFADE, GAPLESS, REPEAT, REPLAY_GAIN, PLAY_PAUSE_FADE, SKIP_SILENCE, RESUME)
+    val actions = listOf(STATUS, CROSSFADE, GAPLESS, REPEAT, REPLAY_GAIN, PLAY_PAUSE_FADE, SKIP_SILENCE, RESUME, BIT_PERFECT)
     fun command(action: String) = SessionCommand(action, Bundle.EMPTY)
     fun encodeStatus(status: PlaybackStatus) = Bundle().apply { putString("status", Json.encodeToString(status)) }
     fun encodeReplayGain(replayGain: ReplayGain) = Bundle().apply { putString("replayGain", Json.encodeToString(replayGain)) }

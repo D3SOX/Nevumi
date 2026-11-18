@@ -1,6 +1,9 @@
 package me.d3sox.nevumi.playback
 
 import android.content.Context
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -26,7 +29,7 @@ import kotlinx.coroutines.*
 
 /** A local decoder. The owning session coordinates audio focus for all overlapping decoders. */
 @UnstableApi
-class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? = null) : PlaybackEngine {
+class AndroidExoPlaybackEngine(context: Context, private val outputMonitor: AudioProcessor? = null) : PlaybackEngine {
     private val appContext = context.applicationContext
     private val detailsScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var detailsJob: Job? = null
@@ -89,16 +92,21 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
         }
     }
 
+    private var bitPerfect = false
+
+    private fun createPlayer() = ExoPlayer.Builder(appContext,
+        NevumiAudioRenderersFactory(appContext, outputMonitor, effects::get, meter, replayGain::get, bitPerfect))
+        .setAudioAttributes(AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .setUsage(C.USAGE_MEDIA).build(), false).build().also { created ->
+            created.addListener(listener)
+            created.addAnalyticsListener(AudioUnderrunRecorder(appContext, created))
+        }
+
     init {
         onMain {
             if (!closed) try {
-                val created = ExoPlayer.Builder(context.applicationContext,
-                    NevumiAudioRenderersFactory(context.applicationContext, outputMonitor, effects::get, meter, replayGain::get))
-                    .setAudioAttributes(AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .setUsage(C.USAGE_MEDIA).build(), false).build()
+                val created = createPlayer()
                 player = created
-                created.addListener(listener)
-                created.addAnalyticsListener(AudioUnderrunRecorder(appContext, created))
                 pending.forEach { it(created) }
                 pending.clear()
                 progress.run()
@@ -106,6 +114,58 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
                 mutableStatus.update { it.copy(error = "Could not start the audio decoder") }
             }
         }
+    }
+
+    /** The audio sink is fixed when a player is built, so switching rebuilds the player and continues where it was. */
+    override fun setBitPerfectOutput(enabled: Boolean) = onMain {
+        if (closed || bitPerfect == enabled) return@onMain
+        bitPerfect = enabled
+        rebuild()
+    }
+
+    /** Media3 keeps an open output when a DAC connects, so a new player lets the DAC's bit-perfect mixer take over. */
+    private val dacs = object : AudioDeviceCallback() {
+        private var listed = false
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) {
+            // The first call lists the outputs connected before registration.
+            if (!listed) { listed = true; return }
+            if (bitPerfect && !closed && added.any { it.isSink && (it.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                    it.type == AudioDeviceInfo.TYPE_USB_HEADSET) }) rebuild()
+        }
+    }
+
+    init { appContext.getSystemService(AudioManager::class.java).registerAudioDeviceCallback(dacs, main) }
+
+    private fun rebuild() {
+        val previous = player ?: return
+        val items = (0 until previous.mediaItemCount).map(previous::getMediaItemAt)
+        val index = previous.currentMediaItemIndex
+        val position = previous.currentPosition
+        val repeat = previous.repeatMode
+        val volume = previous.volume
+        val parameters = previous.playbackParameters
+        // Bit-perfect output never skips silence, so the new player starts without it before the setting arrives.
+        val skipSilence = previous.skipSilenceEnabled && !bitPerfect
+        val playWhenReady = previous.playWhenReady
+        // The level meter belongs to one audio sink at a time, so the old player goes first.
+        previous.removeListener(listener)
+        previous.release()
+        player = null
+        val replacement = try { createPlayer() } catch (_: Exception) {
+            mutableStatus.update { it.copy(error = "Could not start the audio decoder") }
+            return
+        }
+        replacement.repeatMode = repeat
+        replacement.volume = volume
+        replacement.playbackParameters = parameters
+        replacement.skipSilenceEnabled = skipSilence
+        if (items.isNotEmpty()) {
+            replacement.setMediaItems(items, index, position)
+            replacement.prepare()
+        }
+        replacement.playWhenReady = playWhenReady
+        player = replacement
+        publish(replacement)
     }
 
     private fun publish(player: Player) {
@@ -251,6 +311,7 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
     override fun close() = onMain {
         if (!closed) {
             closed = true
+            appContext.getSystemService(AudioManager::class.java).unregisterAudioDeviceCallback(dacs)
             detailsScope.cancel()
             main.removeCallbacks(progress)
             pending.clear()

@@ -197,6 +197,10 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
     override fun setGaplessPlayback(enabled: Boolean) = command {
         sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.GAPLESS), Bundle().apply { putBoolean("enabled", enabled) })
     }
+    override val supportsBitPerfectOutput = android.os.Build.VERSION.SDK_INT >= 34
+    override fun setBitPerfectOutput(enabled: Boolean) = command {
+        sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.BIT_PERFECT), Bundle().apply { putBoolean("enabled", enabled) })
+    }
     override fun setPlayPauseFade(enabled: Boolean) = command {
         sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.PLAY_PAUSE_FADE), Bundle().apply { putBoolean("enabled", enabled) })
     }

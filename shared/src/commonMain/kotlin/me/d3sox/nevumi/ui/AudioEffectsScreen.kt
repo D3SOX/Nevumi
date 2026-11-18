@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import me.d3sox.nevumi.settings.bitPerfect
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +26,7 @@ import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.settings_could_not_save_profile
 import me.d3sox.nevumi.resources.settings_custom_settings
 import me.d3sox.nevumi.resources.settings_effective_preamp
+import me.d3sox.nevumi.resources.settings_bit_perfect_effects_off
 import me.d3sox.nevumi.resources.settings_enable_equalizer
 import me.d3sox.nevumi.resources.settings_equalizer_gain_at
 import me.d3sox.nevumi.resources.settings_equalizer_profile
@@ -67,6 +69,8 @@ internal fun AudioEffectsScreen(state: AppState, controller: MusicController, di
     else {
     SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.audio_effects)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput)) Text(stringResource(Res.string.settings_bit_perfect_effects_off),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             EffectSwitch(stringResource(Res.string.settings_enable_equalizer), effects.enabled) { enabled -> update { it.copy(enabled = enabled) } }
             EffectSwitch(stringResource(Res.string.settings_mono_audio), effects.mono) { mono -> update { it.copy(mono = mono) } }
             if (catalog != null) {
