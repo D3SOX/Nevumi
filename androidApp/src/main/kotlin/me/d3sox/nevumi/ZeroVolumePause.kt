@@ -19,8 +19,8 @@ import me.d3sox.nevumi.app.MusicController
 class ZeroVolumePause(private val context: Context, private val controller: MusicController) {
     private val audio = context.getSystemService(AudioManager::class.java)
     private var volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-    /** Whether the paused song was paused here; playing it any other way clears this. */
-    private var pausedHere = false
+    /** The queue entry paused here; playing any other way clears it, and another selected song keeps it from resuming. */
+    private var pausedEntry: String? = null
 
     // Recent Android versions no longer save volumes as system settings, so only AudioManager's volume broadcast reports changes.
     // It has no public constant but is sent to registered receivers on every Android version.
@@ -30,14 +30,15 @@ class ZeroVolumePause(private val context: Context, private val controller: Musi
             val previous = volume
             volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
             val state = controller.state.value
-            if (!state.preferences.pauseAtZeroVolume) { pausedHere = false; return }
+            if (!state.preferences.pauseAtZeroVolume) { pausedEntry = null; return }
             if (volume == 0 && previous > 0 && state.playback.playWhenReady) {
-                pausedHere = true
+                pausedEntry = state.queue.currentEntryId
                 controller.pause()
-            } else if (volume > 0 && previous == 0 && pausedHere) {
-                pausedHere = false
+            } else if (volume > 0 && previous == 0 && pausedEntry != null) {
+                val entry = pausedEntry
+                pausedEntry = null
                 // A finished queue would start its last song again.
-                if (state.queue.currentEntryId != null && !state.playback.playWhenReady && !state.playback.ended) controller.play()
+                if (entry == state.queue.currentEntryId && !state.playback.playWhenReady && !state.playback.ended) controller.play()
             }
         }
     }
@@ -47,7 +48,7 @@ class ZeroVolumePause(private val context: Context, private val controller: Musi
         if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         else @Suppress("UnspecifiedRegisterReceiverFlag") context.registerReceiver(receiver, filter)
         MainScope().launch {
-            controller.state.map { it.playback.playWhenReady }.distinctUntilChanged().collect { if (it) pausedHere = false }
+            controller.state.map { it.playback.playWhenReady }.distinctUntilChanged().collect { if (it) pausedEntry = null }
         }
     }
 }

@@ -23,6 +23,8 @@ internal class LongSongResume(private val context: ControllerContext, private va
     private suspend fun follow() {
         var previous: PlaybackStatus? = null
         var savedAt = 0L
+        /** A song whose length was unknown when it started; it can still resume once the decoder reports one. */
+        var awaitingDuration: String? = null
         val clock = kotlin.time.TimeSource.Monotonic.markNow()
         context.state.map { it.playback }.distinctUntilChanged().collect { current ->
             val last = previous
@@ -32,7 +34,11 @@ internal class LongSongResume(private val context: ControllerContext, private va
             // One failed lookup or write must not end the saving for the rest of the session.
             try {
                 val changed = current.entryId != last.entryId
-                if (changed) resume(current, minimumMs)
+                if (changed) awaitingDuration = if (resume(current, minimumMs)) null else current.entryId
+                else if (current.entryId == awaitingDuration && current.durationMs > 0) {
+                    awaitingDuration = null
+                    resume(current, minimumMs)
+                }
                 // Repeat-one starts the song over by itself, so the pass that ended counts as finished.
                 val repeated = !changed && current.repeatMode == RepeatMode.ONE && last.playbackId != null &&
                     current.playbackId != null && current.playbackId != last.playbackId
@@ -55,13 +61,18 @@ internal class LongSongResume(private val context: ControllerContext, private va
         }
     }
 
-    /** Continues [status]'s song where it was left when it starts from the beginning; a recovered queue already starts where it stopped. */
-    private suspend fun resume(status: PlaybackStatus, minimumMs: Long) {
-        val entryId = status.entryId ?: return
-        if (status.positionMs >= MINIMUM_POSITION_MS) return
-        val track = findTrack(status.trackId ?: return)?.takeIf { qualifies(it, status, minimumMs) } ?: return
-        val position = library.songPosition(track.id) ?: return
-        playback.resumeCurrentEntry(entryId, position)
+    /**
+     * Continues [status]'s song where it was left when it starts from the beginning; a recovered queue already starts where it stopped.
+     * Returns false only while neither the library nor the decoder knows the song's length, so the caller can try again.
+     */
+    private suspend fun resume(status: PlaybackStatus, minimumMs: Long): Boolean {
+        val entryId = status.entryId ?: return true
+        if (status.positionMs >= MINIMUM_POSITION_MS) return true
+        val track = findTrack(status.trackId ?: return true) ?: return true
+        if (status.durationMs <= 0 && track.metadata.durationMs <= 0) return false
+        if (!qualifies(track, status, minimumMs)) return true
+        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it) }
+        return true
     }
 
     private suspend fun findTrack(id: String): Track? = context.state.value.tracks.firstOrNull { it.id == id } ?: library.findTrack(id)

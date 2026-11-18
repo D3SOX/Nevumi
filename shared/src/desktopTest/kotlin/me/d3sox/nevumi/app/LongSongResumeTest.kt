@@ -22,11 +22,8 @@ import java.nio.file.Path
 import kotlin.test.*
 
 class LongSongResumeTest {
-    @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = runBlocking {
-        val directory = Files.createTempDirectory("long-song-resume")
-        val store = openMusicStore(directory.resolve("library.db").toString())
-        val library = MusicLibrary(store)
-        // Eleven minutes of 8 kHz mono silence; seeking skips the listening.
+    /** Eleven minutes of 8 kHz mono silence; seeking skips the listening. */
+    private fun elevenMinutes(directory: Path): Path {
         val mix = directory.resolve("mix.wav")
         val frames = 11 * 60 * 8_000
         RandomAccessFile(mix.toFile(), "rw").use { file ->
@@ -35,6 +32,32 @@ class LongSongResumeTest {
                 .put("data".toByteArray()).putInt(frames * 2).array())
             file.setLength(44L + frames * 2)
         }
+        return mix
+    }
+
+    @Test fun aSongWithoutAKnownLengthResumesOnceTheDecoderReportsIt() = runBlocking {
+        val directory = Files.createTempDirectory("long-song-unknown-length")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val mix = library.importTrack(TrackMetadata("Mix"), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
+        assertEquals(0, mix.metadata.durationMs)
+        library.rememberSongPosition(mix.id, 240_000)
+        val player = MusicController(library, PlaybackQueue(store), CrossfadePlaybackEngine { MpvPlaybackEngine("null") },
+            preferences = MusicPreferences(store))
+        try {
+            withTimeout(5_000) { player.state.first { it.libraryReady } }
+            player.updatePreferences { it.copy(resumeLongSongsMinutes = 10) }.join()
+            player.playTrack(mix.id, listOf(mix.id), 0).join()
+            withTimeout(5_000) { player.state.first { it.playback.trackId == mix.id && it.playback.playing && it.playback.positionMs >= 240_000 } }
+            assertNull(player.state.value.error)
+        } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = runBlocking {
+        val directory = Files.createTempDirectory("long-song-resume")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val mix = elevenMinutes(directory)
         val fixture = Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/fixture.flac").toString()
         val long = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, mix.toString()))
         val short = library.importTrack(TrackMetadata("Short", durationMs = 3_000), TrackSource("source:short", SourceKind.LOCAL, fixture))
