@@ -42,7 +42,8 @@ data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARAT
         if (pieces.size < 2) return@flatMap emptyList()
         val neighbors = pieces.zipWithNext { first, second -> text.substring(first.first, second.last + 1) }
         (neighbors + if (pieces.size > 2) listOf(text.substring(pieces.first().first, pieces.last().last + 1)) else emptyList())
-            .mapNotNull { it.trim().ifEmpty { null } }
+            // The same brackets the names lose, as in "Tyler, The Creator)" from "A (feat. Tyler, The Creator)".
+            .mapNotNull { tidy(it) }
     }.distinctBy { it.lowercase() }
 
     private fun featuredCredits(title: String): List<String> = if (!featuredFromTitle) emptyList()

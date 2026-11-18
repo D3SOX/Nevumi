@@ -61,6 +61,7 @@ class ArtistCreditsTest {
         // Featured names in titles can be kept together too, unless titles don't credit artists.
         fun title(text: String, splitting: ArtistSplitting = ArtistSplitting()) = splitting.joinedNames(TrackMetadata(text, "A"))
         assertEquals(listOf("Tyler, The Creator"), title("Song (feat. Tyler, The Creator)"))
+        assertEquals(true, "Tyler, The Creator" in joined("A (feat. Tyler, The Creator)"))
         assertEquals(emptyList(), title("Song (feat. Tyler, The Creator)", ArtistSplitting(featuredFromTitle = false)))
         val earth = ArtistSplitting(exceptions = listOf("Earth, Wind & Fire"))
         assertEquals(listOf("Earth, Wind & Fire", "Echo"), names("Earth, Wind & Fire, Echo", splitting = earth))
