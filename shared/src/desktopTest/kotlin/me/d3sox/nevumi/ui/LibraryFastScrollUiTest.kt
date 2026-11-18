@@ -35,7 +35,7 @@ class LibraryFastScrollUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 fun label() = onNodeWithTag("fast-scroll-label").fetchSemanticsNode().config[SemanticsProperties.Text].single().text
                 val scrollbar = onNodeWithContentDescription("Scroll library")
                 scrollbar.assertIsDisplayed()

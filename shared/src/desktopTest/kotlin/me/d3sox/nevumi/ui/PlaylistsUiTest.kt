@@ -117,7 +117,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 openLibraryPage("Playlists")
                 onNodeWithContentDescription("New smart playlist").performClick()
                 onNodeWithText("Playlist name").performTextInput("Top rated")
@@ -262,7 +262,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Local song").performClick()
                 onNodeWithText("Select song").performClick()
                 onNodeWithContentDescription("Select all").performClick()
@@ -293,7 +293,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 openLibraryPage("Playlists")
                 onNodeWithContentDescription("New smart playlist").performClick()
                 onNodeWithText("Playlist name").performTextInput("Recent selection")
@@ -328,7 +328,7 @@ class PlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 openLibraryPage("Playlists")
                 onNodeWithContentDescription("New smart playlist").performClick()
                 onNodeWithText("Playlist name").performTextInput("Favorite ambient")

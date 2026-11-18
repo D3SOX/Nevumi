@@ -36,7 +36,7 @@ class AutoEqUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, equalizerFiles = files) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Playback").performScrollTo().performClick()
                 onNodeWithText("Audio effects").performScrollTo().performClick()

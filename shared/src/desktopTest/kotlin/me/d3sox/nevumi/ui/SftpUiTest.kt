@@ -166,7 +166,7 @@ class SftpUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Files & recovery").performScrollTo().performClick()
                 onNodeWithText("Server files (SFTP)").performScrollTo().performClick()
@@ -210,7 +210,7 @@ class SftpUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Select song").performClick()
                 onNodeWithContentDescription("Select all").performClick()
@@ -277,7 +277,7 @@ class SftpUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, artworkPicker = ArtworkPicker { blue }) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val track = controller.state.value.tracks.single { it.metadata.title == "Northern Light" }
                 runBlocking { controller.playTrack(track.id, listOf(track.id)).join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
@@ -343,7 +343,7 @@ class SftpUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Upload from Nevumi").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Upload to server").performClick()
@@ -400,7 +400,7 @@ class SftpUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Rename server file").performClick()
@@ -466,7 +466,7 @@ class SftpUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Edit server tags").performClick()
@@ -513,7 +513,7 @@ class SftpUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Files & recovery").performScrollTo().performClick()
                 onNodeWithText("Server files (SFTP)").performScrollTo().performClick()

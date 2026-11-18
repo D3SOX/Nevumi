@@ -129,7 +129,7 @@ class ListeningHistoryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 openLibraryPage("Playlists")
                 onNodeWithContentDescription("New smart playlist").performClick()
                 onNodeWithText("Playlist name").performTextInput("Recently played")
@@ -165,7 +165,7 @@ class ListeningHistoryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Listening & scrobbling").performScrollTo().performClick()
                 onNodeWithContentDescription("Record listening history").performScrollTo().performClick()
@@ -211,7 +211,7 @@ class ListeningHistoryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Northern Light").performClick()
                 waitUntil(timeoutMillis = 6_000) { controller.state.value.playback.ended && controller.state.value.listens.singleOrNull()?.ended == true }
                 openLibraryPage("History")

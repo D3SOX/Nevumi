@@ -40,7 +40,7 @@ class DownloadUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Select song").performClick()
                 onNodeWithContentDescription("Select all").performClick()
@@ -78,7 +78,7 @@ class DownloadUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Download").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.downloads[track.id]?.status == DownloadStatus.FAILED }
@@ -137,7 +137,7 @@ class DownloadUiTest {
                 preferences = MusicPreferences(store))
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { delay(500) }
                 assertEquals(null, runBlocking { SourceResolver.resolve(library.findTrack(track.id)!!.sources, online = false) })
                 runBlocking { controller.downloadTracks(listOf(track.id)).join() }
@@ -222,7 +222,7 @@ class DownloadUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 openLibraryPage("Playlists")
                 onNodeWithContentDescription("New playlist").performClick()
                 onNodeWithText("Playlist name").performTextInput("Evening")
@@ -258,7 +258,7 @@ class DownloadUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Download").performClick()
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.downloads[track.id]?.status == DownloadStatus.COMPLETE }

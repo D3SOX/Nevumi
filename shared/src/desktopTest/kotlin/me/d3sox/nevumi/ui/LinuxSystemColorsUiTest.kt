@@ -37,7 +37,7 @@ class LinuxSystemColorsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 waitUntil(timeoutMillis = 3_000) { onRoot().captureToImage().toPixelMap()[5, 5].luminance() > 0.8f }
                 runBlocking { controller.updatePreferences { it.copy(themeMode = ThemeMode.SYSTEM) }.join() }
                 waitUntil(timeoutMillis = 8_000) { onRoot().captureToImage().toPixelMap()[5, 5].luminance() < 0.1f }
@@ -61,7 +61,7 @@ class LinuxSystemColorsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val artworkFallback = onRoot().captureToImage().toPixelMap()[5, 5]
                 runBlocking { controller.updatePreferences { it.copy(colors = ColorMode.SYSTEM) }.join() }
                 waitUntil(timeoutMillis = 8_000) { onRoot().captureToImage().toPixelMap()[5, 5] != artworkFallback }

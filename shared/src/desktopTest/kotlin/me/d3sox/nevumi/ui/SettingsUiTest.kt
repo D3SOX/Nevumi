@@ -53,7 +53,7 @@ class SettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("About Nevumi").performScrollTo().performClick()
                 onNodeWithText("AGPL-3.0-or-later").assertIsDisplayed()
@@ -123,7 +123,7 @@ class SettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.downloadTracks(listOf(track.id)).join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.downloads.containsKey(track.id) }
                 assertEquals(DownloadStatus.PENDING, controller.state.value.downloads[track.id]?.status)
@@ -156,7 +156,7 @@ class SettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.playTrack(track.id, listOf(track.id)).join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.pause().join() }
@@ -198,7 +198,7 @@ class SettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Downloads & cache").performScrollTo().performClick()
                 onNodeWithContentDescription("Playback cache").performScrollTo().performClick()
@@ -218,7 +218,7 @@ class SettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Downloads & cache").performScrollTo().performClick()
                 onNodeWithContentDescription("Streaming quality on metered networks").performScrollTo().performClick()
@@ -241,7 +241,7 @@ class SettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Appearance").performScrollTo().performClick()
                 onNodeWithText("Theme", useUnmergedTree = true).performMouseInput { click() }
@@ -264,7 +264,7 @@ class SettingsUiTest {
             controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 assertEquals(Color.Black, onRoot().captureToImage().toPixelMap()[5, 5])
                 assertEquals(2.0, controller.state.value.preferences.marqueeSpeed)
                 onNodeWithText("Northern Light").performClick()

@@ -34,7 +34,7 @@ class HomeUiTest {
         val release = CountDownLatch(1)
         try {
             runComposeUiTest {
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val state = controller.state.value
                 val tracks = object : AbstractList<Track>() {
                     override val size = state.tracks.size

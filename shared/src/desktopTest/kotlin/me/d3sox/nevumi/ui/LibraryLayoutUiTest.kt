@@ -149,7 +149,7 @@ class LibraryLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.size(360.dp, 740.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val navigation = onNodeWithTag("library-navigation").fetchSemanticsNode().boundsInRoot
                 assertTrue(navigation.top > onRoot().fetchSemanticsNode().boundsInRoot.height * .8f)
                 onNodeWithText("Folders").assertDoesNotExist()
@@ -176,7 +176,7 @@ class LibraryLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Song order").performClick()
                 onNodeWithText("Ascending").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.songOrderReversed }
@@ -201,7 +201,7 @@ class LibraryLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, folderPicker = FolderPicker { answers.pollFirst() }) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Local music").performClick()
                 onNodeWithContentDescription("Add included folder").performClick()
@@ -231,7 +231,7 @@ class LibraryLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, onAddMusic = { addMusicRequests++ }) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithTag("settings-page").assertIsDisplayed()
                 onNodeWithTag("library-pager").assertDoesNotExist()
@@ -269,7 +269,7 @@ class LibraryLayoutUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, onAddMusic = {}) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Search your library").assertDoesNotExist()
                 onNodeWithText("Scan music").assertDoesNotExist()
                 onNodeWithText("Music sources").assertDoesNotExist()

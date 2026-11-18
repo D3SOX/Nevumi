@@ -37,7 +37,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Server title").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Edit tags").performClick()
@@ -72,7 +72,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 fun coverOffset() = onNodeWithTag("track-action-artwork").getUnclippedBoundsInRoot().top -
                     onNodeWithTag("track-actions").getUnclippedBoundsInRoot().top
@@ -113,7 +113,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Files & recovery").performClick()
                 onNodeWithText("Review interrupted edit").performClick()
@@ -141,7 +141,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Edit tags").performClick()
@@ -173,7 +173,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Delete local file").performClick()
@@ -212,7 +212,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Rename file").performClick()
@@ -247,7 +247,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, artworkPicker = ArtworkPicker { image }) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Replace artwork").performClick()
@@ -276,7 +276,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Select song").performClick()
                 for (title in listOf("Long Way Home", "Night Walk")) onNodeWithTag("track-row:${tracks.getValue(title).id}").performClick()
@@ -313,7 +313,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Select song").performClick()
                 onNodeWithTag("track-row:${tracks.getValue("Long Way Home").id}").performClick()
@@ -391,7 +391,7 @@ class FileEditingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("File actions").performClick()
                 onNodeWithText("Edit tags").performClick()

@@ -42,7 +42,7 @@ class TunnelUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Tunnel").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Sign in to Tailscale").fetchSemanticsNodes().isNotEmpty() }

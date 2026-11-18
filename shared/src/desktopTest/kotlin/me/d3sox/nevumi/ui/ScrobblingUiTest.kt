@@ -147,7 +147,7 @@ class ScrobblingUiTest {
                 setContent { CompositionLocalProvider(LocalUriHandler provides object : UriHandler {
                     override fun openUri(uri: String) { opened += uri }
                 }) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Listening & scrobbling").performScrollTo().performClick()
                 onNodeWithText("Connect Last.fm").performScrollTo().performClick()
@@ -216,7 +216,7 @@ class ScrobblingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Northern Light").performClick()
                 waitUntil(timeoutMillis = 6_000) { controller.state.value.playback.ended && controller.state.value.scrobbling.submissions.singleOrNull()?.state == ScrobbleState.UNCERTAIN }
                 onNodeWithContentDescription("Settings").performClick()
@@ -265,7 +265,7 @@ class ScrobblingUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Listening & scrobbling").performScrollTo().performClick()
                 onNodeWithText("Connect ListenBrainz").performScrollTo().performClick()

@@ -39,7 +39,7 @@ class BackupSettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, backupFiles = files) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Backup & restore").performScrollTo().performClick()
                 onNodeWithText("No backup exported on this device yet").assertIsDisplayed()
@@ -87,7 +87,7 @@ class BackupSettingsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, backupFiles = files) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Export backup").assertDoesNotExist()
                 onNodeWithText("Restore backup").assertDoesNotExist()

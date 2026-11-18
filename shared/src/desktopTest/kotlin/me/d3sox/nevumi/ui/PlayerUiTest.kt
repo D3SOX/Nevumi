@@ -74,7 +74,7 @@ class PlayerUiTest {
                         Box(Modifier.width(360.dp).height(740.dp)) { MusicPlayerApp(controller) }
                     }
                 }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.playTrack(song.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithContentDescription("Favorite").assertIsDisplayed()
@@ -105,7 +105,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.width(800.dp).height(360.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.playTrack(song.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 onNodeWithContentDescription("Favorite").performScrollTo().assertIsDisplayed().performClick()
@@ -134,7 +134,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.width(360.dp).height(700.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.playTrack(song.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 assertTrue(onNodeWithText(title).fetchSemanticsNode().boundsInRoot.height <= 36f, "The expanded title uses one line")
@@ -156,7 +156,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val song = controller.state.value.tracks.first { it.metadata.title == "Northern Light" }
                 runBlocking { controller.playTrack(song.id).join(); controller.pause().join(); controller.seek(1_000).join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.durationMs == 3_000L && controller.state.value.playback.positionMs == 1_000L }
@@ -360,7 +360,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val songs = controller.state.value.tracks.sortedBy { it.metadata.title }
                 runBlocking { controller.playTrack(songs[1].id, songs.map { it.id }, 1).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
@@ -388,7 +388,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val songs = controller.state.value.tracks.sortedBy { it.metadata.title }
                 runBlocking { controller.playTrack(songs[0].id, songs.map { it.id }).join(); controller.pause().join() }
                 val entry = controller.state.value.queue.currentEntryId
@@ -415,7 +415,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val songs = controller.state.value.tracks.sortedBy { it.metadata.title }
                 runBlocking { controller.playTrack(songs[0].id, listOf(songs[0].id, songs[1].id, songs[1].id)).join(); controller.pause().join() }
                 val entries = controller.state.value.queue.entries
@@ -448,7 +448,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val song = controller.state.value.tracks.first { it.metadata.title == "Northern Light" }
                 runBlocking { controller.playTrack(song.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
@@ -490,7 +490,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val song = controller.state.value.tracks.first { it.metadata.title == "Northern Light" }
                 runBlocking { controller.playTrack(song.id).join(); controller.pause().join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.durationMs == 3_000L }
@@ -526,7 +526,7 @@ class PlayerUiTest {
             runComposeUiTest {
                 // The mini player floats above the bottom bar of a compact window; wider windows move navigation to a rail.
                 setContent { Box(Modifier.width(400.dp).height(740.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val song = controller.state.value.tracks.first { it.metadata.title == "Northern Light" }
                 runBlocking { controller.playTrack(song.id, listOf(song.id, song.id), 1).join(); controller.pause().join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.durationMs == 3_000L }
@@ -587,7 +587,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val song = controller.state.value.tracks.first { it.metadata.title == "Northern Light" }
                 runBlocking { controller.playTrack(song.id, listOf(song.id, song.id)).join(); controller.pause().join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.durationMs == 3_000L }
@@ -635,7 +635,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Northern Light").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.pause().join() }
@@ -673,7 +673,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Long Way Home").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.pause().join(); controller.seek(1_000).join() }
@@ -706,7 +706,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Long Way Home").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.pause().join(); controller.seek(1_000).join() }
@@ -756,7 +756,7 @@ class PlayerUiTest {
             runComposeUiTest {
                 val height = mutableStateOf(700.dp)
                 setContent { Box(Modifier.height(height.value)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Long Way Home").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.togglePlayback().join() }
@@ -780,7 +780,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val songs = controller.state.value.tracks.sortedBy { it.metadata.title }
                 runBlocking { controller.playTrack(songs[1].id, songs.map { it.id }, 1).join(); controller.pause().join() }
                 val original = controller.state.value.queue.currentEntryId
@@ -813,7 +813,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Long Way Home").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 onNodeWithTag("mini-player").performTouchInput { swipe(center, center.copy(x = center.x - 200), 200) }
@@ -838,7 +838,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Long Way Home").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.togglePlayback().join() }
@@ -877,7 +877,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Long Way Home").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 onNodeWithTag("mini-player").performClick()
@@ -936,7 +936,7 @@ class PlayerUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 val songs = controller.state.value.tracks.sortedBy { it.metadata.title }
                 runBlocking { controller.playTrack(songs[1].id, songs.map { it.id }, 1).join(); controller.pause().join() }
                 fun artwork() = onNodeWithTag("player-artwork", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot

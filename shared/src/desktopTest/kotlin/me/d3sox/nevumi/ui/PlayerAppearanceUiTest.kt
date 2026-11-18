@@ -90,7 +90,7 @@ class PlayerAppearanceUiTest {
         try {
             runComposeUiTest {
                 setContent { Box(Modifier.size(360.dp, 740.dp)) { MusicPlayerApp(controller) } }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
                 onNodeWithTag("mini-player").performClick()
                 val foreground = listOf(
@@ -160,7 +160,7 @@ class PlayerAppearanceUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.playTrack(tracks[70].id, tracks.map { it.id }, 70).join(); controller.pause().join() }
                 fun assertRed(description: String) {
                     waitUntil(timeoutMillis = 3_000) {

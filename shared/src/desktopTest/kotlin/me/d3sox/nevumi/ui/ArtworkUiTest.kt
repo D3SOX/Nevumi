@@ -82,7 +82,7 @@ class ArtworkUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking { controller.playTrack(track.id, listOf(track.id)).join() }
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.playing }
                 runBlocking { controller.pause().join() }
@@ -122,7 +122,7 @@ class ArtworkUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Appearance").performScrollTo().performClick()
                 onNodeWithContentDescription("Theme").performClick()

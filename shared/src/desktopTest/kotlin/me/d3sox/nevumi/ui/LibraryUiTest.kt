@@ -113,7 +113,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Rate song").performClick()
                 onNodeWithContentDescription("4 stars").performClick()
@@ -142,7 +142,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Library & gestures").performScrollTo().performClick()
                 onNodeWithText("Library tabs").performScrollTo().performClick()
@@ -184,7 +184,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Song a").performClick()
                 onNodeWithText("Select song").performClick()
                 onNodeWithContentDescription("Select all").performClick()
@@ -210,7 +210,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking {
                     controller.playTrack(tracks[0].id, listOf(tracks[0].id)).join()
                     controller.pause().join(); controller.seek(1_000).join()
@@ -248,7 +248,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Music sources").performClick()
                 onNodeWithText("Filters").performClick()
                 onNode(hasText("Genre") and hasSetTextAction()).performTextInput("Ambient")
@@ -291,7 +291,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 runBlocking {
                     controller.playTrack(local.id, listOf(local.id, remote.id, local.id)).join()
                     controller.pause().join()
@@ -339,7 +339,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Music sources").performClick()
                 onNodeWithText("Server").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.preferences.sourceFilter == SourceKind.SERVER }
@@ -431,7 +431,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithContentDescription("Track options: Northern Light").performClick()
                 onNodeWithText("Favorite").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.tracks.any { it.metadata.title == "Northern Light" && it.favorite } }
@@ -463,7 +463,7 @@ class LibraryUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 onNodeWithText("Albums").performClick()
                 onNodeWithText("Fixture Album").performClick()
                 onNodeWithText("Northern Light").assertIsDisplayed()

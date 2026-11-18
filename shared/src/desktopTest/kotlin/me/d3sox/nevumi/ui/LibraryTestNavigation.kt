@@ -13,6 +13,10 @@ internal fun ComposeUiTest.assertLibraryBackInHeader() {
     onNodeWithContentDescription("Nevumi logo").assertDoesNotExist()
 }
 
+/** Startup recovers files, loads the queue and reads the library twice, which can take several seconds on a busy CI runner. */
+@OptIn(ExperimentalTestApi::class)
+internal fun ComposeUiTest.waitForStartup(controller: MusicController) = waitUntil(timeoutMillis = 15_000) { !controller.state.value.loading }
+
 /**
  * MusicPlayerApp renders a copy of the controller state that a collector updates, so the controller can report a ready
  * library before the app has composed it. Waiting for the library pager as well keeps the next lookup from racing it.

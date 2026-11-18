@@ -33,7 +33,7 @@ class PlayerStartupUiTest {
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"))
         try {
             runComposeUiTest {
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 setContent { Box(Modifier.size(1000.dp, 740.dp)) { MusicPlayerApp(controller) } }
                 onNodeWithTag("mini-player").assertIsDisplayed()
                 onNodeWithTag("now-playing", useUnmergedTree = true).assertDoesNotExist()

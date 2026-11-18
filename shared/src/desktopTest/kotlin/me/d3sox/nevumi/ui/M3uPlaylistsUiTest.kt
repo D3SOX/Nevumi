@@ -38,7 +38,7 @@ class M3uPlaylistsUiTest {
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, playlistFiles = picker) }
-                waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
+                waitForStartup(controller)
                 openLibraryPage("Playlists")
                 onNodeWithContentDescription("Import M3U").performClick()
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playlists.size == 1 }
