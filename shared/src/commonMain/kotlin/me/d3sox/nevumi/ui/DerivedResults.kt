@@ -34,7 +34,9 @@ private const val INLINE_COMPUTE_MS = 5L
  * library after one song's favorite changed or the listening history that playback checkpoints every few seconds,
  * computes it off the main thread and keeps the previous value until the new one is ready, unless the previous
  * computation was quick enough to repeat inline. With an [id], the value outlives this composable inside the library,
- * so returning to a tab reuses it. With [initial], calculations run in the background until the first value is ready.
+ * so returning to a tab reuses it. With [initial], calculations run in the background until the first value is ready, and
+ * later changes to [refreshKeys] always compute in the background, since a cheap previous value says nothing about a much
+ * larger library.
  */
 @Composable
 @Suppress("UNCHECKED_CAST")
@@ -56,7 +58,7 @@ internal fun <T> rememberDerived(id: String?, keys: List<Any?>, refreshKeys: Lis
             DerivedResult(keys, refreshKeys, initial(), pending = true)
         previous == null || previous.keys != keys -> computed()
         previous.pending -> previous
-        previous.refreshKeys != refreshKeys && previous.costMs < INLINE_COMPUTE_MS -> computed()
+        initial == null && previous.refreshKeys != refreshKeys && previous.costMs < INLINE_COMPUTE_MS -> computed()
         else -> previous
     }
     if (result !== previous) {
