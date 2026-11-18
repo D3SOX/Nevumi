@@ -20,6 +20,24 @@ import io.ktor.utils.io.ByteChannel
 
 class NavidromeClientTest {
     @Test
+    fun songsKeepEachArtistAnOpenSubsonicServerCredits() = runBlocking {
+        val engine = MockEngine { request ->
+            val songs = if (request.url.parameters["songOffset"] == "0") """[{"id":"a","title":"Duet","artist":"Pulse feat. Echo",""" +
+                """"artists":[{"id":"1","name":"Pulse"},{"id":"2","name":"Echo"}]},""" +
+                """{"id":"b","title":"Solo","artist":"Pulse","artists":[{"id":"1","name":"Pulse"}]}]""" else "[]"
+            respond("""{"subsonic-response":{"status":"ok","searchResult3":{"song":$songs}}}""",
+                headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val http = HttpClient(engine)
+        try {
+            val songs = NavidromeClient(http, "https://music.example.test", ServerCredentials("test", "test")).songs().associateBy { it.id }
+            assertEquals(listOf("Pulse", "Echo"), songs.getValue("a").metadata.artists)
+            assertEquals("Pulse feat. Echo", songs.getValue("a").metadata.artist)
+            assertEquals(emptyList(), songs.getValue("b").metadata.artists)
+        } finally { http.close() }
+    }
+
+    @Test
     fun theCatalogueIncludesEveryPageWhenTheServerCapsPageSize() = runBlocking {
         val engine = MockEngine { request ->
             val offset = request.url.parameters["songOffset"]?.toInt() ?: 0

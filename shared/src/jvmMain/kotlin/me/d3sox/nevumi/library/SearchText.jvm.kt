@@ -1,4 +1,4 @@
-package me.d3sox.nevumi.soundcloud
+package me.d3sox.nevumi.library
 
 import java.text.Normalizer
 

@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.ui
 
 import me.d3sox.nevumi.history.*
+import me.d3sox.nevumi.library.ArtistSplitting
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.recentAt
 import me.d3sox.nevumi.playlists.Playlist
@@ -32,20 +33,22 @@ internal data class HomeFeed(val recent: List<Track> = emptyList(), val top: Lis
 
 /** Builds the Home sections; [unknownAlbum] and [unknownArtist] name collections whose tag is blank. */
 internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, randomSeed: Int,
-    unknownAlbum: String, unknownArtist: String): HomeFeed {
+    unknownAlbum: String, unknownArtist: String, splitting: ArtistSplitting = ArtistSplitting()): HomeFeed {
     val playable = tracks.filter { track -> track.sources.any { it.available } }
     val catalog = playable.associateBy { it.id }
     val events = listens.filter { it.trackId in catalog && it.startedAt <= now }
     val statistics = listeningStatistics(events)
     val recent = events.sortedByDescending { it.startedAt }.distinctBy { it.trackId }.map { catalog.getValue(it.trackId) }.take(20)
-    val report = listeningReport(events, playable, ListeningPeriod.LAST_30_DAYS, now)
+    val report = listeningReport(events, playable, ListeningPeriod.LAST_30_DAYS, now, splitting)
     val top = report.songs.filter { it.playCount > 0 }.map { catalog.getValue(it.trackIds.single()) }.take(20)
     val rediscover = playable.filter { track -> statistics[track.id]?.let { it.playCount > 0 && it.lastPlayedAt < now - 30 * 86_400_000L } == true }
         .sortedWith(compareByDescending<Track> { statistics.getValue(it.id).playCount }.thenBy { statistics.getValue(it.id).lastPlayedAt }).take(20)
     val added = playable.map { Triple(it, it.recentAt, it.metadata.title.lowercase()) }
         .sortedWith(compareByDescending<Triple<Track, Long, String>> { it.second }.thenBy { it.third }).take(20).map { it.first }
     val albumSongs = playable.groupBy { albumCollectionId(it.metadata) }
-    val artistSongs = playable.groupBy { it.metadata.artist }
+    fun artists(track: Track) = splitting.names(track.metadata).ifEmpty { listOf("") }
+    val artistSongs = linkedMapOf<String, MutableList<Track>>()
+    for (track in playable) for (artist in artists(track)) artistSongs.getOrPut(artist) { mutableListOf() } += track
     // Only a few albums and artists are shown, so build their collections on demand.
     val albums = mutableMapOf<String, TrackCollection>()
     fun album(track: Track): TrackCollection? {
@@ -58,19 +61,15 @@ internal fun homeFeed(tracks: List<Track>, listens: List<Listen>, now: Long, ran
                 first.albumArtist.ifBlank { first.artist })
         }
     }
-    fun artist(track: Track) = track.metadata.artist.let { artist ->
-        artistSongs[artist]?.let { TrackCollection(artist, artist.ifBlank { unknownArtist }, it) }
-    }
+    fun artist(name: String) = artistSongs[name]?.let { TrackCollection(name, name.ifBlank { unknownArtist }, it) }
     val recentAlbums = recent.mapNotNull(::album).distinctBy { it.id }.take(12)
-    val recentArtists = recent.distinctBy { it.metadata.artist }.mapNotNull(::artist).take(12)
+    val recentArtists = recent.flatMap(::artists).distinct().mapNotNull(::artist).take(12)
     val topAlbums = report.albums.filter { it.playCount > 0 }.mapNotNull { rank ->
         rank.trackIds.firstOrNull()?.let(catalog::get)?.let(::album)
     }.distinctBy { it.id }.take(12)
-    val topArtists = report.artists.filter { it.playCount > 0 }.mapNotNull { rank ->
-        rank.trackIds.firstOrNull()?.let(catalog::get)
-    }.distinctBy { it.metadata.artist }.mapNotNull(::artist).take(12)
+    val topArtists = report.artists.filter { it.playCount > 0 }.map { it.name }.distinct().mapNotNull(::artist).take(12)
     val discovery = playable.filter { (statistics[it.id]?.playCount ?: 0) == 0 }.shuffled(Random(randomSeed)).take(50)
-    val recommendations = listeningRecommendations(events, playable, limit = 50, now = now).map { it.track }
+    val recommendations = listeningRecommendations(events, playable, limit = 50, now = now, splitting = splitting).map { it.track }
     val favorites = playable.filter { it.favorite }.shuffled(Random(randomSeed)).take(50)
     val mixes = buildList {
         fun mix(id: String, title: StringResource, description: StringResource, songs: List<Track>) {

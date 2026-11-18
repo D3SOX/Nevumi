@@ -16,6 +16,7 @@ import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.artistSplitting
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.discovery_about
 import me.d3sox.nevumi.resources.discovery_not_in_library
@@ -27,6 +28,11 @@ import me.d3sox.nevumi.resources.discovery_show_more
 import me.d3sox.nevumi.resources.discovery_similar_artists
 import me.d3sox.nevumi.resources.discovery_top_songs
 import org.jetbrains.compose.resources.stringResource
+
+/** The artist splitting [settings] choose, kept while they stay the same. */
+@Composable
+internal fun rememberArtistSplitting(settings: me.d3sox.nevumi.settings.MusicSettings): me.d3sox.nevumi.library.ArtistSplitting =
+    remember(settings.artistSeparators, settings.artistSeparatorExceptions, settings.featuredArtistsFromTitle) { settings.artistSplitting() }
 
 /** Following and the server's knowledge of an artist below the artist page's hero; shows nothing outside artist pages. */
 @OptIn(ExperimentalLayoutApi::class)

@@ -68,7 +68,8 @@ internal fun ListeningStatisticsScreen(state: AppState, controller: MusicControl
     var selected by rememberSaveable(period, grouping) { mutableStateOf<String?>(null) }
     OnLibraryTabReselected { selected = null }
     val now = rememberLibraryTime()
-    val report = rememberDerived("statistics-report", listOf(period), listOf(tracks, state.listens, now)) { listeningReport(state.listens, tracks, period, now) }
+    val splitting = rememberArtistSplitting(state.preferences)
+    val report = rememberDerived("statistics-report", listOf(period, splitting), listOf(tracks, state.listens, now)) { listeningReport(state.listens, tracks, period, now, splitting) }
     val ranks = when (grouping) { "Artists" -> report.artists; "Albums" -> report.albums; "Genres" -> report.genres; else -> report.songs }
     val catalog = rememberDerived("statistics-catalog", emptyList(), listOf(tracks)) { tracks.associateBy { it.id } }
     val unknownName = when (grouping) {
@@ -122,7 +123,8 @@ internal fun ListeningRecommendationsScreen(state: AppState, controller: MusicCo
     val now = rememberLibraryTime()
     val fromArtist = stringResource(Res.string.sources_recommendation_artist)
     val fromGenre = stringResource(Res.string.sources_recommendation_genre)
-    val suggestions = rememberDerived("recommendations", emptyList(), listOf(tracks, state.listens, now)) { listeningRecommendations(state.listens, tracks, now = now) }
+    val splitting = rememberArtistSplitting(state.preferences)
+    val suggestions = rememberDerived("recommendations", listOf(splitting), listOf(tracks, state.listens, now)) { listeningRecommendations(state.listens, tracks, now = now, splitting = splitting) }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(Res.string.sources_recommendations_intro),

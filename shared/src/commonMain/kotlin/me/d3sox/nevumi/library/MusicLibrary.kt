@@ -36,6 +36,8 @@ data class TrackMetadata(
     val year: Int = 0,
     val recordingId: String = "",
     val releaseId: String = "",
+    /** Each credited artist, when the tags or the server list several separately; [artist] stays the text to show. */
+    val artists: List<String> = emptyList(),
 )
 
 @Serializable
@@ -200,7 +202,7 @@ class MusicLibrary(private val store: MusicStore) {
 
     internal suspend fun localFolderStamp(): String {
         val settings = store.read<me.d3sox.nevumi.settings.MusicSettings>("settings:music")
-        return store.json.encodeToString(listOf(settings?.includeFolders.orEmpty(), settings?.excludeFolders.orEmpty()))
+        return store.json.encodeToString(listOf(settings?.includeFolders.orEmpty(), settings?.excludeFolders.orEmpty(), listOf("$LOCAL_INDEX_FORMAT")))
     }
 
     internal fun observeLocalRoots(): Flow<List<String>> = store.database.records().observe("library-roots").distinctUntilChanged()

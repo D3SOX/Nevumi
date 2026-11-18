@@ -44,7 +44,7 @@ import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.playlists.playlistedTrackIds
 import me.d3sox.nevumi.library.filterTracks
 import me.d3sox.nevumi.library.recentAt
-import me.d3sox.nevumi.library.LocalFolderRules
+import me.d3sox.nevumi.library.localFolderRules
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.queue.QueueAction
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -152,14 +152,14 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         if (filter.notInPlaylist) playlistedTrackIds(state.playlists) else emptySet()
     }
     // Sort and filter choices answer at once; a library change, such as one song's favorite, re-sorts in the background.
-    val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders)
+    val trackChoices = listOf(order, reversed, sources, filter, state.preferences.includeFolders, state.preferences.excludeFolders,
+        state.preferences.minimumSongSeconds)
     // The unfiltered count is what the library shows without its source and filters, so the header can say "4 of 12 songs".
     // Favorites, History and Statistics also list songs that only stream from YouTube, which the other library views leave out.
     val (tracks, unfilteredTracks, favoriteTracks, listenedTracks) = rememberDerived(null, trackChoices,
         listOf(state.tracks, playlisted, rankedStatistics, filterTime)) {
-        val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
-        fun localAllowed(track: Track) =
-            folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))
+        val folders = state.preferences.localFolderRules()
+        fun localAllowed(track: Track) = folders.allows(track)
         val unfiltered = state.tracks.filter { track -> track.inLibrary && (localAllowed(track) || track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE }) }
         val visible = if (sources == SourceKind.LOCAL) unfiltered.filter(::localAllowed) else unfiltered
         val streamed = state.tracks.filterNot { it.inLibrary }
@@ -307,10 +307,11 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
                         LibraryTab.GENRES -> Res.string.library_unknown_genre
                         else -> Res.string.library_unknown_folder
                     })
-                    val collections = rememberDerived(tab.name, trackChoices + unknownName, listOf(tracks)) {
+                    val splitting = rememberArtistSplitting(state.preferences)
+                    val collections = rememberDerived(tab.name, trackChoices + unknownName + splitting, listOf(tracks)) {
                         groupedCollections(tracks, unknownName) { track ->
                             when (tab) {
-                                LibraryTab.ARTISTS -> listOf(track.metadata.artist)
+                                LibraryTab.ARTISTS -> splitting.names(track.metadata).ifEmpty { listOf("") }
                                 LibraryTab.ALBUM_ARTISTS -> listOf(track.metadata.albumArtist.ifBlank { track.metadata.artist })
                                 LibraryTab.GENRES -> track.metadata.genres.ifEmpty { listOf("") }
                                 else -> listOf(track.metadata.folder)

@@ -13,6 +13,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.settings_split_artists
+import me.d3sox.nevumi.resources.settings_keywords_split_artists
+import me.d3sox.nevumi.resources.settings_minimum_song_length
+import me.d3sox.nevumi.resources.settings_keywords_minimum_song_length
 import me.d3sox.nevumi.resources.about_nevumi
 import me.d3sox.nevumi.resources.audio_effects
 import me.d3sox.nevumi.resources.backup_export
@@ -169,9 +173,11 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             add(SettingEntry(Res.string.settings_clear_ratings, "Library & gestures", AppIcon.RATING, Res.string.settings_keywords_clear_ratings))
             add(SettingEntry(Res.string.settings_remember_scroll_positions, "Library & gestures", AppIcon.LIBRARY,
                 Res.string.settings_keywords_remember_scroll_positions))
+            add(SettingEntry(Res.string.settings_split_artists, "Library & gestures", AppIcon.ALBUM_ARTIST, Res.string.settings_keywords_split_artists))
             category("Local music", AppIcon.FOLDER, Res.string.settings_scan_music to Res.string.settings_keywords_scan_music,
                 Res.string.settings_include_folders to Res.string.settings_keywords_include_folders,
-                Res.string.settings_exclude_folders to Res.string.settings_keywords_exclude_folders)
+                Res.string.settings_exclude_folders to Res.string.settings_keywords_exclude_folders,
+                Res.string.settings_minimum_song_length to Res.string.settings_keywords_minimum_song_length)
             category("Playback", AppIcon.PLAY, Res.string.settings_playback_speed to Res.string.settings_keywords_playback_speed,
                 Res.string.settings_playback_pitch to Res.string.settings_keywords_playback_pitch,
                 Res.string.crossfade to Res.string.settings_keywords_crossfade,

@@ -1,5 +1,7 @@
 package me.d3sox.nevumi.soundcloud
 
+import me.d3sox.nevumi.library.withoutMarks
+
 // Cleanup and file names like sc-gate-dl's web interface, so both offer the same tags for a download.
 
 /** Promo text often glued onto SoundCloud and gate titles. */
@@ -23,9 +25,6 @@ internal fun withoutPromoText(value: String): String {
     result = spaces.replace(result, " ")
     return edgeSeparators.replace(result, "").trim()
 }
-
-/** Strips characters' accents, so artist credits match however they are written. */
-internal expect fun withoutMarks(text: String): String
 
 private val creditJoins = Regex("""\b(?:featuring|feat|ft|with|versus|vs)\.?\b""")
 private val creditSeparators = Regex("""\s*(?:,|&|\+|×)\s*|\s+and\s+""")

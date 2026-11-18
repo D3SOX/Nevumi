@@ -39,6 +39,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.LibraryTab
 import me.d3sox.nevumi.library.inLibrary
+import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.queue.QueueAction
 import me.d3sox.nevumi.settings.TrackAction
 import me.d3sox.nevumi.resources.Res
@@ -333,11 +334,21 @@ internal fun SearchYouTubeRow(query: String, open: () -> Unit) {
         leadingContent = { Icon(AppIcon.YOUTUBE.vector, null) })
 }
 
-/** [artist] when the library has songs by them, so going to the artist opens their library page. */
+/** The first artist [artist] credits that the library has songs by, so going to the artist opens their library page. */
 @Composable
-internal fun libraryArtist(artist: String, state: AppState): String? = remember(artist, state.tracks) {
-    artist.takeIf { name -> name.isNotBlank() && state.tracks.any { it.inLibrary && it.metadata.artist == name } }
+internal fun libraryArtist(artist: String, state: AppState): String? {
+    val splitting = rememberArtistSplitting(state.preferences)
+    return remember(artist, state.tracks, splitting) {
+        splitting.names(me.d3sox.nevumi.library.TrackMetadata("", artist)).firstOrNull { hasLibraryArtist(it, state.tracks, splitting) }
+    }
 }
+
+/** Whether a library song credits [name], so the library has an artist page for them. */
+internal fun hasLibraryArtist(name: String, tracks: List<Track>, splitting: me.d3sox.nevumi.library.ArtistSplitting): Boolean =
+    name.isNotBlank() && tracks.any { track -> track.inLibrary &&
+        // Splitting every song would be slow, so only songs whose tags hold the name are split.
+        (track.metadata.artist.contains(name) || track.metadata.title.contains(name) || name in track.metadata.artists) &&
+        name in splitting.names(track.metadata) }
 
 /**
  * The song menu of a YouTube song: it queues the song, goes to its artist in the library or on YouTube Music or to its album on

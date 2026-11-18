@@ -685,7 +685,11 @@ class NavidromeClient(
                     recordingId = recordingId,
                     releaseId = releaseId,
                     folder = song["path"]?.jsonPrimitive?.content.orEmpty().replace('\\', '/')
-                        .substringBeforeLast('/', "")),
+                        .substringBeforeLast('/', ""),
+                    // OpenSubsonic servers such as Navidrome list each credited artist.
+                    artists = song["artists"]?.jsonArray.orEmpty().mapNotNull {
+                        it.jsonObject["name"]?.jsonPrimitive?.content?.trim()?.takeIf(String::isNotEmpty)
+                    }.distinct().takeIf { it.size > 1 }.orEmpty()),
                 format = song["suffix"]?.jsonPrimitive?.content.orEmpty(),
                 sizeBytes = song["size"]?.jsonPrimitive?.longOrNull ?: 0,
                 coverArt = song["coverArt"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },

@@ -29,7 +29,16 @@ fun AudioFile.trackMetadata(name: String, folder: String, albumArtistFallback: B
     val number = field(FieldKey.TRACK).ifBlank {
         if (container is WavTag) container.infoTag.unrecognisedFields.firstOrNull { it.id == "IPRT" }?.content.orEmpty().trimEnd('\u0000') else ""
     }
+    fun values(key: FieldKey): List<String> = try { tag?.getAll(key).orEmpty().map { it.trimEnd('\u0000').trim() }.filter { it.isNotEmpty() } }
+        catch (_: UnsupportedOperationException) { emptyList() }
+        catch (_: org.jaudiotagger.tag.KeyNotFoundException) { emptyList() }
     val artist = field(FieldKey.ARTIST)
+    // Several artist values, or an ARTISTS tag as MusicBrainz Picard writes it. An ARTISTS tag that names someone the artist
+    // tag doesn't was left behind by an edit of the artist tag, so it no longer counts.
+    val artists = values(FieldKey.ARTIST).takeIf { it.size > 1 }
+        ?: values(FieldKey.ARTISTS).takeIf { names -> names.size > 1 && names.all { name ->
+            Regex("""(?<![\p{L}\p{N}])${Regex.escape(name)}(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE).containsMatchIn(artist)
+        } }.orEmpty()
     return TrackMetadata(
         title = field(FieldKey.TITLE).ifBlank { name },
         artist = artist,
@@ -44,6 +53,7 @@ fun AudioFile.trackMetadata(name: String, folder: String, albumArtistFallback: B
         year = field(FieldKey.YEAR).take(4).toIntOrNull() ?: 0,
         recordingId = field(FieldKey.MUSICBRAINZ_TRACK_ID),
         releaseId = field(FieldKey.MUSICBRAINZ_RELEASEID),
+        artists = artists,
     )
 }
 
@@ -65,9 +75,12 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
             val files = root.musicFiles().filter { (_, canonical) ->
                 canonical.path in chosen || folders.allows(canonical.parent.orEmpty(), canonical.parentFile?.relativeToOrNull(root)?.path)
             }.associate { (file, canonical) -> "local:${canonical.path}" to file }
+            val covers = mutableMapOf<File?, Long>()
             files.any { (id, file) ->
                 val source = indexed[id]
-                source == null || !source.available || source.modifiedAt != file.lastModified() || source.indexedSize != file.length()
+                source == null || !source.available || source.modifiedAt != file.lastModified() || source.indexedSize != file.length() ||
+                    source.indexFormat != LOCAL_INDEX_FORMAT ||
+                    source.folderCoverModifiedAt != File(id.removePrefix("local:")).parentFile.let { folder -> covers.getOrPut(folder) { folderCoverModifiedAt(folder) } }
             } || indexedPaths.any { (source, path) -> path.startsWith(root.toPath()) && source.id !in files }
         }
     }
@@ -92,6 +105,10 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
             .minByOrNull { it.path.length } ?: root
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
+        val folderCovers = mutableMapOf<File?, File?>()
+        // getOrPut would look again for every song in a folder without a cover.
+        fun folderCoverOf(file: File) = if (file.parentFile in folderCovers) folderCovers[file.parentFile]
+            else folderCover(file.parentFile).also { folderCovers[file.parentFile] = it }
         val files = root.musicFiles().filter { (_, canonical) -> !followRules || canonical.path in chosen ||
             folders.allows(canonical.parent.orEmpty(), canonical.parentFile?.relativeToOrNull(base)?.path) }.toList()
         onProgress(LocalScanProgress(0, files.size))
@@ -101,17 +118,20 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
             val cached = previous[sourceId]
             val source = cached?.sources?.firstOrNull { it.id == sourceId }
             if (!force && source?.available == true && source.modifiedAt == file.lastModified() &&
-                source.indexedSize > 0 && source.indexedSize == file.length() &&
+                source.indexedSize > 0 && source.indexedSize == file.length() && source.indexFormat == LOCAL_INDEX_FORMAT &&
+                source.folderCoverModifiedAt == (folderCoverOf(canonical)?.lastModified() ?: 0) &&
                 (!source.hasArtwork || artwork == null || artwork.path(cached.id) != null)) {
                 seen += sourceId
                 return@mapIndexedNotNull cached
             }
             val audio = try { AudioFileIO.read(file) } catch (_: Exception) { return@mapIndexedNotNull null }
             val metadata = audio.trackMetadata(file.nameWithoutExtension, canonical.parent.orEmpty())
+            val folderCover = folderCoverOf(canonical)
             val cover = audio.fieldTag?.firstArtwork?.binaryData
+                ?: folderCover?.let { image -> try { image.readBytes() } catch (_: java.io.IOException) { null } }
             val track = library.importTrack(metadata, TrackSource(sourceId,
                 SourceKind.LOCAL, canonical.path, modifiedAt = file.lastModified(), indexedSize = file.length(),
-                hasArtwork = cover != null))
+                hasArtwork = cover != null, indexFormat = LOCAL_INDEX_FORMAT, folderCoverModifiedAt = folderCover?.lastModified() ?: 0))
             seen += sourceId
             if (cover != null) {
                 try { artwork?.save(track.id, cover) }
@@ -129,6 +149,17 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         imported
     }
 }
+
+private val folderCoverNames = listOf("cover", "folder", "front", "albumart", "album")
+
+/** Whether a file named [name] can be the cover image of the songs in its folder. */
+internal fun isFolderCoverName(name: String) = name.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png") &&
+    name.substringBeforeLast('.').lowercase() in folderCoverNames
+
+/** The cover image beside songs without embedded artwork, such as cover.jpg or Folder.png, preferring the names in that order. */
+internal fun folderCover(folder: File?): File? = folder?.listFiles { file -> file.isFile && isFolderCoverName(file.name) }?.minWithOrNull(compareBy<File> { folderCoverNames.indexOf(it.nameWithoutExtension.lowercase()) }.thenBy { it.name })
+
+private fun folderCoverModifiedAt(folder: File?) = folderCover(folder)?.lastModified() ?: 0
 
 /** The music files in this folder, each with its resolved path. */
 private fun File.musicFiles() = walkMusicFolders().filter { it.isFile && it.extension.lowercase() in localMusicExtensions }

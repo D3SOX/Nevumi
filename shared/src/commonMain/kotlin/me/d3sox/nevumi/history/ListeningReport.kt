@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.history
 
+import me.d3sox.nevumi.library.ArtistSplitting
 import me.d3sox.nevumi.library.Track
 import kotlin.time.Clock
 
@@ -15,7 +16,7 @@ data class ListeningReport(val playCount: Int, val listenedMs: Long, val songs: 
     val artists: List<ListeningRank>, val albums: List<ListeningRank>, val genres: List<ListeningRank>)
 
 fun listeningReport(listens: List<Listen>, tracks: List<Track>, period: ListeningPeriod = ListeningPeriod.ALL_TIME,
-    now: Long = Clock.System.now().toEpochMilliseconds()): ListeningReport {
+    now: Long = Clock.System.now().toEpochMilliseconds(), splitting: ArtistSplitting = ArtistSplitting()): ListeningReport {
     val catalog = tracks.associateBy { it.id }
     val cutoff = period.days?.let { now - it * 86_400_000L } ?: Long.MIN_VALUE
     val events = listens.filter { it.trackId in catalog && it.startedAt in cutoff..now }
@@ -46,7 +47,7 @@ fun listeningReport(listens: List<Listen>, tracks: List<Track>, period: Listenin
         ListeningRank(total.track.metadata.title, total.track.metadata.artist, listOf(id), total.plays, total.milliseconds)
     }.sortedByRank { it.trackIds.single() }
     return ListeningReport(events.count { it.qualified }, events.sumOf { it.listenedMs }, songs,
-        ranks { listOf(it.metadata.artist.ifBlank { "" } to "") },
+        ranks { track -> splitting.names(track.metadata).ifEmpty { listOf("") }.map { it to "" } },
         ranks { listOf(it.metadata.album.ifBlank { "" } to it.metadata.albumArtist.ifBlank { it.metadata.artist }) },
         ranks { it.metadata.genres.ifEmpty { listOf("") }.map { genre -> genre to "" } })
 }
