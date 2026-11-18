@@ -132,7 +132,7 @@ data class MusicSettings(
     val minimumSongSeconds: Int = 0,
     /** See [me.d3sox.nevumi.library.ArtistSplitting]. */
     val artistSeparators: List<String> = me.d3sox.nevumi.library.DEFAULT_ARTIST_SEPARATORS,
-    val artistSeparatorExceptions: List<String> = emptyList(),
+    val artistSeparatorExceptions: List<String> = me.d3sox.nevumi.library.DEFAULT_ARTIST_EXCEPTIONS,
     val featuredArtistsFromTitle: Boolean = true,
     val undoRetentionDays: Int = 30,
     val undoBackupBytes: Long = 1_073_741_824L,

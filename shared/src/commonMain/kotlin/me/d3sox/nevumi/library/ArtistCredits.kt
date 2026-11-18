@@ -2,16 +2,23 @@ package me.d3sox.nevumi.library
 
 import me.d3sox.nevumi.settings.MusicSettings
 
-/** What separates artists in an artist tag by default. Symbols such as `&` and `,` also appear inside band names, so they are opt-in. */
-val DEFAULT_ARTIST_SEPARATORS = listOf(";", "feat.", "ft.", "featuring")
+/**
+ * What separates artists in an artist tag by default. Spotify and SoundCloud downloads list artists with commas. `&`, `x` and
+ * `/` are opt-in, because they appear inside names such as "Above & Beyond", "X CLUB." and "AC/DC".
+ */
+val DEFAULT_ARTIST_SEPARATORS = listOf(";", ",", "feat.", "feat", "ft.", "ft", "featuring", "vs.", "vs")
+
+/** Well-known artists whose names contain a comma, so the default separators keep them whole. */
+val DEFAULT_ARTIST_EXCEPTIONS = listOf("Tyler, The Creator", "Earth, Wind & Fire", "Crosby, Stills, Nash & Young", "Crosby, Stills & Nash",
+    "Emerson, Lake & Palmer", "Blood, Sweat & Tears", "Peter, Paul and Mary")
 
 /**
- * Finds the artists a song credits. Tags and servers that list artists separately win; otherwise [separators] split the
- * artist tag, except inside [exceptions] such as "Simon & Garfunkel". Separators made of symbols split wherever they occur,
+ * Finds the artists a song credits: those that tags or the server list separately, or else the artist tag. [separators]
+ * split each of them, except inside [exceptions] such as "Tyler, The Creator". Separators made of symbols split wherever they occur,
  * and words such as "feat." only where they stand alone, so "ft." does not split "Daft." With [featuredFromTitle], artists a
  * title names, as in "Song (feat. B)", are credited too.
  */
-data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARATORS, val exceptions: List<String> = emptyList(),
+data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARATORS, val exceptions: List<String> = DEFAULT_ARTIST_EXCEPTIONS,
     val featuredFromTitle: Boolean = true) {
     private val protectedNames = exceptions.map { it.trim() }.filter { it.isNotEmpty() }
     private val separator = pattern(separators)
@@ -19,7 +26,8 @@ data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARAT
     private val featuredSeparator = pattern(separators + listOf("&", ","))
 
     fun names(metadata: TrackMetadata): List<String> {
-        val credited = metadata.artists.takeIf { it.size > 1 } ?: split(metadata.artist, separator)
+        // Servers split with their own rules, so a listed name can still hold several artists, as in "Macloud, makko".
+        val credited = (metadata.artists.takeIf { it.size > 1 } ?: listOf(metadata.artist)).flatMap { split(it, separator) }
         val featured = if (featuredFromTitle) featured(metadata.title) else emptyList()
         return (credited + featured).distinctBy { it.lowercase() }
     }

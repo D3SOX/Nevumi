@@ -15,14 +15,14 @@ import me.d3sox.nevumi.resources.*
 import me.d3sox.nevumi.settings.MusicSettings
 import org.jetbrains.compose.resources.stringResource
 
-/** Opens [ArtistSplittingDialog], and shows which separators split artists. */
+/** Opens [ArtistSplittingDialog]. */
 @Composable
 internal fun ArtistSplittingSetting(settings: MusicSettings, controller: MusicController) {
     var editing by remember { mutableStateOf(false) }
     val separators = settings.artistSeparators
     SettingsLink(stringResource(Res.string.settings_split_artists), AppIcon.ALBUM_ARTIST,
         if (separators.isEmpty()) stringResource(Res.string.settings_split_artists_off)
-        else stringResource(Res.string.settings_split_artists_description, separators.joinToString(" · "))) { editing = true }
+        else stringResource(Res.string.settings_split_artists_description)) { editing = true }
     if (editing) ArtistSplittingDialog(settings, controller) { editing = false }
 }
 

@@ -67,12 +67,12 @@
     <string name="settings_remember_scroll_positions">Remember scroll positions</string>
     <string name="settings_remember_scroll_positions_description">Reopen library lists and grids where you left off.</string>
     <string name="settings_split_artists">Split artists</string>
-    <string name="settings_split_artists_description">List each artist of a song like “A feat. B” on their own. Separators: %1$s</string>
+    <string name="settings_split_artists_description">List each artist of songs like “A, B” or “A feat. B” on their own</string>
     <string name="settings_split_artists_off">Each artist tag stays one artist.</string>
     <string name="settings_artist_separators">Separators</string>
     <string name="settings_artist_separators_hint">One per line. Words such as feat. split only where they stand alone. Songs whose tags or server list several artists always split.</string>
     <string name="settings_artist_exceptions">Exceptions</string>
-    <string name="settings_artist_exceptions_hint">Artists whose name contains a separator, such as Simon &amp; Garfunkel. One per line.</string>
+    <string name="settings_artist_exceptions_hint">Artists whose name contains a separator, such as Tyler, The Creator. One per line.</string>
     <string name="settings_featured_artists_from_titles">Featured artists in titles</string>
     <string name="settings_featured_artists_from_titles_description">Also list B as an artist of “Song (feat. B)”</string>
     <string name="settings_customize_home_description">Reorder sections on your Home page</string>

@@ -10,6 +10,7 @@ class ArtistCreditsTest {
     @Test fun defaultSeparatorsSplitCreditsButKeepBandNames() {
         assertEquals(listOf("A", "B"), names("A feat. B"))
         assertEquals(listOf("A", "B"), names("A Ft. B"))
+        assertEquals(listOf("A", "B"), names("A feat B"))
         assertEquals(listOf("A", "B", "C"), names("A; B;C"))
         assertEquals(listOf("Simon & Garfunkel"), names("Simon & Garfunkel"))
         assertEquals(listOf("Earth, Wind & Fire"), names("Earth, Wind & Fire"))
@@ -17,6 +18,13 @@ class ArtistCreditsTest {
         assertEquals(listOf("Daft Punk"), names("Daft Punk"))
         assertEquals(listOf("Leftfield"), names("Leftfield"))
         assertEquals(emptyList(), names(""))
+        assertEquals(listOf("J Wax", "RUA DJ"), names("J Wax, RUA DJ"))
+        assertEquals(listOf("Elvin (UK)", "AMEENAH"), names("Elvin (UK), AMEENAH"))
+        assertEquals(listOf("Tyler, The Creator", "A"), names("Tyler, The Creator, A"))
+        assertEquals(listOf("Calvin Harris", "Rufus Du Sol"), names("Calvin Harris vs Rufus Du Sol"))
+        assertEquals(listOf("A", "B"), names("A Vs. B"))
+        assertEquals(listOf("Above & Beyond"), names("Above & Beyond"))
+        assertEquals(listOf("AC/DC"), names("AC/DC"))
     }
 
     @Test fun exceptionsKeepNamesThatContainASeparator() {
@@ -37,8 +45,12 @@ class ArtistCreditsTest {
         assertEquals(listOf("A"), names("A", "Featuring Nobody"))
     }
 
+    @Test fun artistsAServerListsAreSplitAgainWithTheSeparators() {
+        assertEquals(listOf("Miksu", "Macloud", "makko"), names("Miksu / Macloud, makko", artists = listOf("Miksu", "Macloud, makko")))
+    }
+
     @Test fun artistsListedSeparatelyWin() {
-        assertEquals(listOf("Simon & Garfunkel", "B"), names("Simon & Garfunkel feat. B", artists = listOf("Simon & Garfunkel", "B"),
-            splitting = ArtistSplitting(listOf("&", "feat."))))
+        // No separator splits "and", but the listed names still credit both.
+        assertEquals(listOf("Pulse", "Echo"), names("Pulse and Echo", artists = listOf("Pulse", "Echo")))
     }
 }
