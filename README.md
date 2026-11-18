@@ -161,7 +161,7 @@ Build, test and release instructions are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## License and credits
 
-Nevumi uses [AGPL-3.0-only](LICENSE). Namida inspired the feature requirements. Nevumi does not include its implementation or assets.
+Nevumi uses [AGPL-3.0-or-later](LICENSE). Namida inspired the feature requirements. Nevumi does not include its implementation or assets.
 
 The built-in Tailscale client uses [tsnet](https://tailscale.com/kb/1244/tsnet), under BSD-3-Clause, built without log uploads. Its Go dependencies' license notices ship with the Linux libraries and inside the APK.
 

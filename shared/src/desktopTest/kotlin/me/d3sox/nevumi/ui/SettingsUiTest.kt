@@ -56,7 +56,7 @@ class SettingsUiTest {
                 waitUntil(timeoutMillis = 3_000) { !controller.state.value.loading }
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("About Nevumi").performScrollTo().performClick()
-                onNodeWithText("AGPL-3.0-only").assertIsDisplayed()
+                onNodeWithText("AGPL-3.0-or-later").assertIsDisplayed()
                 onNodeWithText("Source code").assertHasClickAction().assertIsDisplayed()
                 onNodeWithText("View license").performClick()
                 waitUntil(timeoutMillis = 3_000) {

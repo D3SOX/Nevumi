@@ -58,7 +58,7 @@ internal fun AboutNevumi(dismiss: () -> Unit) {
             Text(stringResource(Res.string.settings_version, appVersion()), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(stringResource(Res.string.settings_about_tagline), textAlign = TextAlign.Center)
-            Text("AGPL-3.0-only", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("AGPL-3.0-or-later", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             FilledTonalButton(onClick = { uriHandler.openUri(source) }, Modifier.widthIn(max = 360.dp).fillMaxWidth().heightIn(min = 48.dp)) {
                 Icon(AppIcon.CODE.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.settings_source_code))
