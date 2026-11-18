@@ -61,7 +61,7 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
     }
 
     private var gain = 1f
-    private var gainReadAt = Long.MIN_VALUE
+    private var gainReadAt: Long? = null
 
     /**
      * Android passes the media volume of a bit-perfect track to the audio driver, and some drivers, such as the Pixel 8 Pro's
@@ -71,7 +71,7 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
     override fun gain(): Float {
         val device = preferred ?: return 1f
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - gainReadAt < 100) return gain
+        gainReadAt?.let { if (now - it < 100) return gain }
         gainReadAt = now
         val index = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
         val db = if (index == 0 || audio.isStreamMute(AudioManager.STREAM_MUSIC)) Float.NEGATIVE_INFINITY
