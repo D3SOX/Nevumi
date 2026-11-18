@@ -416,10 +416,11 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
     // ID3v2.3 cannot build an empty year frame, so an empty value removes the field instead.
     /**
      * The editor shows a song's first artist. Leaving it unchanged keeps every artist value, and changing it replaces all of
-     * them, since setting a field only replaces its first value.
+     * them, since setting a field only replaces its first value. A separate ARTISTS list would then name the old artists.
      */
     private fun Tag.replaceArtist(artist: String) {
         if (getFirst(FieldKey.ARTIST).trimEnd('\u0000') == artist) return
+        try { deleteField(FieldKey.ARTISTS) } catch (_: UnsupportedOperationException) {} catch (_: org.jaudiotagger.tag.KeyNotFoundException) {}
         deleteField(FieldKey.ARTIST)
         if (artist.isNotEmpty()) setField(FieldKey.ARTIST, artist)
     }

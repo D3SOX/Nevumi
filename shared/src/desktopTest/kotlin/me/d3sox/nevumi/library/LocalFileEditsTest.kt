@@ -1051,6 +1051,14 @@ class LocalFileEditsTest {
             assertEquals(listOf("Pulse", "Echo"), track.metadata.artists)
             edits.apply(edits.prepareTags(track.id, track.metadata.copy(title = "Renamed")).id)
             assertEquals(listOf("Pulse", "Echo"), LocalFiles(library).scan(music.toString(), force = true).single().metadata.artists)
+            org.jaudiotagger.audio.AudioFileIO.read(audio.toFile()).also {
+                it.tag.deleteField(org.jaudiotagger.tag.FieldKey.ARTIST); it.tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, "Pulse feat. Echo")
+                it.tag.setField(org.jaudiotagger.tag.FieldKey.ARTISTS, "Pulse"); it.tag.addField(org.jaudiotagger.tag.FieldKey.ARTISTS, "Echo"); it.commit()
+            }
+            assertEquals(listOf("Pulse", "Echo"), LocalFiles(library).scan(music.toString(), force = true).single().metadata.artists)
+            // A new artist tag drops the ARTISTS list that named the old credits.
+            edits.apply(edits.prepareTags(track.id, library.findTrack(track.id)!!.metadata.copy(artist = "Pulse feat. Echo feat. Nova")).id)
+            assertEquals(emptyList(), LocalFiles(library).scan(music.toString(), force = true).single().metadata.artists)
             edits.apply(edits.prepareTags(track.id, library.findTrack(track.id)!!.metadata.copy(artist = "Nova")).id)
             val renamed = LocalFiles(library).scan(music.toString(), force = true).single().metadata
             assertEquals("Nova" to emptyList<String>(), renamed.artist to renamed.artists)
