@@ -101,7 +101,7 @@ class LinuxPlaybackSettingsTest {
                 val capture = ProcessBuilder("parec", "--device=$sink.monitor", "--format=float32le", "--rate=48000", "--channels=1",
                     "--latency-msec=10").redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.INHERIT).start()
                 val engine = try { CrossfadePlaybackEngine { MpvPlaybackEngine("pulse", audioDevice = "pulse/$sink") } }
-                catch (failure: Exception) { capture.destroyForcibly(); capture.waitFor(2, TimeUnit.SECONDS); throw failure }
+                catch (failure: Throwable) { capture.destroyForcibly(); capture.waitFor(2, TimeUnit.SECONDS); throw failure }
                 try {
                     withTimeout(3_000) { while (Files.size(output) < 48_000) delay(25) }
                     engine.setPlayPauseFade(fade)

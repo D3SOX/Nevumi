@@ -4,7 +4,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.withLock
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.isPodcastEpisode
@@ -57,16 +56,15 @@ internal class LongSongResume(private val context: ControllerContext, private va
     }
 
     private suspend fun checkpoint(status: PlaybackStatus, repeated: Boolean, minimumMs: Long) {
+        val generation = library.songPositionGeneration
         val track = findTrack(status.trackId ?: return)?.takeIf { qualifies(it, status, minimumMs) } ?: return
         val duration = status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs
         val finished = repeated || status.ended || duration > 0 && status.positionMs >= duration - FINISHED_WITHIN_MS
         // A song left within its first seconds keeps its earlier position, as does one still seeking there after a resume.
         if (!finished && status.positionMs < MINIMUM_POSITION_MS) return
-        // Serialized with settings changes and song links, so a write never recreates a position they just removed.
-        context.operations.withLock {
-            if (context.state.value.preferences.resumeLongSongsMinutes <= 0 || library.findTrack(track.id) == null) return@withLock
-            library.rememberSongPosition(track.id, status.positionMs.takeUnless { finished })
-        }
+        // Turning the setting off forgets every position; a save read before that, even if it runs after the setting is back on,
+        // is dropped, and the library checks in the same transaction that the song was not linked into another meanwhile.
+        library.rememberSongPosition(track.id, status.positionMs.takeUnless { finished }, generation)
     }
 
     /**

@@ -35,6 +35,27 @@ class LongSongResumeTest {
         return mix
     }
 
+    @Test fun aPositionIsNotSavedForARemovedSongOrAfterThePositionsWereForgotten() = runBlocking {
+        val directory = Files.createTempDirectory("long-song-stale-saves")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        try {
+            val kept = library.importTrack(TrackMetadata("Kept"), TrackSource("source:kept", SourceKind.LOCAL, "/kept.flac"))
+            val merged = library.importTrack(TrackMetadata("Merged"), TrackSource("source:merged", SourceKind.LOCAL, "/merged.flac"))
+            // A checkpoint that read the merged song before it was linked into another song writes nothing afterwards.
+            library.linkTracks(kept.id, merged.id)
+            library.rememberSongPosition(merged.id, 120_000)
+            assertNull(library.songPosition(merged.id))
+            // A checkpoint read before the setting was turned off is dropped, even when it is saved after it was turned on again.
+            val generation = library.songPositionGeneration
+            library.forgetSongPositions()
+            library.rememberSongPosition(kept.id, 120_000, generation)
+            assertNull(library.songPosition(kept.id))
+            library.rememberSongPosition(kept.id, 120_000)
+            assertEquals(120_000, library.songPosition(kept.id))
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun aSongWithoutAKnownLengthResumesOnceTheDecoderReportsIt() = runBlocking {
         val directory = Files.createTempDirectory("long-song-unknown-length")
         val store = openMusicStore(directory.resolve("library.db").toString())

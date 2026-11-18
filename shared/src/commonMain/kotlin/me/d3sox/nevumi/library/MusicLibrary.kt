@@ -314,12 +314,22 @@ class MusicLibrary(private val store: MusicStore) {
 
     /** Where a long song was left, kept on this device only: backups and paired devices leave these out. */
     suspend fun songPosition(trackId: String): Long? = store.read<SongPosition>("song-position:$trackId")?.positionMs
-    /** Remembers [positionMs] for [trackId], or forgets it for null. */
-    suspend fun rememberSongPosition(trackId: String, positionMs: Long?) {
+    /**
+     * Remembers [positionMs] for [trackId], or forgets it for null. A song removed meanwhile, such as one linked into another, gets
+     * no new position, and neither does one saved for [generation] after [forgetSongPositions] started a new one.
+     */
+    suspend fun rememberSongPosition(trackId: String, positionMs: Long?, generation: Long = songPositionGeneration) = store.transaction {
         if (positionMs == null) store.database.records().delete("song-position:$trackId")
-        else store.put("song-position:$trackId", "song-positions", SongPosition(trackId, positionMs))
+        else if (generation == songPositionGeneration && findTrack(trackId) != null)
+            store.put("song-position:$trackId", "song-positions", SongPosition(trackId, positionMs))
     }
-    suspend fun forgetSongPositions() = store.database.records().deleteKind("song-positions")
+    suspend fun forgetSongPositions() = store.transaction {
+        songPositionGeneration++
+        store.database.records().deleteKind("song-positions")
+    }
+    /** Counts [forgetSongPositions] calls, so a position read before one is not saved after it. */
+    @kotlin.concurrent.Volatile var songPositionGeneration = 0L
+        private set
     /** Changes with every song write, so callers can skip work over an unchanged library. */
     internal suspend fun revision(): Long = store.revision("tracks")
     internal suspend fun trackForSource(sourceId: String): Track? =
