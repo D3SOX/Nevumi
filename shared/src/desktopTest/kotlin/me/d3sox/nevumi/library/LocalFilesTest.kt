@@ -388,13 +388,24 @@ class LocalFilesTest {
                 album.resolve("Folder.PNG").toFile())
             Files.writeString(bare.resolve("cover.txt"), "not an image")
             val covers = me.d3sox.nevumi.artwork.ArtworkLibrary(directory.resolve("artwork").toString())
-            val tracks = LocalFiles(MusicLibrary(store), covers).scan(directory.resolve("music").toString())
+            val scanner = LocalFiles(MusicLibrary(store), covers)
+            suspend fun scan() = scanner.scan(directory.resolve("music").toString())
                 .associateBy { java.io.File(it.sources.single().location).parentFile.name }
+            val tracks = scan()
             assertEquals(true, tracks.getValue("Album").sources.single().hasArtwork)
             assertEquals(true, covers.path(tracks.getValue("Album").id) != null)
             assertEquals(false, tracks.getValue("Bare").sources.single().hasArtwork)
             assertEquals(null, covers.path(tracks.getValue("Bare").id))
             assertEquals("Folder.PNG", folderCover(album.toFile())?.name)
+            // A cover added later is read by the next scan, although the audio files stay unchanged.
+            assertEquals(emptyList(), scanner.pendingRefreshLocations())
+            javax.imageio.ImageIO.write(java.awt.image.BufferedImage(16, 16, java.awt.image.BufferedImage.TYPE_INT_RGB), "jpg",
+                bare.resolve("cover.jpg").toFile())
+            assertEquals(1, scanner.pendingRefreshLocations().size)
+            val rescanned = scan()
+            assertEquals(true, rescanned.getValue("Bare").sources.single().hasArtwork)
+            assertEquals(true, covers.path(rescanned.getValue("Bare").id) != null)
+            assertEquals(emptyList(), scanner.pendingRefreshLocations())
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
 

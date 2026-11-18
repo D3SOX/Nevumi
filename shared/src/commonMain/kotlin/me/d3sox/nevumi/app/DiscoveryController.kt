@@ -88,7 +88,8 @@ class DiscoveryController internal constructor(private val context: ControllerCo
         tracks.flatMap { track -> track.sources.mapNotNull { it.serverSongId(serverId) }.map { it to track } }.toMap()
 
     private fun serverSongIds(tracks: List<Track>, serverId: String, artistName: String) =
-        context.state.value.preferences.artistSplitting().let { splitting -> tracks.filter { track -> splitting.names(track.metadata).any { it.equals(artistName, ignoreCase = true) } ||
+        // The server falls back to the song's main artist, so a song only featuring the artist would describe someone else.
+        context.state.value.preferences.artistSplitting().let { splitting -> tracks.filter { track -> splitting.names(track.metadata).firstOrNull()?.equals(artistName, ignoreCase = true) == true ||
             track.metadata.albumArtist.equals(artistName, ignoreCase = true) }
             .flatMap { track -> track.sources.mapNotNull { it.serverSongId(serverId) } }.take(1) }
 }
