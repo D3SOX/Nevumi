@@ -25,6 +25,7 @@ class ArtistCreditsTest {
         assertEquals(listOf("A", "B"), names("A Vs. B"))
         assertEquals(listOf("Above & Beyond"), names("Above & Beyond"))
         assertEquals(listOf("AC/DC"), names("AC/DC"))
+        assertEquals(listOf("Sunn O)))"), names("Sunn O)))"))
     }
 
     @Test fun exceptionsKeepNamesThatContainASeparator() {

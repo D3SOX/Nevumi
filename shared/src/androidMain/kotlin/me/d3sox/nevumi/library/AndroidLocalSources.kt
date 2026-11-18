@@ -97,8 +97,10 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
      */
     private fun folderCover(uri: Uri): ByteArray? = try {
         val thumbnail = context.contentResolver.loadThumbnail(uri, android.util.Size(1024, 1024), null)
-        java.io.ByteArrayOutputStream().also { thumbnail.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }.toByteArray()
-            .also { thumbnail.recycle() }
+        try {
+            val bytes = java.io.ByteArrayOutputStream()
+            if (thumbnail.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, bytes)) bytes.toByteArray() else null
+        } finally { thumbnail.recycle() }
     } catch (_: Exception) { null } // Most songs without embedded artwork have no folder cover either.
 
     private suspend fun deviceStamp(): String = buildString {

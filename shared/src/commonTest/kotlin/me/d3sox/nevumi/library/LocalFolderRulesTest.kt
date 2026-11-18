@@ -18,6 +18,8 @@ class LocalFolderRulesTest {
         assertEquals(false, rules.allows(song(29_999)))
         assertEquals(false, rules.allows(song(60_000, "Ringtones")))
         assertTrue(LocalFolderRules().allows(song(1_000)))
+        assertTrue(rules.allows(Track("server", TrackMetadata("Intro", durationMs = 5_000),
+            listOf(TrackSource("server:a:1", SourceKind.SERVER, "1")))))
         assertEquals(30_000, me.d3sox.nevumi.settings.MusicSettings(minimumSongSeconds = 30).localFolderRules().minimumDurationMs)
     }
 

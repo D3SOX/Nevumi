@@ -425,6 +425,7 @@ class LocalFilesTest {
             assertEquals(listOf("A", "B"), tag { it.setField(key, "A"); it.addField(key, "B") })
             assertEquals(listOf("A", "B"), tag { it.deleteField(key); it.setField(key, "A feat. B"); it.setField(artists, "A"); it.addField(artists, "B") })
             assertEquals(emptyList(), tag { it.setField(key, "C") })
+            assertEquals(emptyList(), tag { it.deleteField(key); it.setField(key, "ABBA"); it.setField(artists, "A"); it.addField(artists, "B") })
         } finally { directory.toFile().deleteRecursively() }
     }
 }

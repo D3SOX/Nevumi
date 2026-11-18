@@ -36,7 +36,9 @@ fun AudioFile.trackMetadata(name: String, folder: String, albumArtistFallback: B
     // Several artist values, or an ARTISTS tag as MusicBrainz Picard writes it. An ARTISTS tag that names someone the artist
     // tag doesn't was left behind by an edit of the artist tag, so it no longer counts.
     val artists = values(FieldKey.ARTIST).takeIf { it.size > 1 }
-        ?: values(FieldKey.ARTISTS).takeIf { names -> names.size > 1 && names.all { artist.contains(it, ignoreCase = true) } }.orEmpty()
+        ?: values(FieldKey.ARTISTS).takeIf { names -> names.size > 1 && names.all { name ->
+            Regex("""(?<![\p{L}\p{N}])${Regex.escape(name)}(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE).containsMatchIn(artist)
+        } }.orEmpty()
     return TrackMetadata(
         title = field(FieldKey.TITLE).ifBlank { name },
         artist = artist,
@@ -104,7 +106,9 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
         val seen = mutableSetOf<String>()
         val previous = library.tracks().flatMap { track -> track.sources.map { it.id to track } }.toMap()
         val folderCovers = mutableMapOf<File?, File?>()
-        fun folderCoverOf(file: File) = folderCovers.getOrPut(file.parentFile) { folderCover(file.parentFile) }
+        // getOrPut would look again for every song in a folder without a cover.
+        fun folderCoverOf(file: File) = if (file.parentFile in folderCovers) folderCovers[file.parentFile]
+            else folderCover(file.parentFile).also { folderCovers[file.parentFile] = it }
         val files = root.musicFiles().filter { (_, canonical) -> !followRules || canonical.path in chosen ||
             folders.allows(canonical.parent.orEmpty(), canonical.parentFile?.relativeToOrNull(base)?.path) }.toList()
         onProgress(LocalScanProgress(0, files.size))

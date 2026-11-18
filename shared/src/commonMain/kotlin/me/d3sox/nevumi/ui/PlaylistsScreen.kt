@@ -263,8 +263,9 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
                         search = if (playlist.trackIds.isNotEmpty()) ({ songSearch = "" }) else null)
             }
             val query = songSearch?.trim().orEmpty()
-            val shown = remember(ordered, query) { SearchQuery(query).let { search ->
-                if (search.isEmpty) ordered else ordered.filter { search.matches(it.value.searchText()) }
+            val searchTexts = remember(ordered, songSearch != null) { if (songSearch == null) emptyList() else ordered.map { it.value.searchText() } }
+            val shown = remember(ordered, searchTexts, query) { SearchQuery(query).let { search ->
+                if (search.isEmpty) ordered else ordered.filterIndexed { index, _ -> search.matches(searchTexts[index]) }
             } }
             CompositionLocalProvider(LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, playlist.id)) {
             if (rearrangingSongs && editable) {

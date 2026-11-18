@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.*
@@ -85,7 +87,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     var deleting by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     var sources by remember { mutableStateOf(false) }
-    var choosingArtist by remember { mutableStateOf<List<String>?>(null) }
+    var choosingArtist by remember { mutableStateOf(false) }
     val navigate = LocalLibraryNavigate.current
     val origin = LocalLibraryOrigin.current
     var rating by remember { mutableStateOf(false) }
@@ -134,7 +136,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             TrackAction.ADD_TO_PLAYLIST -> playlistPicker = true
             TrackAction.DOWNLOAD -> if (youTubeOnly) controller.downloadFromYouTube(track.id, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
                 else controller.downloadTracks(listOf(track.id))
-            TrackAction.GO_ARTIST -> if (artists.size == 1) navigate(LibraryTab.ARTISTS, artists.single()) else choosingArtist = artists
+            TrackAction.GO_ARTIST -> if (artists.size == 1) navigate(LibraryTab.ARTISTS, artists.single()) else choosingArtist = true
             TrackAction.GO_ALBUM -> navigate(LibraryTab.ALBUMS, albumCollectionId(track.metadata))
             TrackAction.GO_ALBUM_ARTIST -> navigate(LibraryTab.ALBUM_ARTISTS, track.metadata.albumArtist)
             TrackAction.GO_GENRE -> navigate(LibraryTab.GENRES, track.metadata.genres.first())
@@ -247,16 +249,16 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             onFileActions = { controller.prepareServerFileEdit(track) })
     }
     if (sources) SongSources(track, controller) { sources = false }
-    choosingArtist?.let { names ->
-        AlertDialog(onDismissRequest = { choosingArtist = null }, title = { Text(TrackAction.GO_ARTIST.displayLabel()) }, text = {
-            Column {
-                names.forEach { name ->
+    if (choosingArtist && artists.isNotEmpty()) {
+        AlertDialog(onDismissRequest = { choosingArtist = false }, title = { Text(TrackAction.GO_ARTIST.displayLabel()) }, text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                artists.forEach { name ->
                     ListItem(headlineContent = { Text(name) }, leadingContent = { Icon(AppIcon.ARTIST.vector, null) },
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                        modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable { choosingArtist = null; navigate(LibraryTab.ARTISTS, name) })
+                        modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable { choosingArtist = false; navigate(LibraryTab.ARTISTS, name) })
                 }
             }
-        }, confirmButton = {}, dismissButton = { TextButton(onClick = { choosingArtist = null }) { Text(stringResource(Res.string.cancel)) } })
+        }, confirmButton = {}, dismissButton = { TextButton(onClick = { choosingArtist = false }) { Text(stringResource(Res.string.cancel)) } })
     }
     if (rating) SongRating(track, controller) { rating = false }
     if (playlistPicker) PlaylistPicker(controller, track.id) { playlistPicker = false }

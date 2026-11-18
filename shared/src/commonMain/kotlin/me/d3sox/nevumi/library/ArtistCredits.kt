@@ -36,7 +36,7 @@ data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARAT
         featuring.findAll(title).flatMap { split(it.groupValues[1].ifEmpty { it.groupValues[2] }, featuredSeparator) }.toList()
 
     private fun split(text: String, pattern: Regex?): List<String> {
-        if (pattern == null || text.isBlank()) return listOfNotNull(tidy(text))
+        if (pattern == null || text.isBlank()) return listOfNotNull(text.trim().ifEmpty { null })
         // An exception keeps its separators, so splits inside one are skipped.
         val protected = protectedNames.flatMap { name ->
             generateSequence(text.indexOf(name, ignoreCase = true).takeIf { it >= 0 }) { start ->
@@ -50,6 +50,8 @@ data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARAT
             tidy(text.substring(start, match.range.first))?.let(names::add)
             start = match.range.last + 1
         }
+        // A name nothing split keeps its punctuation, as in "Sunn O)))".
+        if (start == 0) return listOfNotNull(text.trim().ifEmpty { null })
         tidy(text.substring(start))?.let(names::add)
         return names
     }

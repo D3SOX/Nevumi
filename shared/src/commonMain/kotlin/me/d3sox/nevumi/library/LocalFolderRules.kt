@@ -11,7 +11,7 @@ data class LocalFolderRules(val included: List<String> = emptyList(), val exclud
     /** Whether the library lists the local [track]: its folder is allowed and it is long enough. */
     fun allows(track: Track): Boolean = allows(track.metadata.folder,
         track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/')) &&
-        (track.metadata.durationMs <= 0 || track.metadata.durationMs >= minimumDurationMs)
+        (track.sources.none { it.kind == SourceKind.LOCAL } || track.metadata.durationMs <= 0 || track.metadata.durationMs >= minimumDurationMs)
 
     fun allows(folder: String, alternative: String? = null): Boolean {
         val folders = listOfNotNull(folder, alternative)

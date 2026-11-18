@@ -33,6 +33,9 @@ class LibrarySearchResultsTest {
             Track("dont", TrackMetadata("Don't Stop Me Now", "Queen"), emptyList()),
             Track("duet", TrackMetadata("Duet", "Pulse feat. Echo"), emptyList()),
             Track("bang", TrackMetadata("Bang", "!!!"), emptyList()),
+            Track("art", TrackMetadata("The Art", "Donald"), emptyList()),
+            Track("strasse", TrackMetadata("Straße", "Pulse"), emptyList()),
+            Track("blue", TrackMetadata("Blue", "Moon"), emptyList()),
         )
         val index = LibrarySearchIndex(tracks, emptyList())
         assertEquals(listOf("help"), index.search("beatles help").songs.map { it.id })
@@ -42,6 +45,10 @@ class LibrarySearchResultsTest {
         assertEquals(listOf("back"), index.search("acdc").songs.map { it.id })
         assertEquals(listOf("back"), index.search("ac dc black").songs.map { it.id })
         assertEquals(listOf("dont"), index.search("dont stop").songs.map { it.id })
+        assertEquals(listOf("dont"), index.search("don't stop").songs.map { it.id })
+        assertEquals(emptyList(), index.search("heart").songs.map { it.id })
+        assertEquals(listOf("strasse"), index.search("STRASSE").songs.map { it.id })
+        assertEquals(emptyList(), index.search("bluemoon").songs.map { it.id })
         assertEquals(listOf("bang"), index.search("!!!").songs.map { it.id })
         assertEquals(0, index.search("beatles halo").count)
         // Each credited artist is an artist result of its own.

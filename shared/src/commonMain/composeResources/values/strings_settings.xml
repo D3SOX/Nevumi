@@ -68,7 +68,7 @@
     <string name="settings_remember_scroll_positions_description">Reopen library lists and grids where you left off.</string>
     <string name="settings_split_artists">Split artists</string>
     <string name="settings_split_artists_description">List each artist of songs like “A, B” or “A feat. B” on their own</string>
-    <string name="settings_split_artists_off">Each artist tag stays one artist.</string>
+    <string name="settings_split_artists_off">Artist separators are off</string>
     <string name="settings_artist_separators">Separators</string>
     <string name="settings_artist_separators_hint">One per line. Words such as feat. split only where they stand alone. Songs whose tags or server list several artists always split.</string>
     <string name="settings_artist_exceptions">Exceptions</string>
