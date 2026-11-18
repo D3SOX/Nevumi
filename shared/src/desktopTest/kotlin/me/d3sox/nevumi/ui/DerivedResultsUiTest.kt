@@ -45,6 +45,35 @@ class DerivedResultsUiTest {
     }
 
     @Test
+    fun aRefreshAfterACheapFirstValueStillRunsOffTheUiThread() {
+        val release = CountDownLatch(1)
+        val library = mutableIntStateOf(0)
+        try {
+            runComposeUiTest {
+                setContent {
+                    val size = library.intValue
+                    val value = rememberDerived("search", emptyList(), listOf(size), initial = { "Loading" }) {
+                        assertFalse(EventQueue.isDispatchThread(), "A refresh must not calculate on the UI thread")
+                        // Small libraries are quick, so only the large one waits.
+                        if (size > 2) check(release.await(10, TimeUnit.SECONDS))
+                        "Songs $size"
+                    }
+                    Text(value)
+                }
+                // A few quick refreshes, so the last value's cost is that of a quick calculation, not of starting the thread.
+                for (size in 0..2) {
+                    runOnIdle { library.intValue = size }
+                    waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Songs $size").fetchSemanticsNodes().isNotEmpty() }
+                }
+                runOnIdle { library.intValue = 5_000 }
+                onNodeWithText("Songs 2").assertIsDisplayed()
+                release.countDown()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithText("Songs 5000").fetchSemanticsNodes().isNotEmpty() }
+            }
+        } finally { release.countDown() }
+    }
+
+    @Test
     fun initialCalculationDoesNotBlockTheUiAndAReopenedTabReusesItsResult() {
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)

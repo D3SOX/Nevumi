@@ -98,17 +98,20 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     fun stopTyping() { keyboard?.hide(); focusManager.clearFocus() }
-    val visible = remember(state.tracks, state.preferences.includeFolders, state.preferences.excludeFolders, state.preferences.minimumSongSeconds) {
-        val folders = state.preferences.localFolderRules()
-        state.tracks.filter { track -> track.inLibrary && track.sources.any { it.available } && (track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE } ||
-            folders.allows(track)) }
-    }
-    // Grouping the library is the expensive part; it happens once per library change, off the main thread for large ones.
+    // Preparing the library for search takes long enough on phones to freeze opening search, so it happens off the main
+    // thread; the search field is usable meanwhile and results appear once the index is ready.
+    val folders = state.preferences.localFolderRules()
     val splitting = rememberArtistSplitting(state.preferences)
-    val index = rememberDerived(null, listOf(splitting), listOf(visible, state.playlists)) { LibrarySearchIndex(visible, state.playlists, splitting) }
-    val results = remember(index, query) { index.search(query) }
+    val index = rememberDerived("search-index", emptyList(), listOf(state.tracks, state.playlists, folders, splitting), initial = { null }) {
+        val visible = state.tracks.filter { track -> track.inLibrary && track.sources.any { it.available } &&
+            (track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE } || folders.allows(track)) }
+        LibrarySearchIndex(visible, state.playlists, splitting)
+    }
+    val results = remember(index, query) { index?.search(query) ?: LibrarySearchResults(emptyList(), emptyMap()) }
     val songIds = remember(results.songs) { results.songs.map { it.id } }
     val opened = results.collections[openedType].orEmpty().firstOrNull { it.id == openedId }
+    // While the index is prepared again, such as after the window was recreated, the opened collection stays open.
+    val openedPage = if (index == null) openedType?.let { pageType -> openedId?.let { pageType to it } } else opened?.let { requireNotNull(openedType) to it.id }
     val active = LocalNavigationActive.current
     LaunchedEffect(active) { if (!active) selection.clear() }
     // Restore the search field before its focus effect runs, including while the selection header replaces it.
@@ -121,8 +124,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
         Column(Modifier.fillMaxSize().imePadding().testTag("library-search-page")) {
             val searchLabel = stringResource(Res.string.sources_search_your_library)
             if (selection.active) SongSelectionHeader(selection, controller)
-            else Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = if (opened == null && dismiss == null) 16.dp else 0.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (opened != null || dismiss != null) AppIconButton(AppIcon.BACK, stringResource(Res.string.sources_close_search)) { stopTyping(); if (opened != null) openedId = null else dismiss?.invoke() }
+            else Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = if (openedPage == null && dismiss == null) 16.dp else 0.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (openedPage != null || dismiss != null) AppIconButton(AppIcon.BACK, stringResource(Res.string.sources_close_search)) { stopTyping(); if (openedPage != null) openedId = null else dismiss?.invoke() }
                 TextField(search, { if (it.text != query) openedId = null; search = it }, placeholder = { Text(searchLabel) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { stopTyping() }),
                     trailingIcon = { if (query.isNotEmpty()) AppIconButton(AppIcon.CLOSE, stringResource(Res.string.sources_clear_search)) { search = TextFieldValue(); openedId = null } },
@@ -132,7 +135,6 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                 LaunchedEffect(focusRequest) { focus.requestFocus() }
             }
             // An opened collection slides over the results like a library page, so Back previews the way back to them.
-            val openedPage = opened?.let { requireNotNull(openedType) to it.id }
             AnimatedNavigation(openedPage, null, canGoBack = active && openedPage != null && !selection.active, onBack = { openedId = null },
                 Modifier.weight(1f).fillMaxWidth(), depth = { if (it == null) 0 else 1 }) { page ->
             val shown = page?.let { (pageType, id) -> results.collections[pageType].orEmpty().firstOrNull { it.id == id } }
@@ -165,6 +167,7 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     else SearchPrompt(AppIcon.MUSIC, stringResource(Res.string.sources_enter_search_term), Modifier.align(Alignment.Center))
                 } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller, soundCloudSearches)
                 else if (type == SearchType.YOUTUBE) YouTubeSearchResults(query, state, controller, youTubeSearches)
+                else if (index == null) Unit
                 else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search", scrollRequest = seeAllPosition)
                 else {
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD && it != SearchType.YOUTUBE } else listOf(type)
