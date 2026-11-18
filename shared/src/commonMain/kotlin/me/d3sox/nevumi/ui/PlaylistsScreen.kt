@@ -37,6 +37,7 @@ import me.d3sox.nevumi.library.LibraryQuery
 import me.d3sox.nevumi.library.filterTracks
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.recentAt
+import me.d3sox.nevumi.library.SearchQuery
 import me.d3sox.nevumi.playlists.Playlist
 import me.d3sox.nevumi.playlists.PlaylistImport
 import me.d3sox.nevumi.playlists.folder
@@ -261,8 +262,10 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
                         }) else null, finishRearranging = if (rearrangingSongs) ({ rearrangingSongs = false }) else null,
                         search = if (playlist.trackIds.isNotEmpty()) ({ songSearch = "" }) else null)
             }
-            val query = songSearch?.trim()?.lowercase().orEmpty()
-            val shown = remember(ordered, query) { if (query.isEmpty()) ordered else ordered.filter { query in it.value.searchText() } }
+            val query = songSearch?.trim().orEmpty()
+            val shown = remember(ordered, query) { SearchQuery(query).let { search ->
+                if (search.isEmpty) ordered else ordered.filter { search.matches(it.value.searchText()) }
+            } }
             CompositionLocalProvider(LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, playlist.id)) {
             if (rearrangingSongs && editable) {
                 ReportLibraryHeader(playlist.title, ordered.size, onBack = { closePlaylist() })

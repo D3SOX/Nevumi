@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.history
 
+import me.d3sox.nevumi.library.ArtistSplitting
 import me.d3sox.nevumi.library.Track
 import kotlin.time.Clock
 
@@ -9,15 +10,14 @@ data class ListeningRecommendation(val track: Track, val reason: Reason, val nam
 }
 
 fun listeningRecommendations(listens: List<Listen>, tracks: List<Track>, limit: Int = 20,
-    now: Long = Clock.System.now().toEpochMilliseconds()): List<ListeningRecommendation> {
+    now: Long = Clock.System.now().toEpochMilliseconds(), splitting: ArtistSplitting = ArtistSplitting()): List<ListeningRecommendation> {
     require(limit > 0) { "Recommendation limit must be positive" }
     data class Preference(val name: String, var plays: Int = 0)
     val artists = linkedMapOf<String, Preference>()
     val genres = linkedMapOf<String, Preference>()
     val qualified = listens.filter { it.qualified && it.startedAt <= now }
     for (event in qualified) {
-        val artist = event.metadata.artist.trim()
-        if (artist.isNotEmpty()) artists.getOrPut(artist.lowercase()) { Preference(artist) }.plays++
+        for (artist in splitting.names(event.metadata)) artists.getOrPut(artist.lowercase()) { Preference(artist) }.plays++
         for (genre in event.metadata.genres.map(String::trim).filter(String::isNotEmpty).distinctBy { it.lowercase() })
             genres.getOrPut(genre.lowercase()) { Preference(genre) }.plays++
     }
@@ -26,7 +26,7 @@ fun listeningRecommendations(listens: List<Listen>, tracks: List<Track>, limit: 
     return tracks.asSequence().filter { it.sources.any { source -> source.available } }.mapNotNull { track ->
         val previous = statistics[track.id]
         if (previous != null && previous.lastPlayedAt >= now - 7 * 86_400_000L) return@mapNotNull null
-        val artist = artists[track.metadata.artist.trim().lowercase()]
+        val artist = splitting.names(track.metadata).mapNotNull { artists[it.lowercase()] }.maxByOrNull { it.plays }
         val matchingGenres = track.metadata.genres.map(String::trim).distinctBy { it.lowercase() }.mapNotNull { genres[it.lowercase()] }
         val affinity = (artist?.plays ?: 0) * 3 + matchingGenres.sumOf { it.plays }
         if (affinity == 0) return@mapNotNull null

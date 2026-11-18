@@ -23,7 +23,7 @@ I started it because I couldn't find a music player with all the features I want
 
 ## What it does
 
-- **Library.** Browse songs, albums, artists, genres and folders, and search everything. You choose the library tabs and Home sections.
+- **Library.** Browse songs, albums, artists, genres and folders. A song credited to several artists, as in "A feat. B", appears under each of them, and you choose which separators split an artist tag. Search ignores accents and punctuation and finds songs that contain every word you type, in any order. Local songs without embedded artwork use a cover.jpg or folder.jpg from their folder, and you can hide short files such as ringtones. You choose the library tabs and Home sections.
 - **Playlists.** Create regular, smart and M3U playlists, sort them into folders and sync them with your music server.
 - **Queue.** Up next is a separate queue. Save queues and switch between them.
 - **Playback.** Nevumi has gapless playback, crossfade, speed and pitch control, an equalizer with AutoEQ headphone profiles and a sleep timer.

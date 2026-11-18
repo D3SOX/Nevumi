@@ -95,13 +95,14 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     fun stopTyping() { keyboard?.hide(); focusManager.clearFocus() }
-    val visible = remember(state.tracks, state.preferences.includeFolders, state.preferences.excludeFolders) {
-        val folders = LocalFolderRules(state.preferences.includeFolders, state.preferences.excludeFolders)
+    val visible = remember(state.tracks, state.preferences.includeFolders, state.preferences.excludeFolders, state.preferences.minimumSongSeconds) {
+        val folders = state.preferences.localFolderRules()
         state.tracks.filter { track -> track.inLibrary && track.sources.any { it.available } && (track.sources.any { it.kind != SourceKind.LOCAL && it.kind != SourceKind.YOUTUBE } ||
-            folders.allows(track.metadata.folder, track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/'))) }
+            folders.allows(track)) }
     }
     // Grouping the library is the expensive part; it happens once per library change, off the main thread for large ones.
-    val index = rememberDerived(null, emptyList(), listOf(visible, state.playlists)) { LibrarySearchIndex(visible, state.playlists) }
+    val splitting = rememberArtistSplitting(state.preferences)
+    val index = rememberDerived(null, listOf(splitting), listOf(visible, state.playlists)) { LibrarySearchIndex(visible, state.playlists, splitting) }
     val results = remember(index, query) { index.search(query) }
     val songIds = remember(results.songs) { results.songs.map { it.id } }
     val opened = results.collections[openedType].orEmpty().firstOrNull { it.id == openedId }

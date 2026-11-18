@@ -128,6 +128,12 @@ data class MusicSettings(
     val playlistPickerSort: PlaylistPickerSort = PlaylistPickerSort.UPDATED,
     val includeFolders: List<String> = emptyList(),
     val excludeFolders: List<String> = emptyList(),
+    /** Local songs shorter than this, such as ringtones and voice notes, stay out of the library; 0 keeps every song. */
+    val minimumSongSeconds: Int = 0,
+    /** See [me.d3sox.nevumi.library.ArtistSplitting]. */
+    val artistSeparators: List<String> = me.d3sox.nevumi.library.DEFAULT_ARTIST_SEPARATORS,
+    val artistSeparatorExceptions: List<String> = emptyList(),
+    val featuredArtistsFromTitle: Boolean = true,
     val undoRetentionDays: Int = 30,
     val undoBackupBytes: Long = 1_073_741_824L,
 ) {
@@ -173,6 +179,7 @@ class MusicPreferences(private val store: MusicStore) {
         require(settings.homeSections.size == HomeSectionId.entries.size && settings.homeSections.toSet() == HomeSectionId.entries.toSet()) {
             "Include each Home section once"
         }
+        require(settings.minimumSongSeconds in 0..600) { "Choose a minimum song length between 0 and 600 seconds" }
         require(settings.undoRetentionDays in 1..3650 && settings.undoBackupBytes >= 0) { "Choose a valid undo retention period and size" }
         require(settings.speed in 0.5..2.0) { "Playback speed must be between 0.5 and 2" }
         require(settings.pitch in 0.5..2.0) { "Playback pitch must be between 0.5 and 2" }

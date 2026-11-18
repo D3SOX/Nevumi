@@ -3,7 +3,9 @@ package me.d3sox.nevumi.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.*
@@ -15,6 +17,7 @@ import me.d3sox.nevumi.youtube.YouTubeDestination
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.shares_share_link
 import me.d3sox.nevumi.resources.edit_server_tags
@@ -82,6 +85,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     var deleting by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     var sources by remember { mutableStateOf(false) }
+    var choosingArtist by remember { mutableStateOf<List<String>?>(null) }
     val navigate = LocalLibraryNavigate.current
     val origin = LocalLibraryOrigin.current
     var rating by remember { mutableStateOf(false) }
@@ -93,7 +97,10 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     val openYouTubePage = LocalOpenYouTubeLinkedPage.current
     val youTubeVideoId = track.youTubeVideoId?.takeIf { controller.youTubeAvailable && state.preferences.youTube }
     // A song streamed from YouTube has a library artist page only when the library has songs by the same artist.
-    val artistInLibrary = track.inLibrary || libraryArtist(track.metadata.artist, state) != null
+    val splitting = rememberArtistSplitting(state.preferences)
+    val artists = remember(track.metadata, track.inLibrary, splitting, if (track.inLibrary) null else state.tracks) {
+        splitting.names(track.metadata).filter { track.inLibrary || hasLibraryArtist(it, state.tracks, splitting) }
+    }
     fun enqueue(action: QueueAction): Boolean { controller.enqueue(track.id, action, queueOrigin ?: origin); return true }
     // A song that only streams from YouTube is saved like a YouTube result, and the library views leave it out.
     val youTubeOnly = youTubeVideoId != null && !track.inLibrary
@@ -102,7 +109,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
         TrackAction.NONE, TrackAction.PLAY -> false
         TrackAction.DOWNLOAD -> if (youTubeOnly) controller.youTubeDeviceDownloads
             else track.sources.any { it.kind == SourceKind.SERVER || it.kind == SourceKind.LOCAL && it.available }
-        TrackAction.GO_ARTIST -> track.metadata.artist.isNotBlank() && artistInLibrary
+        TrackAction.GO_ARTIST -> artists.isNotEmpty()
         TrackAction.GO_ALBUM -> track.metadata.album.isNotBlank() && inLibrary { albumCollectionId(it.metadata) == albumCollectionId(track.metadata) }
         TrackAction.GO_ALBUM_ARTIST -> track.metadata.albumArtist.isNotBlank() &&
             inLibrary { it.metadata.albumArtist.ifBlank { it.metadata.artist } == track.metadata.albumArtist }
@@ -127,7 +134,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             TrackAction.ADD_TO_PLAYLIST -> playlistPicker = true
             TrackAction.DOWNLOAD -> if (youTubeOnly) controller.downloadFromYouTube(track.id, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
                 else controller.downloadTracks(listOf(track.id))
-            TrackAction.GO_ARTIST -> navigate(LibraryTab.ARTISTS, track.metadata.artist)
+            TrackAction.GO_ARTIST -> if (artists.size == 1) navigate(LibraryTab.ARTISTS, artists.single()) else choosingArtist = artists
             TrackAction.GO_ALBUM -> navigate(LibraryTab.ALBUMS, albumCollectionId(track.metadata))
             TrackAction.GO_ALBUM_ARTIST -> navigate(LibraryTab.ALBUM_ARTISTS, track.metadata.albumArtist)
             TrackAction.GO_GENRE -> navigate(LibraryTab.GENRES, track.metadata.genres.first())
@@ -240,6 +247,17 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             onFileActions = { controller.prepareServerFileEdit(track) })
     }
     if (sources) SongSources(track, controller) { sources = false }
+    choosingArtist?.let { names ->
+        AlertDialog(onDismissRequest = { choosingArtist = null }, title = { Text(TrackAction.GO_ARTIST.displayLabel()) }, text = {
+            Column {
+                names.forEach { name ->
+                    ListItem(headlineContent = { Text(name) }, leadingContent = { Icon(AppIcon.ARTIST.vector, null) },
+                        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                        modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable { choosingArtist = null; navigate(LibraryTab.ARTISTS, name) })
+                }
+            }
+        }, confirmButton = {}, dismissButton = { TextButton(onClick = { choosingArtist = null }) { Text(stringResource(Res.string.cancel)) } })
+    }
     if (rating) SongRating(track, controller) { rating = false }
     if (playlistPicker) PlaylistPicker(controller, track.id) { playlistPicker = false }
     if (tagEditor) TagEditor(track, controller, fileTarget) { tagEditor = false }

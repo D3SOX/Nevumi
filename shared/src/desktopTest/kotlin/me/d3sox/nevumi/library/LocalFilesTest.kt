@@ -371,4 +371,49 @@ class LocalFilesTest {
             assertEquals(emptyList(), scanner.pendingRefreshLocations())
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
+
+    @Test
+    fun songsWithoutEmbeddedArtworkUseTheCoverInTheirFolder() = runBlocking {
+        val directory = Files.createTempDirectory("folder-cover")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try {
+            val fixture = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac")
+            val album = Files.createDirectories(directory.resolve("music").resolve("Album"))
+            val bare = Files.createDirectories(directory.resolve("music").resolve("Bare"))
+            Files.copy(fixture, album.resolve("song.flac"))
+            org.jaudiotagger.audio.AudioFileIO.read(Files.copy(fixture, bare.resolve("song.flac")).toFile()).also {
+                it.tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, "Elsewhere"); it.commit()
+            }
+            javax.imageio.ImageIO.write(java.awt.image.BufferedImage(32, 32, java.awt.image.BufferedImage.TYPE_INT_RGB), "png",
+                album.resolve("Folder.PNG").toFile())
+            Files.writeString(bare.resolve("cover.txt"), "not an image")
+            val covers = me.d3sox.nevumi.artwork.ArtworkLibrary(directory.resolve("artwork").toString())
+            val tracks = LocalFiles(MusicLibrary(store), covers).scan(directory.resolve("music").toString())
+                .associateBy { java.io.File(it.sources.single().location).parentFile.name }
+            assertEquals(true, tracks.getValue("Album").sources.single().hasArtwork)
+            assertEquals(true, covers.path(tracks.getValue("Album").id) != null)
+            assertEquals(false, tracks.getValue("Bare").sources.single().hasArtwork)
+            assertEquals(null, covers.path(tracks.getValue("Bare").id))
+            assertEquals("Folder.PNG", folderCover(album.toFile())?.name)
+        } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun separatelyTaggedArtistsAreReadUnlessAnEditLeftThemBehind() {
+        val directory = Files.createTempDirectory("artist-tags")
+        try {
+            val fixture = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac")
+            val file = Files.copy(fixture, directory.resolve("song.flac")).toFile()
+            fun tag(change: (org.jaudiotagger.tag.Tag) -> Unit): List<String> {
+                org.jaudiotagger.audio.AudioFileIO.read(file).also { change(it.tag); it.commit() }
+                return org.jaudiotagger.audio.AudioFileIO.read(file).trackMetadata("song", "").artists
+            }
+            val key = org.jaudiotagger.tag.FieldKey.ARTIST
+            val artists = org.jaudiotagger.tag.FieldKey.ARTISTS
+            assertEquals(emptyList(), tag { it.setField(key, "Solo") })
+            assertEquals(listOf("A", "B"), tag { it.setField(key, "A"); it.addField(key, "B") })
+            assertEquals(listOf("A", "B"), tag { it.deleteField(key); it.setField(key, "A feat. B"); it.setField(artists, "A"); it.addField(artists, "B") })
+            assertEquals(emptyList(), tag { it.setField(key, "C") })
+        } finally { directory.toFile().deleteRecursively() }
+    }
 }

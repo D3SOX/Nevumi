@@ -27,6 +27,8 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.settings_minimum_song_length
+import me.d3sox.nevumi.resources.settings_shorter_than
 import me.d3sox.nevumi.resources.sources_gate_browser
 import me.d3sox.nevumi.resources.ssh_authentication
 import me.d3sox.nevumi.resources.statistics_grouping
@@ -347,6 +349,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsToggle(stringResource(Res.string.settings_remember_scroll_positions), AppIcon.LIBRARY, stringResource(Res.string.settings_remember_scroll_positions_description), settings.rememberScrollPositions) {
                 enabled -> controller.updatePreferences { it.copy(rememberScrollPositions = enabled) }
             }
+                ArtistSplittingSetting(settings, controller)
                 SettingsLink(stringResource(Res.string.customize_home), AppIcon.HOME, stringResource(Res.string.settings_customize_home_description)) { customizeHome = true }
                 SettingsLink(stringResource(Res.string.library_tabs), AppIcon.TABS, stringResource(Res.string.settings_library_tabs_description)) { libraryTabs = true }
                         }
@@ -505,6 +508,10 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                 } ?: state.lastLocalScanCount?.let { count ->
                     Text(stringResource(Res.string.settings_scan_complete, countLabel(count, Res.plurals.songs)), style = MaterialTheme.typography.bodySmall)
                 }
+                SettingChoice(Res.string.settings_minimum_song_length, settings.minimumSongSeconds,
+                    listOf(0 to stringResource(Res.string.off)) + listOf(10, 20, 30, 60).map { seconds ->
+                        seconds to stringResource(Res.string.settings_shorter_than, pluralStringResource(Res.plurals.settings_seconds, seconds, seconds))
+                    }) { seconds -> controller.updatePreferences { it.copy(minimumSongSeconds = seconds) } }
                 Text(stringResource(Res.string.settings_folder_rules_note),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FolderRuleList(stringResource(Res.string.settings_include_folders), settings.includeFolders, stringResource(Res.string.settings_add_included_folder),

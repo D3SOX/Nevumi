@@ -31,7 +31,12 @@ data class TrackSource(
     val modifiedAt: Long = 0,
     val indexedSize: Long = 0,
     val hasArtwork: Boolean = false,
+    /** The [LOCAL_INDEX_FORMAT] a local file was read with; files read with an older one are read again. */
+    val indexFormat: Int = 0,
 )
+
+/** Raise this when local scans read more from a file, so the next scan reads every file again. 1 added folder covers and artist lists. */
+const val LOCAL_INDEX_FORMAT = 1
 
 /**
  * Songs streamed or queued from YouTube are kept for the queue and history, but only songs with another source belong to the

@@ -9,6 +9,19 @@ class LocalFolderRulesTest {
     private val downloads = "/storage/emulated/0/Music/Nevumi/SoundCloud"
 
     @Test
+    fun shortLocalSongsStayOutWhileSongsOfUnknownLengthStayIn() {
+        fun song(durationMs: Long, folder: String = "Music") = Track(durationMs.toString(), TrackMetadata("Song", durationMs = durationMs, folder = folder),
+            listOf(TrackSource("local:$durationMs", SourceKind.LOCAL, "/$folder/song.mp3", filePath = "/storage/emulated/0/$folder/song.mp3")))
+        val rules = LocalFolderRules(excluded = listOf("Ringtones"), minimumDurationMs = 30_000)
+        assertTrue(rules.allows(song(30_000)))
+        assertTrue(rules.allows(song(0)))
+        assertEquals(false, rules.allows(song(29_999)))
+        assertEquals(false, rules.allows(song(60_000, "Ringtones")))
+        assertTrue(LocalFolderRules().allows(song(1_000)))
+        assertEquals(30_000, me.d3sox.nevumi.settings.MusicSettings(minimumSongSeconds = 30).localFolderRules().minimumDurationMs)
+    }
+
+    @Test
     fun allowingAFolderLiftsItsOwnExclusionsHoweverTheyAreWritten() {
         val rules = LocalFolderRules(excluded = listOf("Music/Nevumi/SoundCloud/", "$downloads/Old", "Podcasts"))
         assertNull(rules.excludedParent(downloads))

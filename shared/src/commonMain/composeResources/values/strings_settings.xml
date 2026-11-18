@@ -66,6 +66,15 @@
     <string name="settings_show_options_buttons_description">Show ⋮ on songs and collections. Long press opens the same menu.</string>
     <string name="settings_remember_scroll_positions">Remember scroll positions</string>
     <string name="settings_remember_scroll_positions_description">Reopen library lists and grids where you left off.</string>
+    <string name="settings_split_artists">Split artists</string>
+    <string name="settings_split_artists_description">List each artist of a song like “A feat. B” on their own. Separators: %1$s</string>
+    <string name="settings_split_artists_off">Each artist tag stays one artist.</string>
+    <string name="settings_artist_separators">Separators</string>
+    <string name="settings_artist_separators_hint">One per line. Words such as feat. split only where they stand alone. Songs whose tags or server list several artists always split.</string>
+    <string name="settings_artist_exceptions">Exceptions</string>
+    <string name="settings_artist_exceptions_hint">Artists whose name contains a separator, such as Simon &amp; Garfunkel. One per line.</string>
+    <string name="settings_featured_artists_from_titles">Featured artists in titles</string>
+    <string name="settings_featured_artists_from_titles_description">Also list B as an artist of “Song (feat. B)”</string>
     <string name="settings_customize_home_description">Reorder sections on your Home page</string>
     <string name="settings_library_tabs_description">Choose and reorder library pages</string>
     <string name="settings_clear_favorites">Clear favorites</string>
@@ -195,6 +204,8 @@
     <string name="settings_include_folders_empty">All scanned folders are included</string>
     <string name="settings_exclude_folders">Exclude folders</string>
     <string name="settings_exclude_folders_empty">No folders excluded</string>
+    <string name="settings_minimum_song_length">Hide short songs</string>
+    <string name="settings_shorter_than">Under %1$s</string>
     <string name="settings_dismiss_folder_error">Dismiss folder error</string>
     <string name="settings_add_folder">Add folder</string>
     <string name="settings_add_included_folder">Add included folder</string>
@@ -242,6 +253,8 @@
     <string name="settings_keywords_scan_music">index refresh local device files</string>
     <string name="settings_keywords_include_folders">picker local music</string>
     <string name="settings_keywords_exclude_folders">picker exclusions local music</string>
+    <string name="settings_keywords_minimum_song_length">minimum duration length ringtones voice notes sounds filter</string>
+    <string name="settings_keywords_split_artists">separators featuring feat multiple artists delimiter semicolon</string>
     <string name="settings_keywords_playback_speed">tempo</string>
     <string name="settings_keywords_playback_pitch">semitones</string>
     <string name="settings_keywords_crossfade">transition seconds</string>

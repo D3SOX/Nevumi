@@ -91,6 +91,16 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
         digest.digest()
     }
 
+    /**
+     * The media store's thumbnail of a song without embedded artwork, which it takes from an image such as cover.jpg in the
+     * song's folder. The app may only read audio files, so the media store has to look for the image.
+     */
+    private fun folderCover(uri: Uri): ByteArray? = try {
+        val thumbnail = context.contentResolver.loadThumbnail(uri, android.util.Size(1024, 1024), null)
+        java.io.ByteArrayOutputStream().also { thumbnail.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) }.toByteArray()
+            .also { thumbnail.recycle() }
+    } catch (_: Exception) { null } // Most songs without embedded artwork have no folder cover either.
+
     private suspend fun deviceStamp(): String = buildString {
         append(library.localFolderStamp())
         // A volume's generation also moves for photos and downloads; only its audio rows decide whether to rescan.
@@ -165,7 +175,7 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
                 val cached = previous[sourceId]
                 val source = cached?.sources?.firstOrNull { it.id == sourceId }
                 if (!force && source?.available == true && source.modifiedAt == modifiedAt && source.indexedSize > 0 &&
-                    source.indexedSize == size && (!source.hasArtwork || artwork == null || artwork.path(cached.id) != null)) {
+                    source.indexedSize == size && source.indexFormat == LOCAL_INDEX_FORMAT && (!source.hasArtwork || artwork == null || artwork.path(cached.id) != null)) {
                     seen += sourceId
                     result += cached
                     continue
@@ -183,9 +193,10 @@ class AndroidLocalSources(private val context: Context, private val library: Mus
                         }
                     } catch (_: Exception) { continue }
                     val metadata = audio.trackMetadata(name.substringBeforeLast('.'), cursor.getString(2).orEmpty().trimEnd('/'))
-                    val cover = audio.fieldTag?.firstArtwork?.binaryData
+                    val cover = audio.fieldTag?.firstArtwork?.binaryData ?: folderCover(uri)
                     val track = library.importTrack(metadata, TrackSource(sourceId, SourceKind.LOCAL, uri.toString(),
-                        filePath = cursor.getString(3), modifiedAt = modifiedAt, indexedSize = size, hasArtwork = cover != null))
+                        filePath = cursor.getString(3), modifiedAt = modifiedAt, indexedSize = size, hasArtwork = cover != null,
+                        indexFormat = LOCAL_INDEX_FORMAT))
                     seen += sourceId
                     if (cover != null) {
                 try { artwork?.save(track.id, cover) }
