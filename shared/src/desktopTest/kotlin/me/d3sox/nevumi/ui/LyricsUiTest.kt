@@ -1,10 +1,19 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.runBlocking
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.*
@@ -61,6 +70,39 @@ class LyricsUiTest {
                 waitUntil(timeoutMillis = 3_000) { controller.state.value.playback.positionMs == 4_000L }
                 onNodeWithContentDescription("Lyrics").performClick()
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("lyrics-panel").fetchSemanticsNodes().isEmpty() }
+            }
+        } finally { PlayerLyrics.visible = false; runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun lyricsKeepRoomAboveTheControlsInASplitScreenWindow() {
+        val directory = Files.createTempDirectory("lyrics-split")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val audio = Path.of(System.getProperty("nevumi.testRoot"), "androidApp", "src", "androidTest", "assets", "fixture.flac").toString()
+        val track = runBlocking { library.importTrack(TrackMetadata("Lyrics fixture", durationMs = 10_000), TrackSource("lyrics", SourceKind.LOCAL, audio)) }
+        val lyrics = object : LyricsLibrary {
+            override suspend fun lyrics(track: Track, online: Set<LyricsSource>, query: LyricsQuery?) = Lyrics(LyricsSource.EMBEDDED, lines)
+        }
+        val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store), lyrics = lyrics)
+        PlayerLyrics.visible = false
+        try {
+            runComposeUiTest {
+                var window by mutableStateOf(DpSize(560.dp, 420.dp))
+                setContent { Box(Modifier.size(window)) { MusicPlayerApp(controller) } }
+                waitForLibrary(controller)
+                runBlocking { controller.playTrack(track.id).join(); controller.pause().join() }
+                // The narrow mini-player has its volume slider in the middle, so the player opens before the window shrinks.
+                onNodeWithTag("mini-player").performTouchInput { click(Offset(width * .15f, centerY)) }
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithContentDescription("Lyrics").fetchSemanticsNodes().isNotEmpty() }
+                window = DpSize(384.dp, 380.dp)
+                onNodeWithContentDescription("Lyrics").performScrollTo().performClick()
+                waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("lyrics-panel").fetchSemanticsNodes().isNotEmpty() }
+                waitForIdle()
+                assertTrue(onNodeWithTag("lyrics-panel").fetchSemanticsNode().size.height >= with(density) { 120.dp.roundToPx() })
+                // Too short for both, the controls keep half the height so the lyrics can still be turned off.
+                window = DpSize(384.dp, 200.dp)
+                onNodeWithContentDescription("Play").performScrollTo().assertIsDisplayed()
+                onNodeWithContentDescription("Lyrics").performScrollTo().assertIsDisplayed()
             }
         } finally { PlayerLyrics.visible = false; runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }

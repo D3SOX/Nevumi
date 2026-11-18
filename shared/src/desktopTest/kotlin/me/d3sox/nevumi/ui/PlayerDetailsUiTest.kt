@@ -140,7 +140,8 @@ class PlayerDetailsUiTest {
                 val output = onNodeWithContentDescription("Audio output").fetchSemanticsNode().boundsInRoot
                 val queue = onNodeWithContentDescription("Queue").fetchSemanticsNode().boundsInRoot
                 assertTrue(kotlin.math.abs(label.center.x - (output.center.x + queue.center.x) / 2) < 2f)
-                onNodeWithContentDescription("App volume").performScrollTo().assertIsDisplayed()
+                // The cover gives way, so nothing below the transport needs scrolling to.
+                onNodeWithContentDescription("App volume").assertIsDisplayed()
                 onNodeWithContentDescription("Collapse").performClick()
                 onNodeWithContentDescription("Settings").performClick()
                 onNodeWithText("Playback").performScrollTo().performClick()

@@ -23,8 +23,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.input.pointer.pointerInput
@@ -440,18 +446,36 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                             }
                             AppIconButton(AppIcon.MORE, stringResource(Res.string.player_track_options, current.metadata.title), onClick = openPlayingMenu)
                         }
-                        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(24.dp)) {
+                        // The controls pad themselves vertically, so content scrolled into the margin fades instead of being cut at it.
+                        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp)) {
                             val controlsVisible = expansion >= .999f && queueProgress == 0f
-                            val controlsMaxHeight = maxHeight * .65f
-                            if (maxWidth > maxHeight) Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
+                            val contentHeight = maxHeight - 48.dp
+                            val minimumCover = 120.dp
+                            val minimumCoverPx = with(LocalDensity.current) { minimumCover.roundToPx() }
+                            // Beside the cover, the controls keep the width their transport row and toolbar need.
+                            val sideControlsWidth = maxOf((maxWidth - 32.dp) / 2, 288.dp)
+                            val side = maxWidth > contentHeight && maxWidth - 32.dp - sideControlsWidth >= minimumCover
+                            // Above the controls, the cover shrinks to the room they leave. In a short window, such as split screen,
+                            // it gives that room up when too little is left. A new size tries it again; lyrics the listener opened keep their place.
+                            var coverless by remember(maxWidth, maxHeight) { mutableStateOf(false) }
+                            val controls: @Composable (Modifier) -> Unit = { modifier ->
+                                PlayerControls(state, controller, current, requested, buffering, modifier, motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) }, onTitle = openSongOrigin)
+                            }
+                            if (!side && coverless && !PlayerLyrics.shown(controller)) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                // The moving artwork shrinks into this empty anchor instead of covering the controls.
+                                Box(Modifier.align(Alignment.TopCenter).size(0.dp).then(motion.anchor(PlayerPanel.PLAYING, PlayerElement.ARTWORK)))
+                                controls(Modifier.fillMaxWidth())
+                            } else if (side) Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-                                PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxHeight(), motion)
-                                PlayerControls(state, controller, current, requested, buffering, Modifier.weight(1f), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) }, onTitle = openSongOrigin)
-                            } else Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                                PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxWidth(), motion)
-                                PlayerControls(state, controller, current, requested, buffering,
-                                    Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight), motion, controlsVisible, artworkSwipe, onOutput = { choosingOutput = true }, onVisualizer = { showingMilkDrop = true }, onAudioEffects = onAudioEffects, onPlaybackSettings = { showingPlaybackSettings = true }, onRepeatCount = { repeatCount = (state.queue.repeatPlays ?: 2).toString(); showRepeatCount = true }, onQueue = { show(PlayerPanel.QUEUE) }, onTitle = openSongOrigin)
+                                PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxHeight().padding(vertical = 24.dp), motion)
+                                controls(Modifier.width(sideControlsWidth))
+                            } else Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxWidth().padding(top = 24.dp)
+                                    .onSizeChanged { if (it.height < minimumCoverPx) coverless = true }, motion)
+                                // Lyrics in the cover's place keep about a third of the height, and at least the cover's minimum, so their
+                                // footer and a whole line fit. The controls scroll instead, but always keep half the height to stay reachable.
+                                controls(Modifier.fillMaxWidth().then(if (PlayerLyrics.shown(controller)) Modifier.heightIn(max = minOf(contentHeight * .65f + 48.dp,
+                                    contentHeight + 24.dp - minimumCover).coerceAtLeast((contentHeight + 48.dp) / 2)) else Modifier))
                             }
                         }
 
@@ -768,7 +792,13 @@ private fun PlayerControls(state: AppState, controller: MusicController, current
         peaks.map { kotlin.math.sqrt((it / highest).coerceIn(0f, 1f)) }
     }
     val controlsScroll = rememberScrollState()
-    Column(modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(controlsScroll, enabled = controlsScroll.maxValue > 0), horizontalAlignment = Alignment.CenterHorizontally,
+    // Controls that don't fit fade out at the scrolling edge instead of ending in a hard cut.
+    Column(modifier.widthIn(max = 640.dp).fillMaxWidth().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val edge = 24.dp.toPx()
+        if (controlsScroll.canScrollBackward) drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black), 0f, edge), blendMode = BlendMode.DstIn)
+        if (controlsScroll.canScrollForward) drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent), size.height - edge, size.height), blendMode = BlendMode.DstIn)
+    }.verticalScroll(controlsScroll, enabled = controlsScroll.maxValue > 0).padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PlayingTrackDetails(state, controller, current, motion, visible, artworkSwipe, onTitle)
         if (current.isRadio) LiveIndicator(Modifier.fillMaxWidth())
