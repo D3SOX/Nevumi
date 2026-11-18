@@ -102,6 +102,36 @@ class LongSongResumeTest {
         } finally { player.closeAndJoin() }
     }
 
+    @Test fun closingTheAppSavesTheLatestPositionAndASingleSongRepeatClearsIt() = withStore("long-song-close") { directory, store ->
+        val library = MusicLibrary(store)
+        val mix = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
+        fun player() = MusicController(library, PlaybackQueue(store), CrossfadePlaybackEngine { MpvPlaybackEngine("null") },
+            preferences = MusicPreferences(store))
+        val first = player()
+        try {
+            withTimeout(5_000) { first.state.first { it.libraryReady } }
+            first.updatePreferences { it.copy(resumeLongSongsMinutes = 10) }.join()
+            first.playTrack(mix.id, listOf(mix.id), 0).join()
+            withTimeout(5_000) { first.state.first { it.playback.playing } }
+            first.seek(200_000).join()
+            withTimeout(5_000) { first.state.first { it.playback.playing && it.playback.positionMs >= 200_500 } }
+            // Closing while it plays, before any checkpoint, still saves where it was.
+            first.closeAndJoin()
+            assertTrue(library.songPosition(mix.id)!! in 200_000..205_000)
+        } finally { first.closeAndJoin() }
+        val second = player()
+        try {
+            withTimeout(5_000) { second.state.first { it.libraryReady } }
+            // A queue of only this song that repeats it forgets the finished pass, like repeating the song itself.
+            second.playTrack(mix.id, listOf(mix.id), 0).join()
+            withTimeout(5_000) { second.state.first { it.playback.playing && it.playback.positionMs >= 200_000 } }
+            second.setQueueRepeat(RepeatMode.ALL).join()
+            second.seek(658_500).join()
+            withTimeout(8_000) { second.state.first { it.playback.playing && it.playback.positionMs in 1..5_000 } }
+            withTimeout(5_000) { while (library.songPosition(mix.id) != null) delay(25) }
+        } finally { second.closeAndJoin() }
+    }
+
     @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = withStore("long-song-resume") { directory, store ->
         val library = MusicLibrary(store)
         val mix = elevenMinutes(directory)

@@ -37,8 +37,8 @@ internal class LongSongResume(private val context: ControllerContext, private va
             // One failed lookup or write must not end the saving for the rest of the session.
             try {
                 val changed = current.entryId != last.entryId
-                // Repeat-one starts the song over by itself, so the pass that ended counts as finished.
-                val repeated = !changed && current.repeatMode == RepeatMode.ONE && last.playbackId != null &&
+                // Repeating the song, or a queue of only this song, starts it over by itself, so the pass that ended counts as finished.
+                val repeated = !changed && current.repeatMode != RepeatMode.OFF && last.playbackId != null &&
                     current.playbackId != null && current.playbackId != last.playbackId
                 val paused = last.playing && !current.playing && !changed
                 val now = clock.elapsedNow().inWholeMilliseconds
@@ -59,6 +59,12 @@ internal class LongSongResume(private val context: ControllerContext, private va
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { }
         }
+    }
+
+    /** Saves where the song is when the app closes, after the collector stopped and could no longer see the final pause. */
+    suspend fun saveOnClose(status: PlaybackStatus) {
+        val minimumMs = context.state.value.preferences.resumeLongSongsMinutes * 60_000L
+        if (minimumMs > 0) checkpoint(status, repeated = false, minimumMs, library.songPositionGeneration)
     }
 
     private suspend fun checkpoint(status: PlaybackStatus, repeated: Boolean, minimumMs: Long, generation: Long) {
