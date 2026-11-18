@@ -264,11 +264,13 @@ internal fun PlaylistsScreen(state: AppState, controller: MusicController, backE
             }
             val query = songSearch?.trim().orEmpty()
             // Preparing a large playlist for search would freeze opening it, so it happens off the main thread; until it is
-            // ready, the playlist stays unfiltered.
+            // ready, the playlist stays unfiltered. The texts are kept by song and the current playlist is filtered, so a
+            // song's position stays right while a changed playlist is prepared again.
             val searchTexts = if (songSearch == null) null
-                else rememberDerived(null, emptyList(), listOf(ordered), initial = { null }) { ordered.map { it to it.value.searchText() } }
+                else rememberDerived(null, emptyList(), listOf(ordered), initial = { null }) { ordered.associate { it.value.id to it.value.searchText() } }
             val shown = remember(ordered, searchTexts, query) { SearchQuery(query).let { search ->
-                if (search.isEmpty || searchTexts == null) ordered else searchTexts.filter { search.matches(it.second) }.map { it.first }
+                if (search.isEmpty || searchTexts == null) ordered
+                else ordered.filter { search.matches(searchTexts[it.value.id] ?: it.value.searchText()) }
             } }
             CompositionLocalProvider(LocalLibraryOrigin provides me.d3sox.nevumi.queue.QueueOrigin(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS, playlist.id)) {
             if (rearrangingSongs && editable) {
