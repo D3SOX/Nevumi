@@ -98,7 +98,7 @@ class LyricsUiTest {
                 onNodeWithContentDescription("Lyrics").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("lyrics-panel").fetchSemanticsNodes().isNotEmpty() }
                 waitForIdle()
-                assertTrue(onNodeWithTag("lyrics-panel").fetchSemanticsNode().size.height >= with(density) { 56.dp.roundToPx() })
+                assertTrue(onNodeWithTag("lyrics-panel").fetchSemanticsNode().size.height >= with(density) { 120.dp.roundToPx() })
             }
         } finally { PlayerLyrics.visible = false; runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
