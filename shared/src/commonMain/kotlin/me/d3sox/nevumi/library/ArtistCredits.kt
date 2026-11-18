@@ -64,10 +64,12 @@ data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARAT
     private fun pieces(text: String, pattern: Regex?): List<IntRange> {
         if (pattern == null || text.isBlank()) return listOf(text.indices)
         val matches = pattern.findAll(text).toList()
-        fun creditStart(index: Int) = text.substring(0, index).isBlank() ||
-            matches.any { it.range.last < index && text.substring(it.range.last + 1, index).isBlank() }
-        fun creditEnd(index: Int) = text.substring(index).isBlank() ||
-            matches.any { it.range.first >= index && text.substring(index, it.range.first).isBlank() }
+        // Brackets around a credit, as in "A (feat. B)", are as much a boundary as spaces.
+        fun gap(between: String) = between.all { it.isWhitespace() || it in "()[]" }
+        fun creditStart(index: Int) = gap(text.substring(0, index)) ||
+            matches.any { it.range.last < index && gap(text.substring(it.range.last + 1, index)) }
+        fun creditEnd(index: Int) = gap(text.substring(index)) ||
+            matches.any { it.range.first >= index && gap(text.substring(index, it.range.first)) }
         val protected = protectedNames.flatMap { name ->
             generateSequence(text.indexOf(name, ignoreCase = true).takeIf { it >= 0 }) { start ->
                 text.indexOf(name, start + 1, ignoreCase = true).takeIf { it >= 0 }

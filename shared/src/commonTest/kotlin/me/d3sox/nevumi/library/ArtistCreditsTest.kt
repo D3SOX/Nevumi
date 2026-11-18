@@ -65,6 +65,9 @@ class ArtistCreditsTest {
         val earth = ArtistSplitting(exceptions = listOf("Earth, Wind & Fire"))
         assertEquals(listOf("Earth, Wind & Fire", "Echo"), names("Earth, Wind & Fire, Echo", splitting = earth))
         assertEquals(listOf("Earth", "Wind & Fireflies"), names("Earth, Wind & Fireflies", splitting = earth))
+        val tyler = ArtistSplitting(exceptions = listOf("Tyler, The Creator"))
+        assertEquals(listOf("A", "Tyler, The Creator"), names("A (feat. Tyler, The Creator)", splitting = tyler))
+        assertEquals(listOf("A", "Tyler, The Creator"), names("A", "Song [feat. Tyler, The Creator]", splitting = tyler))
     }
 
     @Test fun artistsAServerListsAreSplitAgainWithTheSeparators() {
