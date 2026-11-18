@@ -197,7 +197,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     val chrome = remember { LibraryChrome() }
     chrome.enabled = LocalShortWindow.current && !selection.active
     // Another page, or a window with room again, starts with its header and navigation in view.
-    LaunchedEffect(chrome.enabled, currentTab, headerTitle) { chrome.show() }
+    LaunchedEffect(chrome.enabled, currentTab, headerContext?.page) { chrome.show() }
     // The rail leaves the bottom free, so nothing above the player needs to make room for a navigation bar.
     LaunchedEffect(rail) { if (rail) { navigationHeight = 0.dp; onNavigationHeight(0) } }
     // A lambda, not a local function reference, so the navigation recomposes with the tab that is open now.

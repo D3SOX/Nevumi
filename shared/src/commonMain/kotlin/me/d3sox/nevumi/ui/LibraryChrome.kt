@@ -35,6 +35,7 @@ internal class LibraryChrome {
             val distance = (if (headerHeight > 0) headerHeight else navigationHeight).toFloat()
             if (!enabled || distance == 0f || available.y == 0f) return Offset.Zero
             val previous = hidden
+            settling++
             hidden = (hidden - available.y / distance).coerceIn(0f, 1f)
             // The page moves up as the header above it shrinks, so the header takes the scroll it uses.
             return Offset(0f, (previous - hidden) * headerHeight)
@@ -48,7 +49,17 @@ internal class LibraryChrome {
 
     suspend fun show() { if (hidden > 0f) settle(0f) }
 
-    private suspend fun settle(target: Float) = animate(hidden, target) { value, _ -> hidden = value }
+    /** Counts animations and scrolls, so a scroll or a newer animation stops the one running. */
+    private var settling = 0
+
+    private suspend fun settle(target: Float) {
+        val run = ++settling
+        try {
+            animate(hidden, target) { value, _ -> if (run != settling) throw Interrupted() else hidden = value }
+        } catch (_: Interrupted) { }
+    }
+
+    private class Interrupted : Exception()
 
     /** The header slides up out of the window's top. */
     fun header(modifier: Modifier) = modifier.slideAway(top = true) { headerHeight = it }

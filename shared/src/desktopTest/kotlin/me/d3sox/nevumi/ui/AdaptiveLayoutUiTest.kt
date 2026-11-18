@@ -92,6 +92,14 @@ class AdaptiveLayoutUiTest {
         onAllNodesWithText("Unknown album")[0].performClick()
         // An album's cover sits beside its title instead of filling the short window above it.
         assertTrue(onNodeWithContentDescription("Collection artwork: Unknown album").fetchSemanticsNode().size.height <= with(density) { 112.dp.roundToPx() })
+        // Leaving a page whose bars slid away brings them back on the next one.
+        val album = bounds("library-pager")
+        onNodeWithTag("library-pager").performTouchInput { swipeUp(centerY + 40f, centerY - 160f) }
+        waitForIdle()
+        assertTrue(bounds("library-pager").height > album.height + 1f, "The album's bars slide away")
+        onNodeWithContentDescription("Back").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        waitForIdle()
+        assertEquals(album.height, bounds("library-pager").height, 1f)
     }
 
     @Test fun mediumWindowsUseARailBesideTheLibraryAboveTheMiniPlayer() = withApp(800.dp) { controller, tracks ->
