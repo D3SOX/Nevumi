@@ -207,12 +207,22 @@ class GlobalSearchUiTest {
                 onNodeWithTag("search-results").performScrollToKey("see-all:SONGS")
                 onNodeWithText("Songs · 25").assertIsDisplayed()
                 captureSearch("search-see-all")
+                // See all lists the whole section with the results on screen staying where they were. Song 15 sits under the pinned heading.
+                onNodeWithTag("search-results").performScrollToIndex(15)
+                val songTop = onNodeWithText("Wave song 18").fetchSemanticsNode().boundsInRoot.top
+                captureSearch("search-see-all-songs-before")
                 onNodeWithTag("search-see-all:SONGS").assertTextEquals("See all 25 songs").performClick()
                 onNodeWithTag("search-type:SONGS").assertIsSelected()
+                assertEquals(songTop, onNodeWithText("Wave song 18").fetchSemanticsNode().boundsInRoot.top, 1f)
+                captureSearch("search-see-all-songs-after")
                 onNodeWithTag("search-type:ALL").performClick()
-                onNodeWithTag("search-results").performScrollToKey("see-all:ALBUMS")
+                // Album 06 sits under the pinned heading.
+                onNodeWithTag("search-results").performScrollToIndex(28)
+                val albumTop = onNodeWithText("Wave album 08").fetchSemanticsNode().boundsInRoot.top
                 onNodeWithTag("search-see-all:ALBUMS").assertTextEquals("See all 25 albums").performClick()
                 onNodeWithTag("search-type:ALBUMS").assertIsSelected()
+                assertEquals(albumTop, onNodeWithText("Wave album 08").fetchSemanticsNode().boundsInRoot.top, 1f)
+                onNodeWithTag("search-results").performScrollToIndex(0)
                 onNodeWithContentDescription("Open album: Wave album 01").assertIsDisplayed()
             }
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }

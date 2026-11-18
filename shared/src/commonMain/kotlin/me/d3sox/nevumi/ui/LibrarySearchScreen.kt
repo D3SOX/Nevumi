@@ -28,6 +28,7 @@ import me.d3sox.nevumi.app.AppState
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.library.*
 import me.d3sox.nevumi.queue.QueueOrigin
+import me.d3sox.nevumi.settings.LibraryPosition
 import org.jetbrains.compose.resources.stringResource
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.settings
@@ -90,6 +91,8 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
     val youTubeSearches = rememberSaveable(saver = YouTubeSearches.Saver) { YouTubeSearches() }
     val soundCloudSearches = remember { RecentSearches(::SoundCloudSearch) }
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Where See all opens its section's list, so the results on screen stay where they were.
+    val seeAllPosition = remember { mutableStateOf<LibraryPosition?>(null) }
     val selection = remember { SongSelection() }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -162,19 +165,28 @@ internal fun LibrarySearchScreen(state: AppState, controller: MusicController, b
                     else SearchPrompt(AppIcon.MUSIC, stringResource(Res.string.sources_enter_search_term), Modifier.align(Alignment.Center))
                 } else if (type == SearchType.SOUNDCLOUD) SoundCloudSearchResults(query, state, controller, soundCloudSearches)
                 else if (type == SearchType.YOUTUBE) YouTubeSearchResults(query, state, controller, youTubeSearches)
-                else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search")
+                else if (type == SearchType.SONGS) SongList(results.songs, controller, contextName = "Search", scrollRequest = seeAllPosition)
                 else {
                     val categories = if (type == SearchType.ALL) SearchType.entries.filter { it != SearchType.ALL && it != SearchType.SOUNDCLOUD && it != SearchType.YOUTUBE } else listOf(type)
                     val count = if (type == SearchType.ALL) results.count else results.collections[type].orEmpty().size
                     CompositionLocalProvider(LocalTrackRowStrings provides trackRowStrings()) {
                     // Each chip starts at its top instead of reusing the scroll position of the list it was opened from.
-                    LazyColumn(Modifier.fillMaxSize().testTag("search-results"), key(type) { rememberLazyListState() }) {
+                    val list = key(type) { rememberLazyListState() }
+                    ApplyScrollRequest(list, seeAllPosition)
+                    LazyColumn(Modifier.fillMaxSize().testTag("search-results"), list) {
                         if (count == 0) item { Text(stringResource(Res.string.sources_no_results_for, query.trim()), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         categories.forEach { category ->
                             val collections = results.collections[category].orEmpty()
                             val total = if (category == SearchType.SONGS) results.songs.size else collections.size
                             val limit = if (type != SearchType.ALL) total else if (category == SearchType.SONGS) 20 else 10
-                            val seeAll = { type = category; libraryType = category; stopTyping() }
+                            val seeAll = {
+                                // The section's list keeps the first of its results on screen in place; its own list starts with a heading unless it lists songs.
+                                val keys = if (category == SearchType.SONGS) results.songs.map { "song:${it.id}" } else collections.map { "${category.name}:${it.id}" }
+                                seeAllPosition.value = list.layoutInfo.visibleItemsInfo.firstNotNullOfOrNull { item ->
+                                    keys.indexOf(item.key).takeIf { it >= 0 }?.let { LibraryPosition(it + if (category == SearchType.SONGS) 0 else 1, -item.offset) }
+                                }
+                                type = category; libraryType = category; stopTyping()
+                            }
                             // The heading stays pinned while its section scrolls by, so its See all button is always within reach.
                             if (total > 0) stickyHeader(key = "heading:${category.name}") {
                                 SearchSectionHeading("${stringResource(category.label)} · $total", seeAll.takeIf { total > limit })
