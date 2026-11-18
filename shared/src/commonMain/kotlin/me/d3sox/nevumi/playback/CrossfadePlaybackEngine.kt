@@ -42,6 +42,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var pitch = 1.0
     private var effects = AudioEffects()
     private var replayGain = ReplayGain()
+    private var bitPerfect = false
     private var repeatMode = RepeatMode.OFF
     private var repeatPlays: Int? = null
     private var fadeElapsedMs = 0.0
@@ -120,6 +121,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         replayGain.validate()
         command { this.replayGain = replayGain; engines().forEach { it.setReplayGain(replayGain) } }
     }
+
+    override fun setBitPerfectOutput(enabled: Boolean) = command { bitPerfect = enabled; engines().forEach { it.setBitPerfectOutput(enabled) } }
 
     override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
 
@@ -284,6 +287,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                     waiting.setPitch(pitch)
                     waiting.setAudioEffects(effects)
                     waiting.setReplayGain(replayGain)
+                    waiting.setBitPerfectOutput(bitPerfect)
                     waiting.setRepeat(RepeatMode.OFF)
                     waiting.load(next, play = false)
                     prepared = next

@@ -53,6 +53,10 @@ enum class QueueRecoveryMode(val label: StringResource) {
     BEFORE_REPLACE(Res.string.queue_recovery_before_replace), ON_CHANGE(Res.string.queue_recovery_on_change), TIMER(Res.string.queue_recovery_timer)
 }
 
+/** The playback values the engine gets: bit-perfect output plays files unchanged, while the settings keep the listener's choices. */
+fun MusicSettings.forEngine(): MusicSettings = if (!bitPerfectOutput) this else
+    copy(speed = 1.0, pitch = 1.0, audioEffects = AudioEffects(), crossfadeDurationMs = 0, replayGain = ReplayGain())
+
 @Serializable
 data class MusicSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -107,6 +111,8 @@ data class MusicSettings(
     val trayIcon: Boolean = false,
     /** Android: connecting headphones, a USB headset or Bluetooth audio resumes the paused song. */
     val resumeOnHeadphones: Boolean = false,
+    /** Android 14+: sends each file's samples unchanged to a USB DAC, so speed, pitch, effects, crossfade and ReplayGain stay off. */
+    val bitPerfectOutput: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,

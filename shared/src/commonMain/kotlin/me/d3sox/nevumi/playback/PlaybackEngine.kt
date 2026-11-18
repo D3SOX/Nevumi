@@ -57,5 +57,7 @@ interface PlaybackEngine : AutoCloseable {
     fun setCrossfadeDuration(milliseconds: Long) { require(milliseconds == 0L) { "This decoder does not support crossfade" } }
     fun setGaplessPlayback(enabled: Boolean) {}
     fun setReplayGain(replayGain: ReplayGain) {}
+    /** Sends decoded samples unprocessed to an output that can take them bit for bit, where the platform offers one. */
+    fun setBitPerfectOutput(enabled: Boolean) {}
     fun setRepeat(mode: RepeatMode, playCount: Int? = null)
 }

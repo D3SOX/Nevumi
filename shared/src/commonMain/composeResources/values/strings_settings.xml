@@ -111,6 +111,9 @@
     <string name="settings_keep_playing_description">Closing the window while music plays hides it. Reopen Nevumi from the tray icon or your media controls</string>
     <string name="settings_resume_on_headphones">Resume when headphones connect</string>
     <string name="settings_resume_on_headphones_description">Continue the paused song when you connect wired, USB or Bluetooth audio</string>
+    <string name="settings_bit_perfect">Bit-perfect USB output</string>
+    <string name="settings_bit_perfect_description">Send songs unchanged to a USB DAC. Turns off speed, pitch, effects, crossfade, ReplayGain and the visualizer.</string>
+    <string name="settings_bit_perfect_effects_off">Bit-perfect USB output is on, so audio effects are off. Turn it off in Playback settings to use them.</string>
     <string name="settings_tray_icon">Tray icon</string>
     <string name="settings_tray_icon_description">Closing the window keeps Nevumi in the system tray, where you can control playback, reopen it or quit</string>
 
@@ -252,6 +255,7 @@
     <string name="settings_keywords_previous_track_limit">queue history count</string>
     <string name="settings_keywords_confirm_queue_jumps">confirmation skip play now</string>
     <string name="settings_keywords_confirm_up_next_interruption">confirmation replace queue starting music album playlist</string>
+    <string name="settings_keywords_bit_perfect">bitperfect dac hi-res high resolution lossless exclusive audiophile 24-bit</string>
     <string name="settings_keywords_resume_on_headphones">headset bluetooth wired usb car connect autoplay continue</string>
     <string name="settings_keywords_keep_playing">background close window hide minimize quit tray</string>
     <string name="settings_keywords_tray_icon">system tray status notifier panel background quit</string>

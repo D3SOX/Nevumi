@@ -44,6 +44,8 @@ import me.d3sox.nevumi.resources.settings_confirm_up_next_interruption
 import me.d3sox.nevumi.resources.settings_exclude_folders
 import me.d3sox.nevumi.resources.settings_include_folders
 import me.d3sox.nevumi.resources.settings_keep_playing
+import me.d3sox.nevumi.resources.settings_bit_perfect
+import me.d3sox.nevumi.resources.settings_keywords_bit_perfect
 import me.d3sox.nevumi.resources.settings_resume_on_headphones
 import me.d3sox.nevumi.resources.settings_keywords_resume_on_headphones
 import me.d3sox.nevumi.resources.settings_tray_icon
@@ -183,6 +185,7 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_previous_track_limit to Res.string.settings_keywords_previous_track_limit,
                 Res.string.settings_confirm_queue_jumps to Res.string.settings_keywords_confirm_queue_jumps,
                 Res.string.settings_confirm_up_next_interruption to Res.string.settings_keywords_confirm_up_next_interruption)
+            if (bitPerfectSetting) add(SettingEntry(Res.string.settings_bit_perfect, "Playback", AppIcon.USB, Res.string.settings_keywords_bit_perfect))
             if (headphoneResumeSetting) add(SettingEntry(Res.string.settings_resume_on_headphones, "Playback", AppIcon.HEADPHONES,
                 Res.string.settings_keywords_resume_on_headphones))
             if (desktopWindowSettings) {

@@ -39,6 +39,7 @@ import org.jetbrains.compose.resources.getString
 import me.d3sox.nevumi.resources.notice_playback_moved_skipped_song
 import me.d3sox.nevumi.resources.notice_playback_moved_skipped_songs
 import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.settings.forEngine
 import me.d3sox.nevumi.sync.PairedDevices
 import me.d3sox.nevumi.sync.PlaybackReceiver
 import me.d3sox.nevumi.sync.PlaybackTransfer
@@ -250,13 +251,13 @@ class PlaybackController internal constructor(private val context: ControllerCon
 
     fun setVolume(volume: Double) = context.action(serialized = false) { engine.setVolume(volume) }
     fun setSpeed(speed: Double) = context.action {
-        engine.setSpeed(speed)
+        engine.setSpeed(context.state.value.preferences.copy(speed = speed).forEngine().speed)
         preferences?.update { it.copy(speed = speed) }?.let { settings ->
             context.update { it.copy(preferences = settings) }
         }
     }
     fun setPitch(pitch: Double) = context.action {
-        engine.setPitch(pitch)
+        engine.setPitch(context.state.value.preferences.copy(pitch = pitch).forEngine().pitch)
         preferences?.update { it.copy(pitch = pitch) }?.let { settings ->
             context.update { it.copy(preferences = settings) }
         }
@@ -383,7 +384,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
     }
 
     private suspend fun applyTransferredPlayback(playback: PlaybackTransfer) {
-        engine.setSpeed(playback.speed); engine.setPitch(playback.pitch)
+        context.state.value.preferences.copy(speed = playback.speed, pitch = playback.pitch).forEngine().let {
+            engine.setSpeed(it.speed); engine.setPitch(it.pitch)
+        }
         queue.restore(playback.queue)
         loadSnapshot(playback.queue, playback.playWhenReady)
         // A live station never reports a length, so loading it is enough.
@@ -409,12 +412,14 @@ class PlaybackController internal constructor(private val context: ControllerCon
     /** Applies the saved playback settings to the engine at startup. */
     internal suspend fun applyPreferences() {
         if (preferences != null) {
-            engine.setSpeed(context.state.value.preferences.speed)
-            engine.setPitch(context.state.value.preferences.pitch)
-            engine.setAudioEffects(context.state.value.preferences.audioEffects)
-            engine.setCrossfadeDuration(context.state.value.preferences.crossfadeDurationMs)
-            engine.setGaplessPlayback(context.state.value.preferences.gaplessPlayback)
-            engine.setReplayGain(context.state.value.preferences.replayGain)
+            val settings = context.state.value.preferences.forEngine()
+            engine.setBitPerfectOutput(settings.bitPerfectOutput)
+            engine.setSpeed(settings.speed)
+            engine.setPitch(settings.pitch)
+            engine.setAudioEffects(settings.audioEffects)
+            engine.setCrossfadeDuration(settings.crossfadeDurationMs)
+            engine.setGaplessPlayback(settings.gaplessPlayback)
+            engine.setReplayGain(settings.replayGain)
         }
     }
 

@@ -110,6 +110,7 @@ import androidx.compose.material.icons.rounded.CopyAll
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Save
@@ -192,6 +193,7 @@ internal enum class AppIcon(val vector: ImageVector) {
     ALBUM(Icons.Rounded.Album),
     EQUALIZER(Icons.Rounded.GraphicEq),
     HEADPHONES(Icons.Rounded.Headphones),
+    USB(Icons.Rounded.Usb),
     QR_SCAN(Icons.Rounded.QrCodeScanner),
     HOME(Icons.Rounded.Home),
     WAVEFORM(Icons.Rounded.Waves),

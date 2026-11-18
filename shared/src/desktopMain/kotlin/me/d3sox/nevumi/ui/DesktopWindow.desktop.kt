@@ -34,6 +34,7 @@ import java.net.URI
 
 internal actual val desktopWindowSettings = true
 internal actual val headphoneResumeSetting = false
+internal actual val bitPerfectSetting = false
 
 /**
  * Hides the window only when a registered tray or media session can restore it, and the user enabled

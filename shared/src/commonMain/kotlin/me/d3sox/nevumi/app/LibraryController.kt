@@ -31,6 +31,7 @@ import me.d3sox.nevumi.resources.notice_removed_from_favorites
 import me.d3sox.nevumi.settings.LibraryPosition
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.settings.MusicSettings
+import me.d3sox.nevumi.settings.forEngine
 import org.jetbrains.compose.resources.getString
 
 /** Keeps the library in the app state: local music scans, linked songs, favorites, ratings, covers and the preferences. */
@@ -139,10 +140,17 @@ class LibraryController internal constructor(private val context: ControllerCont
         if (settings.recordListeningHistory != previous.recordListeningHistory)
             listeningHistory?.record(engine.status.value, enabled = settings.recordListeningHistory)
         context.update { it.copy(preferences = settings) }
-        if (settings.audioEffects != previous.audioEffects) engine.setAudioEffects(settings.audioEffects)
-        if (settings.crossfadeDurationMs != previous.crossfadeDurationMs) engine.setCrossfadeDuration(settings.crossfadeDurationMs)
+        val playing = settings.forEngine()
+        val played = previous.forEngine()
+        // Neutral values reach the engine before bit-perfect output starts, and the listener's return after it stops.
+        if (settings.bitPerfectOutput && !previous.bitPerfectOutput) engine.setBitPerfectOutput(true)
+        if (playing.speed != played.speed) engine.setSpeed(playing.speed)
+        if (playing.pitch != played.pitch) engine.setPitch(playing.pitch)
+        if (playing.audioEffects != played.audioEffects) engine.setAudioEffects(playing.audioEffects)
+        if (playing.crossfadeDurationMs != played.crossfadeDurationMs) engine.setCrossfadeDuration(playing.crossfadeDurationMs)
         if (settings.gaplessPlayback != previous.gaplessPlayback) engine.setGaplessPlayback(settings.gaplessPlayback)
-        if (settings.replayGain != previous.replayGain) engine.setReplayGain(settings.replayGain)
+        if (playing.replayGain != played.replayGain) engine.setReplayGain(playing.replayGain)
+        if (!settings.bitPerfectOutput && previous.bitPerfectOutput) engine.setBitPerfectOutput(false)
         if (playback.queueLoaded && (settings.sourcePriority != previous.sourcePriority || settings.youTube != previous.youTube))
             engine.updateQueue(playback.playableQueue(queue.snapshot()))
         if (settings.undoRetentionDays != previous.undoRetentionDays || settings.undoBackupBytes != previous.undoBackupBytes) {

@@ -197,6 +197,9 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
     override fun setGaplessPlayback(enabled: Boolean) = command {
         sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.GAPLESS), Bundle().apply { putBoolean("enabled", enabled) })
     }
+    override fun setBitPerfectOutput(enabled: Boolean) = command {
+        sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.BIT_PERFECT), Bundle().apply { putBoolean("enabled", enabled) })
+    }
     override fun setReplayGain(replayGain: ReplayGain) {
         replayGain.validate()
         command { sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.REPLAY_GAIN), SessionPlaybackCommands.encodeReplayGain(replayGain)) }

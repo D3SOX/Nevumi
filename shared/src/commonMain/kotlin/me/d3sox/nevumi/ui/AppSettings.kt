@@ -94,6 +94,8 @@ import me.d3sox.nevumi.resources.settings_confirm_queue_jumps
 import me.d3sox.nevumi.resources.settings_keep_playing
 import me.d3sox.nevumi.resources.settings_keep_playing_description
 import me.d3sox.nevumi.resources.settings_tray_icon
+import me.d3sox.nevumi.resources.settings_bit_perfect
+import me.d3sox.nevumi.resources.settings_bit_perfect_description
 import me.d3sox.nevumi.resources.settings_resume_on_headphones
 import me.d3sox.nevumi.resources.settings_resume_on_headphones_description
 import me.d3sox.nevumi.resources.settings_tray_icon_description
@@ -359,6 +361,12 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
 }
             if (category == "Playback") {
             SettingsGroup {
+            if (bitPerfectSetting) {
+                SettingsToggle(stringResource(Res.string.settings_bit_perfect), AppIcon.USB, stringResource(Res.string.settings_bit_perfect_description),
+                    settings.bitPerfectOutput) { enabled -> controller.updatePreferences { it.copy(bitPerfectOutput = enabled) } }
+            }
+            // Bit-perfect output plays files unchanged, so the settings that change the sound wait until it is off.
+            if (!settings.bitPerfectOutput) {
             SettingsSlider(stringResource(Res.string.settings_playback_speed), AppIcon.SPEED, settings.speed.toFloat(), 0.5f..2f, 29,
                 { value -> "${(value * 100).roundToInt() / 100.0}×" }) { controller.setSpeed(it.toDouble()) }
             SettingsSlider(stringResource(Res.string.settings_playback_pitch), AppIcon.PITCH, (12 * log2(settings.pitch)).toFloat(), -12f..12f, 23,
@@ -367,19 +375,23 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                     else -> if (semitones > 0) pluralStringResource(Res.plurals.settings_semitones_up, semitones, semitones)
                         else pluralStringResource(Res.plurals.settings_semitones_down, -semitones, -semitones)
                 } }) { controller.setPitch(2.0.pow(it.roundToInt() / 12.0)) }
+            }
             SettingsLink(stringResource(Res.string.settings_waveforms), AppIcon.WAVEFORM, stringResource(Res.string.settings_waveforms_description)) { categoryState.value = "Waveforms" }
             SettingsToggle(stringResource(Res.string.settings_show_audio_info), AppIcon.INFO, stringResource(Res.string.settings_show_audio_info_description), settings.showAudioInfo) {
                 enabled -> controller.updatePreferences { it.copy(showAudioInfo = enabled) }
             }
             LyricsSettings(settings, controller)
             SettingsLink(stringResource(Res.string.audio_effects), AppIcon.EQUALIZER, stringResource(Res.string.settings_audio_effects_description), audioEffects)
+            if (!settings.bitPerfectOutput) {
             SettingsSlider(stringResource(Res.string.crossfade), AppIcon.CROSSFADE, settings.crossfadeDurationMs / 1_000f, 0f..12f, 11,
                 { value -> when (val seconds = value.roundToInt()) { 0 -> stringResource(Res.string.off); else -> pluralStringResource(Res.plurals.settings_seconds, seconds, seconds) } }) {
                 controller.updatePreferences { preferences -> preferences.copy(crossfadeDurationMs = it.roundToInt() * 1_000L) }
             }
+            }
             SettingsToggle(stringResource(Res.string.settings_gapless_playback), AppIcon.MUSIC, stringResource(Res.string.settings_gapless_playback_description), settings.gaplessPlayback) {
                 enabled -> controller.updatePreferences { it.copy(gaplessPlayback = enabled) }
             }
+            if (!settings.bitPerfectOutput) {
             SettingChoice(Res.string.settings_replay_gain, settings.replayGain.mode, listOf(ReplayGainMode.OFF to stringResource(Res.string.off),
                 ReplayGainMode.TRACK to stringResource(Res.string.settings_replay_gain_track),
                 ReplayGainMode.ALBUM to stringResource(Res.string.settings_replay_gain_album))) { mode ->
@@ -390,6 +402,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                     { value -> "${value.roundToInt()} dB" }) { value ->
                     controller.updatePreferences { it.copy(replayGain = it.replayGain.copy(preampDb = value.roundToInt().toDouble())) }
                 }
+            }
             }
             SettingsToggle(stringResource(Res.string.settings_smart_shuffle), AppIcon.SHUFFLE, stringResource(Res.string.settings_smart_shuffle_description), settings.smartShuffle) {
                 enabled -> controller.updatePreferences { it.copy(smartShuffle = enabled) }
