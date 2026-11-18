@@ -258,6 +258,7 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
         // A wrong split, such as "Tyler" and "The Creator", is fixed here by keeping those names together from now on.
         var joining by remember { mutableStateOf(false) }
         val joinable = remember(track.metadata, splitting) { splitting.joinedNames(track.metadata) }
+        LaunchedEffect(joinable.isEmpty()) { if (joinable.isEmpty()) joining = false }
         val close = { choosingArtist = false; joining = false }
         AlertDialog(onDismissRequest = close, title = {
             Text(if (joining) stringResource(Res.string.keep_as_one_artist) else TrackAction.GO_ARTIST.displayLabel())
