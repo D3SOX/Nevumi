@@ -2,7 +2,7 @@ module nevumi.app/tailscale
 
 go 1.27.4
 
-require tailscale.com v1.104.6
+require tailscale.com v1.104.7
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
