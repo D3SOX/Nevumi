@@ -147,6 +147,9 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             standby?.close()
             standby = null
             prepared = null
+            speed = 1.0
+            pitch = 1.0
+            engines().forEach { it.setSpeed(1.0); it.setPitch(1.0) }
         }
         engines().forEach { it.setBitPerfectOutput(enabled) }
         if (crossfadeMs > 0) applyCrossfade()
@@ -279,12 +282,13 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
 
     override fun setSpeed(speed: Double) {
         require(speed in 0.5..2.0) { "Playback speed must be between 0.5 and 2" }
-        command { this.speed = speed; engines().forEach { it.setSpeed(speed) } }
+        // A headset or watch reaches the engine without the app's settings, so bit-perfect output keeps the neutral speed here.
+        command { if (!bitPerfect) { this.speed = speed; engines().forEach { it.setSpeed(speed) } } }
     }
 
     override fun setPitch(pitch: Double) {
         require(pitch in 0.5..2.0) { "Playback pitch must be between 0.5 and 2" }
-        command { this.pitch = pitch; engines().forEach { it.setPitch(pitch) } }
+        command { if (!bitPerfect) { this.pitch = pitch; engines().forEach { it.setPitch(pitch) } } }
     }
 
     override suspend fun setAudioEffects(effects: AudioEffects) {

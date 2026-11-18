@@ -33,12 +33,34 @@ class CrossfadeBitPerfectTest {
             assertEquals(2, synchronized(decoders) { decoders.size })
         } finally { engine.close() }
     }
+
+    @Test fun speedAndPitchFromAMediaControllerStayNeutralWhileBitPerfectOutputPlays(): Unit = runBlocking {
+        val decoder = FakeDecoder()
+        val engine = CrossfadePlaybackEngine { decoder }
+        try {
+            engine.setSpeed(1.5)
+            engine.loadQueue(listOf(PlayableTrack("a", "a.flac")), play = true)
+            withTimeout(5_000) { decoder.speed.first { it == 1.5 } }
+            engine.setBitPerfectOutput(true)
+            withTimeout(5_000) { decoder.speed.first { it == 1.0 } }
+            // A headset or watch reaches the engine through the media session, without the app's settings.
+            engine.setSpeed(1.25)
+            engine.setPitch(0.75)
+            engine.setBitPerfectOutput(false)
+            withTimeout(5_000) { decoder.bitPerfect.first { !it } }
+            assertEquals(1.0 to 1.0, decoder.speed.value to decoder.pitch.value)
+            engine.setSpeed(1.25)
+            withTimeout(5_000) { decoder.speed.first { it == 1.25 } }
+        } finally { engine.close() }
+    }
 }
 
 /** Reports what it was asked to load and play without decoding audio. */
 private class FakeDecoder : PlaybackEngine {
     val loaded = MutableStateFlow<String?>(null)
     val bitPerfect = MutableStateFlow(false)
+    val speed = MutableStateFlow(1.0)
+    val pitch = MutableStateFlow(1.0)
     val closed = MutableStateFlow(false)
     private val mutableStatus = MutableStateFlow(PlaybackStatus())
     override val status = mutableStatus.asStateFlow()
@@ -54,8 +76,8 @@ private class FakeDecoder : PlaybackEngine {
     override fun pause() = mutableStatus.update { it.copy(playing = false, playWhenReady = false) }
     override fun seek(positionMs: Long) = mutableStatus.update { it.copy(positionMs = positionMs) }
     override fun setVolume(volume: Double) {}
-    override fun setSpeed(speed: Double) {}
-    override fun setPitch(pitch: Double) {}
+    override fun setSpeed(speed: Double) { this.speed.value = speed }
+    override fun setPitch(pitch: Double) { this.pitch.value = pitch }
     override suspend fun setAudioEffects(effects: AudioEffects) {}
     override fun setCrossfadeDuration(milliseconds: Long) {}
     override fun setBitPerfectOutput(enabled: Boolean) { bitPerfect.value = enabled }
