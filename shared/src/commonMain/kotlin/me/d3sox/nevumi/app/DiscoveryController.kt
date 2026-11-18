@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import me.d3sox.nevumi.library.SourceKind
 import me.d3sox.nevumi.library.Track
+import me.d3sox.nevumi.library.artistSplitting
 import me.d3sox.nevumi.navidrome.ServerDiscovery
 import me.d3sox.nevumi.navidrome.ServerSong
 import me.d3sox.nevumi.resources.Res
@@ -41,7 +42,7 @@ class DiscoveryController internal constructor(private val context: ControllerCo
         // Track artists first, then artists only credited as album artists, such as on compilations.
         val libraryArtists = tracks.map { it.metadata.albumArtist }.filter { it.isNotBlank() }
             .associate { it.lowercase() to LibraryArtist(it, me.d3sox.nevumi.library.LibraryTab.ALBUM_ARTISTS) } +
-            tracks.map { it.metadata.artist }.filter { it.isNotBlank() }
+            context.state.value.preferences.artistSplitting().let { splitting -> tracks.flatMap { splitting.names(it.metadata) } }
                 .associate { it.lowercase() to LibraryArtist(it, me.d3sox.nevumi.library.LibraryTab.ARTISTS) }
         val (inLibrary, elsewhere) = details.info?.similarArtists.orEmpty().map { it.name }
             .filterNot { it.equals(artistName, ignoreCase = true) }.distinctBy { it.lowercase() }
@@ -87,6 +88,8 @@ class DiscoveryController internal constructor(private val context: ControllerCo
         tracks.flatMap { track -> track.sources.mapNotNull { it.serverSongId(serverId) }.map { it to track } }.toMap()
 
     private fun serverSongIds(tracks: List<Track>, serverId: String, artistName: String) =
-        tracks.filter { it.metadata.artist.equals(artistName, ignoreCase = true) || it.metadata.albumArtist.equals(artistName, ignoreCase = true) }
-            .flatMap { track -> track.sources.mapNotNull { it.serverSongId(serverId) } }.take(1)
+        // The server falls back to the song's main artist, so a song only featuring the artist would describe someone else.
+        context.state.value.preferences.artistSplitting().let { splitting -> tracks.filter { track -> splitting.names(track.metadata).firstOrNull()?.equals(artistName, ignoreCase = true) == true ||
+            track.metadata.albumArtist.equals(artistName, ignoreCase = true) }
+            .flatMap { track -> track.sources.mapNotNull { it.serverSongId(serverId) } }.take(1) }
 }

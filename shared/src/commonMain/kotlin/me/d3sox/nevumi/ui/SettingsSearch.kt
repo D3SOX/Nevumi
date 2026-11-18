@@ -13,6 +13,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.resources.Res
+import me.d3sox.nevumi.resources.settings_split_artists
+import me.d3sox.nevumi.resources.settings_keywords_split_artists
+import me.d3sox.nevumi.resources.settings_minimum_song_length
+import me.d3sox.nevumi.resources.settings_keywords_minimum_song_length
 import me.d3sox.nevumi.resources.about_nevumi
 import me.d3sox.nevumi.resources.audio_effects
 import me.d3sox.nevumi.resources.backup_export
@@ -47,6 +51,14 @@ import me.d3sox.nevumi.resources.settings_keep_playing
 import me.d3sox.nevumi.resources.settings_bit_perfect
 import me.d3sox.nevumi.resources.settings_keywords_bit_perfect
 import me.d3sox.nevumi.resources.settings_resume_on_headphones
+import me.d3sox.nevumi.resources.settings_fade_play_pause
+import me.d3sox.nevumi.resources.settings_keywords_fade_play_pause
+import me.d3sox.nevumi.resources.settings_skip_silence
+import me.d3sox.nevumi.resources.settings_keywords_skip_silence
+import me.d3sox.nevumi.resources.settings_resume_long_songs
+import me.d3sox.nevumi.resources.settings_keywords_resume_long_songs
+import me.d3sox.nevumi.resources.settings_pause_at_zero_volume
+import me.d3sox.nevumi.resources.settings_keywords_pause_at_zero_volume
 import me.d3sox.nevumi.resources.settings_keywords_resume_on_headphones
 import me.d3sox.nevumi.resources.settings_tray_icon
 import me.d3sox.nevumi.resources.settings_keywords_about_nevumi
@@ -171,13 +183,18 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
             add(SettingEntry(Res.string.settings_clear_ratings, "Library & gestures", AppIcon.RATING, Res.string.settings_keywords_clear_ratings))
             add(SettingEntry(Res.string.settings_remember_scroll_positions, "Library & gestures", AppIcon.LIBRARY,
                 Res.string.settings_keywords_remember_scroll_positions))
+            add(SettingEntry(Res.string.settings_split_artists, "Library & gestures", AppIcon.ALBUM_ARTIST, Res.string.settings_keywords_split_artists))
             category("Local music", AppIcon.FOLDER, Res.string.settings_scan_music to Res.string.settings_keywords_scan_music,
                 Res.string.settings_include_folders to Res.string.settings_keywords_include_folders,
-                Res.string.settings_exclude_folders to Res.string.settings_keywords_exclude_folders)
+                Res.string.settings_exclude_folders to Res.string.settings_keywords_exclude_folders,
+                Res.string.settings_minimum_song_length to Res.string.settings_keywords_minimum_song_length)
             category("Playback", AppIcon.PLAY, Res.string.settings_playback_speed to Res.string.settings_keywords_playback_speed,
                 Res.string.settings_playback_pitch to Res.string.settings_keywords_playback_pitch,
                 Res.string.crossfade to Res.string.settings_keywords_crossfade,
                 Res.string.settings_replay_gain to Res.string.settings_keywords_replay_gain,
+                Res.string.settings_fade_play_pause to Res.string.settings_keywords_fade_play_pause,
+                Res.string.settings_skip_silence to Res.string.settings_keywords_skip_silence,
+                Res.string.settings_resume_long_songs to Res.string.settings_keywords_resume_long_songs,
                 Res.string.settings_show_audio_info to Res.string.settings_keywords_show_audio_info,
                 Res.string.lyrics_setting_online to Res.string.lyrics_keywords_online,
                 Res.string.settings_smart_shuffle to Res.string.settings_keywords_smart_shuffle,
@@ -186,8 +203,10 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_confirm_queue_jumps to Res.string.settings_keywords_confirm_queue_jumps,
                 Res.string.settings_confirm_up_next_interruption to Res.string.settings_keywords_confirm_up_next_interruption)
             if (controller.engine.supportsBitPerfectOutput) add(SettingEntry(Res.string.settings_bit_perfect, "Playback", AppIcon.USB, Res.string.settings_keywords_bit_perfect))
-            if (headphoneResumeSetting) add(SettingEntry(Res.string.settings_resume_on_headphones, "Playback", AppIcon.HEADPHONES,
-                Res.string.settings_keywords_resume_on_headphones))
+            if (deviceAudioSettings) {
+                add(SettingEntry(Res.string.settings_resume_on_headphones, "Playback", AppIcon.HEADPHONES, Res.string.settings_keywords_resume_on_headphones))
+                add(SettingEntry(Res.string.settings_pause_at_zero_volume, "Playback", AppIcon.MUTE, Res.string.settings_keywords_pause_at_zero_volume))
+            }
             if (desktopWindowSettings) {
                 add(SettingEntry(Res.string.settings_keep_playing, "Playback", AppIcon.HEADPHONES, Res.string.settings_keywords_keep_playing))
                 add(SettingEntry(Res.string.settings_tray_icon, "Playback", AppIcon.DESKTOP, Res.string.settings_keywords_tray_icon))

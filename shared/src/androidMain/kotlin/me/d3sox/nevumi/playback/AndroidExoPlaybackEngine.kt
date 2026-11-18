@@ -124,6 +124,7 @@ class AndroidExoPlaybackEngine(context: Context, private val outputMonitor: Audi
         val repeat = previous.repeatMode
         val volume = previous.volume
         val parameters = previous.playbackParameters
+        val skipSilence = previous.skipSilenceEnabled
         val playWhenReady = previous.playWhenReady
         // The level meter belongs to one audio sink at a time, so the old player goes first.
         previous.removeListener(listener)
@@ -136,6 +137,7 @@ class AndroidExoPlaybackEngine(context: Context, private val outputMonitor: Audi
         replacement.repeatMode = repeat
         replacement.volume = volume
         replacement.playbackParameters = parameters
+        replacement.skipSilenceEnabled = skipSilence
         if (items.isNotEmpty()) {
             replacement.setMediaItems(items, index, position)
             replacement.prepare()
@@ -263,6 +265,8 @@ class AndroidExoPlaybackEngine(context: Context, private val outputMonitor: Audi
         replayGain.validate()
         this.replayGain.set(replayGain)
     }
+    // ExoPlayer keeps reporting positions in the file, which the waveforms, seeking and crossfades rely on.
+    override fun setSkipSilence(enabled: Boolean) = command { skipSilenceEnabled = enabled }
     override fun setRepeat(mode: RepeatMode, playCount: Int?) {
         require(playCount == null || mode == RepeatMode.ONE && playCount > 0)
         command {

@@ -358,7 +358,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
                 requireNotNull(track) { "Track is missing" }
                 completed += applyFresh(prepare(id) { tag ->
                     changes.title?.let { tag.setField(FieldKey.TITLE, it) }
-                    changes.artist?.let { tag.setFieldOrDelete(FieldKey.ARTIST, it) }
+                    changes.artist?.let { tag.replaceArtist(it) }
                     changes.album?.let { tag.setFieldOrDelete(FieldKey.ALBUM, it) }
                     changes.albumArtist?.let { tag.setFieldOrDelete(FieldKey.ALBUM_ARTIST, it) }
                     changes.genres?.let { genres ->
@@ -402,7 +402,7 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
 
     suspend fun prepareTags(trackId: String, metadata: TrackMetadata): LocalFileEdit = prepare(trackId) { tag ->
         tag.setField(FieldKey.TITLE, metadata.title)
-        tag.setFieldOrDelete(FieldKey.ARTIST, metadata.artist)
+        tag.replaceArtist(metadata.artist)
         tag.setFieldOrDelete(FieldKey.ALBUM, metadata.album)
         tag.setFieldOrDelete(FieldKey.ALBUM_ARTIST, metadata.albumArtist)
         tag.deleteField(FieldKey.GENRE)
@@ -414,6 +414,17 @@ class LocalFileEdits(private val store: MusicStore, private val library: MusicLi
     }
 
     // ID3v2.3 cannot build an empty year frame, so an empty value removes the field instead.
+    /**
+     * The editor shows a song's first artist. Leaving it unchanged keeps every artist value, and changing it replaces all of
+     * them, since setting a field only replaces its first value. A separate ARTISTS list would then name the old artists.
+     */
+    private fun Tag.replaceArtist(artist: String) {
+        if (getFirst(FieldKey.ARTIST).trimEnd('\u0000') == artist) return
+        try { deleteField(FieldKey.ARTISTS) } catch (_: UnsupportedOperationException) {} catch (_: org.jaudiotagger.tag.KeyNotFoundException) {}
+        deleteField(FieldKey.ARTIST)
+        if (artist.isNotEmpty()) setField(FieldKey.ARTIST, artist)
+    }
+
     private fun Tag.setFieldOrDelete(key: FieldKey, value: String) = if (value.isEmpty()) deleteField(key) else setField(key, value)
 
     private suspend fun prepare(trackId: String, change: (Tag) -> Unit): LocalFileEdit = edits.withLock {

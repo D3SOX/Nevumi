@@ -1,6 +1,18 @@
 package me.d3sox.nevumi.library
 
-data class LocalFolderRules(val included: List<String> = emptyList(), val excluded: List<String> = emptyList()) {
+import me.d3sox.nevumi.settings.MusicSettings
+
+/** The rules that decide which local songs the library lists. */
+fun MusicSettings.localFolderRules() = LocalFolderRules(includeFolders, excludeFolders, minimumSongSeconds * 1_000L)
+
+data class LocalFolderRules(val included: List<String> = emptyList(), val excluded: List<String> = emptyList(),
+    /** Local songs shorter than this stay out of the library; songs of unknown length stay in. */
+    val minimumDurationMs: Long = 0) {
+    /** Whether the library lists the local [track]: its folder is allowed and it is long enough. */
+    fun allows(track: Track): Boolean = allows(track.metadata.folder,
+        track.sources.firstOrNull { it.kind == SourceKind.LOCAL }?.filePath?.substringBeforeLast('/')) &&
+        (track.sources.none { it.kind == SourceKind.LOCAL } || track.metadata.durationMs <= 0 || track.metadata.durationMs >= minimumDurationMs)
+
     fun allows(folder: String, alternative: String? = null): Boolean {
         val folders = listOfNotNull(folder, alternative)
         fun contains(rule: String): Boolean = folders.any { covers(rule, it) }
@@ -11,9 +23,9 @@ data class LocalFolderRules(val included: List<String> = emptyList(), val exclud
     fun excludedParent(folder: String): String? = excluded.firstOrNull { covers(it, folder) && !covers(folder, it) }
 
     /** These rules changed so [folder] joins the library, unless an [excludedParent] still hides it. */
-    fun allowing(folder: String) = LocalFolderRules(
-        if (included.isEmpty() || included.any { covers(it, folder) }) included else included + folder,
-        excluded.filterNot { covers(folder, it) })
+    fun allowing(folder: String) = copy(
+        included = if (included.isEmpty() || included.any { covers(it, folder) }) included else included + folder,
+        excluded = excluded.filterNot { covers(folder, it) })
 
     /** Whether [rule] names [folder] or a folder that contains it. */
     private fun covers(rule: String, folder: String): Boolean =

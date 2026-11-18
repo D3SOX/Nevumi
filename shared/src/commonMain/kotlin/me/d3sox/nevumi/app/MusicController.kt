@@ -153,6 +153,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     val serverQueueController = ServerQueueController(context, playbackController, queue, engine, navidrome)
     val releasesController = ReleasesController(context, libraryController, releases, discovery, releaseNotifier, scrobbling)
     val serverMediaController = ServerMediaController(context, library, queueController, playbackController, artwork, navidrome)
+    private val longSongResume = LongSongResume(context, library, playbackController)
     private val shutdown = Mutex()
     private var shutdownFinished = false
     val state = context.state
@@ -422,6 +423,7 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
                 scrobbling?.enqueueEligible()
                 if (playback.entryId != null && playback.entryId == queue.snapshot().currentEntryId)
                     queue.setPosition(playback.positionMs)
+                try { longSongResume.saveOnClose(playback) } catch (_: Exception) { }
             } finally {
                 engine.close()
                 shutdownFinished = true

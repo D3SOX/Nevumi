@@ -8,7 +8,9 @@ data class TagChanges(val title: String? = null, val artist: String? = null, val
     internal fun applyTo(metadata: TrackMetadata) = metadata.copy(title = title ?: metadata.title, artist = artist ?: metadata.artist,
         album = album ?: metadata.album, albumArtist = albumArtist ?: metadata.albumArtist, genres = genres ?: metadata.genres,
         trackNumber = trackNumber ?: metadata.trackNumber, discNumber = discNumber ?: metadata.discNumber,
-        year = year ?: metadata.year)
+        year = year ?: metadata.year,
+        // Separately listed artists would contradict a rewritten artist tag; the next scan reads them again.
+        artists = if (artist == null || artist == metadata.artist) metadata.artists else emptyList())
 }
 
 @Serializable

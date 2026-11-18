@@ -201,6 +201,16 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
     override fun setBitPerfectOutput(enabled: Boolean) = command {
         sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.BIT_PERFECT), Bundle().apply { putBoolean("enabled", enabled) })
     }
+    override fun setPlayPauseFade(enabled: Boolean) = command {
+        sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.PLAY_PAUSE_FADE), Bundle().apply { putBoolean("enabled", enabled) })
+    }
+    override fun setSkipSilence(enabled: Boolean) = command {
+        sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.SKIP_SILENCE), Bundle().apply { putBoolean("enabled", enabled) })
+    }
+    override fun resume(entryId: String, positionMs: Long) = command {
+        sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.RESUME),
+            Bundle().apply { putString("entryId", entryId); putLong("positionMs", positionMs.coerceAtLeast(0)) })
+    }
     override fun setReplayGain(replayGain: ReplayGain) {
         replayGain.validate()
         command { sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.REPLAY_GAIN), SessionPlaybackCommands.encodeReplayGain(replayGain)) }

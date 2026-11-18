@@ -105,6 +105,7 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
     private var repeatPlays: Int? = null
     private var repeatedEntryId: String? = null
     private var audioEffects = AudioEffects()
+    private var skipSilence = false
 
     init {
         try {
@@ -352,9 +353,21 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         checked(native.mpv_set_property_string(handle, "replaygain", replayGain.mode.name.lowercase().replace("off", "no")))
         checked(native.mpv_set_property_string(handle, "replaygain-preamp", replayGain.preampDb.toString()))
     }
+    override fun setSkipSilence(enabled: Boolean) = synchronized(lock) {
+        check(!closed)
+        if (skipSilence != enabled) {
+            skipSilence = enabled
+            // libmpv rejects the whole chain when FFmpeg's silenceremove lacks an option; keep the effects that worked.
+            try { applyAudioFilters() } catch (failure: Exception) { skipSilence = !enabled; applyAudioFilters(); throw failure }
+        }
+    }
     private fun applyAudioFilters() {
         val effects = audioEffects
         val filters = buildList {
+            // Silence at the start is removed, and any longer than 0.3 seconds later on shrinks to 0.1 seconds. Copied timestamps keep
+            // positions in the file, so they jump over the removed audio instead of falling behind the waveform and seeking.
+            if (skipSilence) add("silenceremove=start_periods=1:start_threshold=-50dB:stop_periods=-1:stop_duration=0.3:" +
+                "stop_threshold=-50dB:stop_silence=0.1:timestamp=copy")
             if (effects.mono) add("pan=stereo|c0<c0+c1+c2+c3+c4+c5+c6+c7|c1<c0+c1+c2+c3+c4+c5+c6+c7")
             if (effects.enabled) {
                 effects.bands.filter { it.gainDb != 0.0 }.forEach { band ->

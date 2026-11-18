@@ -43,6 +43,16 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var effects = AudioEffects()
     private var replayGain = ReplayGain()
     private var bitPerfect = false
+    private var playPauseFade = false
+    private var skipSilence = false
+    /** The play/pause fade's share of the volume: 0 while paused with the fade on, otherwise 1 once a fade-in finishes. */
+    private var transportGain = 1.0
+    /** A pause with the fade on waits until the fade-out ends before it pauses the decoders. */
+    private var pausePending = false
+    /** The song a pending pause fades out; a gapless queue that moves on meanwhile pauses at once instead. */
+    private var pausingEntry: String? = null
+    /** Whether the worker last told the decoders to play; callers change [requestedPlaying] before their command runs. */
+    private var decodersPlaying = false
     private var repeatMode = RepeatMode.OFF
     private var repeatPlays: Int? = null
     private var fadeElapsedMs = 0.0
@@ -52,7 +62,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     // Starts before the recent-command window; Long.MIN_VALUE would overflow the subtraction and keep the fast cadence.
     private var commandedAtMs = -COMMAND_CADENCE_MS
     /** Fades and loads need the fast cadence; a paused or idle player only has to notice commands, which wake it at once. */
-    private fun tickDelayMs(): Long = if (requestedPlaying.value || outgoing != null || pendingLoad != null || active.status.value.playing ||
+    private fun tickDelayMs(): Long = if (requestedPlaying.value || pausePending || outgoing != null || pendingLoad != null || active.status.value.playing ||
         clock.elapsedNow().inWholeMilliseconds - commandedAtMs < COMMAND_CADENCE_MS) 25 else 250
     private val worker = scope.launch {
         try {
@@ -134,6 +144,22 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         engines().forEach { it.setBitPerfectOutput(enabled) }
     }
 
+    override fun setPlayPauseFade(enabled: Boolean) = command {
+        if (playPauseFade == enabled) return@command
+        if (pausePending) pauseDecoders()
+        playPauseFade = enabled
+        // Paused with the fade on, the next play starts silent; with it off, nothing lowers the volume.
+        transportGain = if (enabled && !decodersPlaying) 0.0 else 1.0
+        applyGains()
+    }
+
+    override fun setSkipSilence(enabled: Boolean) = command {
+        // A decoder that rejects it keeps the previous state, so the standby player is never prepared with a failing setting.
+        active.setSkipSilence(enabled)
+        skipSilence = enabled
+        engines().filter { it !== active }.forEach { it.setSkipSilence(enabled) }
+    }
+
     override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
 
     override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
@@ -144,6 +170,12 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         // Report the requested song immediately so observers never see the previous song selected again.
         mutableStatus.update { pendingStatus(it, pending).copy(playWhenReady = play) }
         command {
+            // Another song replaces one that is fading out; one loaded paused starts silent, ready to fade in.
+            pausePending = false
+            // A song that starts while nothing is heard, such as after the queue ended, fades in like a resume.
+            val audible = active.status.value.playing || outgoing?.status?.value?.playing == true
+            if (playPauseFade && (!play || !audible)) transportGain = 0.0
+            decodersPlaying = play
             cancelFade()
             this.tracks = tracks.toList()
             selectedEntry = tracks[startIndex].entryId
@@ -183,21 +215,52 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     override fun play() {
         requestedPlaying.value = true
         mutableStatus.update { it.copy(playWhenReady = true) }
-        command { active.play(); outgoing?.play() }
+        // A play during the fade-out turns it around; the tick fades in from the current volume once audio runs.
+        command { pausePending = false; decodersPlaying = true; active.play(); outgoing?.play() }
     }
 
-    override fun pause() {
+    override fun pause() = pause(fade = true)
+
+    /** Pauses; without [fade], at once even with the play/pause fade on, as when headphones are unplugged. */
+    fun pause(fade: Boolean) {
         requestedPlaying.value = false
         mutableAudioLevel.value = 0f
         mutableStatus.update { it.copy(playing = false, playWhenReady = false,
             fadingOut = it.fadingOut?.copy(playing = false, playWhenReady = false)) }
-        command { active.pause(); outgoing?.pause() }
+        command {
+            val audible = active.status.value.playing || outgoing?.status?.value?.playing == true
+            // A song that would end during the fade pauses at once, so a gapless queue never starts the next one meanwhile.
+            val current = active.status.value
+            val endsDuringFade = current.durationMs > 0 && (current.durationMs - current.positionMs) / speed < PLAY_PAUSE_FADE_MS + 100
+            if (fade && playPauseFade && audible && transportGain > 0 && !endsDuringFade) {
+                pausePending = true
+                pausingEntry = active.status.value.entryId
+            } else pauseDecoders()
+        }
+    }
+
+    private fun pauseDecoders() {
+        pausePending = false
+        decodersPlaying = false
+        active.pause()
+        outgoing?.pause()
+        if (playPauseFade) { transportGain = 0.0; applyGains() }
     }
 
     override fun seek(positionMs: Long) = command {
+        // Seeking while a pause fades out finishes the pause first, so the new position is not heard faintly.
+        if (pausePending) pauseDecoders()
         cancelFade()
         standby?.pause()
         prepared = null
+        active.seek(positionMs)
+    }
+
+    override fun resume(entryId: String, positionMs: Long) = command {
+        if ((loadingEntry ?: active.status.value.entryId) != entryId) return@command
+        if (pausePending) pauseDecoders()
+        // During a crossfade the song fading in is the active one, so it moves on while the previous song still fades out.
+        if (outgoing == null) { standby?.pause(); prepared = null }
         active.seek(positionMs)
     }
 
@@ -275,6 +338,19 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         val now = clock.elapsedNow().inWholeMilliseconds
         val elapsed = (now - lastTickMs).coerceAtLeast(0)
         lastTickMs = now
+        if (playPauseFade) {
+            // A late tick must not skip most of the fade.
+            val step = elapsed.coerceAtMost(50).toDouble() / PLAY_PAUSE_FADE_MS
+            if (pausePending) {
+                transportGain = (transportGain - step).coerceAtLeast(0.0)
+                if (transportGain == 0.0 || active.status.value.entryId != pausingEntry) pauseDecoders() else applyGains()
+            } else if (requestedPlaying.value && transportGain < 1.0 &&
+                (active.status.value.playing || outgoing?.status?.value?.playing == true)) {
+                // Only while audio runs: a stream that is still opening would otherwise start at full volume.
+                transportGain = (transportGain + step).coerceAtMost(1.0)
+                applyGains()
+            }
+        }
         val current = active.status.value
         if (current.entryId == loadingEntry) loadingEntry = null
         if (repeatPlays != null && current.repeatPlays == null && current.repeatMode == RepeatMode.OFF && current.durationMs > 0) {
@@ -285,7 +361,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             if (outgoing != null) {
                 if (requestedPlaying.value && current.playing) fadeElapsedMs += elapsed
                 applyGains()
-                if (fadeElapsedMs >= fadeDurationMs || outgoing?.status?.value?.ended == true) cancelFade()
+                // During a pause's fade-out, ending the crossfade would raise the incoming song to the full volume; it ends after the pause.
+                if (!pausePending && (fadeElapsedMs >= fadeDurationMs || outgoing?.status?.value?.ended == true)) cancelFade()
             } else if (loadingEntry == null) {
                 // The old song's ended state would otherwise advance past the requested song.
                 val next = nextTrack()
@@ -298,6 +375,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                     waiting.setAudioEffects(effects)
                     waiting.setReplayGain(replayGain)
                     waiting.setBitPerfectOutput(bitPerfect)
+                    waiting.setSkipSilence(skipSilence)
                     waiting.setRepeat(RepeatMode.OFF)
                     waiting.load(next, play = false)
                     prepared = next
@@ -348,11 +426,12 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         playing = false, ended = false, error = null, playbackId = null, fadingOut = null, audioInfo = null, streamTitle = null)
 
     private fun applyGains() {
-        if (outgoing == null) active.setVolume(masterVolume)
+        val volume = masterVolume * transportGain
+        if (outgoing == null) active.setVolume(volume)
         else {
             val progress = (fadeElapsedMs / fadeDurationMs.coerceAtLeast(1.0)).coerceIn(0.0, 1.0)
-            active.setVolume(masterVolume * sin(progress * PI / 2))
-            outgoing?.setVolume(masterVolume * cos(progress * PI / 2))
+            active.setVolume(volume * sin(progress * PI / 2))
+            outgoing?.setVolume(volume * cos(progress * PI / 2))
         }
     }
 
@@ -361,7 +440,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         outgoing = null
         prepared = null
         fadeElapsedMs = 0.0
-        active.setVolume(masterVolume)
+        active.setVolume(masterVolume * transportGain)
     }
 
     override fun close() {

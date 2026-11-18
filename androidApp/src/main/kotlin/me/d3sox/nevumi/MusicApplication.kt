@@ -134,6 +134,7 @@ class MusicApplication : Application() {
             releaseNotifier = AndroidReleaseNotifier(this))
         widgetUpdates = NowPlayingWidgetUpdates(this, controller).apply { resume() }
         HeadphoneResume(this, controller).start()
+        ZeroVolumePause(this, controller).start()
         ReleaseJobService.scheduleWhileNeeded(this, controller)
     }
 

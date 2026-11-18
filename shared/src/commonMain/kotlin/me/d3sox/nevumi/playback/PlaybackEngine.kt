@@ -37,6 +37,9 @@ data class PlaybackStatus(
 data class PlayableTrack(val id: String, val location: String, val title: String = "", val artist: String = "",
     val entryId: String = id, val sourceId: String? = null, val live: Boolean = false)
 
+/** How long pausing fades out and playing fades in when [PlaybackEngine.setPlayPauseFade] is on. */
+const val PLAY_PAUSE_FADE_MS = 250L
+
 private val silentAudioLevel = MutableStateFlow(0f).asStateFlow()
 
 interface PlaybackEngine : AutoCloseable {
@@ -61,5 +64,10 @@ interface PlaybackEngine : AutoCloseable {
     val supportsBitPerfectOutput: Boolean get() = false
     /** Sends decoded samples unprocessed to an output that can take them bit for bit. */
     fun setBitPerfectOutput(enabled: Boolean) {}
+    fun setPlayPauseFade(enabled: Boolean) {}
+    /** Shortens silent stretches; positions stay those of the file, so they jump over what was skipped. */
+    fun setSkipSilence(enabled: Boolean) {}
+    /** Continues [entryId], the current song, at [positionMs] where it was left; unlike [seek], a crossfade into it keeps going. */
+    fun resume(entryId: String, positionMs: Long) { if (status.value.entryId == entryId) seek(positionMs) }
     fun setRepeat(mode: RepeatMode, playCount: Int? = null)
 }

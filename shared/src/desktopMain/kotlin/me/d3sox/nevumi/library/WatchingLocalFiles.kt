@@ -131,7 +131,8 @@ class WatchingLocalFiles(private val library: MusicLibrary, artwork: ArtworkLibr
                     }
                     if (event.kind() == ENTRY_CREATE && folder) registerTree(path)
                     val music = name.toString().substringAfterLast('.', "").lowercase() in localMusicExtensions
-                    if (music || folder || removedFolder) pending.add(directory)
+                    // A new or changed cover image changes the artwork of the folder's songs without embedded artwork.
+                    if (music || isFolderCoverName(name.toString()) || folder || removedFolder) pending.add(directory)
                 }
                 // A deleted folder takes its subfolders' watches with it.
                 if (!key.reset()) directories.entries.removeAll { (path, watch) ->

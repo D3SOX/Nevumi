@@ -28,11 +28,12 @@ class BitPerfectOutputTest {
         val preferences = MusicPreferences(store)
         val effects = AudioEffects(enabled = true, preampDb = -3.0)
         val gain = ReplayGain(ReplayGainMode.TRACK, 2.0)
-        preferences.update { it.copy(speed = 1.5, pitch = 0.75, audioEffects = effects, crossfadeDurationMs = 4_000, replayGain = gain) }
+        preferences.update { it.copy(speed = 1.5, pitch = 0.75, audioEffects = effects, crossfadeDurationMs = 4_000, replayGain = gain,
+            fadePlayPause = true, skipSilence = true) }
         val engine = RecordingEngine(supportsBitPerfectOutput = true)
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), engine, preferences = preferences)
         try {
-            withTimeout(5_000) { engine.applied.first { it.speed == 1.5 && it.replayGain == gain } }
+            withTimeout(5_000) { engine.applied.first { it.speed == 1.5 && it.replayGain == gain && it.skipSilence } }
             controller.updatePreferences { it.copy(bitPerfectOutput = true) }.join()
             assertEquals(Applied(bitPerfect = true), engine.applied.value)
             controller.setSpeed(2.0).join()
@@ -41,7 +42,7 @@ class BitPerfectOutputTest {
             assertEquals(0, engine.applied.value.crossfadeMs)
 
             controller.updatePreferences { it.copy(bitPerfectOutput = false) }.join()
-            assertEquals(Applied(false, 2.0, 0.75, effects, 6_000, gain), engine.applied.value)
+            assertEquals(Applied(false, 2.0, 0.75, effects, 6_000, gain, fade = true, skipSilence = true), engine.applied.value)
         } finally {
             controller.closeAndJoin()
             store.close()
@@ -72,7 +73,8 @@ class BitPerfectOutputTest {
 }
 
 private data class Applied(val bitPerfect: Boolean = false, val speed: Double = 1.0, val pitch: Double = 1.0,
-    val effects: AudioEffects = AudioEffects(), val crossfadeMs: Long = 0, val replayGain: ReplayGain = ReplayGain())
+    val effects: AudioEffects = AudioEffects(), val crossfadeMs: Long = 0, val replayGain: ReplayGain = ReplayGain(),
+    val fade: Boolean = false, val skipSilence: Boolean = false)
 
 /** Records the playback values the controller applies. */
 private class RecordingEngine(override val supportsBitPerfectOutput: Boolean) : PlaybackEngine {
@@ -92,6 +94,8 @@ private class RecordingEngine(override val supportsBitPerfectOutput: Boolean) : 
     override fun setCrossfadeDuration(milliseconds: Long) = applied.update { it.copy(crossfadeMs = milliseconds) }
     override fun setReplayGain(replayGain: ReplayGain) = applied.update { it.copy(replayGain = replayGain) }
     override fun setBitPerfectOutput(enabled: Boolean) = applied.update { it.copy(bitPerfect = enabled) }
+    override fun setPlayPauseFade(enabled: Boolean) = applied.update { it.copy(fade = enabled) }
+    override fun setSkipSilence(enabled: Boolean) = applied.update { it.copy(skipSilence = enabled) }
     override fun setRepeat(mode: RepeatMode, playCount: Int?) {}
     override fun close() {}
 }

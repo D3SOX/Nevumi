@@ -2,6 +2,9 @@ package me.d3sox.nevumi.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.VolumeDown
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Remove
@@ -280,7 +283,10 @@ internal enum class AppIcon(val vector: ImageVector) {
     RADIO(Icons.Rounded.Radio),
     PODCAST(Icons.Rounded.Podcasts),
     LIVE(Icons.Rounded.Sensors),
-    SHARE(Icons.Rounded.Share);
+    SHARE(Icons.Rounded.Share),
+    FADE(Icons.Rounded.VolumeDown),
+    SKIP_SILENCE(Icons.Rounded.FastForward),
+    BOOKMARK(Icons.Rounded.Bookmark);
 }
 
 internal fun me.d3sox.nevumi.queue.QueueAction.icon() = when (this) {
