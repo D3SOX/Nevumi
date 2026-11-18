@@ -249,6 +249,8 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             onFileActions = { controller.prepareServerFileEdit(track) })
     }
     if (sources) SongSources(track, controller) { sources = false }
+    // A refresh can remove every credit while the chooser is open; it then stays closed.
+    LaunchedEffect(artists.isEmpty()) { if (artists.isEmpty()) choosingArtist = false }
     if (choosingArtist && artists.isNotEmpty()) {
         AlertDialog(onDismissRequest = { choosingArtist = false }, title = { Text(TrackAction.GO_ARTIST.displayLabel()) }, text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {

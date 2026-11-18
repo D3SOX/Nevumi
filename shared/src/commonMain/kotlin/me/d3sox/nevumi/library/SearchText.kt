@@ -6,8 +6,8 @@ internal expect fun withoutMarks(text: String): String
 private val punctuation = Regex("""[^\p{L}\p{N}]+""")
 private val whitespace = Regex("""\s+""")
 
-// Upper- then lowercasing folds case more fully than lowercasing alone, so "STRASSE" finds "Straße".
-private fun words(text: String) = withoutMarks(text).uppercase().lowercase().split(whitespace)
+// Upper- then lowercasing folds case more fully than lowercasing alone, so "STRASSE" finds "Straße"; the capital ẞ stays ß.
+private fun words(text: String) = withoutMarks(text).uppercase().lowercase().replace("ß", "ss").split(whitespace)
     .map { punctuation.replace(it, "") }.filter { it.isNotEmpty() }
 
 /**

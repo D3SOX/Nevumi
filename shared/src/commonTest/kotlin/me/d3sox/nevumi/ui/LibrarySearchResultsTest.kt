@@ -48,6 +48,7 @@ class LibrarySearchResultsTest {
         assertEquals(listOf("dont"), index.search("don't stop").songs.map { it.id })
         assertEquals(emptyList(), index.search("heart").songs.map { it.id })
         assertEquals(listOf("strasse"), index.search("STRASSE").songs.map { it.id })
+        assertEquals(listOf("strasse"), index.search("STRAẞE").songs.map { it.id })
         assertEquals(emptyList(), index.search("bluemoon").songs.map { it.id })
         assertEquals(listOf("bang"), index.search("!!!").songs.map { it.id })
         assertEquals(0, index.search("beatles halo").count)
