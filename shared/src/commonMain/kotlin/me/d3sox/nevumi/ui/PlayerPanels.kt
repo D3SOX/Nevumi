@@ -473,9 +473,9 @@ internal fun PlayerPanels(state: AppState, controller: MusicController, sheet: A
                                 PlayerCover(state, controller, current, Modifier.weight(1f).fillMaxWidth().padding(top = 24.dp)
                                     .onSizeChanged { if (it.height < minimumCoverPx) coverless = true }, motion)
                                 // Lyrics in the cover's place keep about a third of the height, and at least the cover's minimum, so their
-                                // footer and a whole line fit. The controls scroll instead.
-                                controls(Modifier.fillMaxWidth().then(if (PlayerLyrics.shown(controller))
-                                    Modifier.heightIn(max = minOf(contentHeight * .65f + 48.dp, contentHeight + 24.dp - minimumCover).coerceAtLeast(0.dp)) else Modifier))
+                                // footer and a whole line fit. The controls scroll instead, but always keep half the height to stay reachable.
+                                controls(Modifier.fillMaxWidth().then(if (PlayerLyrics.shown(controller)) Modifier.heightIn(max = minOf(contentHeight * .65f + 48.dp,
+                                    contentHeight + 24.dp - minimumCover).coerceAtLeast((contentHeight + 48.dp) / 2)) else Modifier))
                             }
                         }
 

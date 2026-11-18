@@ -99,6 +99,10 @@ class LyricsUiTest {
                 waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("lyrics-panel").fetchSemanticsNodes().isNotEmpty() }
                 waitForIdle()
                 assertTrue(onNodeWithTag("lyrics-panel").fetchSemanticsNode().size.height >= with(density) { 120.dp.roundToPx() })
+                // Too short for both, the controls keep half the height so the lyrics can still be turned off.
+                window = DpSize(384.dp, 200.dp)
+                onNodeWithContentDescription("Play").performScrollTo().assertIsDisplayed()
+                onNodeWithContentDescription("Lyrics").performScrollTo().assertIsDisplayed()
             }
         } finally { PlayerLyrics.visible = false; runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
