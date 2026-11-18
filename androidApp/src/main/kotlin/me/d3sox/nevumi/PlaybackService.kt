@@ -73,7 +73,7 @@ class PlaybackService : MediaSessionService() {
                             SessionPlaybackCommands.PLAY_PAUSE_FADE -> player.engine.setPlayPauseFade(arguments.getBoolean("enabled"))
                             SessionPlaybackCommands.SKIP_SILENCE -> player.engine.setSkipSilence(arguments.getBoolean("enabled"))
                             SessionPlaybackCommands.RESUME -> player.engine.resume(requireNotNull(arguments.getString("entryId")),
-                                arguments.getLong("positionMs").also { require(it >= 0) })
+                                arguments.getLong("positionMs", -1).also { require(it >= 0) })
                             SessionPlaybackCommands.CROSSFADE -> {
                                 val duration = arguments.getLong("durationMs", -1)
                                 player.engine.setCrossfadeDuration(duration)

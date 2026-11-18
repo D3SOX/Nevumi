@@ -64,6 +64,6 @@ interface PlaybackEngine : AutoCloseable {
     /** Shortens silent stretches; positions stay those of the file, so they jump over what was skipped. */
     fun setSkipSilence(enabled: Boolean) {}
     /** Continues [entryId], the current song, at [positionMs] where it was left; unlike [seek], a crossfade into it keeps going. */
-    fun resume(entryId: String, positionMs: Long) = seek(positionMs)
+    fun resume(entryId: String, positionMs: Long) { if (status.value.entryId == entryId) seek(positionMs) }
     fun setRepeat(mode: RepeatMode, playCount: Int? = null)
 }

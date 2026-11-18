@@ -100,7 +100,8 @@ class LinuxPlaybackSettingsTest {
                 val output = directory.resolve("$fade.pcm")
                 val capture = ProcessBuilder("parec", "--device=$sink.monitor", "--format=float32le", "--rate=48000", "--channels=1",
                     "--latency-msec=10").redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.INHERIT).start()
-                val engine = CrossfadePlaybackEngine { MpvPlaybackEngine("pulse", audioDevice = "pulse/$sink") }
+                val engine = try { CrossfadePlaybackEngine { MpvPlaybackEngine("pulse", audioDevice = "pulse/$sink") } }
+                catch (failure: Exception) { capture.destroyForcibly(); capture.waitFor(2, TimeUnit.SECONDS); throw failure }
                 try {
                     withTimeout(3_000) { while (Files.size(output) < 48_000) delay(25) }
                     engine.setPlayPauseFade(fade)
@@ -133,8 +134,9 @@ class LinuxPlaybackSettingsTest {
             assertTrue(faded >= 25, "Only $faded windows faded")
             assertTrue(plain <= 6, "Playback without the fade still ramped in $plain windows")
         } finally {
-            if (command("pactl", "get-default-sink").trim() == sink) command("pactl", "set-default-sink", previousSink)
-            module?.let { command("pactl", "unload-module", it) }
+            // Each step runs even when an earlier one fails, so the test never leaves its sink behind.
+            runCatching { if (command("pactl", "get-default-sink").trim() == sink) command("pactl", "set-default-sink", previousSink) }
+            runCatching { module?.let { command("pactl", "unload-module", it) } }
             directory.toFile().deleteRecursively()
         }
     }

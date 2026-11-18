@@ -34,6 +34,12 @@ class PlayPauseFadeTest {
         override fun setPitch(pitch: Double) {}
         override suspend fun setAudioEffects(effects: AudioEffects) {}
         override fun setRepeat(mode: RepeatMode, playCount: Int?) { status.update { it.copy(repeatMode = mode, repeatPlays = playCount) } }
+        @Volatile var rejectSkipSilence = false
+        val skipSilence = CopyOnWriteArrayList<Boolean>()
+        override fun setSkipSilence(enabled: Boolean) {
+            if (enabled && rejectSkipSilence) error("The decoder rejected the filter chain")
+            skipSilence += enabled
+        }
         override fun close() {}
     }
 
@@ -59,7 +65,8 @@ class PlayPauseFadeTest {
             engine.pause()
             // The app shows the pause at once while the audio fades out.
             assertFalse(engine.status.value.playWhenReady)
-            withTimeout(2_000) { while ("pause" !in decoder.transport) delay(5) }
+            // The decoder pauses just before the engine silences it for the next fade-in.
+            withTimeout(2_000) { while ("pause" !in decoder.transport || decoder.level != 0.0) delay(5) }
             val fadeMs = (System.nanoTime() - started) / 1_000_000
             assertTrue(fadeMs in 150..1_000, "The fade-out took $fadeMs ms")
             assertEquals(0.0, decoder.level)
@@ -132,7 +139,7 @@ class PlayPauseFadeTest {
             decoder.awaitVolume(1.0)
             decoder.volumes.clear()
             engine.pause(fade = false)
-            withTimeout(500) { while ("pause" !in decoder.transport) delay(5) }
+            withTimeout(500) { while ("pause" !in decoder.transport || decoder.level != 0.0) delay(5) }
             assertTrue(decoder.volumes.none { it > 0.0 && it < 1.0 }, "An immediate pause faded: ${decoder.volumes}")
             // Paused with the fade on, the decoder waits silent; turning the fade off restores the volume.
             assertEquals(0.0, decoder.level)
@@ -159,6 +166,54 @@ class PlayPauseFadeTest {
             engine.play()
             decoder.awaitVolume(1.0)
             assertTrue(decoder.volumes.count { it > 0.0 && it < 1.0 } >= 3, "Playing did not fade in: ${decoder.volumes}")
+        } finally { engine.close() }
+    }
+
+    @Test fun aSongStartedAfterTheQueueEndedFadesIn() = runBlocking {
+        val decoder = RecordingEngine()
+        val engine = CrossfadePlaybackEngine { decoder }
+        try {
+            engine.setPlayPauseFade(true)
+            engine.loadQueue(listOf(track))
+            decoder.awaitVolume(1.0)
+            // The last song ends by itself, so nothing paused it and the fade still stands at full volume.
+            decoder.status.update { it.copy(playing = false, ended = true) }
+            delay(100)
+            decoder.volumes.clear()
+            engine.loadQueue(listOf(track.copy(entryId = "again")))
+            withTimeout(2_000) { while (0.0 !in decoder.volumes) delay(5) }
+            decoder.awaitVolume(1.0)
+            assertEquals(0.0, decoder.volumes.first(), "The song did not start silent: ${decoder.volumes}")
+            assertTrue(decoder.volumes.count { it > 0.0 && it < 1.0 } >= 3, "Playing did not fade in: ${decoder.volumes}")
+        } finally { engine.close() }
+    }
+
+    @Test fun aGaplessQueueThatMovesOnDuringTheFadeOutPausesAtOnce() = runBlocking {
+        val decoder = RecordingEngine()
+        val engine = CrossfadePlaybackEngine { decoder }
+        try {
+            engine.setPlayPauseFade(true)
+            engine.loadQueue(listOf(track))
+            decoder.awaitVolume(1.0)
+            engine.pause()
+            withTimeout(2_000) { while (decoder.level >= 0.9) delay(5) }
+            // The song ends during the fade and the decoder's own queue starts the next one.
+            decoder.status.update { it.copy(entryId = "next", positionMs = 0) }
+            withTimeout(100) { while ("pause" !in decoder.transport) delay(5) }
+        } finally { engine.close() }
+    }
+
+    @Test fun skipSilenceThatTheDecoderRejectsIsNotPassedToTheNextSongsDecoder() = runBlocking {
+        val decoders = CopyOnWriteArrayList<RecordingEngine>()
+        val engine = CrossfadePlaybackEngine { RecordingEngine().also { it.rejectSkipSilence = true; decoders += it } }
+        try {
+            engine.setCrossfadeDuration(1_000)
+            engine.setSkipSilence(true)
+            engine.loadQueue((1..2).map { track.copy(entryId = "entry-$it") })
+            // The worker prepares the next song's decoder once the current one reports its length.
+            withTimeout(2_000) { while (decoders.size < 2 || decoders[1].skipSilence.isEmpty()) delay(5) }
+            assertEquals(listOf(false), decoders[1].skipSilence.toList())
+            assertTrue(decoders.none { true in it.skipSilence })
         } finally { engine.close() }
     }
 }

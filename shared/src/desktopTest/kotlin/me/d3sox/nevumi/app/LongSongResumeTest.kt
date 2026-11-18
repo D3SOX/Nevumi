@@ -53,6 +53,28 @@ class LongSongResumeTest {
         } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test fun theSameSongQueuedTwiceStartsItsSecondPlayFromTheBeginning() = runBlocking {
+        val directory = Files.createTempDirectory("long-song-twice")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val library = MusicLibrary(store)
+        val mix = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
+        library.rememberSongPosition(mix.id, 240_000)
+        val player = MusicController(library, PlaybackQueue(store), CrossfadePlaybackEngine { MpvPlaybackEngine("null") },
+            preferences = MusicPreferences(store))
+        try {
+            withTimeout(5_000) { player.state.first { it.libraryReady } }
+            player.updatePreferences { it.copy(resumeLongSongsMinutes = 10) }.join()
+            player.playTrack(mix.id, listOf(mix.id, mix.id), 0).join()
+            val first = withTimeout(5_000) { player.state.first { it.playback.playing && it.playback.positionMs >= 240_000 } }.playback.entryId
+            // The first play finishes and the gapless queue moves on to the second one at its start.
+            player.seek(658_500).join()
+            withTimeout(8_000) { player.state.first { it.playback.entryId != first && it.playback.playing } }
+            delay(1_500)
+            assertTrue(player.state.value.playback.positionMs < 5_000, "The second play resumed at ${player.state.value.playback.positionMs}")
+            assertNull(library.songPosition(mix.id))
+        } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = runBlocking {
         val directory = Files.createTempDirectory("long-song-resume")
         val store = openMusicStore(directory.resolve("library.db").toString())

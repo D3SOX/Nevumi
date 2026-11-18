@@ -48,6 +48,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var transportGain = 1.0
     /** A pause with the fade on waits until the fade-out ends before it pauses the decoders. */
     private var pausePending = false
+    /** The song a pending pause fades out; a gapless queue that moves on meanwhile pauses at once instead. */
+    private var pausingEntry: String? = null
     /** Whether the worker last told the decoders to play; callers change [requestedPlaying] before their command runs. */
     private var decodersPlaying = false
     private var repeatMode = RepeatMode.OFF
@@ -138,7 +140,12 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         applyGains()
     }
 
-    override fun setSkipSilence(enabled: Boolean) = command { skipSilence = enabled; engines().forEach { it.setSkipSilence(enabled) } }
+    override fun setSkipSilence(enabled: Boolean) = command {
+        // A decoder that rejects it keeps the previous state, so the standby player is never prepared with a failing setting.
+        active.setSkipSilence(enabled)
+        skipSilence = enabled
+        engines().filter { it !== active }.forEach { it.setSkipSilence(enabled) }
+    }
 
     override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
 
@@ -152,8 +159,10 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         command {
             // Another song replaces one that is fading out; one loaded paused starts silent, ready to fade in.
             pausePending = false
+            // A song that starts while nothing is heard, such as after the queue ended, fades in like a resume.
+            val audible = active.status.value.playing || outgoing?.status?.value?.playing == true
+            if (playPauseFade && (!play || !audible)) transportGain = 0.0
             decodersPlaying = play
-            if (playPauseFade && !play) transportGain = 0.0
             cancelFade()
             this.tracks = tracks.toList()
             selectedEntry = tracks[startIndex].entryId
@@ -207,7 +216,10 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             fadingOut = it.fadingOut?.copy(playing = false, playWhenReady = false)) }
         command {
             val audible = active.status.value.playing || outgoing?.status?.value?.playing == true
-            if (fade && playPauseFade && audible && transportGain > 0) pausePending = true else pauseDecoders()
+            if (fade && playPauseFade && audible && transportGain > 0) {
+                pausePending = true
+                pausingEntry = active.status.value.entryId
+            } else pauseDecoders()
         }
     }
 
@@ -315,7 +327,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             val step = elapsed.coerceAtMost(50).toDouble() / PLAY_PAUSE_FADE_MS
             if (pausePending) {
                 transportGain = (transportGain - step).coerceAtLeast(0.0)
-                if (transportGain == 0.0) pauseDecoders() else applyGains()
+                if (transportGain == 0.0 || active.status.value.entryId != pausingEntry) pauseDecoders() else applyGains()
             } else if (requestedPlaying.value && transportGain < 1.0 &&
                 (active.status.value.playing || outgoing?.status?.value?.playing == true)) {
                 // Only while audio runs: a stream that is still opening would otherwise start at full volume.

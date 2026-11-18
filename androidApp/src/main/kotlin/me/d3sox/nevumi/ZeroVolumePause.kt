@@ -37,8 +37,8 @@ class ZeroVolumePause(private val context: Context, private val controller: Musi
             } else if (volume > 0 && previous == 0 && pausedEntry != null) {
                 val entry = pausedEntry
                 pausedEntry = null
-                // A finished queue would start its last song again.
-                if (entry == state.queue.currentEntryId && !state.playback.playWhenReady && !state.playback.ended) controller.play()
+                // Playing is harmless when the pause has not been applied yet; a finished queue would start its last song again.
+                if (entry == state.queue.currentEntryId && !state.playback.ended) controller.play()
             }
         }
     }
@@ -48,7 +48,9 @@ class ZeroVolumePause(private val context: Context, private val controller: Musi
         if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         else @Suppress("UnspecifiedRegisterReceiverFlag") context.registerReceiver(receiver, filter)
         MainScope().launch {
-            controller.state.map { it.playback.playWhenReady }.distinctUntilChanged().collect { if (it) pausedEntry = null }
+            // Playing any other way, or turning the setting off, forgets the song paused here.
+            controller.state.map { it.playback.playWhenReady || !it.preferences.pauseAtZeroVolume }.distinctUntilChanged()
+                .collect { if (it) pausedEntry = null }
         }
     }
 }

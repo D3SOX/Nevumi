@@ -357,7 +357,8 @@ class MpvPlaybackEngine(audioOutput: String = "auto", pcmOutputFile: String? = n
         check(!closed)
         if (skipSilence != enabled) {
             skipSilence = enabled
-            applyAudioFilters()
+            // libmpv rejects the whole chain when FFmpeg's silenceremove lacks an option; keep the effects that worked.
+            try { applyAudioFilters() } catch (failure: Exception) { skipSilence = !enabled; applyAudioFilters(); throw failure }
         }
     }
     private fun applyAudioFilters() {

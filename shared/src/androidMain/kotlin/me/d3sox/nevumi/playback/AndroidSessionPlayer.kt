@@ -202,6 +202,8 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
         val granted = focusRequested && !suppressed || audio.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         focusRequested = granted
         suppressed = !granted
+        // A pause keeps a ducked volume while it fades out, so the volume returns only when playback starts again.
+        engine.setVolume(masterVolume * if (ducked) 0.2 else 1.0)
         if (granted) engine.play() else engine.pause()
     }
     private fun pausePlayback(fade: Boolean = true) {
@@ -209,7 +211,6 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
         suppressed = false
         ducked = false
         engine.pause(fade)
-        engine.setVolume(masterVolume.toDouble())
         abandonFocus()
     }
     private fun abandonFocus() {

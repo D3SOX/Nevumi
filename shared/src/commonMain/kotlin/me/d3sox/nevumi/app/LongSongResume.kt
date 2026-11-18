@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import me.d3sox.nevumi.library.MusicLibrary
 import me.d3sox.nevumi.library.Track
 import me.d3sox.nevumi.library.isPodcastEpisode
@@ -34,30 +35,37 @@ internal class LongSongResume(private val context: ControllerContext, private va
             // One failed lookup or write must not end the saving for the rest of the session.
             try {
                 val changed = current.entryId != last.entryId
-                if (changed) awaitingDuration = if (resume(current, minimumMs)) null else current.entryId
-                else if (current.entryId == awaitingDuration && current.durationMs > 0) {
-                    awaitingDuration = null
-                    resume(current, minimumMs)
-                }
                 // Repeat-one starts the song over by itself, so the pass that ended counts as finished.
                 val repeated = !changed && current.repeatMode == RepeatMode.ONE && last.playbackId != null &&
                     current.playbackId != null && current.playbackId != last.playbackId
                 val paused = last.playing && !current.playing && !changed
                 val now = clock.elapsedNow().inWholeMilliseconds
                 val periodic = current.playing && !changed && now - savedAt >= 30_000
-                if (!changed && !repeated && !paused && !periodic && !current.ended) return@collect
-                if (periodic) savedAt = now
-                val status = if (changed || repeated) last else current
-                val trackId = status.trackId ?: return@collect
-                val track = findTrack(trackId)?.takeIf { qualifies(it, status, minimumMs) } ?: return@collect
-                savedAt = now
-                val duration = status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs
-                val finished = repeated || status.ended || duration > 0 && status.positionMs >= duration - FINISHED_WITHIN_MS
-                // A song left within its first seconds keeps its earlier position, as does one still seeking there after a resume.
-                if (finished) library.rememberSongPosition(track.id, null)
-                else if (status.positionMs >= MINIMUM_POSITION_MS) library.rememberSongPosition(track.id, status.positionMs)
+                if (changed || repeated || paused || periodic || current.ended) {
+                    savedAt = now
+                    // The song being left saves first: the same song queued twice must not resume from the position it just finished.
+                    checkpoint(if (changed || repeated) last else current, repeated, minimumMs)
+                }
+                if (changed) awaitingDuration = if (resume(current, minimumMs)) null else current.entryId
+                else if (current.entryId == awaitingDuration && current.durationMs > 0) {
+                    awaitingDuration = null
+                    resume(current, minimumMs)
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { }
+        }
+    }
+
+    private suspend fun checkpoint(status: PlaybackStatus, repeated: Boolean, minimumMs: Long) {
+        val track = findTrack(status.trackId ?: return)?.takeIf { qualifies(it, status, minimumMs) } ?: return
+        val duration = status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs
+        val finished = repeated || status.ended || duration > 0 && status.positionMs >= duration - FINISHED_WITHIN_MS
+        // A song left within its first seconds keeps its earlier position, as does one still seeking there after a resume.
+        if (!finished && status.positionMs < MINIMUM_POSITION_MS) return
+        // Serialized with settings changes and song links, so a write never recreates a position they just removed.
+        context.operations.withLock {
+            if (context.state.value.preferences.resumeLongSongsMinutes <= 0 || library.findTrack(track.id) == null) return@withLock
+            library.rememberSongPosition(track.id, status.positionMs.takeUnless { finished })
         }
     }
 
