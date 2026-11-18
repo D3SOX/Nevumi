@@ -8,6 +8,10 @@ import kotlin.math.roundToLong
 internal enum class PcmSampleFormat(val bytes: Int, private val bits: Int) {
     INT16(2, 16), INT24(3, 24), INT32(4, 32), FLOAT(4, 0);
 
+    /** Whether every sample in [source] fits this format unchanged. Floats keep 24 bits, as many as their mantissa holds. */
+    internal fun holds(source: PcmSampleFormat) = precision >= source.precision
+    private val precision get() = if (this == FLOAT) 24 else bits
+
     internal fun read(buffer: ByteBuffer): Double = when (this) {
         INT16 -> buffer.short / 32_768.0
         INT24 -> ((buffer.get().toInt() and 0xff) or ((buffer.get().toInt() and 0xff) shl 8) or (buffer.get().toInt() shl 16)) / 8_388_608.0

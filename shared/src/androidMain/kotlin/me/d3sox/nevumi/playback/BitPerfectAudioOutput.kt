@@ -63,11 +63,14 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
 
 private val widths = listOf(PcmSampleFormat.INT16, PcmSampleFormat.FLOAT, PcmSampleFormat.INT24, PcmSampleFormat.INT32)
 
-/** Keeps the song's encoding when the DAC takes it, and otherwise the widest integers, which hold every sample unchanged. */
+/**
+ * Keeps the song's encoding when the DAC takes it, and otherwise the widest integers. A mixer too narrow for the samples, such as
+ * 16 bits for the floats a 24-bit song decodes to, would round them, so the song plays through Android's mixer instead.
+ */
 @RequiresApi(34)
 internal fun bitPerfectMixer(mixers: List<AudioMixerAttributes>, sampleRate: Int, channelMask: Int, source: PcmSampleFormat) = mixers
     .filter { it.mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT && it.format.sampleRate == sampleRate &&
-        it.format.channelMask == channelMask && pcmFormat(it.format.encoding) != null }
+        it.format.channelMask == channelMask && pcmFormat(it.format.encoding)?.holds(source) == true }
     .maxByOrNull { mixer -> pcmFormat(mixer.format.encoding).let { if (it == source) widths.size else widths.indexOf(it) } }
 
 /** Writes PCM through [mixers]' bit-perfect mixers, converting samples to the mixer's encoding without changing their values. */

@@ -34,6 +34,15 @@ class PcmConversionTest {
         assertEquals(listOf(Int.MAX_VALUE, Int.MIN_VALUE), listOf(clipped.int, clipped.int))
     }
 
+    @Test fun onlyFormatsAtLeastAsPreciseHoldTheSamples() {
+        assertFalse(PcmSampleFormat.INT16.holds(PcmSampleFormat.FLOAT))
+        assertTrue(PcmSampleFormat.INT24.holds(PcmSampleFormat.FLOAT))
+        assertTrue(PcmSampleFormat.INT32.holds(PcmSampleFormat.FLOAT))
+        assertTrue(PcmSampleFormat.FLOAT.holds(PcmSampleFormat.INT24))
+        assertFalse(PcmSampleFormat.FLOAT.holds(PcmSampleFormat.INT32))
+        assertTrue(PcmSampleFormat.INT16.holds(PcmSampleFormat.INT16))
+    }
+
     @Test fun conversionStopsAtAFullOutputBuffer() {
         val input = ByteBuffer.allocate(4 * 4).order(ByteOrder.LITTLE_ENDIAN).apply { repeat(4) { putFloat(0.5f) } }.flip()
         val output = ByteBuffer.allocate(2 * 3 + 1)
