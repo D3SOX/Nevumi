@@ -44,6 +44,9 @@ class LocalFilesTest {
             folders.forEach { scanner.scan(it) }
             assertEquals(setOf(renamed.resolve("first.flac").toString(), renamed.resolve("second.flac").toString()),
                 library.tracks().flatMap { it.sources }.filter { it.available && it.location.contains("Renamed") }.map { it.location }.toSet())
+            // A cover image also changes the folder's songs.
+            Files.writeString(renamed.resolve("Cover.jpg"), "image")
+            assertEquals(listOf(renamed.toString()), next())
         } finally { watcher?.cancel(); store.close(); directory.toFile().deleteRecursively() }
     }
 

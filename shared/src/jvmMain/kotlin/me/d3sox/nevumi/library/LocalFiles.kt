@@ -152,10 +152,12 @@ class LocalFiles(private val library: MusicLibrary, private val artwork: Artwork
 
 private val folderCoverNames = listOf("cover", "folder", "front", "albumart", "album")
 
+/** Whether a file named [name] can be the cover image of the songs in its folder. */
+internal fun isFolderCoverName(name: String) = name.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png") &&
+    name.substringBeforeLast('.').lowercase() in folderCoverNames
+
 /** The cover image beside songs without embedded artwork, such as cover.jpg or Folder.png, preferring the names in that order. */
-internal fun folderCover(folder: File?): File? = folder?.listFiles { file ->
-    file.isFile && file.extension.lowercase() in setOf("jpg", "jpeg", "png") && file.nameWithoutExtension.lowercase() in folderCoverNames
-}?.minWithOrNull(compareBy<File> { folderCoverNames.indexOf(it.nameWithoutExtension.lowercase()) }.thenBy { it.name })
+internal fun folderCover(folder: File?): File? = folder?.listFiles { file -> file.isFile && isFolderCoverName(file.name) }?.minWithOrNull(compareBy<File> { folderCoverNames.indexOf(it.nameWithoutExtension.lowercase()) }.thenBy { it.name })
 
 private fun folderCoverModifiedAt(folder: File?) = folderCover(folder)?.lastModified() ?: 0
 
