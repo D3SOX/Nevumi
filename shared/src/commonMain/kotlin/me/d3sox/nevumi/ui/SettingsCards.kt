@@ -30,6 +30,7 @@ import me.d3sox.nevumi.resources.record_listening_history
 import me.d3sox.nevumi.resources.settings_equalizer_profile
 import me.d3sox.nevumi.resources.settings_minimum_song_length
 import me.d3sox.nevumi.resources.settings_replay_gain
+import me.d3sox.nevumi.resources.settings_resume_long_songs
 import me.d3sox.nevumi.resources.show_options_buttons
 import me.d3sox.nevumi.resources.source_priority
 import me.d3sox.nevumi.resources.ssh_authentication
@@ -100,6 +101,7 @@ internal fun settingsIcon(label: StringResource): AppIcon = when (label) {
     Res.string.colors -> AppIcon.ARTWORK_COLORS
     Res.string.settings_equalizer_profile -> AppIcon.HEADPHONES
     Res.string.settings_replay_gain -> AppIcon.VOLUME
+    Res.string.settings_resume_long_songs -> AppIcon.BOOKMARK
     Res.string.on_launch -> AppIcon.STARTUP
     Res.string.swipe_right -> AppIcon.SWIPE_RIGHT
     Res.string.swipe_left -> AppIcon.SWIPE_LEFT
@@ -131,7 +133,8 @@ private val iconSettings = listOf(Res.string.theme, Res.string.colors, Res.strin
     Res.string.source_priority, Res.string.music_sources, Res.string.playback_cache, Res.string.undo_backup_storage,
     Res.string.download_network, Res.string.record_listening_history, Res.string.keep_undo_backups, Res.string.statistics_grouping,
     Res.string.sources_download_format, Res.string.sources_when_you_pick_a_song, Res.string.sources_gate_browser,
-    Res.string.ssh_authentication, Res.string.music_library, Res.string.settings_minimum_song_length)
+    Res.string.ssh_authentication, Res.string.music_library, Res.string.settings_minimum_song_length,
+    Res.string.settings_resume_long_songs)
 
 /** Finds the setting a resolved label belongs to by comparing it with the displayed, localized setting names. */
 @Composable

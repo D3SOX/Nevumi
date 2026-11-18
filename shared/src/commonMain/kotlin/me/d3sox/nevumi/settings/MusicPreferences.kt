@@ -78,6 +78,12 @@ data class MusicSettings(
     val crossfadeDurationMs: Long = 0,
     val gaplessPlayback: Boolean = true,
     val replayGain: ReplayGain = ReplayGain(),
+    /** Pausing fades the music out before it stops, and playing fades it in; see [me.d3sox.nevumi.playback.PLAY_PAUSE_FADE_MS]. */
+    val fadePlayPause: Boolean = false,
+    /** Shortens silent stretches, such as long gaps before a hidden track. */
+    val skipSilence: Boolean = false,
+    /** Songs at least this many minutes long, such as DJ mixes or audiobooks, continue where they were left; 0 turns it off. */
+    val resumeLongSongsMinutes: Int = 0,
     /** Shares the queue with the music server, so other devices and Subsonic apps can continue it. Off until chosen, as it writes to the server. */
     val syncPlayQueue: Boolean = false,
     val milkDrop: me.d3sox.nevumi.visualizer.MilkDropSettings = me.d3sox.nevumi.visualizer.MilkDropSettings(),
@@ -107,6 +113,8 @@ data class MusicSettings(
     val trayIcon: Boolean = false,
     /** Android: connecting headphones, a USB headset or Bluetooth audio resumes the paused song. */
     val resumeOnHeadphones: Boolean = false,
+    /** Android: turning the media volume down to zero pauses, and turning it up again resumes what this paused. */
+    val pauseAtZeroVolume: Boolean = false,
     val previousQueueTrackLimit: Int = 5,
     val recordListeningHistory: Boolean = true,
     val scrobblePercent: Int = 50,
@@ -142,6 +150,9 @@ data class MusicSettings(
         else -> CollectionView.GRID
     })
 }
+
+/** Song lengths in minutes from which Settings offers to continue songs where they were left; 0 is off. */
+val RESUME_LONG_SONG_MINUTES = listOf(0, 10, 20, 30, 60)
 
 /** Streaming bitrate limits in kbit/s that Settings offers; 0 is the original file. */
 val STREAM_BIT_RATES = listOf(0, 320, 256, 192, 128, 96)
@@ -187,6 +198,7 @@ class MusicPreferences(private val store: MusicStore) {
         settings.audioEffects.validate()
         settings.replayGain.validate()
         require(settings.crossfadeDurationMs in 0..12_000) { "Crossfade must be between 0 and 12 seconds" }
+        require(settings.resumeLongSongsMinutes in RESUME_LONG_SONG_MINUTES) { "Choose a listed song length" }
         require(settings.previousQueueTrackLimit in 1..100) { "Choose between 1 and 100 previous tracks" }
         require(settings.queueRecoveryIntervalMinutes in 1..60) { "Choose a recovery interval between 1 and 60 minutes" }
         require(settings.scrobblePercent in 1..100) { "Choose a scrobbling percentage between 1 and 100" }

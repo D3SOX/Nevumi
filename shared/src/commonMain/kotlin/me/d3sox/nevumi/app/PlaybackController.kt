@@ -276,6 +276,20 @@ class PlaybackController internal constructor(private val context: ControllerCon
             publishSeek(positionMs)
         }
     }
+    /**
+     * Continues the current [entryId] where it was left, like [seekCurrentEntry] but keeping a crossfade into it. A song that
+     * already moved past its first seconds, such as by a seek made meanwhile, stays where it is, and so does every song once the
+     * positions read under [generation] were forgotten, as when the setting is turned off.
+     */
+    internal fun resumeCurrentEntry(entryId: String, positionMs: Long, generation: Long) = context.action {
+        val playback = engine.status.value
+        if (generation == library.songPositionGeneration && context.state.value.preferences.resumeLongSongsMinutes > 0 && entryId == playback.entryId && positionMs >= 0 && (playback.durationMs <= 0 || positionMs < playback.durationMs) &&
+            playback.positionMs < RESUME_WINDOW_MS && queue.snapshot().positionMs < RESUME_WINDOW_MS) {
+            queue.setPosition(positionMs)
+            engine.resume(entryId, positionMs)
+            publishSeek(positionMs)
+        }
+    }
     fun seek(positionMs: Long) = context.action {
         queue.setPosition(positionMs)
         engine.seek(positionMs)
@@ -415,6 +429,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
             engine.setCrossfadeDuration(context.state.value.preferences.crossfadeDurationMs)
             engine.setGaplessPlayback(context.state.value.preferences.gaplessPlayback)
             engine.setReplayGain(context.state.value.preferences.replayGain)
+            engine.setPlayPauseFade(context.state.value.preferences.fadePlayPause)
+            engine.setSkipSilence(context.state.value.preferences.skipSilence)
         }
     }
 
@@ -523,6 +539,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
 
     private companion object {
         const val POSITION_CHECKPOINT_MS = 30_000L
+        /** How far into a song a remembered position can still be resumed. */
+        const val RESUME_WINDOW_MS = 5_000L
         const val TRANSFER_ACTIVATION_TIMEOUT_MS = 60_000L
     }
 }

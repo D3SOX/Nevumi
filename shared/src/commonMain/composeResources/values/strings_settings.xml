@@ -103,6 +103,12 @@
     <string name="settings_audio_effects_description">Equalizer, headphone profiles and mono audio</string>
     <string name="settings_gapless_playback">Gapless playback</string>
     <string name="settings_gapless_playback_description">Play adjacent tracks without a break when crossfade is off.</string>
+    <string name="settings_fade_play_pause">Fade on play and pause</string>
+    <string name="settings_fade_play_pause_description">Fade the music in when it starts and out before it pauses</string>
+    <string name="settings_skip_silence">Skip silence</string>
+    <string name="settings_skip_silence_description">Shorten silent stretches, such as the gap before a hidden track</string>
+    <string name="settings_resume_long_songs">Resume long songs</string>
+    <string name="settings_resume_long_songs_minutes">%1$d+ minutes</string>
     <string name="settings_replay_gain">ReplayGain</string>
     <string name="settings_replay_gain_track">Song</string>
     <string name="settings_replay_gain_album">Album</string>
@@ -120,6 +126,8 @@
     <string name="settings_keep_playing_description">Closing the window while music plays hides it. Reopen Nevumi from the tray icon or your media controls</string>
     <string name="settings_resume_on_headphones">Resume when headphones connect</string>
     <string name="settings_resume_on_headphones_description">Continue the paused song when you connect wired, USB or Bluetooth audio</string>
+    <string name="settings_pause_at_zero_volume">Pause at zero volume</string>
+    <string name="settings_pause_at_zero_volume_description">Pause when you turn the media volume all the way down, and continue when you turn it up again</string>
     <string name="settings_tray_icon">Tray icon</string>
     <string name="settings_tray_icon_description">Closing the window keeps Nevumi in the system tray, where you can control playback, reopen it or quit</string>
 
@@ -258,6 +266,9 @@
     <string name="settings_keywords_playback_speed">tempo</string>
     <string name="settings_keywords_playback_pitch">semitones</string>
     <string name="settings_keywords_crossfade">transition seconds</string>
+    <string name="settings_keywords_fade_play_pause">fade in out smooth soft volume ramp resume stop</string>
+    <string name="settings_keywords_skip_silence">silent gaps quiet trim remove hidden track</string>
+    <string name="settings_keywords_resume_long_songs">remember position resume bookmark audiobook dj mix live recording long minutes</string>
     <string name="settings_keywords_replay_gain">volume normalization loudness level r128 tags</string>
     <string name="settings_keywords_show_audio_info">format bitrate sample rate kb/s kHz quality</string>
     <string name="settings_keywords_smart_shuffle">random weighted favorites ratings stars recently played</string>
@@ -266,6 +277,7 @@
     <string name="settings_keywords_confirm_queue_jumps">confirmation skip play now</string>
     <string name="settings_keywords_confirm_up_next_interruption">confirmation replace queue starting music album playlist</string>
     <string name="settings_keywords_resume_on_headphones">headset bluetooth wired usb car connect autoplay continue</string>
+    <string name="settings_keywords_pause_at_zero_volume">mute volume zero silent down automatic resume continue</string>
     <string name="settings_keywords_keep_playing">background close window hide minimize quit tray</string>
     <string name="settings_keywords_tray_icon">system tray status notifier panel background quit</string>
     <string name="settings_keywords_prepare_all_waveforms">audio waveform background cache precompute progress</string>
