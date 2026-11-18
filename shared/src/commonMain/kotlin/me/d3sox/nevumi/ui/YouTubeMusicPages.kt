@@ -385,7 +385,7 @@ private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowse
     val surface = MaterialTheme.colorScheme.surface
     val (title, subtitle) = pageTitles(collection, page)
     Column(Modifier.fillMaxWidth()) {
-        if (page.banner) Box(Modifier.fillMaxWidth().height(min(width / 1.5f, 360.dp))) {
+        if (page.banner) Box(Modifier.fillMaxWidth().height(min(width / 1.5f, if (LocalShortWindow.current) 200.dp else 360.dp))) {
             image?.let { androidx.compose.foundation.Image(it, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop) }
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, .35f to surface.copy(alpha = .1f), 1f to surface)))
             Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 24.dp, vertical = 8.dp)) {
@@ -394,15 +394,16 @@ private fun YouTubePageHeader(collection: YouTubeCollection, page: YouTubeBrowse
             }
         } else Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(color.copy(alpha = .4f), surface)))
             .padding(start = 24.dp, end = 24.dp, top = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (page.artworkUrl != null) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                YouTubeImage(sizedArtwork(page.artworkUrl, 544), controller, Modifier.size(200.dp), collection.kind.shape(), collection.kind.icon(), 400)
+            val heading: @Composable ColumnScope.() -> Unit = {
+                Text(title, style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                page.artist?.let { artist ->
+                    Text(artist.title, Modifier.clickable { open(artist) }.semantics { contentDescription = artist.title },
+                        style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                if (subtitle.isNotEmpty()) Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(title, style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            page.artist?.let { artist ->
-                Text(artist.title, Modifier.clickable { open(artist) }.semantics { contentDescription = artist.title },
-                    style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            }
-            if (subtitle.isNotEmpty()) Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (page.artworkUrl != null) HeroHeading({ YouTubeImage(sizedArtwork(page.artworkUrl, 544), controller, it, collection.kind.shape(), collection.kind.icon(), 400) }, heading)
+            else heading()
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (page.description.isNotEmpty()) {

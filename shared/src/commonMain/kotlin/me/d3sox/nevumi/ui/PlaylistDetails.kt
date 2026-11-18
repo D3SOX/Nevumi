@@ -122,15 +122,13 @@ internal fun PlaylistHero(playlist: Playlist, state: AppState, controller: Music
     val shuffleDescription = stringResource(Res.string.library_shuffle_playlist)
     Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(color.copy(alpha = .4f), surface)))
         .padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.fillMaxWidth().height(200.dp)) {
-            CollectionArtwork(path, playlist.name, AppIcon.QUEUE,
-                Modifier.size(200.dp).align(Alignment.Center).semantics { contentDescription = artworkDescription })
+        HeroHeading({ CollectionArtwork(path, playlist.name, AppIcon.QUEUE, it.semantics { contentDescription = artworkDescription }) }) {
+            Text(playlist.title, style = MaterialTheme.typography.headlineMedium)
+            val kind = if (playlist.youTube != null) stringResource(Res.string.library_youtube_playlist) else playlist.folder?.let { stringResource(if (playlist.rule == null) Res.string.library_playlist_in_folder else Res.string.library_smart_playlist_in_folder, it) }
+                ?: stringResource(if (playlist.rule == null) Res.string.library_playlist else Res.string.library_smart_playlist)
+            Text("$kind · ${countLabel(playlist.trackIds.size, Res.plurals.songs)}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(playlist.title, style = MaterialTheme.typography.headlineMedium)
-        val kind = if (playlist.youTube != null) stringResource(Res.string.library_youtube_playlist) else playlist.folder?.let { stringResource(if (playlist.rule == null) Res.string.library_playlist_in_folder else Res.string.library_smart_playlist_in_folder, it) }
-            ?: stringResource(if (playlist.rule == null) Res.string.library_playlist else Res.string.library_smart_playlist)
-        Text("$kind · ${countLabel(playlist.trackIds.size, Res.plurals.songs)}",
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (playlist.description.isNotBlank()) Text(playlist.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box {

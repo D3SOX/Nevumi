@@ -38,3 +38,8 @@ internal fun windowLayout(width: Dp, height: Dp) = when {
 internal fun nowPlayingPaneWidth(windowWidth: Dp) = (windowWidth * .3f).coerceIn(NowPlayingPaneMinWidth, NowPlayingPaneMaxWidth)
 
 internal val LocalWindowLayout = staticCompositionLocalOf { WindowLayout.COMPACT }
+
+/** A window shorter than Material's compact height, such as an app in split screen or a phone in landscape. */
+internal fun isShortWindow(height: Dp) = height < CompactWindowHeight
+
+internal val LocalShortWindow = staticCompositionLocalOf { false }

@@ -50,15 +50,13 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
     val shuffleDescription = stringResource(Res.string.library_shuffle_collection)
     Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(color.copy(alpha = .4f), MaterialTheme.colorScheme.surface)))
         .padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.fillMaxWidth().height(200.dp)) {
-            CollectionArtwork(artwork, collection.title, tab.icon(), Modifier.size(200.dp).align(Alignment.Center)
-                .semantics { contentDescription = artworkDescription })
+        HeroHeading({ CollectionArtwork(artwork, collection.title, tab.icon(), it.semantics { contentDescription = artworkDescription }) }) {
+            Text(collection.title, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            if (collection.subtitle.isNotBlank()) Text(collection.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${stringResource(tab.collectionNouns().kind)} · ${countLabel(ids.size, Res.plurals.songs)} · ${playbackTime(collection.tracks.sumOf { it.metadata.durationMs })}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(collection.title, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        if (collection.subtitle.isNotBlank()) Text(collection.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("${stringResource(tab.collectionNouns().kind)} · ${countLabel(ids.size, Res.plurals.songs)} · ${playbackTime(collection.tracks.sumOf { it.metadata.durationMs })}",
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box {
                 AppIconButton(AppIcon.MORE, stringResource(Res.string.library_collection_options)) { options = true }
@@ -84,6 +82,21 @@ internal fun CollectionHero(collection: TrackCollection, tab: LibraryTab, state:
         ArtistDiscovery(collection.id, tab, state, controller)
     }
     if (playlists) PlaylistPicker(controller, ids) { playlists = false }
+}
+
+/**
+ * A collection's cover above its title, or beside it in a short window, such as split screen, where a cover above
+ * would push the songs out of view.
+ */
+@Composable
+internal fun HeroHeading(cover: @Composable (Modifier) -> Unit, heading: @Composable ColumnScope.() -> Unit) {
+    if (LocalShortWindow.current) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        cover(Modifier.size(112.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp), content = heading)
+    } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { cover(Modifier.size(200.dp)) }
+        heading()
+    }
 }
 
 @Composable
