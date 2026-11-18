@@ -188,6 +188,23 @@ class PlayPauseFadeTest {
         } finally { engine.close() }
     }
 
+    @Test fun pausingTooCloseToTheEndForAFadePausesBeforeTheNextSong() = runBlocking {
+        val decoder = RecordingEngine()
+        val engine = CrossfadePlaybackEngine { decoder }
+        try {
+            engine.setPlayPauseFade(true)
+            engine.loadQueue((1..2).map { track.copy(entryId = "entry-$it") })
+            decoder.awaitVolume(1.0)
+            // 200 ms remain, less than the fade, so a gapless decoder would start the next song before the fade ended.
+            decoder.status.update { it.copy(positionMs = it.durationMs - 200) }
+            decoder.volumes.clear()
+            engine.pause()
+            withTimeout(100) { while ("pause" !in decoder.transport) delay(5) }
+            assertTrue(decoder.volumes.none { it > 0.0 && it < 1.0 }, "The pause faded into the song's end: ${decoder.volumes}")
+            assertEquals("entry-1", engine.status.value.entryId)
+        } finally { engine.close() }
+    }
+
     @Test fun aGaplessQueueThatMovesOnDuringTheFadeOutPausesAtOnce() = runBlocking {
         val decoder = RecordingEngine()
         val engine = CrossfadePlaybackEngine { decoder }

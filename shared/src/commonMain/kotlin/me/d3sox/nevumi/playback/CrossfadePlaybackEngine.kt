@@ -216,7 +216,10 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             fadingOut = it.fadingOut?.copy(playing = false, playWhenReady = false)) }
         command {
             val audible = active.status.value.playing || outgoing?.status?.value?.playing == true
-            if (fade && playPauseFade && audible && transportGain > 0) {
+            // A song that would end during the fade pauses at once, so a gapless queue never starts the next one meanwhile.
+            val current = active.status.value
+            val endsDuringFade = current.durationMs > 0 && (current.durationMs - current.positionMs) / speed < PLAY_PAUSE_FADE_MS + 100
+            if (fade && playPauseFade && audible && transportGain > 0 && !endsDuringFade) {
                 pausePending = true
                 pausingEntry = active.status.value.entryId
             } else pauseDecoders()
