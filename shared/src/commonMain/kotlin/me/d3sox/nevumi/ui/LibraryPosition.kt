@@ -59,3 +59,9 @@ private fun RememberPosition(controller: MusicController, key: String, scrolling
 }
 
 @Composable internal expect fun OnLibraryStopped(onStop: () -> Unit)
+
+/** Moves [list] to the position in [request] before its next frame, then clears the request. A negative offset places the item below the top. */
+@Composable
+internal fun ApplyScrollRequest(list: LazyListState, request: MutableState<LibraryPosition?>) {
+    SideEffect { request.value?.let { list.requestScrollToItem(it.index, it.offset); request.value = null } }
+}

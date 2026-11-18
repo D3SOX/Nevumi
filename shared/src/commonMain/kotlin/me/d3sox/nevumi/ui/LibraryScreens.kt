@@ -21,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import me.d3sox.nevumi.settings.LibraryPosition
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
@@ -360,7 +361,8 @@ private fun groupedCollections(tracks: List<Track>, unknownName: String, keys: (
 internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: MusicController,
     modifier: Modifier = Modifier, playlistId: String? = null, statistics: Map<String, ListeningStatistics>? = null,
     extraInfo: Map<String, String> = emptyMap(), entryInfo: ((Int) -> String)? = null, scrollSort: LibrarySort = LibrarySort.TITLE, scrollIndicator: ((Int) -> String)? = null, header: (@Composable () -> Unit)? = null, contextName: String = "Library", playlistPositions: List<Int>? = null,
-    shuffleContext: Boolean = false, headerTitle: String? = null, headerBack: (() -> Unit)? = null, emptyText: String? = null) {
+    shuffleContext: Boolean = false, headerTitle: String? = null, headerBack: (() -> Unit)? = null, emptyText: String? = null,
+    scrollRequest: MutableState<LibraryPosition?>? = null) {
     val songPages = LocalSongGesturePages.current
     val origin = LocalLibraryOrigin.current
     ReportLibraryHeader(headerTitle ?: contextName.takeIf { origin.collectionId != null }, tracks.size, headerBack)
@@ -374,6 +376,7 @@ internal fun SongList(tracks: List<me.d3sox.nevumi.library.Track>, controller: M
         } }
     }
     val scroll = rememberLibraryListState(controller, "songs:${playlistId ?: contextName}")
+    if (scrollRequest != null) ApplyScrollRequest(scroll, scrollRequest)
     val ids = remember(tracks) { tracks.map { it.id } }
     val rowKeys = remember(ids) {
         val occurrences = mutableMapOf<String, Int>()
