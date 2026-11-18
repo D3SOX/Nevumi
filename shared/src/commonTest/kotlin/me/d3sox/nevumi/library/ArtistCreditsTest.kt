@@ -13,14 +13,13 @@ class ArtistCreditsTest {
         assertEquals(listOf("A", "B"), names("A feat B"))
         assertEquals(listOf("A", "B", "C"), names("A; B;C"))
         assertEquals(listOf("Simon & Garfunkel"), names("Simon & Garfunkel"))
-        assertEquals(listOf("Earth, Wind & Fire"), names("Earth, Wind & Fire"))
         // A word separator only splits where it stands alone.
         assertEquals(listOf("Daft Punk"), names("Daft Punk"))
         assertEquals(listOf("Leftfield"), names("Leftfield"))
         assertEquals(emptyList(), names(""))
         assertEquals(listOf("J Wax", "RUA DJ"), names("J Wax, RUA DJ"))
         assertEquals(listOf("Elvin (UK)", "AMEENAH"), names("Elvin (UK), AMEENAH"))
-        assertEquals(listOf("Tyler, The Creator", "A"), names("Tyler, The Creator, A"))
+        assertEquals(listOf("A"), names("A feat."))
         assertEquals(listOf("Calvin Harris", "Rufus Du Sol"), names("Calvin Harris vs Rufus Du Sol"))
         assertEquals(listOf("A", "B"), names("A Vs. B"))
         assertEquals(listOf("Above & Beyond"), names("Above & Beyond"))
@@ -44,6 +43,20 @@ class ArtistCreditsTest {
         assertEquals(listOf("A", "the Orchestra"), names("A", "Song (with the Orchestra)"))
         assertEquals(listOf("A"), names("A", "Song (feat. B)", ArtistSplitting(featuredFromTitle = false)))
         assertEquals(listOf("A"), names("A", "Featuring Nobody"))
+    }
+
+    @Test fun keepingNamesTogetherOffersNeighborsAndWholeCredits() {
+        fun joined(artist: String, artists: List<String> = emptyList(), splitting: ArtistSplitting = ArtistSplitting()) =
+            splitting.joinedNames(TrackMetadata("Song (feat. Nova)", artist, artists = artists))
+        assertEquals(listOf("Earth", "Wind & Fire"), names("Earth, Wind & Fire"))
+        assertEquals(listOf("Earth, Wind & Fire"), joined("Earth, Wind & Fire"))
+        assertEquals(listOf("Tyler, The Creator", "The Creator, A", "Tyler, The Creator, A"), joined("Tyler, The Creator, A"))
+        val kept = ArtistSplitting(exceptions = listOf("Tyler, The Creator"))
+        assertEquals(listOf("Tyler, The Creator", "A"), names("Tyler, The Creator, A", splitting = kept))
+        assertEquals(listOf("Tyler, The Creator, A"), joined("Tyler, The Creator, A", splitting = kept))
+        assertEquals(listOf("Macloud, makko"), joined("Miksu / Macloud, makko", listOf("Miksu", "Macloud, makko")))
+        // Featured artists in titles and unsplit credits have nothing to keep together.
+        assertEquals(emptyList(), joined("Pulse"))
     }
 
     @Test fun artistsAServerListsAreSplitAgainWithTheSeparators() {

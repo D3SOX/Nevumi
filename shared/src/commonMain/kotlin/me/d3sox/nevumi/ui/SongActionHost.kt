@@ -20,6 +20,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.cancel
+import me.d3sox.nevumi.resources.keep_as_one_artist
+import me.d3sox.nevumi.resources.keep_as_one_artist_description
 import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.shares_share_link
 import me.d3sox.nevumi.resources.edit_server_tags
@@ -252,15 +254,29 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
     // A refresh can remove every credit while the chooser is open; it then stays closed.
     LaunchedEffect(artists.isEmpty()) { if (artists.isEmpty()) choosingArtist = false }
     if (choosingArtist && artists.isNotEmpty()) {
-        AlertDialog(onDismissRequest = { choosingArtist = false }, title = { Text(TrackAction.GO_ARTIST.displayLabel()) }, text = {
+        // A wrong split, such as "Tyler" and "The Creator", is fixed here by keeping those names together from now on.
+        var joining by remember { mutableStateOf(false) }
+        val joinable = remember(track.metadata, splitting) { splitting.joinedNames(track.metadata) }
+        val close = { choosingArtist = false; joining = false }
+        AlertDialog(onDismissRequest = close, title = {
+            Text(if (joining) stringResource(Res.string.keep_as_one_artist) else TrackAction.GO_ARTIST.displayLabel())
+        }, text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                artists.forEach { name ->
-                    ListItem(headlineContent = { Text(name) }, leadingContent = { Icon(AppIcon.ARTIST.vector, null) },
+                if (joining) Text(stringResource(Res.string.keep_as_one_artist_description), Modifier.padding(bottom = 8.dp),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                (if (joining) joinable else artists).forEach { name ->
+                    ListItem(headlineContent = { Text(name) }, leadingContent = { Icon((if (joining) AppIcon.ALBUM_ARTIST else AppIcon.ARTIST).vector, null) },
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                        modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable { choosingArtist = false; navigate(LibraryTab.ARTISTS, name) })
+                        modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable {
+                            if (joining) controller.updatePreferences { it.copy(artistSeparatorExceptions = (it.artistSeparatorExceptions + name).distinct()) }
+                            else navigate(LibraryTab.ARTISTS, name)
+                            close()
+                        })
                 }
             }
-        }, confirmButton = {}, dismissButton = { TextButton(onClick = { choosingArtist = false }) { Text(stringResource(Res.string.cancel)) } })
+        }, confirmButton = {
+            if (!joining && joinable.isNotEmpty()) TextButton(onClick = { joining = true }) { Text(stringResource(Res.string.keep_as_one_artist)) }
+        }, dismissButton = { TextButton(onClick = close) { Text(stringResource(Res.string.cancel)) } })
     }
     if (rating) SongRating(track, controller) { rating = false }
     if (playlistPicker) PlaylistPicker(controller, track.id) { playlistPicker = false }
