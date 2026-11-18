@@ -51,7 +51,12 @@ class AndroidBitPerfectOutputTest {
     fun aUsbDacReceives16BitSamplesUnchangedAfterTheFadeIn() =
         play("bit-perfect-16.wav", bits = 16, decodedEncoding = AudioFormat.ENCODING_PCM_16BIT)
 
-    private fun play(fixture: String, bits: Int, decodedEncoding: Int) = runBlocking {
+    @Test
+    fun aLowerMediaVolumeNeverStartsLouder() =
+        play("bit-perfect-16.wav", bits = 16, decodedEncoding = AudioFormat.ENCODING_PCM_16BIT, gain = 0.5f)
+
+    /** Plays [fixture] into stand-in DACs; at a [gain] below 1, every sample, including the first buffer's, must be at most that loud. */
+    private fun play(fixture: String, bits: Int, decodedEncoding: Int, gain: Float = 1f) = runBlocking {
         assumeTrue(android.os.Build.VERSION.SDK_INT >= 34)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -65,7 +70,7 @@ class AndroidBitPerfectOutputTest {
         }
         try {
             for ((encoding, width) in listOf(AudioFormat.ENCODING_PCM_32BIT to 4, AudioFormat.ENCODING_PCM_24BIT_PACKED to 3)) {
-                val dac = FakeDac(context, encoding)
+                val dac = FakeDac(context, encoding, gain)
                 val ended = CompletableDeferred<Unit>()
                 lateinit var player: ExoPlayer
                 instrumentation.runOnMainSync {
@@ -96,6 +101,14 @@ class AndroidBitPerfectOutputTest {
                 val received = if (width == 4) IntArray(expected.size) { bytes.int }
                     else IntArray(expected.size) { (bytes.get().toInt() and 0xff) or ((bytes.get().toInt() and 0xff) shl 8) or (bytes.get().toInt() shl 16) }
                 val padded = expected.map { it shl (width * 8 - bits) }
+                if (gain < 1f) {
+                    // Rounding may add one step of the narrower source format.
+                    val step = 1L shl (width * 8 - bits)
+                    val loudest = (0 until expected.size).firstOrNull { kotlin.math.abs(received[it].toLong()) > kotlin.math.abs(padded[it] * gain.toDouble()).toLong() + step }
+                    assertEquals("Sample $loudest is louder than the media volume for encoding $encoding", null, loudest)
+                    assertEquals(1, dac.releases)
+                    continue
+                }
                 // Media3 fades in the first 20 ms after it opens an output, so those samples may only get quieter, keeping their sign.
                 val ramp = 960 * 2
                 assertTrue((0 until ramp).all { received[it].toLong() in minOf(0L, padded[it].toLong())..maxOf(0L, padded[it].toLong()) })
@@ -109,7 +122,7 @@ class AndroidBitPerfectOutputTest {
 
 /** A USB DAC whose bit-perfect mixer takes [encoding]. Its outputs record what they receive, 3,000 bytes per write at most. */
 @UnstableApi
-private class FakeDac(context: android.content.Context, private val encoding: Int,
+private class FakeDac(context: android.content.Context, private val encoding: Int, private val volume: Float = 1f,
     private val real: AudioOutputProvider = AudioTrackAudioOutputProvider.Builder(context).build()) : AudioOutputProvider by real {
     val routed = mutableListOf<OutputConfig>()
     val opened = mutableListOf<OutputConfig>()
@@ -119,6 +132,7 @@ private class FakeDac(context: android.content.Context, private val encoding: In
         override fun getAudioOutput(config: OutputConfig): AudioOutput = RecordingOutput(config).also { opened += config }
     }, object : BitPerfectMixers {
         override fun route(config: OutputConfig?) = config?.let { routed += it; encoding }
+        override fun gain() = volume
         override fun release() { releases++ }
     })
     override fun getAudioOutput(config: OutputConfig) = provider.getAudioOutput(config)

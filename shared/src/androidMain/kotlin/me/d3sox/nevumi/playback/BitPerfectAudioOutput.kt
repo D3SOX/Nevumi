@@ -139,8 +139,11 @@ private class ConvertingAudioOutput(private val output: AudioOutput, private val
     /** A buffer the output took only part of unchanged, which it must get again as is until it takes the rest. */
     private var passing: ByteBuffer? = null
     private var playerVolume = 1f
-    /** The gain the last buffer ended at, so a volume change ramps across the next buffer instead of clicking. */
-    private var applied = 1.0
+    /**
+     * The gain the last buffer ended at, so a volume change ramps across the next buffer instead of clicking. The first buffer
+     * starts at the requested gain, so a quiet or muted start never begins loud.
+     */
+    private var applied: Double? = null
 
     init { output.setVolume(1f) }
 
@@ -151,7 +154,9 @@ private class ConvertingAudioOutput(private val output: AudioOutput, private val
         // A full track gets the same buffer again until it takes the rest, which then needs no second conversion.
         if (buffer === passing || buffer !== source || buffer.position() != sourcePosition) {
             val gain = (mediaGain() * playerVolume).toDouble()
-            if (buffer === passing || from == to && gain == 1.0 && applied == 1.0) {
+            val start = applied ?: gain
+            if (buffer === passing || from == to && gain == 1.0 && start == 1.0) {
+                if (buffer !== passing) applied = gain
                 source = null
                 val written = output.write(buffer, encodedAccessUnitCount, presentationTimeUs)
                 passing = buffer.takeUnless { written }
@@ -160,7 +165,7 @@ private class ConvertingAudioOutput(private val output: AudioOutput, private val
             val bytes = buffer.remaining() / from.bytes * to.bytes
             if (converted.capacity() < bytes) converted = ByteBuffer.allocateDirect(bytes)
             converted.clear().limit(bytes)
-            convertPcm(buffer.duplicate(), from, converted, to, applied, gain, channels)
+            convertPcm(buffer.duplicate(), from, converted, to, start, gain, channels)
             applied = gain
             converted.flip()
             source = buffer
