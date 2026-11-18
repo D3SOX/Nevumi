@@ -7,8 +7,21 @@ private val punctuation = Regex("""[^\p{L}\p{N}]+""")
 private val whitespace = Regex("""\s+""")
 
 // Upper- then lowercasing folds case more fully than lowercasing alone, so "STRASSE" finds "Straße"; the capital ẞ stays ß.
-private fun words(text: String) = withoutMarks(text).uppercase().lowercase().replace("ß", "ss").split(whitespace)
-    .map { punctuation.replace(it, "") }.filter { it.isNotEmpty() }
+private fun words(text: String) = if (text.all { it < '\u0080' }) asciiWords(text)
+    else withoutMarks(text).uppercase().lowercase().replace("ß", "ss").split(whitespace).map { punctuation.replace(it, "") }.filter { it.isNotEmpty() }
+
+/** [words] of plain ASCII text without normalizing or regular expressions, since most tags are ASCII and phones index thousands. */
+private fun asciiWords(text: String): List<String> {
+    val words = mutableListOf<String>()
+    val word = StringBuilder()
+    for (char in text) when (char) {
+        in 'a'..'z', in '0'..'9' -> word.append(char)
+        in 'A'..'Z' -> word.append(char + ('a' - 'A'))
+        ' ', '\t', '\n', '\u000B', '\u000C', '\r' -> if (word.isNotEmpty()) { words += word.toString(); word.clear() }
+    }
+    if (word.isNotEmpty()) words += word.toString()
+    return words
+}
 
 /**
  * Text prepared for [SearchQuery]: case-folded, without accents and with punctuation removed from each word, so "acdc" finds
