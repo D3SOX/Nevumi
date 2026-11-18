@@ -35,11 +35,14 @@ class NevumiAudioRenderersFactory(context: Context, private val outputMonitor: A
         val chain = object : AudioProcessorChain by processing {
             override fun getAudioProcessors(): Array<AudioProcessor> = processing.audioProcessors + listOfNotNull(outputMonitor, visualizer)
         }
-        // Float output asks decoders for float samples, which skip the processors: 24-bit songs keep every bit, and nothing changes them
-        // except the 20 ms fade-in DefaultAudioSink always applies when it opens an output, on start and after seeks.
-        val sink = DefaultAudioSink.Builder(context).setAudioProcessorChain(chain).apply {
-            if (bitPerfect && Build.VERSION.SDK_INT >= 34) setEnableFloatOutput(true).setAudioOutputProvider(bitPerfectOutput(context))
-            else setEnableFloatOutput(false)
+        // Float output asks decoders for float samples, which skip the processors: 24-bit songs keep every bit. 16-bit PCM still passes
+        // the chain, so bit-perfect output leaves the app's processors out. Nothing changes the samples except the 20 ms fade-in
+        // DefaultAudioSink always applies when it opens an output, on start and after seeks.
+        val bitPerfectSink = bitPerfect && Build.VERSION.SDK_INT >= 34
+        val sink = DefaultAudioSink.Builder(context).apply {
+            if (bitPerfectSink) setAudioProcessorChain(DefaultAudioSink.DefaultAudioProcessorChain()).setEnableFloatOutput(true)
+                .setAudioOutputProvider(bitPerfectOutput(context))
+            else setAudioProcessorChain(chain).setEnableFloatOutput(false)
         }.setEnableAudioOutputPlaybackParameters(false).build()
         return object : ForwardingAudioSink(sink) {
             override fun configure(config: AudioSink.AudioSinkConfig) {

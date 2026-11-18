@@ -42,8 +42,11 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
 
     override fun route(config: OutputConfig?): Int? {
         val source = config?.let { pcmFormat(it.encoding) }
-        val device = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .firstOrNull { it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET }
+        val outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .filter { it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET }
+        // With two DACs connected, the one music plays on is the one whose mixer counts.
+        val playingOn = runCatching { audio.getAudioDevicesForAttributes(media) }.getOrDefault(emptyList())
+        val device = outputs.firstOrNull { output -> playingOn.any { it.id == output.id } } ?: outputs.firstOrNull()
         val mixer = if (config == null || source == null || device == null) null else
             bitPerfectMixer(audio.getSupportedMixerAttributes(device), config.sampleRate, config.channelMask, source)
         if (preferred != null && (mixer == null || preferred?.id != device?.id)) release()
@@ -82,8 +85,13 @@ class BitPerfectAudioOutputProvider(private val delegate: AudioOutputProvider, p
         val encoding = mixers.route(config.takeIf { source != null })
         val target = encoding?.let(::pcmFormat)
         if (source == null || encoding == null || target == null) return delegate.getAudioOutput(config)
-        val output = delegate.getAudioOutput(config.buildUpon().setEncoding(encoding)
-            .setBufferSize(config.bufferSize / source.bytes * target.bytes).build())
+        val output = try {
+            delegate.getAudioOutput(config.buildUpon().setEncoding(encoding).setBufferSize(config.bufferSize / source.bytes * target.bytes).build())
+        } catch (_: AudioOutputProvider.InitializationException) {
+            // Android took the mixer but can't open a track for it, so the song plays through its normal mixer.
+            mixers.release()
+            return delegate.getAudioOutput(config)
+        }
         return if (target == source) output else ConvertingAudioOutput(output, source, target)
     }
 

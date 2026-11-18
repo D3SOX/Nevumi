@@ -35,28 +35,36 @@ import java.nio.ByteOrder
 import java.util.UUID
 
 /**
- * Plays a 24-bit FLAC through the bit-perfect pipeline into a stand-in for a USB DAC's mixer, which takes only part of each
- * buffer per write like a full AudioTrack. The DAC must receive every decoded sample unchanged, even with effects set, after
- * the fade-in Media3 applies to the start of every output.
+ * Plays songs through the bit-perfect pipeline into a stand-in for a USB DAC's mixer, which takes only part of each buffer per
+ * write like a full AudioTrack. The DAC must receive every sample unchanged, even with effects set, after the fade-in Media3
+ * applies to the start of every output. A 24-bit FLAC decodes to floats, while 16-bit PCM keeps its integers and passes the
+ * sink's processors.
  */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class AndroidBitPerfectOutputTest {
     @Test
-    fun aUsbDacReceives24BitSamplesUnchangedAfterTheFadeIn() = runBlocking {
+    fun aUsbDacReceives24BitSamplesUnchangedAfterTheFadeIn() =
+        play("bit-perfect-24.flac", bits = 24, decodedEncoding = AudioFormat.ENCODING_PCM_FLOAT)
+
+    @Test
+    fun aUsbDacReceives16BitSamplesUnchangedAfterTheFadeIn() =
+        play("bit-perfect-16.wav", bits = 16, decodedEncoding = AudioFormat.ENCODING_PCM_16BIT)
+
+    private fun play(fixture: String, bits: Int, decodedEncoding: Int) = runBlocking {
         assumeTrue(android.os.Build.VERSION.SDK_INT >= 34)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        val source = File(context.cacheDir, "bit-perfect-${UUID.randomUUID()}.flac")
-        instrumentation.context.assets.open("bit-perfect-24.flac").use { input -> source.outputStream().use(input::copyTo) }
-        // The fixture's samples come from this generator, encoded losslessly as 24-bit stereo FLAC at 48 kHz.
+        val source = File(context.cacheDir, "bit-perfect-${UUID.randomUUID()}-$fixture")
+        instrumentation.context.assets.open(fixture).use { input -> source.outputStream().use(input::copyTo) }
+        // The fixtures' samples come from this generator, stored losslessly as stereo at 48 kHz.
         var state = 1L
         val expected = IntArray(12_000 * 2) {
             state = (state * 1_103_515_245 + 12_345) % (1L shl 31)
-            (((state shr 7) and 0xFFFFFF).toInt() shl 8) shr 8
+            (((state shr 7) and ((1L shl bits) - 1)).toInt() shl (32 - bits)) shr (32 - bits)
         }
         try {
-            for (encoding in listOf(AudioFormat.ENCODING_PCM_32BIT, AudioFormat.ENCODING_PCM_24BIT_PACKED)) {
+            for ((encoding, width) in listOf(AudioFormat.ENCODING_PCM_32BIT to 4, AudioFormat.ENCODING_PCM_24BIT_PACKED to 3)) {
                 val dac = FakeDac(context, encoding)
                 val ended = CompletableDeferred<Unit>()
                 lateinit var player: ExoPlayer
@@ -80,16 +88,18 @@ class AndroidBitPerfectOutputTest {
                 val routed = dac.routed.single()
                 assertEquals(48_000, routed.sampleRate)
                 assertEquals(AudioFormat.CHANNEL_OUT_STEREO, routed.channelMask)
-                assertEquals(AudioFormat.ENCODING_PCM_FLOAT, routed.encoding)
+                assertEquals(decodedEncoding, routed.encoding)
                 assertEquals(encoding, dac.opened.single().encoding)
                 val bytes = ByteBuffer.wrap(dac.received.toByteArray()).order(ByteOrder.LITTLE_ENDIAN)
-                val received = if (encoding == AudioFormat.ENCODING_PCM_32BIT) IntArray(bytes.remaining() / 4) { bytes.int shr 8 }
-                    else IntArray(bytes.remaining() / 3) { (bytes.get().toInt() and 0xff) or ((bytes.get().toInt() and 0xff) shl 8) or (bytes.get().toInt() shl 16) }
-                assertEquals(expected.size, received.size)
+                assertEquals(expected.size * width, bytes.remaining())
+                // Whole words, so a wrong padding bit fails too.
+                val received = if (width == 4) IntArray(expected.size) { bytes.int }
+                    else IntArray(expected.size) { (bytes.get().toInt() and 0xff) or ((bytes.get().toInt() and 0xff) shl 8) or (bytes.get().toInt() shl 16) }
+                val padded = expected.map { it shl (width * 8 - bits) }
                 // Media3 fades in the first 20 ms after it opens an output, so those samples may only get quieter.
                 val ramp = 960 * 2
-                assertTrue((0 until ramp).all { kotlin.math.abs(received[it]) <= kotlin.math.abs(expected[it]) })
-                val first = (ramp until expected.size).firstOrNull { expected[it] != received[it] }
+                assertTrue((0 until ramp).all { kotlin.math.abs(received[it].toLong()) <= kotlin.math.abs(padded[it].toLong()) })
+                val first = (ramp until expected.size).firstOrNull { padded[it] != received[it] }
                 assertEquals("Sample $first differs for encoding $encoding", null, first)
                 assertEquals(1, dac.releases)
             }

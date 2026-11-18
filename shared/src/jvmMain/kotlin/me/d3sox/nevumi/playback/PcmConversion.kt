@@ -25,7 +25,8 @@ internal enum class PcmSampleFormat(val bytes: Int, private val bits: Int) {
     internal fun write(buffer: ByteBuffer, sample: Double) {
         if (this == FLOAT) { buffer.putFloat(sample.toFloat()); return }
         val scale = (1L shl (bits - 1)).toDouble()
-        val value = (sample * scale).roundToLong().coerceIn(-scale.toLong(), scale.toLong() - 1)
+        // A broken float sample, which no DAC can play, becomes silence.
+        val value = if (sample.isNaN()) 0L else (sample * scale).roundToLong().coerceIn(-scale.toLong(), scale.toLong() - 1)
         when (this) {
             INT16 -> buffer.putShort(value.toInt().toShort())
             INT24 -> { buffer.put(value.toByte()); buffer.put((value shr 8).toByte()); buffer.put((value shr 16).toByte()) }

@@ -34,6 +34,11 @@ class PcmConversionTest {
         assertEquals(listOf(Int.MAX_VALUE, Int.MIN_VALUE), listOf(clipped.int, clipped.int))
     }
 
+    @Test fun aBrokenFloatSampleBecomesSilence() {
+        val converted = convert(PcmSampleFormat.FLOAT, PcmSampleFormat.INT24, 2) { it.putFloat(Float.NaN); it.putFloat(0.5f) }
+        assertEquals(listOf(0.0, 0.5), listOf(PcmSampleFormat.INT24.read(converted), PcmSampleFormat.INT24.read(converted)))
+    }
+
     @Test fun onlyFormatsAtLeastAsPreciseHoldTheSamples() {
         assertFalse(PcmSampleFormat.INT16.holds(PcmSampleFormat.FLOAT))
         assertTrue(PcmSampleFormat.INT24.holds(PcmSampleFormat.FLOAT))
