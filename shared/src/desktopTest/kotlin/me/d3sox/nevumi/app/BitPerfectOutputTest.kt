@@ -34,15 +34,22 @@ class BitPerfectOutputTest {
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), engine, preferences = preferences)
         try {
             withTimeout(5_000) { engine.applied.first { it.speed == 1.5 && it.replayGain == gain && it.skipSilence } }
+            withTimeout(5_000) { controller.state.first { it.playback.speed == 1.5 } }
             controller.updatePreferences { it.copy(bitPerfectOutput = true) }.join()
             assertEquals(Applied(bitPerfect = true), engine.applied.value)
+            // The engine now reports the neutral speed, which must not replace the listener's.
+            withTimeout(5_000) { controller.state.first { it.playback.speed == 1.0 } }
+            assertEquals(1.5, controller.state.value.preferences.speed)
             controller.setSpeed(2.0).join()
             assertEquals(1.0, engine.applied.value.speed)
             controller.updatePreferences { it.copy(crossfadeDurationMs = 6_000) }.join()
             assertEquals(0, engine.applied.value.crossfadeMs)
 
+            engine.calls.clear()
             controller.updatePreferences { it.copy(bitPerfectOutput = false) }.join()
             assertEquals(Applied(false, 2.0, 0.75, effects, 6_000, gain, fade = true, skipSilence = true), engine.applied.value)
+            // Bit-perfect output stops first, so a setting the engine rejects can't keep it on.
+            assertEquals("bitPerfect", engine.calls.first())
         } finally {
             controller.closeAndJoin()
             store.close()
@@ -79,6 +86,7 @@ private data class Applied(val bitPerfect: Boolean = false, val speed: Double = 
 /** Records the playback values the controller applies. */
 private class RecordingEngine(override val supportsBitPerfectOutput: Boolean) : PlaybackEngine {
     val applied = MutableStateFlow(Applied())
+    val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val mutableStatus = MutableStateFlow(PlaybackStatus())
     override val status = mutableStatus.asStateFlow()
     override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
@@ -88,12 +96,23 @@ private class RecordingEngine(override val supportsBitPerfectOutput: Boolean) : 
     override fun pause() {}
     override fun seek(positionMs: Long) {}
     override fun setVolume(volume: Double) {}
-    override fun setSpeed(speed: Double) = applied.update { it.copy(speed = speed) }
-    override fun setPitch(pitch: Double) = applied.update { it.copy(pitch = pitch) }
+    override fun setSpeed(speed: Double) {
+        calls += "speed"
+        applied.update { it.copy(speed = speed) }
+        mutableStatus.update { it.copy(speed = speed) }
+    }
+    override fun setPitch(pitch: Double) {
+        calls += "pitch"
+        applied.update { it.copy(pitch = pitch) }
+        mutableStatus.update { it.copy(pitch = pitch) }
+    }
     override suspend fun setAudioEffects(effects: AudioEffects) = applied.update { it.copy(effects = effects) }
     override fun setCrossfadeDuration(milliseconds: Long) = applied.update { it.copy(crossfadeMs = milliseconds) }
     override fun setReplayGain(replayGain: ReplayGain) = applied.update { it.copy(replayGain = replayGain) }
-    override fun setBitPerfectOutput(enabled: Boolean) = applied.update { it.copy(bitPerfect = enabled) }
+    override fun setBitPerfectOutput(enabled: Boolean) {
+        calls += "bitPerfect"
+        applied.update { it.copy(bitPerfect = enabled) }
+    }
     override fun setPlayPauseFade(enabled: Boolean) = applied.update { it.copy(fade = enabled) }
     override fun setSkipSilence(enabled: Boolean) = applied.update { it.copy(skipSilence = enabled) }
     override fun setRepeat(mode: RepeatMode, playCount: Int?) {}

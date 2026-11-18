@@ -124,7 +124,11 @@ data class MusicSettings(
     val trayIcon: Boolean = false,
     /** Android: connecting headphones, a USB headset or Bluetooth audio resumes the paused song. */
     val resumeOnHeadphones: Boolean = false,
-    /** Android 14+: sends each file's samples unchanged to a USB DAC, so speed, pitch, effects, crossfade, fades, skipping silence and ReplayGain stay off. */
+    /**
+     * Android 14+: sends each file's samples unchanged to a USB DAC whose bit-perfect mixer takes the song's format, after a 20 ms
+     * fade-in when playback starts or seeks; other songs play through Android's mixer. Speed, pitch, effects, crossfade, fades,
+     * skipping silence and ReplayGain stay off.
+     */
     val bitPerfectOutput: Boolean = false,
     /** Android: turning the media volume down to zero pauses, and turning it up again resumes what this paused. */
     val pauseAtZeroVolume: Boolean = false,

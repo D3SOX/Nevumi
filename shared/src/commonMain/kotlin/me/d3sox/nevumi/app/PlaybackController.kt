@@ -39,6 +39,7 @@ import org.jetbrains.compose.resources.getString
 import me.d3sox.nevumi.resources.notice_playback_moved_skipped_song
 import me.d3sox.nevumi.resources.notice_playback_moved_skipped_songs
 import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.settings.bitPerfect
 import me.d3sox.nevumi.settings.forEngine
 import me.d3sox.nevumi.sync.PairedDevices
 import me.d3sox.nevumi.sync.PlaybackReceiver
@@ -176,9 +177,11 @@ class PlaybackController internal constructor(private val context: ControllerCon
                     snapshot = queue.snapshot()
                 }
                 // The same applies to speed and pitch, which a headset or watch can change; Android reports them as floats.
-                if (preferences != null && previous != null && (previous.speed != playback.speed || previous.pitch != playback.pitch)) {
+                // Bit-perfect output plays at the neutral values, which must not replace the listener's.
+                val settings = context.state.value.preferences
+                if (preferences != null && previous != null && (previous.speed != playback.speed || previous.pitch != playback.pitch) &&
+                    !settings.bitPerfect(engine.supportsBitPerfectOutput)) {
                     fun rounded(value: Double) = kotlin.math.round(value * 100) / 100
-                    val settings = context.state.value.preferences
                     val speed = rounded(playback.speed)
                     val pitch = rounded(playback.pitch)
                     if (speed in 0.5..2.0 && pitch in 0.5..2.0 && (abs(settings.speed - speed) > 0.001 || abs(settings.pitch - pitch) > 0.001))
@@ -392,9 +395,12 @@ class PlaybackController internal constructor(private val context: ControllerCon
     private suspend fun capturePlayback(id: String, includeSavedSelection: Boolean = false): PlaybackTransfer {
         val snapshot = queue.snapshot()
         val playing = engine.status.value
+        // Bit-perfect output plays at the neutral values, so the listener's own speed and pitch travel instead.
+        val settings = context.state.value.preferences
+        val listened = if (settings.bitPerfect(engine.supportsBitPerfectOutput)) settings else null
         return PlaybackTransfer(id, snapshot.copy(selectedSavedQueueId = snapshot.selectedSavedQueueId.takeIf { includeSavedSelection },
             positionMs = if (playing.entryId == snapshot.currentEntryId) playing.positionMs else snapshot.positionMs),
-            playing.playWhenReady, playing.speed, playing.pitch)
+            playing.playWhenReady, listened?.speed ?: playing.speed, listened?.pitch ?: playing.pitch)
     }
 
     private suspend fun applyTransferredPlayback(playback: PlaybackTransfer) {

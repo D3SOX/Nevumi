@@ -36,6 +36,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     // Set by callers and cleared by the worker once the decoder reports the requested entry.
     @kotlin.concurrent.Volatile private var pendingLoad: PendingLoad? = null
     private var crossfadeMs = 0L
+    /** Bit-perfect output plays one decoder at a time, so it keeps the chosen crossfade for later and plays without it. */
+    private val activeCrossfadeMs get() = if (bitPerfect) 0L else crossfadeMs
     private var gapless = true
     private var masterVolume = 1.0
     private var speed = 1.0
@@ -105,18 +107,23 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         command {
             cancelFade()
             crossfadeMs = milliseconds
-            val index = currentIndex()
-            if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
-            applyRepeat()
+            applyCrossfade()
         }
     }
 
-    private fun nativeQueue() = crossfadeMs == 0L && gapless
+    /** Gives the playing decoder the whole queue when it plays without crossfade, and only the current song when it crossfades. */
+    private suspend fun applyCrossfade() {
+        val index = currentIndex()
+        if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
+        applyRepeat()
+    }
+
+    private fun nativeQueue() = activeCrossfadeMs == 0L && gapless
 
     override fun setGaplessPlayback(enabled: Boolean) = command {
         if (gapless != enabled) {
             gapless = enabled
-            if (crossfadeMs > 0) return@command
+            if (activeCrossfadeMs > 0) return@command
             cancelFade()
             val index = currentIndex()
             if (index >= 0) {
@@ -142,6 +149,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             prepared = null
         }
         engines().forEach { it.setBitPerfectOutput(enabled) }
+        if (crossfadeMs > 0) applyCrossfade()
     }
 
     override fun setPlayPauseFade(enabled: Boolean) = command {
@@ -357,7 +365,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             repeatPlays = null
             repeatMode = RepeatMode.OFF
         } else if (repeatPlays != null) repeatPlays = current.repeatPlays
-        if (crossfadeMs > 0 && current.error == null) {
+        if (activeCrossfadeMs > 0 && current.error == null) {
             if (outgoing != null) {
                 if (requestedPlaying.value && current.playing) fadeElapsedMs += elapsed
                 applyGains()
@@ -382,7 +390,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                 }
                 val remaining = (current.durationMs - current.positionMs).coerceAtLeast(0) / speed
                 val waiting = standby
-                val fadeLimit = minOf(crossfadeMs.toDouble(), current.durationMs / speed / 2,
+                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), current.durationMs / speed / 2,
                     (waiting?.status?.value?.durationMs ?: 0) / speed / 2)
                 if (next != null && waiting != null && prepared == next && requestedPlaying.value &&
                     waiting.status.value.entryId == next.entryId && waiting.status.value.durationMs > 0 &&
@@ -403,7 +411,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                 }
             }
         }
-        if (!gapless && crossfadeMs == 0L && current.ended && current.entryId == selectedEntry && requestedPlaying.value) {
+        if (!gapless && activeCrossfadeMs == 0L && current.ended && current.entryId == selectedEntry && requestedPlaying.value) {
             nextTrack()?.let(::loadNext)
         }
         val requested = pendingLoad
@@ -418,7 +426,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         } else 0f
         mutableStatus.value = playback.copy(volume = masterVolume, speed = speed, pitch = pitch, audioEffects = effects,
             playWhenReady = requestedPlaying.value, playing = playback.playing && requestedPlaying.value,
-            repeatMode = repeatMode, repeatPlays = repeatPlays, fadingOut = tail, crossfadeDurationMs = crossfadeMs)
+            repeatMode = repeatMode, repeatPlays = repeatPlays, fadingOut = tail, crossfadeDurationMs = activeCrossfadeMs)
     }
 
     private fun pendingStatus(current: PlaybackStatus, pending: PendingLoad) = current.copy(trackId = pending.track.id,

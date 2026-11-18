@@ -26,6 +26,11 @@ class CrossfadeBitPerfectTest {
             withTimeout(5_000) { playing.bitPerfect.first { it } }
             assertTrue(waiting.closed.value, "The waiting decoder must close instead of claiming the bit-perfect mixer")
             assertEquals(false, waiting.bitPerfect.value)
+            // The chosen crossfade stays set, yet later ticks must not prepare another decoder for the next song.
+            withTimeout(5_000) { engine.status.first { it.crossfadeDurationMs == 0L } }
+            playing.seek(1_000)
+            withTimeout(5_000) { engine.status.first { it.positionMs == 1_000L } }
+            assertEquals(2, synchronized(decoders) { decoders.size })
         } finally { engine.close() }
     }
 }

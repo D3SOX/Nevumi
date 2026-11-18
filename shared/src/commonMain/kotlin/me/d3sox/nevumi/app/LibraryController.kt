@@ -142,8 +142,9 @@ class LibraryController internal constructor(private val context: ControllerCont
         context.update { it.copy(preferences = settings) }
         val playing = settings.forEngine(engine.supportsBitPerfectOutput)
         val played = previous.forEngine(engine.supportsBitPerfectOutput)
-        // Neutral values reach the engine before bit-perfect output starts, and the listener's return after it stops.
-        if (playing.bitPerfectOutput && !played.bitPerfectOutput) engine.setBitPerfectOutput(true)
+        // Bit-perfect output starts before the neutral values reach the engine and stops before the listener's return, so a
+        // setting the engine rejects can't keep it on.
+        if (playing.bitPerfectOutput != played.bitPerfectOutput) engine.setBitPerfectOutput(playing.bitPerfectOutput)
         if (playing.speed != played.speed) engine.setSpeed(playing.speed)
         if (playing.pitch != played.pitch) engine.setPitch(playing.pitch)
         if (playing.audioEffects != played.audioEffects) engine.setAudioEffects(playing.audioEffects)
@@ -153,7 +154,6 @@ class LibraryController internal constructor(private val context: ControllerCont
         if (playing.fadePlayPause != played.fadePlayPause) engine.setPlayPauseFade(playing.fadePlayPause)
         if (playing.skipSilence != played.skipSilence) engine.setSkipSilence(playing.skipSilence)
         if (settings.resumeLongSongsMinutes == 0 && previous.resumeLongSongsMinutes != 0) library.forgetSongPositions()
-        if (!playing.bitPerfectOutput && played.bitPerfectOutput) engine.setBitPerfectOutput(false)
         if (playback.queueLoaded && (settings.sourcePriority != previous.sourcePriority || settings.youTube != previous.youTube))
             engine.updateQueue(playback.playableQueue(queue.snapshot()))
         if (settings.undoRetentionDays != previous.undoRetentionDays || settings.undoBackupBytes != previous.undoBackupBytes) {
