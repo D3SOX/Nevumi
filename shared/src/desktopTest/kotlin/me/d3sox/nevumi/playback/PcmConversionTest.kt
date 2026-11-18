@@ -48,6 +48,22 @@ class PcmConversionTest {
         assertTrue(PcmSampleFormat.INT16.holds(PcmSampleFormat.INT16))
     }
 
+    @Test fun aLowerVolumeScalesTheSamplesAndAChangeRampsAcrossTheBuffer() {
+        val half = convert(PcmSampleFormat.INT16, PcmSampleFormat.INT16, 2) { it.putShort(1_000); it.putShort(-1_000) }
+        val input = ByteBuffer.allocate(2 * 2).order(ByteOrder.LITTLE_ENDIAN).putShort(1_000).putShort(-1_000).flip()
+        val output = ByteBuffer.allocate(2 * 2)
+        convertPcm(input, PcmSampleFormat.INT16, output, PcmSampleFormat.INT16, 0.5)
+        output.flip().order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(listOf<Short>(500, -500), listOf(output.short, output.short))
+        assertEquals(listOf<Short>(1_000, -1_000), listOf(half.short, half.short))
+
+        val ramp = ByteBuffer.allocate(4 * 2).order(ByteOrder.LITTLE_ENDIAN).apply { repeat(4) { putShort(1_000) } }.flip()
+        val faded = ByteBuffer.allocate(4 * 2)
+        convertPcm(ramp, PcmSampleFormat.INT16, faded, PcmSampleFormat.INT16, 1.0, 0.0)
+        faded.flip().order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(listOf<Short>(750, 500, 250, 0), List(4) { faded.short })
+    }
+
     @Test fun conversionStopsAtAFullOutputBuffer() {
         val input = ByteBuffer.allocate(4 * 4).order(ByteOrder.LITTLE_ENDIAN).apply { repeat(4) { putFloat(0.5f) } }.flip()
         val output = ByteBuffer.allocate(2 * 3 + 1)

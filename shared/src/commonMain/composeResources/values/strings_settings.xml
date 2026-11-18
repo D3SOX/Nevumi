@@ -127,7 +127,7 @@
     <string name="settings_resume_on_headphones">Resume when headphones connect</string>
     <string name="settings_resume_on_headphones_description">Continue the paused song when you connect wired, USB or Bluetooth audio</string>
     <string name="settings_bit_perfect">Bit-perfect USB output</string>
-    <string name="settings_bit_perfect_description">Send songs unchanged to a USB DAC that supports their format, and play others as usual. Turns off speed, pitch, effects, crossfade, fading on play and pause, skipping silence, ReplayGain and the visualizer.</string>
+    <string name="settings_bit_perfect_description">Send songs unchanged to a USB DAC that supports their format, and play others as usual. Below full media volume, Nevumi lowers the volume itself. Turns off speed, pitch, effects, crossfade, fading on play and pause, skipping silence, ReplayGain and the visualizer.</string>
     <string name="settings_bit_perfect_effects_off">Bit-perfect USB output is on, so audio effects are off. Changes here apply once you turn it off in Playback settings.</string>
     <string name="settings_pause_at_zero_volume">Pause at zero volume</string>
     <string name="settings_pause_at_zero_volume_description">Pause when you turn the media volume all the way down, and continue when you turn it up again</string>

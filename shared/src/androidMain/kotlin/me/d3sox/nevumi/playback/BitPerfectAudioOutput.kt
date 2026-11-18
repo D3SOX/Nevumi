@@ -26,6 +26,8 @@ private fun pcmFormat(encoding: Int) = when (encoding) {
 interface BitPerfectMixers {
     /** Routes PCM in [config] to a bit-perfect mixer and returns the encoding it takes, or returns null and lets Android mix it. */
     fun route(config: OutputConfig?): Int?
+    /** The media volume for the routed DAC as a linear gain, which Nevumi applies because the bit-perfect mixer doesn't. */
+    fun gain(): Float = 1f
     fun release()
 }
 
@@ -56,6 +58,26 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
         if (!routed) return null
         preferred = device
         return requireNotNull(mixer).format.encoding
+    }
+
+    private var gain = 1f
+    private var gainReadAt = Long.MIN_VALUE
+
+    /**
+     * Android passes the media volume of a bit-perfect track to the audio driver, and some drivers, such as the Pixel 8 Pro's
+     * for USB, ignore it, so the DAC would play at full volume. Nevumi lowers the samples instead; at full volume they stay
+     * unchanged. A driver that applies the volume as well makes songs quieter than set, which is safer than too loud.
+     */
+    override fun gain(): Float {
+        val device = preferred ?: return 1f
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - gainReadAt < 100) return gain
+        gainReadAt = now
+        val index = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val db = if (index == 0 || audio.isStreamMute(AudioManager.STREAM_MUSIC)) Float.NEGATIVE_INFINITY
+            else audio.getStreamVolumeDb(AudioManager.STREAM_MUSIC, index, device.type)
+        gain = if (db.isFinite()) Math.pow(10.0, db / 20.0).toFloat().coerceIn(0f, 1f) else 0f
+        return gain
     }
 
     override fun release() {
@@ -92,7 +114,7 @@ class BitPerfectAudioOutputProvider(private val delegate: AudioOutputProvider, p
             mixers.release()
             return delegate.getAudioOutput(config)
         }
-        return if (target == source) output else ConvertingAudioOutput(output, source, target)
+        return ConvertingAudioOutput(output, source, target, mixers::gain)
     }
 
     override fun release() {
@@ -101,21 +123,38 @@ class BitPerfectAudioOutputProvider(private val delegate: AudioOutputProvider, p
     }
 }
 
-/** Writes the sink's samples to [output] in its encoding, keeping the sink's byte positions in the source encoding. */
+/**
+ * Writes the sink's samples to [output] in its encoding at the media and player volume, keeping the sink's byte positions in the
+ * source encoding. At full volume in the source encoding, the sink's buffers pass through untouched.
+ */
 @UnstableApi
 private class ConvertingAudioOutput(private val output: AudioOutput, private val from: PcmSampleFormat,
-    private val to: PcmSampleFormat) : AudioOutput by output {
+    private val to: PcmSampleFormat, private val mediaGain: () -> Float) : AudioOutput by output {
     private var converted = ByteBuffer.allocateDirect(0)
     private var source: ByteBuffer? = null
     private var sourcePosition = -1
+    private var playerVolume = 1f
+    /** The gain the last buffer ended at, so a volume change ramps across the next buffer instead of clicking. */
+    private var applied = 1.0
+
+    init { output.setVolume(1f) }
+
+    // The bit-perfect mixer doesn't apply a track's volume either, so it joins the media volume here.
+    override fun setVolume(volume: Float) { playerVolume = volume }
 
     override fun write(buffer: ByteBuffer, encodedAccessUnitCount: Int, presentationTimeUs: Long): Boolean {
         // A full track gets the same buffer again until it takes the rest, which then needs no second conversion.
         if (buffer !== source || buffer.position() != sourcePosition) {
+            val gain = (mediaGain() * playerVolume).toDouble()
+            if (from == to && gain == 1.0 && applied == 1.0) {
+                source = null
+                return output.write(buffer, encodedAccessUnitCount, presentationTimeUs)
+            }
             val bytes = buffer.remaining() / from.bytes * to.bytes
             if (converted.capacity() < bytes) converted = ByteBuffer.allocateDirect(bytes)
             converted.clear().limit(bytes)
-            convertPcm(buffer.duplicate(), from, converted, to)
+            convertPcm(buffer.duplicate(), from, converted, to, applied, gain)
+            applied = gain
             converted.flip()
             source = buffer
         }
