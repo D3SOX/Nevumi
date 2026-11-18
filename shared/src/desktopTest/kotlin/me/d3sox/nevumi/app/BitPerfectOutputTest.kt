@@ -29,7 +29,7 @@ class BitPerfectOutputTest {
         val effects = AudioEffects(enabled = true, preampDb = -3.0)
         val gain = ReplayGain(ReplayGainMode.TRACK, 2.0)
         preferences.update { it.copy(speed = 1.5, pitch = 0.75, audioEffects = effects, crossfadeDurationMs = 4_000, replayGain = gain) }
-        val engine = RecordingEngine()
+        val engine = RecordingEngine(supportsBitPerfectOutput = true)
         val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), engine, preferences = preferences)
         try {
             withTimeout(5_000) { engine.applied.first { it.speed == 1.5 && it.replayGain == gain } }
@@ -48,13 +48,34 @@ class BitPerfectOutputTest {
             directory.toFile().deleteRecursively()
         }
     }
+
+    @Test fun aRestoredBackupCannotSilenceEffectsWhereBitPerfectOutputIsMissing() = runBlocking {
+        val directory = Files.createTempDirectory("bit-perfect-unsupported")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val preferences = MusicPreferences(store)
+        val gain = ReplayGain(ReplayGainMode.TRACK, 2.0)
+        // Settings restored from an Android backup that had bit-perfect output on.
+        preferences.update { it.copy(speed = 1.5, crossfadeDurationMs = 4_000, replayGain = gain, bitPerfectOutput = true) }
+        val engine = RecordingEngine(supportsBitPerfectOutput = false)
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), engine, preferences = preferences)
+        try {
+            withTimeout(5_000) { engine.applied.first { it.speed == 1.5 && it.replayGain == gain } }
+            assertEquals(Applied(false, 1.5, 1.0, AudioEffects(), 4_000, gain), engine.applied.value)
+            controller.setSpeed(1.25).join()
+            assertEquals(1.25, engine.applied.value.speed)
+        } finally {
+            controller.closeAndJoin()
+            store.close()
+            directory.toFile().deleteRecursively()
+        }
+    }
 }
 
 private data class Applied(val bitPerfect: Boolean = false, val speed: Double = 1.0, val pitch: Double = 1.0,
     val effects: AudioEffects = AudioEffects(), val crossfadeMs: Long = 0, val replayGain: ReplayGain = ReplayGain())
 
 /** Records the playback values the controller applies. */
-private class RecordingEngine : PlaybackEngine {
+private class RecordingEngine(override val supportsBitPerfectOutput: Boolean) : PlaybackEngine {
     val applied = MutableStateFlow(Applied())
     private val mutableStatus = MutableStateFlow(PlaybackStatus())
     override val status = mutableStatus.asStateFlow()

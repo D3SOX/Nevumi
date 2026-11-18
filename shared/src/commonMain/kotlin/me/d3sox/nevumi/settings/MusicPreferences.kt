@@ -53,9 +53,15 @@ enum class QueueRecoveryMode(val label: StringResource) {
     BEFORE_REPLACE(Res.string.queue_recovery_before_replace), ON_CHANGE(Res.string.queue_recovery_on_change), TIMER(Res.string.queue_recovery_timer)
 }
 
+/** Whether bit-perfect output is on and the engine can provide it. A backup from another device may turn it on where it can't. */
+fun MusicSettings.bitPerfect(supported: Boolean) = bitPerfectOutput && supported
+
 /** The playback values the engine gets: bit-perfect output plays files unchanged, while the settings keep the listener's choices. */
-fun MusicSettings.forEngine(): MusicSettings = if (!bitPerfectOutput) this else
-    copy(speed = 1.0, pitch = 1.0, audioEffects = AudioEffects(), crossfadeDurationMs = 0, replayGain = ReplayGain())
+fun MusicSettings.forEngine(bitPerfectSupported: Boolean): MusicSettings = when {
+    !bitPerfectOutput -> this
+    !bitPerfectSupported -> copy(bitPerfectOutput = false)
+    else -> copy(speed = 1.0, pitch = 1.0, audioEffects = AudioEffects(), crossfadeDurationMs = 0, replayGain = ReplayGain())
+}
 
 @Serializable
 data class MusicSettings(

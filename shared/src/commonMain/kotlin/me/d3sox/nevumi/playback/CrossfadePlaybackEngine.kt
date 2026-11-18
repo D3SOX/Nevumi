@@ -122,7 +122,17 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         command { this.replayGain = replayGain; engines().forEach { it.setReplayGain(replayGain) } }
     }
 
-    override fun setBitPerfectOutput(enabled: Boolean) = command { bitPerfect = enabled; engines().forEach { it.setBitPerfectOutput(enabled) } }
+    override fun setBitPerfectOutput(enabled: Boolean) = command {
+        bitPerfect = enabled
+        if (enabled) {
+            // Android reserves a bit-perfect mixer for the app, not for one decoder, so a waiting decoder must not claim it.
+            cancelFade()
+            standby?.close()
+            standby = null
+            prepared = null
+        }
+        engines().forEach { it.setBitPerfectOutput(enabled) }
+    }
 
     override fun load(track: PlayableTrack, positionMs: Long, play: Boolean) = loadQueue(listOf(track), 0, positionMs, play)
 

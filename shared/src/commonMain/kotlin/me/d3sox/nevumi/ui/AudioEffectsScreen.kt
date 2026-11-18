@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import me.d3sox.nevumi.settings.bitPerfect
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -68,7 +69,7 @@ internal fun AudioEffectsScreen(state: AppState, controller: MusicController, di
     else {
     SettingsScreen(onDismissRequest = dismiss, title = { Text(stringResource(Res.string.audio_effects)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (state.preferences.bitPerfectOutput) Text(stringResource(Res.string.settings_bit_perfect_effects_off),
+            if (state.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput)) Text(stringResource(Res.string.settings_bit_perfect_effects_off),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             EffectSwitch(stringResource(Res.string.settings_enable_equalizer), effects.enabled) { enabled -> update { it.copy(enabled = enabled) } }
             EffectSwitch(stringResource(Res.string.settings_mono_audio), effects.mono) { mono -> update { it.copy(mono = mono) } }

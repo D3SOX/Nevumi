@@ -251,13 +251,13 @@ class PlaybackController internal constructor(private val context: ControllerCon
 
     fun setVolume(volume: Double) = context.action(serialized = false) { engine.setVolume(volume) }
     fun setSpeed(speed: Double) = context.action {
-        engine.setSpeed(context.state.value.preferences.copy(speed = speed).forEngine().speed)
+        engine.setSpeed(context.state.value.preferences.copy(speed = speed).forEngine(engine.supportsBitPerfectOutput).speed)
         preferences?.update { it.copy(speed = speed) }?.let { settings ->
             context.update { it.copy(preferences = settings) }
         }
     }
     fun setPitch(pitch: Double) = context.action {
-        engine.setPitch(context.state.value.preferences.copy(pitch = pitch).forEngine().pitch)
+        engine.setPitch(context.state.value.preferences.copy(pitch = pitch).forEngine(engine.supportsBitPerfectOutput).pitch)
         preferences?.update { it.copy(pitch = pitch) }?.let { settings ->
             context.update { it.copy(preferences = settings) }
         }
@@ -384,7 +384,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
     }
 
     private suspend fun applyTransferredPlayback(playback: PlaybackTransfer) {
-        context.state.value.preferences.copy(speed = playback.speed, pitch = playback.pitch).forEngine().let {
+        context.state.value.preferences.copy(speed = playback.speed, pitch = playback.pitch).forEngine(engine.supportsBitPerfectOutput).let {
             engine.setSpeed(it.speed); engine.setPitch(it.pitch)
         }
         queue.restore(playback.queue)
@@ -412,7 +412,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
     /** Applies the saved playback settings to the engine at startup. */
     internal suspend fun applyPreferences() {
         if (preferences != null) {
-            val settings = context.state.value.preferences.forEngine()
+            val settings = context.state.value.preferences.forEngine(engine.supportsBitPerfectOutput)
             engine.setBitPerfectOutput(settings.bitPerfectOutput)
             engine.setSpeed(settings.speed)
             engine.setPitch(settings.pitch)

@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import me.d3sox.nevumi.settings.bitPerfect
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -361,12 +362,13 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
 }
             if (category == "Playback") {
             SettingsGroup {
-            if (bitPerfectSetting) {
+            val bitPerfect = settings.bitPerfect(controller.engine.supportsBitPerfectOutput)
+            if (controller.engine.supportsBitPerfectOutput) {
                 SettingsToggle(stringResource(Res.string.settings_bit_perfect), AppIcon.USB, stringResource(Res.string.settings_bit_perfect_description),
                     settings.bitPerfectOutput) { enabled -> controller.updatePreferences { it.copy(bitPerfectOutput = enabled) } }
             }
             // Bit-perfect output plays files unchanged, so the settings that change the sound wait until it is off.
-            if (!settings.bitPerfectOutput) {
+            if (!bitPerfect) {
             SettingsSlider(stringResource(Res.string.settings_playback_speed), AppIcon.SPEED, settings.speed.toFloat(), 0.5f..2f, 29,
                 { value -> "${(value * 100).roundToInt() / 100.0}×" }) { controller.setSpeed(it.toDouble()) }
             SettingsSlider(stringResource(Res.string.settings_playback_pitch), AppIcon.PITCH, (12 * log2(settings.pitch)).toFloat(), -12f..12f, 23,
@@ -382,7 +384,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             }
             LyricsSettings(settings, controller)
             SettingsLink(stringResource(Res.string.audio_effects), AppIcon.EQUALIZER, stringResource(Res.string.settings_audio_effects_description), audioEffects)
-            if (!settings.bitPerfectOutput) {
+            if (!bitPerfect) {
             SettingsSlider(stringResource(Res.string.crossfade), AppIcon.CROSSFADE, settings.crossfadeDurationMs / 1_000f, 0f..12f, 11,
                 { value -> when (val seconds = value.roundToInt()) { 0 -> stringResource(Res.string.off); else -> pluralStringResource(Res.plurals.settings_seconds, seconds, seconds) } }) {
                 controller.updatePreferences { preferences -> preferences.copy(crossfadeDurationMs = it.roundToInt() * 1_000L) }
@@ -391,7 +393,7 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsToggle(stringResource(Res.string.settings_gapless_playback), AppIcon.MUSIC, stringResource(Res.string.settings_gapless_playback_description), settings.gaplessPlayback) {
                 enabled -> controller.updatePreferences { it.copy(gaplessPlayback = enabled) }
             }
-            if (!settings.bitPerfectOutput) {
+            if (!bitPerfect) {
             SettingChoice(Res.string.settings_replay_gain, settings.replayGain.mode, listOf(ReplayGainMode.OFF to stringResource(Res.string.off),
                 ReplayGainMode.TRACK to stringResource(Res.string.settings_replay_gain_track),
                 ReplayGainMode.ALBUM to stringResource(Res.string.settings_replay_gain_album))) { mode ->
