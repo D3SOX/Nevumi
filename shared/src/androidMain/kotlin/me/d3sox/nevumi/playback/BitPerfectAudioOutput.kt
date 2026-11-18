@@ -44,9 +44,9 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
         val source = config?.let { pcmFormat(it.encoding) }
         val outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .filter { it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET }
-        // With two DACs connected, the one music plays on is the one whose mixer counts.
+        // Only the DAC music plays on counts; if Android names another output, such as the speaker, songs play through its mixer.
         val playingOn = runCatching { audio.getAudioDevicesForAttributes(media) }.getOrDefault(emptyList())
-        val device = outputs.firstOrNull { output -> playingOn.any { it.id == output.id } } ?: outputs.firstOrNull()
+        val device = if (playingOn.isEmpty()) outputs.firstOrNull() else outputs.firstOrNull { output -> playingOn.any { it.id == output.id } }
         val mixer = if (config == null || source == null || device == null) null else
             bitPerfectMixer(audio.getSupportedMixerAttributes(device), config.sampleRate, config.channelMask, source)
         if (preferred != null && (mixer == null || preferred?.id != device?.id)) release()
