@@ -26,24 +26,29 @@ data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARAT
 
     fun names(metadata: TrackMetadata): List<String> {
         val credited = credits(metadata).flatMap { split(it, separator) }
-        val featured = if (featuredFromTitle) featured(metadata.title) else emptyList()
+        val featured = featured(metadata.title)
         return (credited + featured).distinctBy { it.lowercase() }
     }
 
     /**
-     * Names the separators split apart in the artist credits, which an exception can keep together: each two neighbors, as in
-     * "Tyler, The Creator" from "Tyler, The Creator, A", and a whole credit of three or more, as in "Crosby, Stills, Nash & Young".
+     * Names the separators split apart in the artist credits and featured titles, which an exception can keep together: each
+     * two neighbors, as in "Tyler, The Creator" from "Tyler, The Creator, A", and a whole credit of three or more, as in
+     * "Crosby, Stills, Nash & Young".
      */
-    fun joinedNames(metadata: TrackMetadata): List<String> = credits(metadata).flatMap { text ->
-        val pieces = pieces(text, separator)
+    fun joinedNames(metadata: TrackMetadata): List<String> =
+        (credits(metadata).map { it to separator } + featuredCredits(metadata.title).map { it to featuredSeparator }).flatMap { (text, pattern) ->
+        // Pieces that hold no name, such as a lone ")", are no artists to join.
+        val pieces = pieces(text, pattern).filter { tidy(text.substring(it)) != null }
         if (pieces.size < 2) return@flatMap emptyList()
         val neighbors = pieces.zipWithNext { first, second -> text.substring(first.first, second.last + 1) }
         (neighbors + if (pieces.size > 2) listOf(text.substring(pieces.first().first, pieces.last().last + 1)) else emptyList())
             .mapNotNull { it.trim().ifEmpty { null } }
     }.distinctBy { it.lowercase() }
 
-    private fun featured(title: String): List<String> =
-        featuring.findAll(title).flatMap { split(it.groupValues[1].ifEmpty { it.groupValues[2] }, featuredSeparator) }.toList()
+    private fun featuredCredits(title: String): List<String> = if (!featuredFromTitle) emptyList()
+        else featuring.findAll(title).map { it.groupValues[1].ifEmpty { it.groupValues[2] } }.toList()
+
+    private fun featured(title: String): List<String> = featuredCredits(title).flatMap { split(it, featuredSeparator) }
 
     private fun split(text: String, pattern: Regex?): List<String> {
         val pieces = pieces(text, pattern)
@@ -52,17 +57,25 @@ data class ArtistSplitting(val separators: List<String> = DEFAULT_ARTIST_SEPARAT
         return pieces.mapNotNull { tidy(text.substring(it)) }
     }
 
-    /** Where the names between [pattern]'s separators are in [text], with separators inside an exception skipped. */
+    /**
+     * Where the names between [pattern]'s separators are in [text]. Separators inside an exception are skipped when the
+     * exception is a whole credit, so "Earth, Wind & Fire" doesn't also keep "Earth, Wind & Fireflies" together.
+     */
     private fun pieces(text: String, pattern: Regex?): List<IntRange> {
         if (pattern == null || text.isBlank()) return listOf(text.indices)
+        val matches = pattern.findAll(text).toList()
+        fun creditStart(index: Int) = text.substring(0, index).isBlank() ||
+            matches.any { it.range.last < index && text.substring(it.range.last + 1, index).isBlank() }
+        fun creditEnd(index: Int) = text.substring(index).isBlank() ||
+            matches.any { it.range.first >= index && text.substring(index, it.range.first).isBlank() }
         val protected = protectedNames.flatMap { name ->
             generateSequence(text.indexOf(name, ignoreCase = true).takeIf { it >= 0 }) { start ->
                 text.indexOf(name, start + 1, ignoreCase = true).takeIf { it >= 0 }
-            }.map { it until it + name.length }
+            }.filter { creditStart(it) && creditEnd(it + name.length) }.map { it until it + name.length }
         }
         val pieces = mutableListOf<IntRange>()
         var start = 0
-        for (match in pattern.findAll(text)) {
+        for (match in matches) {
             if (protected.any { match.range.first in it }) continue
             if (text.substring(start, match.range.first).isNotBlank()) pieces += start until match.range.first
             start = match.range.last + 1

@@ -138,7 +138,8 @@ internal fun SongActionHost(track: Track, state: AppState, controller: MusicCont
             TrackAction.ADD_TO_PLAYLIST -> playlistPicker = true
             TrackAction.DOWNLOAD -> if (youTubeOnly) controller.downloadFromYouTube(track.id, YouTubeDestination.DEVICE, state.preferences.youTubeReviewTags)
                 else controller.downloadTracks(listOf(track.id))
-            TrackAction.GO_ARTIST -> if (artists.size == 1) navigate(LibraryTab.ARTISTS, artists.single()) else choosingArtist = true
+            // A credit like "Go, Go" names one artist but can still be kept together, so the chooser opens for it too.
+            TrackAction.GO_ARTIST -> if (artists.size == 1 && splitting.joinedNames(track.metadata).isEmpty()) navigate(LibraryTab.ARTISTS, artists.single()) else choosingArtist = true
             TrackAction.GO_ALBUM -> navigate(LibraryTab.ALBUMS, albumCollectionId(track.metadata))
             TrackAction.GO_ALBUM_ARTIST -> navigate(LibraryTab.ALBUM_ARTISTS, track.metadata.albumArtist)
             TrackAction.GO_GENRE -> navigate(LibraryTab.GENRES, track.metadata.genres.first())
