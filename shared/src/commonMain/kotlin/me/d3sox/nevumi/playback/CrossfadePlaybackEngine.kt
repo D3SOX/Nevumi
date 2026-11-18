@@ -348,7 +348,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             if (outgoing != null) {
                 if (requestedPlaying.value && current.playing) fadeElapsedMs += elapsed
                 applyGains()
-                if (fadeElapsedMs >= fadeDurationMs || outgoing?.status?.value?.ended == true) cancelFade()
+                // During a pause's fade-out, ending the crossfade would raise the incoming song to the full volume; it ends after the pause.
+                if (!pausePending && (fadeElapsedMs >= fadeDurationMs || outgoing?.status?.value?.ended == true)) cancelFade()
             } else if (loadingEntry == null) {
                 // The old song's ended state would otherwise advance past the requested song.
                 val next = nextTrack()
