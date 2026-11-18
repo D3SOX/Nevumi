@@ -114,7 +114,11 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     /** Gives the playing decoder the whole queue when it plays without crossfade, and only the current song when it crossfades. */
     private suspend fun applyCrossfade() {
         val index = currentIndex()
-        if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
+        if (index >= 0) {
+            // A native queue may have moved on without the worker, so a single song becomes the selected one again.
+            if (!nativeQueue()) selectedEntry = tracks[index].entryId
+            active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
+        }
         applyRepeat()
     }
 

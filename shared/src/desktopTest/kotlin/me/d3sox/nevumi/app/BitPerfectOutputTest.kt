@@ -20,6 +20,7 @@ import me.d3sox.nevumi.storage.openMusicStore
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class BitPerfectOutputTest {
     @Test fun bitPerfectOutputPlaysWithNeutralSettingsAndKeepsTheListenersChoicesForLater() = runBlocking {
@@ -50,6 +51,7 @@ class BitPerfectOutputTest {
             assertEquals(Applied(false, 2.0, 0.75, effects, 6_000, gain, fade = true, skipSilence = true), engine.applied.value)
             // Bit-perfect output stops first, so a setting the engine rejects can't keep it on.
             assertEquals("bitPerfect", engine.calls.first())
+            assertTrue(engine.calls.indexOf("effects") > 0)
         } finally {
             controller.closeAndJoin()
             store.close()
@@ -106,7 +108,10 @@ private class RecordingEngine(override val supportsBitPerfectOutput: Boolean) : 
         applied.update { it.copy(pitch = pitch) }
         mutableStatus.update { it.copy(pitch = pitch) }
     }
-    override suspend fun setAudioEffects(effects: AudioEffects) = applied.update { it.copy(effects = effects) }
+    override suspend fun setAudioEffects(effects: AudioEffects) {
+        calls += "effects"
+        applied.update { it.copy(effects = effects) }
+    }
     override fun setCrossfadeDuration(milliseconds: Long) = applied.update { it.copy(crossfadeMs = milliseconds) }
     override fun setReplayGain(replayGain: ReplayGain) = applied.update { it.copy(replayGain = replayGain) }
     override fun setBitPerfectOutput(enabled: Boolean) {

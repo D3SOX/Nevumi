@@ -12,6 +12,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.d3sox.nevumi.settings.bitPerfect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import me.d3sox.nevumi.app.MusicController
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.settings_split_artists
@@ -258,7 +260,9 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
         }
     }
     // Bit-perfect output hides the Playback controls that change the sound, so search leaves them out too.
-    val bitPerfect = controller.state.collectAsState().value.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput)
+    val bitPerfect by remember(controller) {
+        controller.state.map { it.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput) }.distinctUntilChanged()
+    }.collectAsState(controller.state.value.preferences.bitPerfect(controller.engine.supportsBitPerfectOutput))
     val shown = if (!bitPerfect) entries else entries.filter { it.title !in soundChangingSettings }
     // Search the displayed, localized names together with the localized keywords.
     val index = shown.map { entry ->

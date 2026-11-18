@@ -96,9 +96,9 @@ class AndroidBitPerfectOutputTest {
                 val received = if (width == 4) IntArray(expected.size) { bytes.int }
                     else IntArray(expected.size) { (bytes.get().toInt() and 0xff) or ((bytes.get().toInt() and 0xff) shl 8) or (bytes.get().toInt() shl 16) }
                 val padded = expected.map { it shl (width * 8 - bits) }
-                // Media3 fades in the first 20 ms after it opens an output, so those samples may only get quieter.
+                // Media3 fades in the first 20 ms after it opens an output, so those samples may only get quieter, keeping their sign.
                 val ramp = 960 * 2
-                assertTrue((0 until ramp).all { kotlin.math.abs(received[it].toLong()) <= kotlin.math.abs(padded[it].toLong()) })
+                assertTrue((0 until ramp).all { received[it].toLong() in minOf(0L, padded[it].toLong())..maxOf(0L, padded[it].toLong()) })
                 val first = (ramp until expected.size).firstOrNull { padded[it] != received[it] }
                 assertEquals("Sample $first differs for encoding $encoding", null, first)
                 assertEquals(1, dac.releases)

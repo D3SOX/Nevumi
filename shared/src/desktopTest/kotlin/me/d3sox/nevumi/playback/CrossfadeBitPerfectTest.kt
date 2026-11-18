@@ -42,7 +42,8 @@ class CrossfadeBitPerfectTest {
             engine.loadQueue(listOf(PlayableTrack("a", "a.flac")), play = true)
             withTimeout(5_000) { decoder.speed.first { it == 1.5 } }
             engine.setBitPerfectOutput(true)
-            withTimeout(5_000) { decoder.speed.first { it == 1.0 } }
+            withTimeout(5_000) { decoder.bitPerfect.first { it } }
+            assertEquals(1.0, decoder.speed.value)
             // A headset or watch reaches the engine through the media session, without the app's settings.
             engine.setSpeed(1.25)
             engine.setPitch(0.75)

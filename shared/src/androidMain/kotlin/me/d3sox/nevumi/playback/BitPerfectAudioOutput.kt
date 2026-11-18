@@ -56,6 +56,8 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
         if (device != null && config != null) Log.i("BitPerfect", "${device.productName}: ${config.sampleRate} Hz encoding ${config.encoding} " +
             if (routed) "goes to the bit-perfect mixer with encoding ${mixer?.format?.encoding}" else "plays through Android's mixer")
         if (!routed) return null
+        // Each DAC has its own media volume.
+        if (preferred?.id != device?.id) gainReadAt = null
         preferred = device
         return requireNotNull(mixer).format.encoding
     }
@@ -83,6 +85,7 @@ class UsbBitPerfectMixers(context: Context) : BitPerfectMixers {
     override fun release() {
         preferred?.let { runCatching { audio.clearPreferredMixerAttributes(media, it) } }
         preferred = null
+        gainReadAt = null
     }
 }
 
@@ -114,7 +117,7 @@ class BitPerfectAudioOutputProvider(private val delegate: AudioOutputProvider, p
             mixers.release()
             return delegate.getAudioOutput(config)
         }
-        return ConvertingAudioOutput(output, source, target, mixers::gain)
+        return ConvertingAudioOutput(output, source, target, Integer.bitCount(config.channelMask).coerceAtLeast(1), mixers::gain)
     }
 
     override fun release() {
@@ -129,10 +132,12 @@ class BitPerfectAudioOutputProvider(private val delegate: AudioOutputProvider, p
  */
 @UnstableApi
 private class ConvertingAudioOutput(private val output: AudioOutput, private val from: PcmSampleFormat,
-    private val to: PcmSampleFormat, private val mediaGain: () -> Float) : AudioOutput by output {
+    private val to: PcmSampleFormat, private val channels: Int, private val mediaGain: () -> Float) : AudioOutput by output {
     private var converted = ByteBuffer.allocateDirect(0)
     private var source: ByteBuffer? = null
     private var sourcePosition = -1
+    /** A buffer the output took only part of unchanged, which it must get again as is until it takes the rest. */
+    private var passing: ByteBuffer? = null
     private var playerVolume = 1f
     /** The gain the last buffer ended at, so a volume change ramps across the next buffer instead of clicking. */
     private var applied = 1.0
@@ -144,16 +149,18 @@ private class ConvertingAudioOutput(private val output: AudioOutput, private val
 
     override fun write(buffer: ByteBuffer, encodedAccessUnitCount: Int, presentationTimeUs: Long): Boolean {
         // A full track gets the same buffer again until it takes the rest, which then needs no second conversion.
-        if (buffer !== source || buffer.position() != sourcePosition) {
+        if (buffer === passing || buffer !== source || buffer.position() != sourcePosition) {
             val gain = (mediaGain() * playerVolume).toDouble()
-            if (from == to && gain == 1.0 && applied == 1.0) {
+            if (buffer === passing || from == to && gain == 1.0 && applied == 1.0) {
                 source = null
-                return output.write(buffer, encodedAccessUnitCount, presentationTimeUs)
+                val written = output.write(buffer, encodedAccessUnitCount, presentationTimeUs)
+                passing = buffer.takeUnless { written }
+                return written
             }
             val bytes = buffer.remaining() / from.bytes * to.bytes
             if (converted.capacity() < bytes) converted = ByteBuffer.allocateDirect(bytes)
             converted.clear().limit(bytes)
-            convertPcm(buffer.duplicate(), from, converted, to, applied, gain)
+            convertPcm(buffer.duplicate(), from, converted, to, applied, gain, channels)
             applied = gain
             converted.flip()
             source = buffer
@@ -167,6 +174,7 @@ private class ConvertingAudioOutput(private val output: AudioOutput, private val
 
     override fun flush() {
         source = null
+        passing = null
         output.flush()
     }
 }

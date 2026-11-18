@@ -62,6 +62,13 @@ class PcmConversionTest {
         convertPcm(ramp, PcmSampleFormat.INT16, faded, PcmSampleFormat.INT16, 1.0, 0.0)
         faded.flip().order(ByteOrder.LITTLE_ENDIAN)
         assertEquals(listOf<Short>(750, 500, 250, 0), List(4) { faded.short })
+
+        // Both channels of a stereo frame get the same gain, so the balance holds while the volume changes.
+        val stereo = ByteBuffer.allocate(4 * 2).order(ByteOrder.LITTLE_ENDIAN).apply { repeat(4) { putShort(1_000) } }.flip()
+        val balanced = ByteBuffer.allocate(4 * 2)
+        convertPcm(stereo, PcmSampleFormat.INT16, balanced, PcmSampleFormat.INT16, 1.0, 0.0, channels = 2)
+        balanced.flip().order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(listOf<Short>(500, 500, 0, 0), List(4) { balanced.short })
     }
 
     @Test fun conversionStopsAtAFullOutputBuffer() {
