@@ -49,6 +49,14 @@ import me.d3sox.nevumi.resources.settings_exclude_folders
 import me.d3sox.nevumi.resources.settings_include_folders
 import me.d3sox.nevumi.resources.settings_keep_playing
 import me.d3sox.nevumi.resources.settings_resume_on_headphones
+import me.d3sox.nevumi.resources.settings_fade_play_pause
+import me.d3sox.nevumi.resources.settings_keywords_fade_play_pause
+import me.d3sox.nevumi.resources.settings_skip_silence
+import me.d3sox.nevumi.resources.settings_keywords_skip_silence
+import me.d3sox.nevumi.resources.settings_resume_long_songs
+import me.d3sox.nevumi.resources.settings_keywords_resume_long_songs
+import me.d3sox.nevumi.resources.settings_pause_at_zero_volume
+import me.d3sox.nevumi.resources.settings_keywords_pause_at_zero_volume
 import me.d3sox.nevumi.resources.settings_keywords_resume_on_headphones
 import me.d3sox.nevumi.resources.settings_tray_icon
 import me.d3sox.nevumi.resources.settings_keywords_about_nevumi
@@ -182,6 +190,9 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_playback_pitch to Res.string.settings_keywords_playback_pitch,
                 Res.string.crossfade to Res.string.settings_keywords_crossfade,
                 Res.string.settings_replay_gain to Res.string.settings_keywords_replay_gain,
+                Res.string.settings_fade_play_pause to Res.string.settings_keywords_fade_play_pause,
+                Res.string.settings_skip_silence to Res.string.settings_keywords_skip_silence,
+                Res.string.settings_resume_long_songs to Res.string.settings_keywords_resume_long_songs,
                 Res.string.settings_show_audio_info to Res.string.settings_keywords_show_audio_info,
                 Res.string.lyrics_setting_online to Res.string.lyrics_keywords_online,
                 Res.string.settings_smart_shuffle to Res.string.settings_keywords_smart_shuffle,
@@ -189,8 +200,10 @@ internal fun SettingsSearch(query: String, onQuery: (String) -> Unit, back: () -
                 Res.string.settings_previous_track_limit to Res.string.settings_keywords_previous_track_limit,
                 Res.string.settings_confirm_queue_jumps to Res.string.settings_keywords_confirm_queue_jumps,
                 Res.string.settings_confirm_up_next_interruption to Res.string.settings_keywords_confirm_up_next_interruption)
-            if (headphoneResumeSetting) add(SettingEntry(Res.string.settings_resume_on_headphones, "Playback", AppIcon.HEADPHONES,
-                Res.string.settings_keywords_resume_on_headphones))
+            if (deviceAudioSettings) {
+                add(SettingEntry(Res.string.settings_resume_on_headphones, "Playback", AppIcon.HEADPHONES, Res.string.settings_keywords_resume_on_headphones))
+                add(SettingEntry(Res.string.settings_pause_at_zero_volume, "Playback", AppIcon.MUTE, Res.string.settings_keywords_pause_at_zero_volume))
+            }
             if (desktopWindowSettings) {
                 add(SettingEntry(Res.string.settings_keep_playing, "Playback", AppIcon.HEADPHONES, Res.string.settings_keywords_keep_playing))
                 add(SettingEntry(Res.string.settings_tray_icon, "Playback", AppIcon.DESKTOP, Res.string.settings_keywords_tray_icon))

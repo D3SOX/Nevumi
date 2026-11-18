@@ -66,7 +66,8 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
         }, Handler(Looper.getMainLooper())).build()
     private val noisy = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) { pausePlayback(); invalidateState() }
+            // The fade would continue on the speaker for a moment after headphones are unplugged.
+            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) { pausePlayback(fade = false); invalidateState() }
         }
     }
 
@@ -203,11 +204,11 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
         suppressed = !granted
         if (granted) engine.play() else engine.pause()
     }
-    private fun pausePlayback() {
+    private fun pausePlayback(fade: Boolean = true) {
         wantedPlaying = false
         suppressed = false
         ducked = false
-        engine.pause()
+        engine.pause(fade)
         engine.setVolume(masterVolume.toDouble())
         abandonFocus()
     }

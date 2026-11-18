@@ -114,6 +114,14 @@ import me.d3sox.nevumi.resources.settings_files_recovery
 import me.d3sox.nevumi.resources.settings_files_recovery_description
 import me.d3sox.nevumi.resources.settings_folder_rules_note
 import me.d3sox.nevumi.resources.settings_gapless_playback
+import me.d3sox.nevumi.resources.settings_fade_play_pause
+import me.d3sox.nevumi.resources.settings_fade_play_pause_description
+import me.d3sox.nevumi.resources.settings_skip_silence
+import me.d3sox.nevumi.resources.settings_skip_silence_description
+import me.d3sox.nevumi.resources.settings_resume_long_songs
+import me.d3sox.nevumi.resources.settings_resume_long_songs_minutes
+import me.d3sox.nevumi.resources.settings_pause_at_zero_volume
+import me.d3sox.nevumi.resources.settings_pause_at_zero_volume_description
 import me.d3sox.nevumi.resources.settings_gapless_playback_description
 import me.d3sox.nevumi.resources.settings_replay_gain
 import me.d3sox.nevumi.resources.settings_replay_gain_album
@@ -383,6 +391,10 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsToggle(stringResource(Res.string.settings_gapless_playback), AppIcon.MUSIC, stringResource(Res.string.settings_gapless_playback_description), settings.gaplessPlayback) {
                 enabled -> controller.updatePreferences { it.copy(gaplessPlayback = enabled) }
             }
+            SettingsToggle(stringResource(Res.string.settings_fade_play_pause), AppIcon.FADE, stringResource(Res.string.settings_fade_play_pause_description),
+                settings.fadePlayPause) { enabled -> controller.updatePreferences { it.copy(fadePlayPause = enabled) } }
+            SettingsToggle(stringResource(Res.string.settings_skip_silence), AppIcon.SKIP_SILENCE, stringResource(Res.string.settings_skip_silence_description),
+                settings.skipSilence) { enabled -> controller.updatePreferences { it.copy(skipSilence = enabled) } }
             SettingChoice(Res.string.settings_replay_gain, settings.replayGain.mode, listOf(ReplayGainMode.OFF to stringResource(Res.string.off),
                 ReplayGainMode.TRACK to stringResource(Res.string.settings_replay_gain_track),
                 ReplayGainMode.ALBUM to stringResource(Res.string.settings_replay_gain_album))) { mode ->
@@ -394,6 +406,9 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
                     controller.updatePreferences { it.copy(replayGain = it.replayGain.copy(preampDb = value.roundToInt().toDouble())) }
                 }
             }
+            SettingChoice(Res.string.settings_resume_long_songs, settings.resumeLongSongsMinutes, me.d3sox.nevumi.settings.RESUME_LONG_SONG_MINUTES.map { minutes ->
+                minutes to if (minutes == 0) stringResource(Res.string.off) else stringResource(Res.string.settings_resume_long_songs_minutes, minutes)
+            }) { minutes -> controller.updatePreferences { it.copy(resumeLongSongsMinutes = minutes) } }
             SettingsToggle(stringResource(Res.string.settings_smart_shuffle), AppIcon.SHUFFLE, stringResource(Res.string.settings_smart_shuffle_description), settings.smartShuffle) {
                 enabled -> controller.updatePreferences { it.copy(smartShuffle = enabled) }
             }
@@ -406,10 +421,14 @@ internal fun AppSettings(state: AppState, controller: MusicController, server: (
             SettingsToggle(stringResource(Res.string.settings_confirm_up_next_interruption), AppIcon.CONFIRM, stringResource(Res.string.settings_confirm_up_next_interruption_description), settings.confirmNextUpInterruption) {
                 enabled -> controller.updatePreferences { it.copy(confirmNextUpInterruption = enabled) }
             }
-            if (headphoneResumeSetting) {
+            if (deviceAudioSettings) {
                 SettingsToggle(stringResource(Res.string.settings_resume_on_headphones), AppIcon.HEADPHONES,
                     stringResource(Res.string.settings_resume_on_headphones_description), settings.resumeOnHeadphones) { enabled ->
                     controller.updatePreferences { it.copy(resumeOnHeadphones = enabled) }
+                }
+                SettingsToggle(stringResource(Res.string.settings_pause_at_zero_volume), AppIcon.MUTE,
+                    stringResource(Res.string.settings_pause_at_zero_volume_description), settings.pauseAtZeroVolume) { enabled ->
+                    controller.updatePreferences { it.copy(pauseAtZeroVolume = enabled) }
                 }
             }
             if (desktopWindowSettings) {

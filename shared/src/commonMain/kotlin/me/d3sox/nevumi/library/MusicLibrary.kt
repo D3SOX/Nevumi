@@ -311,6 +311,15 @@ class MusicLibrary(private val store: MusicStore) {
     }
 
     suspend fun findTrack(id: String): Track? = store.read("track:$id")
+
+    /** Where a long song was left, kept on this device only: backups and paired devices leave these out. */
+    suspend fun songPosition(trackId: String): Long? = store.read<SongPosition>("song-position:$trackId")?.positionMs
+    /** Remembers [positionMs] for [trackId], or forgets it for null. */
+    suspend fun rememberSongPosition(trackId: String, positionMs: Long?) {
+        if (positionMs == null) store.database.records().delete("song-position:$trackId")
+        else store.put("song-position:$trackId", "song-positions", SongPosition(trackId, positionMs))
+    }
+    suspend fun forgetSongPositions() = store.database.records().deleteKind("song-positions")
     /** Changes with every song write, so callers can skip work over an unchanged library. */
     internal suspend fun revision(): Long = store.revision("tracks")
     internal suspend fun trackForSource(sourceId: String): Track? =
@@ -388,6 +397,11 @@ class MusicLibrary(private val store: MusicStore) {
         remapListeningHistory(store, mapping)
         remapServerUploads(store, mapping)
         me.d3sox.nevumi.sync.remapPairedTracks(store, mapping)
+        for ((from, to) in mapping) {
+            val position = songPosition(from) ?: continue
+            rememberSongPosition(from, null)
+            if (songPosition(to) == null) rememberSongPosition(to, position)
+        }
     }
 
     /** Merges [otherId] into [keepId]; the caller remaps the references to [otherId] in the same transaction. */
@@ -470,6 +484,9 @@ private data class ChosenSong(val location: String)
 
 @Serializable
 private data class SourceOwner(val trackId: String)
+
+@Serializable
+private data class SongPosition(val trackId: String, val positionMs: Long)
 
 internal val musicBrainzId = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 // Song IDs are random UUIDs, which Kotlin writes in lowercase.

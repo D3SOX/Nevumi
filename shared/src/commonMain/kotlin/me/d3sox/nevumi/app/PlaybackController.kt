@@ -276,6 +276,15 @@ class PlaybackController internal constructor(private val context: ControllerCon
             publishSeek(positionMs)
         }
     }
+    /** Continues the current [entryId] where it was left, like [seekCurrentEntry] but keeping a crossfade into it. */
+    internal fun resumeCurrentEntry(entryId: String, positionMs: Long) = context.action {
+        val playback = engine.status.value
+        if (entryId == playback.entryId && positionMs >= 0 && (playback.durationMs <= 0 || positionMs < playback.durationMs)) {
+            queue.setPosition(positionMs)
+            engine.resume(entryId, positionMs)
+            publishSeek(positionMs)
+        }
+    }
     fun seek(positionMs: Long) = context.action {
         queue.setPosition(positionMs)
         engine.seek(positionMs)
@@ -415,6 +424,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
             engine.setCrossfadeDuration(context.state.value.preferences.crossfadeDurationMs)
             engine.setGaplessPlayback(context.state.value.preferences.gaplessPlayback)
             engine.setReplayGain(context.state.value.preferences.replayGain)
+            engine.setPlayPauseFade(context.state.value.preferences.fadePlayPause)
+            engine.setSkipSilence(context.state.value.preferences.skipSilence)
         }
     }
 

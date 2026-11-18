@@ -226,6 +226,8 @@ class AndroidExoPlaybackEngine(context: Context, outputMonitor: AudioProcessor? 
         replayGain.validate()
         this.replayGain.set(replayGain)
     }
+    // ExoPlayer keeps reporting positions in the file, which the waveforms, seeking and crossfades rely on.
+    override fun setSkipSilence(enabled: Boolean) = command { skipSilenceEnabled = enabled }
     override fun setRepeat(mode: RepeatMode, playCount: Int?) {
         require(playCount == null || mode == RepeatMode.ONE && playCount > 0)
         command {

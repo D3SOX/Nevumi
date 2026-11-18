@@ -6,8 +6,8 @@ import me.d3sox.nevumi.app.MusicController
 /** Whether Nevumi runs in a desktop window, whose closing and tray icon have settings. */
 internal expect val desktopWindowSettings: Boolean
 
-/** Whether connecting headphones can resume playback, which only Android reports. */
-internal expect val headphoneResumeSetting: Boolean
+/** Whether playback can follow connected headphones and the media volume, which only Android reports. */
+internal expect val deviceAudioSettings: Boolean
 
 /** Takes music dropped onto [content]: folders join the library and songs play. */
 @Composable
