@@ -1,6 +1,7 @@
 package me.d3sox.nevumi.library
 
 import me.d3sox.nevumi.storage.openMusicStore
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
@@ -47,7 +48,7 @@ class LocalFilesTest {
             // A cover image also changes the folder's songs.
             Files.writeString(renamed.resolve("Cover.jpg"), "image")
             assertEquals(listOf(renamed.toString()), next())
-        } finally { watcher?.cancel(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { watcher?.cancelAndJoin(); store.close(); directory.toFile().deleteRecursively() }
     }
 
     @Test
