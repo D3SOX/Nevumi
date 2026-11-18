@@ -106,6 +106,9 @@ class AndroidBitPerfectOutputTest {
                     val step = 1L shl (width * 8 - bits)
                     val loudest = (0 until expected.size).firstOrNull { kotlin.math.abs(received[it].toLong()) > kotlin.math.abs(padded[it] * gain.toDouble()).toLong() + step }
                     assertEquals("Sample $loudest is louder than the media volume for encoding $encoding", null, loudest)
+                    // After the fade-in, each sample is the expected one at that volume, so silence fails too.
+                    val off = (960 * 2 until expected.size).firstOrNull { kotlin.math.abs(received[it] - padded[it] * gain.toDouble()) > step }
+                    assertEquals("Sample $off is not at the media volume for encoding $encoding", null, off)
                     assertEquals(1, dac.releases)
                     continue
                 }

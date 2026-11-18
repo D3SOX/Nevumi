@@ -37,7 +37,8 @@ class NevumiAudioRenderersFactory(context: Context, private val outputMonitor: A
         }
         // Float output asks decoders for float samples, which skip the processors: 24-bit songs keep every bit. 16-bit PCM still passes
         // the chain, so bit-perfect output leaves the app's processors out. Nothing changes the samples except the 20 ms fade-in
-        // DefaultAudioSink always applies when it opens an output, on start and after seeks.
+        // DefaultAudioSink always applies when it opens an output, on start and after seeks. 32-bit integer PCM is the exception:
+        // its float samples keep 24 bits, so its lowest bits are rounded before the DAC gets them.
         val bitPerfectSink = bitPerfect && Build.VERSION.SDK_INT >= 34
         val sink = DefaultAudioSink.Builder(context).apply {
             if (bitPerfectSink) setAudioProcessorChain(DefaultAudioSink.DefaultAudioProcessorChain()).setEnableFloatOutput(true)
