@@ -13,6 +13,7 @@ import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playback.RepeatMode
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.settings.MusicPreferences
+import me.d3sox.nevumi.storage.MusicStore
 import me.d3sox.nevumi.storage.openMusicStore
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -22,10 +23,19 @@ import java.nio.file.Path
 import kotlin.test.*
 
 class LongSongResumeTest {
-    /** Eleven minutes of 8 kHz mono silence; seeking skips the listening. */
-    private fun elevenMinutes(directory: Path): Path {
-        val mix = directory.resolve("mix.wav")
-        val frames = 11 * 60 * 8_000
+    /** Opens a store in a temporary directory and removes both afterwards, also when the player cannot be created. */
+    private fun withStore(prefix: String, block: suspend (Path, MusicStore) -> Unit) = runBlocking {
+        val directory = Files.createTempDirectory(prefix)
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        try { block(directory, store) } finally { store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    private fun elevenMinutes(directory: Path): Path = silence(directory, "mix.wav", 11 * 60)
+
+    /** [seconds] of 8 kHz mono silence; seeking skips the listening. */
+    private fun silence(directory: Path, name: String, seconds: Int): Path {
+        val mix = directory.resolve(name)
+        val frames = seconds * 8_000
         RandomAccessFile(mix.toFile(), "rw").use { file ->
             file.write(ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).put("RIFF".toByteArray()).putInt(36 + frames * 2)
                 .put("WAVEfmt ".toByteArray()).putInt(16).putShort(1).putShort(1).putInt(8_000).putInt(16_000).putShort(2).putShort(16)
@@ -56,9 +66,7 @@ class LongSongResumeTest {
         } finally { store.close(); directory.toFile().deleteRecursively() }
     }
 
-    @Test fun aSongWithoutAKnownLengthResumesOnceTheDecoderReportsIt() = runBlocking {
-        val directory = Files.createTempDirectory("long-song-unknown-length")
-        val store = openMusicStore(directory.resolve("library.db").toString())
+    @Test fun aSongWithoutAKnownLengthResumesOnceTheDecoderReportsIt() = withStore("long-song-unknown-length") { directory, store ->
         val library = MusicLibrary(store)
         val mix = library.importTrack(TrackMetadata("Mix"), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
         assertEquals(0, mix.metadata.durationMs)
@@ -71,12 +79,10 @@ class LongSongResumeTest {
             player.playTrack(mix.id, listOf(mix.id), 0).join()
             withTimeout(5_000) { player.state.first { it.playback.trackId == mix.id && it.playback.playing && it.playback.positionMs >= 240_000 } }
             assertNull(player.state.value.error)
-        } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { player.closeAndJoin() }
     }
 
-    @Test fun theSameSongQueuedTwiceStartsItsSecondPlayFromTheBeginning() = runBlocking {
-        val directory = Files.createTempDirectory("long-song-twice")
-        val store = openMusicStore(directory.resolve("library.db").toString())
+    @Test fun theSameSongQueuedTwiceStartsItsSecondPlayFromTheBeginning() = withStore("long-song-twice") { directory, store ->
         val library = MusicLibrary(store)
         val mix = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
         library.rememberSongPosition(mix.id, 240_000)
@@ -93,17 +99,15 @@ class LongSongResumeTest {
             delay(1_500)
             assertTrue(player.state.value.playback.positionMs < 5_000, "The second play resumed at ${player.state.value.playback.positionMs}")
             assertNull(library.songPosition(mix.id))
-        } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { player.closeAndJoin() }
     }
 
-    @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = runBlocking {
-        val directory = Files.createTempDirectory("long-song-resume")
-        val store = openMusicStore(directory.resolve("library.db").toString())
+    @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = withStore("long-song-resume") { directory, store ->
         val library = MusicLibrary(store)
         val mix = elevenMinutes(directory)
-        val fixture = Path.of(System.getProperty("nevumi.testRoot"), "androidApp/src/androidTest/assets/fixture.flac").toString()
         val long = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, mix.toString()))
-        val short = library.importTrack(TrackMetadata("Short", durationMs = 3_000), TrackSource("source:short", SourceKind.LOCAL, fixture))
+        val short = library.importTrack(TrackMetadata("Short", durationMs = 60_000),
+            TrackSource("source:short", SourceKind.LOCAL, silence(directory, "short.wav", 60).toString()))
         val player = MusicController(library, PlaybackQueue(store), CrossfadePlaybackEngine { MpvPlaybackEngine("null") },
             preferences = MusicPreferences(store))
         suspend fun storedPosition(expected: (Long?) -> Boolean): Long? = withTimeout(5_000) {
@@ -121,7 +125,10 @@ class LongSongResumeTest {
             player.skip(1).join()
             withTimeout(5_000) { player.state.first { it.playback.trackId == short.id } }
             assertTrue(storedPosition { it != null }!! in 120_000..125_000)
-            // Shorter songs are not remembered.
+            // Shorter songs are not remembered, even when they are paused well past their first seconds.
+            player.seek(20_000).join()
+            withTimeout(5_000) { player.state.first { it.playback.playing && it.playback.positionMs >= 20_500 } }
+            player.pause().join()
             delay(500)
             assertNull(library.songPosition(short.id))
 
@@ -156,6 +163,6 @@ class LongSongResumeTest {
             withTimeout(8_000) { player.state.first { it.playback.ended } }
             storedPosition { it == null }
             assertNull(player.state.value.error)
-        } finally { player.closeAndJoin(); store.close(); directory.toFile().deleteRecursively() }
+        } finally { player.closeAndJoin() }
     }
 }

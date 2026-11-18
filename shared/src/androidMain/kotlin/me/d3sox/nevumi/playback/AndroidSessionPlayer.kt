@@ -60,7 +60,8 @@ class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Loop
                     engine.setVolume(masterVolume * 0.2)
                 }
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> { suppressed = true; engine.pause() }
-                AudioManager.AUDIOFOCUS_LOSS -> pausePlayback()
+                // Another app now plays, so a fade would overlap with it.
+                AudioManager.AUDIOFOCUS_LOSS -> pausePlayback(fade = false)
             }
             invalidateState()
         }, Handler(Looper.getMainLooper())).build()

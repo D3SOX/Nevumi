@@ -130,8 +130,9 @@ class LinuxPlaybackSettingsTest {
             }
             val faded = rampWindows(true)
             val plain = rampWindows(false)
-            // Two pauses and one resume at 250 ms each would be about 50 windows; mpv's volume steps leave some at full level.
-            assertTrue(faded >= 25, "Only $faded windows faded")
+            // Two starts and two pauses fade for 250 ms each, which measured about 50 windows. Fading only the starts or only the
+            // pauses would leave about half, so the threshold fails unless both fade.
+            assertTrue(faded >= 38, "Only $faded windows faded")
             assertTrue(plain <= 6, "Playback without the fade still ramped in $plain windows")
         } finally {
             // Each step runs even when an earlier one fails, so the test never leaves its sink behind.

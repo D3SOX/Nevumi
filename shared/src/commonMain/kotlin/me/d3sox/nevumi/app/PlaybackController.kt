@@ -278,11 +278,12 @@ class PlaybackController internal constructor(private val context: ControllerCon
     }
     /**
      * Continues the current [entryId] where it was left, like [seekCurrentEntry] but keeping a crossfade into it. A song that
-     * already moved past its first seconds, such as by a seek made meanwhile, stays where it is.
+     * already moved past its first seconds, such as by a seek made meanwhile, stays where it is, and so does every song once the
+     * positions read under [generation] were forgotten, as when the setting is turned off.
      */
-    internal fun resumeCurrentEntry(entryId: String, positionMs: Long) = context.action {
+    internal fun resumeCurrentEntry(entryId: String, positionMs: Long, generation: Long) = context.action {
         val playback = engine.status.value
-        if (entryId == playback.entryId && positionMs >= 0 && (playback.durationMs <= 0 || positionMs < playback.durationMs) &&
+        if (generation == library.songPositionGeneration && context.state.value.preferences.resumeLongSongsMinutes > 0 && entryId == playback.entryId && positionMs >= 0 && (playback.durationMs <= 0 || positionMs < playback.durationMs) &&
             playback.positionMs < RESUME_WINDOW_MS && queue.snapshot().positionMs < RESUME_WINDOW_MS) {
             queue.setPosition(positionMs)
             engine.resume(entryId, positionMs)

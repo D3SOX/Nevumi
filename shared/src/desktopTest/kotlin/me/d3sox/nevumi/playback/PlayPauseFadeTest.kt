@@ -146,11 +146,13 @@ class PlayPauseFadeTest {
             engine.setPlayPauseFade(false)
             decoder.awaitVolume(1.0)
             decoder.volumes.clear()
+            val before = decoder.transport.size
             engine.play()
             engine.pause()
-            withTimeout(500) { while (decoder.transport.last() != "pause") delay(5) }
+            withTimeout(500) { while (decoder.transport.drop(before) != listOf("play", "pause")) delay(5) }
             delay(100)
-            assertTrue(decoder.volumes.all { it == 1.0 }, "Playback faded with the fade off: ${decoder.volumes}")
+            assertTrue(decoder.volumes.none { it < 1.0 }, "Playback faded with the fade off: ${decoder.volumes}")
+            assertEquals(1.0, decoder.level)
         } finally { engine.close() }
     }
 

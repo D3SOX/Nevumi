@@ -46,12 +46,15 @@ internal class LongSongResume(private val context: ControllerContext, private va
                 if (changed || repeated || paused || periodic || current.ended) {
                     savedAt = now
                     // The song being left saves first: the same song queued twice must not resume from the position it just finished.
-                    checkpoint(if (changed || repeated) last else current, repeated, minimumMs, generation)
+                    // A save that fails must not keep the next song from resuming.
+                    try { checkpoint(if (changed || repeated) last else current, repeated, minimumMs, generation) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { }
                 }
-                if (changed) awaitingDuration = if (resume(current, minimumMs)) null else current.entryId
+                if (changed) awaitingDuration = if (resume(current, minimumMs, generation)) null else current.entryId
                 else if (current.entryId == awaitingDuration && current.durationMs > 0) {
                     awaitingDuration = null
-                    resume(current, minimumMs)
+                    resume(current, minimumMs, generation)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { }
@@ -73,13 +76,13 @@ internal class LongSongResume(private val context: ControllerContext, private va
      * Continues [status]'s song where it was left when it starts from the beginning; a recovered queue already starts where it stopped.
      * Returns false only while neither the library nor the decoder knows the song's length, so the caller can try again.
      */
-    private suspend fun resume(status: PlaybackStatus, minimumMs: Long): Boolean {
+    private suspend fun resume(status: PlaybackStatus, minimumMs: Long, generation: Long): Boolean {
         val entryId = status.entryId ?: return true
         if (status.positionMs >= MINIMUM_POSITION_MS) return true
         val track = findTrack(status.trackId ?: return true) ?: return true
         if (status.durationMs <= 0 && track.metadata.durationMs <= 0) return false
         if (!qualifies(track, status, minimumMs)) return true
-        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it) }
+        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it, generation) }
         return true
     }
 
