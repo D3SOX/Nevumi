@@ -8,7 +8,10 @@ import kotlin.math.roundToLong
 internal enum class PcmSampleFormat(val bytes: Int, private val bits: Int) {
     INT16(2, 16), INT24(3, 24), INT32(4, 32), FLOAT(4, 0);
 
-    /** Whether every sample in [source] fits this format unchanged. Floats keep 24 bits, as many as their mantissa holds. */
+    /**
+     * Whether [source]'s samples fit this format unchanged. Floats count as 24 bits, which covers every float a decoder makes
+     * from 24-bit or narrower integers. Floats stored natively can hold finer values that integer formats round.
+     */
     internal fun holds(source: PcmSampleFormat) = precision >= source.precision
     private val precision get() = if (this == FLOAT) 24 else bits
 
