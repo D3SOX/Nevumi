@@ -147,7 +147,7 @@ class AndroidBackNavigationTest {
                     it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                     it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
                 }
-                compose.waitUntil("The collection follows the back gesture", 5_000) { heading.fetchSemanticsNode().boundsInRoot.previews(original) }
+                compose.waitUntil("The collection follows the back gesture", 5_000) { heading.fetchSemanticsNode().boundsInRoot.left > original.left + 50 }
                 scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                 compose.waitForIdle()
                 assertTrue(heading.fetchSemanticsNode().boundsInRoot.matches(original))
@@ -181,7 +181,7 @@ class AndroidBackNavigationTest {
                 it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                 it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
             }
-            compose.waitUntil("The opened album follows the back gesture", 5_000) { row.fetchSemanticsNode().boundsInRoot.previews(original) }
+            compose.waitUntil("The opened album follows the back gesture", 5_000) { row.fetchSemanticsNode().boundsInRoot.left > original.left + 50 }
             scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
             compose.waitForIdle()
             assertTrue(row.fetchSemanticsNode().boundsInRoot.matches(original))
