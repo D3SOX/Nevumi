@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class, ExperimentalMaterial3Api::class)
@@ -65,5 +67,29 @@ class BottomSheetMotionUiTest {
         mainClock.autoAdvance = true
         sheet.performTouchInput { swipe(topCenter + Offset(0f, 10f), bottomCenter, 300) }
         waitUntil(timeoutMillis = 2_000) { dismissed }
+    }
+
+    @Test
+    fun backdropFollowsTheSheetWhileItIsDragged() = runComposeUiTest {
+        val backdrop = SheetBackdrop()
+        setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalSheetBackdrop provides backdrop) {
+                    AppBottomSheet(onDismissRequest = {}) {
+                        Box(Modifier.fillMaxWidth().height(300.dp).testTag("sheet-content"))
+                    }
+                }
+            }
+        }
+        waitForIdle()
+        assertEquals(1f, backdrop.progress, 0.01f)
+        val sheet = onNodeWithTag("sheet-content")
+        sheet.performTouchInput {
+            down(topCenter + Offset(0f, 10f))
+            moveBy(Offset(0f, height * 0.4f))
+        }
+        waitForIdle()
+        assertTrue(backdrop.progress in 0.4f..0.8f, "Backdrop did not follow the drag: ${backdrop.progress}")
+        sheet.performTouchInput { up() }
     }
 }

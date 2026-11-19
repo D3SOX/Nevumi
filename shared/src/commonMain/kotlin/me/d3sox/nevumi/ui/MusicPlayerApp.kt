@@ -61,8 +61,10 @@ fun MusicPlayerApp(controller: MusicController, onAddMusic: (() -> Unit)? = null
     audioWaveforms: me.d3sox.nevumi.playback.AudioWaveforms? = null, backupFiles: BackupFiles? = null, shortcuts: AppShortcuts? = null,
     crashReports: me.d3sox.nevumi.diagnostics.CrashReports? = null) {
     // The layout follows the space the app gets, which on the desktop and in tests is not always the whole screen.
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalWindowLayout provides windowLayout(maxWidth, maxHeight), LocalShortWindow provides isShortWindow(maxHeight), LocalCrashReports provides crashReports) {
+    val sheetBackdrop = remember { SheetBackdrop() }
+    BoxWithConstraints(Modifier.fillMaxSize().sheetBackdrop(sheetBackdrop)) {
+        CompositionLocalProvider(LocalWindowLayout provides windowLayout(maxWidth, maxHeight), LocalShortWindow provides isShortWindow(maxHeight), LocalCrashReports provides crashReports,
+            LocalSheetBackdrop provides sheetBackdrop) {
             MusicPlayerScreen(controller, onAddMusic, artworkPicker, playlistFiles, equalizerFiles, folderPicker, audioWaveforms,
                 backupFiles, shortcuts, nowPlayingPaneWidth(maxWidth))
         }
