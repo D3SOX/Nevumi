@@ -275,5 +275,5 @@ class AndroidBackNavigationTest {
 private fun Rect.previews(original: Rect) =
     kotlin.math.abs(left - original.left) > 50 || kotlin.math.abs(width - original.width) > 50
 
-private fun Rect.matches(original: Rect) = kotlin.math.abs(left - original.left) < 2 &&
+private fun Rect.matches(original: Rect) = kotlin.math.abs(left - original.left) < 2 && kotlin.math.abs(top - original.top) < 2 &&
     kotlin.math.abs(width - original.width) < 2 && kotlin.math.abs(height - original.height) < 2
