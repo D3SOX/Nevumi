@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -15,6 +16,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -102,15 +105,16 @@ private fun MorePagesSheet(overflow: List<LibraryTab>, current: LibraryTab, dism
 }
 
 /**
- * The side navigation for medium and wider windows. Like the bottom bar, it shows the chosen tabs that fit, here by height,
- * and moves the rest to More.
+ * The side navigation for medium and wider windows. It shows the tabs that fit by height, the ones chosen for the bottom bar
+ * first and then those in More, and lists the rest in a menu beside its More item.
  */
 @Composable
 internal fun LibraryNavigationRail(tabs: List<LibraryTab>, current: LibraryTab, modifier: Modifier = Modifier,
     bottomNavigationTabs: Set<LibraryTab>? = null, select: (LibraryTab) -> Unit) {
     var more by remember { mutableStateOf(false) }
-    val candidates = tabs.filter { bottomNavigationTabs == null || it in bottomNavigationTabs }
-    // Measuring decides how many fit; the More sheet then lists the rest.
+    // A rail has room for more than a bottom bar, so it continues with the More tabs, in the order the tab editor lists them.
+    val candidates = tabs.partition { bottomNavigationTabs == null || it in bottomNavigationTabs }.let { (chosen, rest) -> chosen + rest }
+    // Measuring decides how many fit; the More menu then lists the rest.
     var fitting by remember { mutableIntStateOf(candidates.size) }
     val primary = candidates.take(fitting)
     val overflow = tabs.filterNot { it in primary }
@@ -148,8 +152,14 @@ internal fun LibraryNavigationRail(tabs: List<LibraryTab>, current: LibraryTab, 
                 count == 0 || shown + (if (count < tabs.size) spacing + moreHeight else 0) <= constraints.maxHeight
             }
             if (count != fitting) fitting = count
+            val railWidth = constraints.maxWidth.toDp()
             val items = candidates.take(count).map { page -> subcompose(page) { railItem(page, Modifier) }.single().measure(loose) } +
-                if (count < tabs.size) listOf(subcompose("more") { railItem(null, Modifier) }.single().measure(loose)) else emptyList()
+                if (count < tabs.size) listOf(subcompose("more") {
+                    Box(Modifier.width(railWidth)) {
+                        railItem(null, Modifier.align(Alignment.TopCenter))
+                        RailMorePagesMenu(more, overflow, current, railWidth, Modifier.align(Alignment.BottomStart), { more = false }, select)
+                    }
+                }.single().measure(loose)) else emptyList()
             layout(constraints.maxWidth, constraints.maxHeight) {
                 var y = 0
                 items.forEach { item ->
@@ -159,5 +169,20 @@ internal fun LibraryNavigationRail(tabs: List<LibraryTab>, current: LibraryTab, 
             }
         }
     }
-    if (more && overflow.isNotEmpty()) MorePagesSheet(overflow, current, { more = false }, select)
+}
+
+/**
+ * The pages that don't fit the rail, in a menu beside it so the pointer barely has to move. More ends a full rail, so the
+ * menu usually opens upwards, and anchoring it at More's bottom keeps it level with More.
+ */
+@Composable
+private fun RailMorePagesMenu(expanded: Boolean, overflow: List<LibraryTab>, current: LibraryTab, railWidth: Dp,
+    modifier: Modifier, dismiss: () -> Unit, select: (LibraryTab) -> Unit) = Box(modifier) {
+    DropdownMenu(expanded && overflow.isNotEmpty(), dismiss, Modifier.testTag("library-more-pages"), offset = DpOffset(railWidth, 0.dp)) {
+        overflow.forEach { page ->
+            AppMenuItem({ Text(stringResource(page.label)) }, { dismiss(); select(page) },
+                Modifier.semantics { selected = page == current }, leadingIcon = { Icon(page.icon().vector, null) },
+                trailingIcon = if (page == current) {{ Icon(AppIcon.CHECK.vector, null) }} else null)
+        }
+    }
 }

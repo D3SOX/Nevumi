@@ -291,15 +291,24 @@ class LibraryNavigationUiTest {
         captureNavigation("navigation-rail")
     }
 
-    @Test fun theRailShowsOnlyTheChosenTabs() = runComposeUiTest {
+    @Test fun theRailFillsItsHeightWithMoreTabsAfterTheChosenOnes() = runSkikoComposeUiTest(size = Size(600f, 1500f)) {
         val chosen = setOf(LibraryTab.HOME, LibraryTab.PLAYLISTS)
         setContent { MusicTheme(MusicSettings(), null) {
-            Box(Modifier.height(900.dp)) { LibraryNavigationRail(tabs, LibraryTab.SONGS, bottomNavigationTabs = chosen) {} }
+            Box(Modifier.height(500.dp)) { LibraryNavigationRail(tabs, LibraryTab.RECOMMENDATIONS, bottomNavigationTabs = chosen) {} }
         } }
-        onAllNodes(navigationItem).assertCountEquals(3)
-        onNodeWithText("More").assertIsSelected().performClick()
-        onNodeWithTag("library-more-pages").performScrollToNode(hasText("Songs"))
-        onNode(hasText("Songs") and hasAnyAncestor(hasTestTag("library-more-pages"))).assertIsDisplayed()
+        val shown = onAllNodes(navigationItem).fetchSemanticsNodes()
+        assertTrue(shown.size in 4 until tabs.size, "The rail should show more than the chosen tabs but still overflow: ${shown.size}")
+        val tops = listOf("Home", "Playlists", "Songs").map { onNodeWithContentDescription(it).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(tops.sorted(), tops)
+        assertEquals(tops.first(), shown.minOf { it.boundsInRoot.top })
+        // The menu opens beside More rather than at the bottom of the window.
+        val more = onNodeWithText("More").assertIsSelected().fetchSemanticsNode().boundsInRoot
+        onNodeWithText("More").performClick()
+        val menu = onNodeWithTag("library-more-pages").fetchSemanticsNode().boundsInRoot
+        assertTrue(menu.left >= more.right, "The menu sits right of the rail: $menu, $more")
+        assertTrue(menu.top <= more.bottom + 1f && menu.bottom >= more.top - 1f, "The menu is level with More: $menu, $more")
+        onNodeWithTag("library-more-pages").performScrollToNode(hasText("Recommendations"))
+        onNode(hasText("Recommendations") and hasAnyAncestor(hasTestTag("library-more-pages"))).assertIsDisplayed().assertIsSelected()
     }
 
     private fun ComposeUiTest.captureNavigation(name: String, tag: String = "library-navigation") {
