@@ -75,6 +75,33 @@ class AdaptiveLayoutUiTest {
         onNodeWithTag("now-playing-pane").assertDoesNotExist()
     }
 
+    @Test fun splitScreenWindowsSlideTheHeaderAndBottomBarAwayWhileAPageScrolls() = withApp(400.dp) { controller, tracks ->
+        height = 400.dp
+        play(controller, tracks)
+        onNodeWithText("Songs").performClick()
+        val page = bounds("library-pager")
+        onNodeWithTag("library-pager").performTouchInput { swipeUp(centerY + 40f, centerY - 160f) }
+        waitForIdle()
+        // The page gains the header's and the bottom bar's room, and the mini player follows the bar down.
+        assertTrue(bounds("library-pager").height >= page.height + with(density) { 140.dp.toPx() }, "The page grows as the bars slide away")
+        assertEquals(with(density) { 392.dp.toPx() }, bounds("mini-player").bottom, 1f)
+        onNodeWithTag("library-pager").performTouchInput { swipeDown(centerY - 40f, centerY + 40f) }
+        waitForIdle()
+        assertEquals(page.height, bounds("library-pager").height, 1f)
+        onNodeWithText("Albums").assertIsDisplayed().performClick()
+        onAllNodesWithText("Unknown album")[0].performClick()
+        // An album's cover sits beside its title instead of filling the short window above it.
+        assertTrue(onNodeWithContentDescription("Collection artwork: Unknown album").fetchSemanticsNode().size.height <= with(density) { 112.dp.roundToPx() })
+        // Leaving a page whose bars slid away brings them back on the next one.
+        val album = bounds("library-pager")
+        onNodeWithTag("library-pager").performTouchInput { swipeUp(centerY + 40f, centerY - 160f) }
+        waitForIdle()
+        assertTrue(bounds("library-pager").height > album.height + 1f, "The album's bars slide away")
+        onNodeWithContentDescription("Back").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        waitForIdle()
+        assertEquals(album.height, bounds("library-pager").height, 1f)
+    }
+
     @Test fun mediumWindowsUseARailBesideTheLibraryAboveTheMiniPlayer() = withApp(800.dp) { controller, tracks ->
         play(controller, tracks)
         val navigation = bounds("library-navigation")

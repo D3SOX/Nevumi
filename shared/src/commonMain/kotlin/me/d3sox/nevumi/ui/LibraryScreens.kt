@@ -51,6 +51,7 @@ import me.d3sox.nevumi.queue.QueueAction
 import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
@@ -193,6 +194,10 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     CompositionLocalProvider(LocalSongSelection provides selection, LocalSongGesturePages provides songPages,
         LocalDerivedResults provides derived, LocalLibraryHeaders provides headers, LocalLibraryReselects provides reselects) {
     val rail = LocalWindowLayout.current != WindowLayout.COMPACT
+    val chrome = remember { LibraryChrome() }
+    chrome.enabled = LocalShortWindow.current && !selection.active
+    // Another page, or a window with room again, starts with its header and navigation in view.
+    LaunchedEffect(chrome.enabled, currentTab, headerContext?.page) { chrome.show() }
     // The rail leaves the bottom free, so nothing above the player needs to make room for a navigation bar.
     LaunchedEffect(rail) { if (rail) { navigationHeight = 0.dp; onNavigationHeight(0) } }
     // A lambda, not a local function reference, so the navigation recomposes with the tab that is open now.
@@ -207,6 +212,7 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     Column(Modifier.weight(1f).fillMaxHeight()) {
         // Search ignores the source and library filters, and Playlists only follow the source.
         val libraryFiltersApply = tabs[currentIndex] !in setOf(LibraryTab.SEARCH, LibraryTab.PLAYLISTS)
+        Column(chrome.header(Modifier.fillMaxWidth())) {
         if (selection.active) SongSelectionHeader(selection, controller)
         else if (tabs[currentIndex] != LibraryTab.SEARCH) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 64.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -273,9 +279,10 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
         if (!selection.active && tabs[currentIndex] != LibraryTab.SEARCH) ActiveLibraryFilters(if (libraryFiltersApply) filter else LibraryQuery(), sources, edit = { filters = true },
             editSource = { sourceMenu = true }, change = { value -> controller.updatePreferences { it.copy(libraryFilter = value) } },
             changeSource = { value -> controller.updatePreferences { it.copy(sourceFilter = value) } })
+        }
         // Like Namida, slide the incoming tab over the stationary previous page, skipping intermediate tabs.
         transition.AnimatedContent(Modifier.weight(1f).fillMaxWidth().clipToBounds()
-            .consumeWindowInsets(PaddingValues(bottom = navigationHeight)).testTag("library-pager"), transitionSpec = {
+            .consumeWindowInsets(PaddingValues(bottom = navigationHeight)).nestedScroll(chrome.connection).testTag("library-pager"), transitionSpec = {
             val direction = if (tabs.indexOf(targetState) > tabs.indexOf(initialState))
                 AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right
             (slideIntoContainer(direction, tween(400, easing = CubicBezierEasing(0f, 0f, 0.58f, 1f))) togetherWith
@@ -340,10 +347,9 @@ internal fun LibraryScreens(state: AppState, controller: MusicController, modifi
     }
     }
         Spacer(Modifier.height(miniPlayerSpace))
-        if (!rail) LibraryNavigation(tabs, tabs[currentIndex], Modifier.onSizeChanged {
-            navigationHeight = with(density) { it.height.toDp() }
-            onNavigationHeight(it.height)
-        }, state.preferences.bottomNavigationTabs, selectTab)
+        // The player follows the navigation as it slides away; the keyboard still covers all of it.
+        if (!rail) LibraryNavigation(tabs, tabs[currentIndex], chrome.navigation(Modifier.onSizeChanged { onNavigationHeight(it.height) })
+            .onSizeChanged { navigationHeight = with(density) { it.height.toDp() } }, state.preferences.bottomNavigationTabs, selectTab)
     }
     }
     if (filters) LibraryFiltersDialog(state, controller) { filters = false }
