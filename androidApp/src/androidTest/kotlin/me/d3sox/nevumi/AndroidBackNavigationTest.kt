@@ -1,6 +1,7 @@
 package me.d3sox.nevumi
 
 import androidx.activity.BackEventCompat
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -20,12 +21,15 @@ class AndroidBackNavigationTest {
     @get:Rule val compose = createEmptyComposeRule()
     @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
+    /** Scaling to 90% around the page's center moves a node by at most 5% of the width, so only a slide passes. */
+    private fun Rect.slidFrom(original: Rect) = left - original.left > compose.onRoot().fetchSemanticsNode().size.width * .1f
+
     @Test
     fun returningToTheEdgeBeforeCancellingKeepsSettingsStationary() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             fun cancelAtTheEdge() {
                 val page = compose.onNodeWithTag("settings-page")
-                val original = page.fetchSemanticsNode().boundsInRoot.left
+                val original = page.fetchSemanticsNode().boundsInRoot
                 compose.mainClock.autoAdvance = false
                 try {
                     scenario.onActivity {
@@ -34,7 +38,7 @@ class AndroidBackNavigationTest {
                     }
                     compose.mainClock.advanceTimeBy(64)
                     compose.waitForIdle()
-                    assertTrue("Settings follow the finger inward", page.fetchSemanticsNode().boundsInRoot.left > original + 50)
+                    assertTrue("Settings follow the finger", page.fetchSemanticsNode().boundsInRoot.previews(original))
                     listOf(.3f, .1f, 0f).forEach { progress ->
                         scenario.onActivity {
                             it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(750f * progress, 800f, progress, BackEventCompat.EDGE_LEFT))
@@ -42,14 +46,14 @@ class AndroidBackNavigationTest {
                         compose.mainClock.advanceTimeBy(64)
                         compose.waitForIdle()
                     }
-                    assertTrue("Returning to the edge restores the page", kotlin.math.abs(page.fetchSemanticsNode().boundsInRoot.left - original) < 2)
+                    assertTrue("Returning to the edge restores the page", page.fetchSemanticsNode().boundsInRoot.matches(original))
                     scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                     repeat(24) { frame ->
                         compose.mainClock.advanceTimeByFrame()
                         compose.waitForIdle()
-                        val left = page.fetchSemanticsNode().boundsInRoot.left
-                        assertTrue("Cancelling at the edge must not restart the animation: frame=$frame, left=$left, original=$original",
-                            kotlin.math.abs(left - original) < 2)
+                        val bounds = page.fetchSemanticsNode().boundsInRoot
+                        assertTrue("Cancelling at the edge must not restart the animation: frame=$frame, bounds=$bounds, original=$original",
+                            bounds.matches(original))
                     }
                 } finally { compose.mainClock.autoAdvance = true }
             }
@@ -65,17 +69,18 @@ class AndroidBackNavigationTest {
     fun settingsBackPreviewsItsParentCancelsAndCommitsAtEachLevel() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             fun previewAndCancel() {
-                val original = compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot.left
+                val original = compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot
                 scenario.onActivity {
                     it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                     it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
                 }
-                compose.waitForIdle()
-                assertTrue("Settings must move with the predictive back gesture",
-                    compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot.left > original + 50)
+                // Sliding alone keeps the height, so a shorter page shows that it scales with the gesture.
+                compose.waitUntil("Settings shrink with the predictive back gesture", 5_000) {
+                    compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot.height < original.height - 10
+                }
                 scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                 compose.waitForIdle()
-                assertTrue(kotlin.math.abs(compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot.left - original) < 2)
+                assertTrue(compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot.matches(original))
             }
             fun commit() {
                 scenario.onActivity {
@@ -140,17 +145,15 @@ class AndroidBackNavigationTest {
                 compose.onNodeWithContentDescription("Track options: Back test song").assertIsDisplayed()
                 compose.onNodeWithText("Back to ${tab.lowercase()}").assertDoesNotExist()
                 val heading = compose.onNode(hasText(group) and !hasClickAction())
-                val original = heading.fetchSemanticsNode().boundsInRoot.left
+                val original = heading.fetchSemanticsNode().boundsInRoot
                 scenario.onActivity {
                     it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                     it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
                 }
-                compose.waitForIdle()
-                assertTrue("The collection must follow the back gesture",
-                    heading.fetchSemanticsNode().boundsInRoot.left > original + 50)
+                compose.waitUntil("The collection follows the back gesture", 5_000) { heading.fetchSemanticsNode().boundsInRoot.slidFrom(original) }
                 scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                 compose.waitForIdle()
-                assertTrue(kotlin.math.abs(heading.fetchSemanticsNode().boundsInRoot.left - original) < 2)
+                assertTrue(heading.fetchSemanticsNode().boundsInRoot.matches(original))
                 compose.onNodeWithContentDescription("Back").assertIsDisplayed()
                 scenario.onActivity {
                     it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
@@ -176,16 +179,15 @@ class AndroidBackNavigationTest {
             compose.onNodeWithTag("search-type:ALBUMS").performClick()
             compose.onNodeWithContentDescription("Open album: Search back album").performClick()
             val row = compose.onNodeWithTag("track-row:${track.id}")
-            val original = row.fetchSemanticsNode().boundsInRoot.left
+            val original = row.fetchSemanticsNode().boundsInRoot
             scenario.onActivity {
                 it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                 it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
             }
-            compose.waitForIdle()
-            assertTrue("The opened album must follow the back gesture", row.fetchSemanticsNode().boundsInRoot.left > original + 50)
+            compose.waitUntil("The opened album follows the back gesture", 5_000) { row.fetchSemanticsNode().boundsInRoot.slidFrom(original) }
             scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
             compose.waitForIdle()
-            assertTrue(kotlin.math.abs(row.fetchSemanticsNode().boundsInRoot.left - original) < 2)
+            assertTrue(row.fetchSemanticsNode().boundsInRoot.matches(original))
             scenario.onActivity {
                 it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                 it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(500f, 800f, .7f, BackEventCompat.EDGE_LEFT))
@@ -271,3 +273,10 @@ class AndroidBackNavigationTest {
         } finally { app.controller.pause().join(); file.delete() }
     }
 }
+
+/** Depending on how far its transition has run, a back preview slides the page or shrinks it. */
+private fun Rect.previews(original: Rect) =
+    kotlin.math.abs(left - original.left) > 50 || kotlin.math.abs(width - original.width) > 50
+
+private fun Rect.matches(original: Rect) = kotlin.math.abs(left - original.left) < 2 && kotlin.math.abs(top - original.top) < 2 &&
+    kotlin.math.abs(width - original.width) < 2 && kotlin.math.abs(height - original.height) < 2
