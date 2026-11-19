@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -7,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -91,5 +94,13 @@ class BottomSheetMotionUiTest {
         waitForIdle()
         assertTrue(backdrop.progress in 0.4f..0.8f, "Backdrop did not follow the drag: ${backdrop.progress}")
         sheet.performTouchInput { up() }
+    }
+
+    @Test
+    fun fullyOpenSheetDimsTheBackdropLikeMaterialsScrim() = runComposeUiTest {
+        val backdrop = SheetBackdrop().apply { update(Any(), 1f) }
+        setContent { Box(Modifier.size(40.dp).sheetBackdrop(backdrop).background(Color.White).testTag("backdrop")) }
+        val pixel = onNodeWithTag("backdrop").captureToImage().toPixelMap()[20, 20]
+        assertEquals(0.68f, pixel.red, 0.02f)
     }
 }

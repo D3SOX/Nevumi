@@ -31,7 +31,7 @@ private val BackdropBlur = 4.dp
 internal fun Modifier.sheetBackdrop(backdrop: SheetBackdrop) = drawWithContent {
     drawContent()
     val progress = backdrop.progress
-    if (progress > 0f) drawRect(BackdropScrim, alpha = BackdropScrim.alpha * progress)
+    if (progress > 0f) drawRect(BackdropScrim, alpha = progress)
 }.graphicsLayer {
     val radius = BackdropBlur.toPx() * backdrop.progress
     renderEffect = if (radius > 0f) BlurEffect(radius, radius, TileMode.Clamp) else null
