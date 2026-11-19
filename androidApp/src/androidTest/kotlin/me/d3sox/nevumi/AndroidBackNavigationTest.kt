@@ -71,8 +71,9 @@ class AndroidBackNavigationTest {
                     it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                     it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
                 }
-                compose.waitUntil("Settings follow the predictive back gesture", 5_000) {
-                    compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot.previews(original)
+                // Sliding alone keeps the height, so a shorter page shows that it scales with the gesture.
+                compose.waitUntil("Settings shrink with the predictive back gesture", 5_000) {
+                    compose.onNodeWithTag("settings-page").fetchSemanticsNode().boundsInRoot.height < original.height - 10
                 }
                 scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                 compose.waitForIdle()
@@ -274,5 +275,5 @@ class AndroidBackNavigationTest {
 private fun Rect.previews(original: Rect) =
     kotlin.math.abs(left - original.left) > 50 || kotlin.math.abs(width - original.width) > 50
 
-private fun Rect.matches(original: Rect) =
-    kotlin.math.abs(left - original.left) < 2 && kotlin.math.abs(width - original.width) < 2
+private fun Rect.matches(original: Rect) = kotlin.math.abs(left - original.left) < 2 &&
+    kotlin.math.abs(width - original.width) < 2 && kotlin.math.abs(height - original.height) < 2
