@@ -31,10 +31,13 @@ import kotlin.math.roundToInt
 internal val LocalNavigationActive = compositionLocalOf { true }
 internal val LocalPageBackHandled = compositionLocalOf { false }
 
-/** The same transition is driven by navigation clicks and Android's back-gesture progress. */
+/**
+ * The same transition is driven by navigation clicks and Android's back-gesture progress. Pages are [opaque] unless they
+ * leave what lies below the navigation in view.
+ */
 @Composable
 internal fun <T> AnimatedNavigation(target: T, parent: T, canGoBack: Boolean,
-    onBack: () -> Unit, modifier: Modifier = Modifier, depth: (T) -> Int,
+    onBack: () -> Unit, modifier: Modifier = Modifier, depth: (T) -> Int, opaque: (T) -> Boolean = { true },
     content: @Composable (T) -> Unit) {
     val navigationActive = LocalNavigationActive.current
     val state = remember { SeekableTransitionState(target) }
@@ -86,7 +89,7 @@ internal fun <T> AnimatedNavigation(target: T, parent: T, canGoBack: Boolean,
         holder.SaveableStateProvider(page.toString()) {
             CompositionLocalProvider(LocalNavigationActive provides active, LocalPageBackHandled provides true) {
                 // Opaque, so the gesture's unfaded pages do not show through each other.
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).then(if (active) Modifier else Modifier.clearAndSetSemantics {})) { content(page) }
+                Box(Modifier.fillMaxSize().then(if (opaque(page)) Modifier.background(MaterialTheme.colorScheme.surface) else Modifier).then(if (active) Modifier else Modifier.clearAndSetSemantics {})) { content(page) }
             }
         }
     }

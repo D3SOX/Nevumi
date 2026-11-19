@@ -62,6 +62,23 @@ class GlobalSearchUiTest {
         } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 
+    @Test fun theSearchPageIsDrawnAndNotOnlyInTheSemanticsTree() {
+        val directory = Files.createTempDirectory("search-drawn-ui")
+        val store = openMusicStore(directory.resolve("library.db").toString())
+        val controller = MusicController(MusicLibrary(store), PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = MusicPreferences(store))
+        try {
+            runSkikoComposeUiTest(size = Size(420f, 900f)) {
+                setContent { MusicPlayerApp(controller) }
+                waitForLibrary(controller)
+                onNodeWithContentDescription("Search").performClick()
+                // An opaque page above the search, such as the empty YouTube page layer, hides it but keeps its semantics.
+                val pixels = onNodeWithText("Enter a search term").assertIsDisplayed().captureToImage().toPixelMap()
+                val colors = (0 until pixels.width).flatMap { x -> (0 until pixels.height).map { y -> pixels[x, y] } }.toSet()
+                assertTrue(colors.size > 1, "The search prompt is covered by a single color")
+            }
+        } finally { runBlocking { controller.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
+    }
+
     @Test fun restoringSearchKeepsTheCursorAtTheEndOfTheQuery() {
         val directory = Files.createTempDirectory("search-cursor-ui")
         val store = openMusicStore(directory.resolve("library.db").toString())
