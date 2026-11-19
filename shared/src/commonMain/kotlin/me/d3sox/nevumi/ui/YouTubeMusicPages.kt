@@ -126,7 +126,7 @@ internal fun YouTubePageHost(state: AppState, controller: MusicController, botto
         }
         // Without a page, the navigation shows nothing and leaves [content] in view; Back previews the page or content below.
         AnimatedNavigation(pages.lastOrNull(), pages.getOrNull(pages.size - 2), canGoBack = pages.isNotEmpty(), onBack = { pages = pages.dropLast(1) },
-            depth = { it?.depth ?: -1 }) { opened ->
+            depth = { it?.depth ?: -1 }, opaque = { it != null }) { opened ->
             if (opened != null) Surface(Modifier.fillMaxSize()) {
                 CompositionLocalProvider(LocalOpenYouTubePage provides open, LocalOpenYouTubeLinkedPage provides openLinked) {
                     YouTubeBrowseScreen(opened, state, controller, bottomSpace) { pages = pages.filter { it.depth < opened.depth } }
