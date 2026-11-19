@@ -21,6 +21,9 @@ class AndroidBackNavigationTest {
     @get:Rule val compose = createEmptyComposeRule()
     @get:Rule val optionsButtons = ShowOptionsButtonsRule()
 
+    /** Scaling to 90% around the page's center moves a node by at most 5% of the width, so only a slide passes. */
+    private fun Rect.slidFrom(original: Rect) = left - original.left > compose.onRoot().fetchSemanticsNode().size.width * .1f
+
     @Test
     fun returningToTheEdgeBeforeCancellingKeepsSettingsStationary() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -147,7 +150,7 @@ class AndroidBackNavigationTest {
                     it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                     it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
                 }
-                compose.waitUntil("The collection follows the back gesture", 5_000) { heading.fetchSemanticsNode().boundsInRoot.left > original.left + 50 }
+                compose.waitUntil("The collection follows the back gesture", 5_000) { heading.fetchSemanticsNode().boundsInRoot.slidFrom(original) }
                 scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                 compose.waitForIdle()
                 assertTrue(heading.fetchSemanticsNode().boundsInRoot.matches(original))
@@ -181,7 +184,7 @@ class AndroidBackNavigationTest {
                 it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
                 it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 800f, .4f, BackEventCompat.EDGE_LEFT))
             }
-            compose.waitUntil("The opened album follows the back gesture", 5_000) { row.fetchSemanticsNode().boundsInRoot.left > original.left + 50 }
+            compose.waitUntil("The opened album follows the back gesture", 5_000) { row.fetchSemanticsNode().boundsInRoot.slidFrom(original) }
             scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
             compose.waitForIdle()
             assertTrue(row.fetchSemanticsNode().boundsInRoot.matches(original))
