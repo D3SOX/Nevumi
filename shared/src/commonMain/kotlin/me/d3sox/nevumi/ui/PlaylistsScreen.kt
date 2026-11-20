@@ -425,6 +425,7 @@ internal fun PlaylistPicker(controller: MusicController, trackId: String, dismis
 internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>, dismiss: () -> Unit) {
     // Song rows keep a state that skips library updates, so read the songs' current sources here.
     val state by (LocalSteadyState.current ?: controller.state).collectAsState()
+    val scope = rememberCoroutineScope()
     var creating by remember { mutableStateOf(false) }
     var confirmingDiscard by remember { mutableStateOf(false) }
     var choices by remember(trackIds) { mutableStateOf(emptyMap<String, Boolean>()) }
@@ -438,6 +439,10 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
     })
     fun requestDismiss() {
         if (hasChanges) confirmingDiscard = true else dismiss()
+    }
+    fun keepEditing() {
+        confirmingDiscard = false
+        scope.launch { sheetState.expand() }
     }
     var query by remember { mutableStateOf("") }
     val sort = state.preferences.playlistPickerSort
@@ -524,13 +529,13 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
             }
         }
     }
-    if (creating) CreatePlaylistDialog(controller, selected, onCreated = dismiss) { creating = false }
+    if (creating) CreatePlaylistDialog(controller, selected, onCreated = { if (!hasChanges) dismiss() }) { creating = false }
     if (confirmingDiscard) AlertDialog(
-        onDismissRequest = { confirmingDiscard = false },
+        onDismissRequest = ::keepEditing,
         title = { Text(stringResource(Res.string.library_discard_playlist_changes_question)) },
         text = { Text(stringResource(Res.string.library_discard_playlist_changes_description)) },
         confirmButton = { TextButton(onClick = { confirmingDiscard = false; dismiss() }) { Text(stringResource(Res.string.library_discard_changes)) } },
-        dismissButton = { TextButton(onClick = { confirmingDiscard = false }) { Text(stringResource(Res.string.library_keep_editing)) } },
+        dismissButton = { TextButton(onClick = ::keepEditing) { Text(stringResource(Res.string.library_keep_editing)) } },
     )
 }
 

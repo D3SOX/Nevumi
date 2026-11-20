@@ -432,6 +432,15 @@ class PlaylistMembershipUiTest {
                 onNodeWithTag("playlist-membership-sheet").assertIsDisplayed()
                 evening.assertIsOn()
 
+                // Creating a new playlist while edits are pending keeps the picker open so edits aren't lost.
+                onNodeWithText("New playlist").performClick()
+                onNodeWithText("Playlist name").performTextInput("Late night")
+                onNodeWithText("Create").performClick()
+                waitUntil(timeoutMillis = 3_000) { player.state.value.playlists.any { it.name == "Late night" } }
+                onNodeWithTag("playlist-membership-sheet").assertIsDisplayed()
+                evening.assertIsOn()
+                onNodeWithContentDescription("Playlist membership: Late night").assertIsOn()
+
                 // Tapping outside the sheet also asks for confirmation instead of dismissing.
                 onAllNodes(isRoot()).onLast().performTouchInput { click(Offset(centerX, 10f)) }
                 onNodeWithText("Discard playlist changes?").assertIsDisplayed()
