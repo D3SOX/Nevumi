@@ -1,5 +1,8 @@
 package me.d3sox.nevumi.ui
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.state.ToggleableState
@@ -98,6 +101,7 @@ class PlaylistMembershipUiTest {
                 membership("Evening").performClick()
                 membership("Morning").performClick()
                 onNodeWithText("Cancel").performClick()
+                onNodeWithText("Discard").performClick()
                 assertEquals(listOf(songs[0].id, songs[0].id), runBlocking { playlists.all().single { it.name == "Evening" }.trackIds })
                 onNodeWithText("2 songs selected").assertIsDisplayed()
                 manage()
@@ -373,5 +377,79 @@ class PlaylistMembershipUiTest {
                 onNodeWithContentDescription("Playlist membership: Mix").assertIsEnabled()
             }
         } finally { runBlocking { player.closeAndJoin(); downloads.closeAndJoin() }; http.close(); store.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun modifiedPlaylistMembershipBlocksSwipeDismissAndRequiresDiscardConfirmation() {
+        val directory = Files.createTempDirectory("playlist-membership-discard")
+        val store = openMusicStore(directory.resolve("music.db").toString())
+        val library = MusicLibrary(store)
+        val playlists = Playlists(store)
+        runBlocking {
+            library.importTrack(TrackMetadata("Song"), TrackSource("song", SourceKind.LOCAL, "/music/song.flac"))
+            playlists.create("Evening", emptyList())
+            playlists.create("Morning", emptyList())
+        }
+        val player = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), playlists = playlists,
+            preferences = MusicPreferences(store).withOptionsButtons())
+        try {
+            runComposeUiTest {
+                setContent { MusicPlayerApp(player) }
+                waitUntil(timeoutMillis = 3_000) { !player.state.value.loading }
+                onNodeWithContentDescription("Track options: Song").performClick()
+                onNodeWithText("Select song").performClick()
+                fun openSheet() {
+                    onNodeWithContentDescription("Selection actions").performClick()
+                    onNodeWithText("Add to playlist").performClick()
+                    onNodeWithTag("playlist-membership-sheet").assertIsDisplayed()
+                }
+                openSheet()
+                val evening = onNodeWithContentDescription("Playlist membership: Evening")
+                evening.assertIsOff().performClick()
+                evening.assertIsOn()
+
+                // Swiping down while there are unsaved changes does not dismiss the sheet or open a prompt.
+                onNodeWithTag("playlist-membership-sheet").performTouchInput {
+                    swipe(topCenter.copy(y = top + 20f), bottomCenter, 300)
+                }
+                waitForIdle()
+                onNodeWithTag("playlist-membership-sheet").assertIsDisplayed()
+                onNodeWithText("Discard playlist changes?").assertDoesNotExist()
+                evening.assertIsOn()
+
+                // Cancel asks for confirmation; keeping edits preserves the modified sheet.
+                onNodeWithText("Cancel").performClick()
+                onNodeWithText("Discard playlist changes?").assertIsDisplayed()
+                System.getenv("NEVUMI_UI_SNAPSHOTS")?.let { output ->
+                    val pixels = onNodeWithTag("app-window").captureToImage().toPixelMap()
+                    val image = java.awt.image.BufferedImage(pixels.width, pixels.height, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+                    for (y in 0 until pixels.height) for (x in 0 until pixels.width) image.setRGB(x, y, pixels[x, y].toArgb())
+                    javax.imageio.ImageIO.write(image, "png", java.nio.file.Path.of(output).also(Files::createDirectories)
+                        .resolve("playlist-membership-discard-dialog.png").toFile())
+                }
+                onNodeWithText("Keep editing").performClick()
+                onNodeWithText("Discard playlist changes?").assertDoesNotExist()
+                onNodeWithTag("playlist-membership-sheet").assertIsDisplayed()
+                evening.assertIsOn()
+
+                // Tapping outside the sheet also asks for confirmation instead of dismissing.
+                onAllNodes(isRoot()).onLast().performTouchInput { click(Offset(centerX, 10f)) }
+                onNodeWithText("Discard playlist changes?").assertIsDisplayed()
+                onNodeWithText("Discard").performClick()
+                waitUntil(timeoutMillis = 2_000) { onAllNodesWithTag("playlist-membership-sheet").fetchSemanticsNodes().isEmpty() }
+                assertEquals(emptyList(), runBlocking { playlists.all().single { it.name == "Evening" }.trackIds })
+
+                // Toggling back to the initial state re-enables swipe-to-dismiss without confirmation.
+                openSheet()
+                evening.assertIsOff().performClick()
+                evening.assertIsOn().performClick()
+                evening.assertIsOff()
+                onNodeWithTag("playlist-membership-sheet").performTouchInput {
+                    swipe(topCenter.copy(y = top + 20f), bottomCenter, 300)
+                }
+                waitUntil(timeoutMillis = 2_000) { onAllNodesWithTag("playlist-membership-sheet").fetchSemanticsNodes().isEmpty() }
+                onNodeWithText("Discard playlist changes?").assertDoesNotExist()
+            }
+        } finally { runBlocking { player.closeAndJoin() }; store.close(); directory.toFile().deleteRecursively() }
     }
 }

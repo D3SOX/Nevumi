@@ -70,8 +70,12 @@ import me.d3sox.nevumi.resources.library_delete_playlist_description
 import me.d3sox.nevumi.resources.library_delete_server_playlist
 import me.d3sox.nevumi.resources.library_delete_server_playlist_description
 import me.d3sox.nevumi.resources.library_deletion_requested
+import me.d3sox.nevumi.resources.library_discard_changes
+import me.d3sox.nevumi.resources.library_discard_playlist_changes_description
+import me.d3sox.nevumi.resources.library_discard_playlist_changes_question
 import me.d3sox.nevumi.resources.library_import
 import me.d3sox.nevumi.resources.library_import_m3u
+import me.d3sox.nevumi.resources.library_keep_editing
 import me.d3sox.nevumi.resources.library_keep_my_version
 import me.d3sox.nevumi.resources.library_new
 import me.d3sox.nevumi.resources.library_new_playlist
@@ -422,7 +426,19 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
     // Song rows keep a state that skips library updates, so read the songs' current sources here.
     val state by (LocalSteadyState.current ?: controller.state).collectAsState()
     var creating by remember { mutableStateOf(false) }
+    var confirmingDiscard by remember { mutableStateOf(false) }
     var choices by remember(trackIds) { mutableStateOf(emptyMap<String, Boolean>()) }
+    val hasChanges = choices.isNotEmpty()
+    val latestHasChanges by rememberUpdatedState(hasChanges)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { target ->
+        if (target == SheetValue.Hidden && latestHasChanges) {
+            confirmingDiscard = true
+            false
+        } else true
+    })
+    fun requestDismiss() {
+        if (hasChanges) confirmingDiscard = true else dismiss()
+    }
     var query by remember { mutableStateOf("") }
     val sort = state.preferences.playlistPickerSort
     val layout = state.preferences.collectionLayout(me.d3sox.nevumi.library.LibraryTab.PLAYLISTS)
@@ -436,7 +452,7 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
             selected.toSet(), memberLabel, othersLabel)
     }
     val catalog = remember(state.tracks) { state.tracks.associateBy { it.id } }
-    AppBottomSheet(onDismissRequest = dismiss) {
+    AppBottomSheet(onDismissRequest = ::requestDismiss, sheetState = sheetState, sheetGesturesEnabled = !hasChanges) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)
             .testTag("playlist-membership-sheet"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(Res.string.manage_playlists), style = MaterialTheme.typography.titleLarge)
@@ -499,16 +515,23 @@ internal fun PlaylistPicker(controller: MusicController, trackIds: List<String>,
                 Icon(AppIcon.PLUS.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.library_new_playlist))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = dismiss, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = ::requestDismiss, modifier = Modifier.weight(1f)) {
                     Icon(AppIcon.CLOSE.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.cancel))
                 }
-                Button(enabled = choices.isNotEmpty(), modifier = Modifier.weight(1f), onClick = {
+                Button(enabled = hasChanges, modifier = Modifier.weight(1f), onClick = {
                     controller.managePlaylistMembership(selected, choices); dismiss()
                 }) { Icon(AppIcon.CHECK.vector, null); Spacer(Modifier.width(8.dp)); Text(stringResource(Res.string.apply)) }
             }
         }
     }
     if (creating) CreatePlaylistDialog(controller, selected, onCreated = dismiss) { creating = false }
+    if (confirmingDiscard) AlertDialog(
+        onDismissRequest = { confirmingDiscard = false },
+        title = { Text(stringResource(Res.string.library_discard_playlist_changes_question)) },
+        text = { Text(stringResource(Res.string.library_discard_playlist_changes_description)) },
+        confirmButton = { TextButton(onClick = { confirmingDiscard = false; dismiss() }) { Text(stringResource(Res.string.library_discard_changes)) } },
+        dismissButton = { TextButton(onClick = { confirmingDiscard = false }) { Text(stringResource(Res.string.library_keep_editing)) } },
+    )
 }
 
 @Composable

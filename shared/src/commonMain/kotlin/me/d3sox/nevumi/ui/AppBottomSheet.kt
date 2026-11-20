@@ -42,6 +42,7 @@ internal fun Modifier.sheetBackdrop(backdrop: SheetBackdrop) = drawWithContent {
 internal fun AppBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    sheetGesturesEnabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdrop = LocalSheetBackdrop.current
@@ -49,6 +50,7 @@ internal fun AppBottomSheet(
     if (backdrop != null) DisposableEffect(backdrop) { onDispose { backdrop.remove(key) } }
     // Material fades its scrim in one step once the sheet settles on a side. The backdrop follows the drag instead.
     ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState,
+        sheetGesturesEnabled = sheetGesturesEnabled,
         containerColor = MaterialTheme.colorScheme.surface,
         scrimColor = if (backdrop != null) Color.Transparent else BottomSheetDefaults.ScrimColor,
         modifier = Modifier.layout { measurable, constraints ->

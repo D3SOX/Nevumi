@@ -144,6 +144,10 @@
     <string name="library_selected_songs_partial">%1$d of %2$d selected songs</string>
     <string name="library_create_playlist_hint">Create a playlist to keep these songs together.</string>
     <string name="library_no_playlists_match">No playlists match "%1$s".</string>
+    <string name="library_discard_playlist_changes_question">Discard playlist changes?</string>
+    <string name="library_discard_playlist_changes_description">Your playlist changes have not been applied yet.</string>
+    <string name="library_discard_changes">Discard</string>
+    <string name="library_keep_editing">Keep editing</string>
     <string name="library_playlist_name">Playlist name</string>
     <string name="library_smart_playlist_hint">Songs update automatically as your library changes.</string>
     <string name="library_create">Create</string>
