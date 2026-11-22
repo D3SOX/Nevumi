@@ -2,12 +2,14 @@ package me.d3sox.nevumi
 
 import androidx.activity.BackEventCompat
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import me.d3sox.nevumi.library.*
+import me.d3sox.nevumi.playlists.playlistName
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -164,6 +166,43 @@ class AndroidBackNavigationTest {
                 compose.onNodeWithText(group).assertIsDisplayed()
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
             }
+        }
+    }
+
+    @Test
+    fun aRestoredPlaylistFolderStaysAboveItsParentDuringTheBackGesture(): Unit = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as MusicApplication
+        val folder = "Back folder ${UUID.randomUUID().toString().take(6)}"
+        listOf("One", "Two").forEach { app.controller.createPlaylist(playlistName(listOf(folder), it)).join() }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.waitForLibrary(app.controller)
+            compose.openLibraryPage("Playlists")
+            compose.onNodeWithText(folder).performClick()
+            // Recreating the activity restores the folder as the first page its navigation shows, like returning to the tab.
+            scenario.recreate()
+            compose.onNodeWithText("One").assertIsDisplayed()
+            val original = compose.onRoot().captureToImage().asAndroidBitmap()
+            fun assertUnchanged(message: String) {
+                compose.waitForIdle()
+                val shown = compose.onRoot().captureToImage().asAndroidBitmap()
+                var differing = 0
+                for (y in 0 until original.height step 4) for (x in 0 until original.width step 4) if (original.getPixel(x, y) != shown.getPixel(x, y)) differing++
+                val share = differing / ((original.width / 4f) * (original.height / 4f))
+                assertTrue("$message: $share of the screen differs", share < .02f)
+            }
+            fun send(progress: Float) {
+                scenario.onActivity {
+                    it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(750f * progress, 800f, progress, BackEventCompat.EDGE_LEFT))
+                }
+                compose.mainClock.advanceTimeByFrame()
+            }
+            scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT)) }
+            (1..10).forEach { send(it / 10f * .9f) }
+            (10 downTo 0).forEach { send(it / 10f * .9f) }
+            // The parent waits behind the folder until the system cancels the gesture.
+            assertUnchanged("The parent shows over the folder with the finger back at the edge")
+            scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
+            assertUnchanged("Cancelling leaves the parent visible")
         }
     }
 
