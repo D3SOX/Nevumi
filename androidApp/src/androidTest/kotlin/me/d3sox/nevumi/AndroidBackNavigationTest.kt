@@ -182,14 +182,14 @@ class AndroidBackNavigationTest {
             scenario.recreate()
             compose.onNodeWithText("One").assertIsDisplayed()
             val original = compose.onRoot().captureToImage().asAndroidBitmap()
-            fun assertUnchanged(message: String) {
+            fun changedShare(): Float {
                 compose.waitForIdle()
                 val shown = compose.onRoot().captureToImage().asAndroidBitmap()
                 var differing = 0
                 for (y in 0 until original.height step 4) for (x in 0 until original.width step 4) if (original.getPixel(x, y) != shown.getPixel(x, y)) differing++
-                val share = differing / ((original.width / 4f) * (original.height / 4f))
-                assertTrue("$message: $share of the screen differs", share < .02f)
+                return differing / ((original.width / 4f) * (original.height / 4f))
             }
+            fun assertUnchanged(message: String) = changedShare().let { assertTrue("$message: $it of the screen differs", it < .02f) }
             fun send(progress: Float) {
                 scenario.onActivity {
                     it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(750f * progress, 800f, progress, BackEventCompat.EDGE_LEFT))
@@ -198,6 +198,7 @@ class AndroidBackNavigationTest {
             }
             scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT)) }
             (1..10).forEach { send(it / 10f * .9f) }
+            changedShare().let { assertTrue("The folder follows the back gesture: only $it of the screen changed", it > .2f) }
             (10 downTo 0).forEach { send(it / 10f * .9f) }
             // The parent waits behind the folder until the system cancels the gesture.
             assertUnchanged("The parent shows over the folder with the finger back at the edge")
