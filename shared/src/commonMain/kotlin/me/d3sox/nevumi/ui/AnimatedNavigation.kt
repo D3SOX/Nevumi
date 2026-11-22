@@ -83,7 +83,9 @@ internal fun <T> AnimatedNavigation(target: T, parent: T, canGoBack: Boolean,
                 slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { it } + scaleOut(tween(250, easing = LinearEasing), targetScale = .9f)
         } else slideInHorizontally(tween(250)) { if (forward) it else -it / 4 } + fadeIn(tween(180)) to
             slideOutHorizontally(tween(250)) { if (forward) -it / 4 else it } + fadeOut(tween(180))
-        (enter togetherWith exit).apply { targetContentZIndex = if (forward) 1f else -1f }
+        // AnimatedContent keeps a page's z-index from when it was first shown, which for a restored page is not a forward
+        // navigation. Deeper pages always cover their parents, so the back gesture cannot draw a parent over its page.
+        (enter togetherWith exit).apply { targetContentZIndex = depth(targetState).toFloat() }
     }) { page ->
         val active = navigationActive && page == target
         holder.SaveableStateProvider(page.toString()) {
