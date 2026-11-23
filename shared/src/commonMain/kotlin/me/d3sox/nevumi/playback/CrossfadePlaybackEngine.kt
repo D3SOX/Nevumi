@@ -418,7 +418,8 @@ class CrossfadePlaybackEngine(private val soundEdges: suspend (PlayableTrack) ->
                 val playing = tracks.getOrNull(currentIndex())
                 edgeLookups.keys.retainAll { it == playing || it == next }
                 val ending = playing?.let { edges(it) }?.takeIf { current.durationMs > 0 && it.startMs < current.durationMs }
-                val nextStartMs = next?.let { edges(it) }?.startMs ?: 0
+                val opening = next?.let { edges(it) }
+                val nextStartMs = opening?.startMs ?: 0
                 if (next != null && current.durationMs > 0 && (prepared != next || preparedStartMs != nextStartMs)) {
                     val waiting = standby ?: factory().also { standby = it }
                     waiting.setAudioLevelEnabled(audioLevelEnabled)
@@ -438,8 +439,10 @@ class CrossfadePlaybackEngine(private val soundEdges: suspend (PlayableTrack) ->
                 val endMs = ending?.endMs?.coerceAtMost(current.durationMs) ?: current.durationMs
                 val remaining = (endMs - current.positionMs).coerceAtLeast(0) / speed
                 val waiting = standby
-                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), current.durationMs / speed / 2,
-                    (waiting?.status?.value?.durationMs ?: 0) / speed / 2)
+                // The incoming song only has its sound after the start it was prepared at, so a long silence leaves a shorter fade.
+                val incomingMs = (waiting?.status?.value?.durationMs ?: 0).let { duration ->
+                    (opening?.endMs?.coerceAtMost(duration) ?: duration) - preparedStartMs }.coerceAtLeast(0)
+                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), current.durationMs / speed / 2, incomingMs / speed / 2)
                 if (next != null && waiting != null && prepared == next && requestedPlaying.value &&
                     waiting.status.value.entryId == next.entryId && waiting.status.value.durationMs > 0 &&
                     waiting.status.value.error == null && remaining <= fadeLimit &&

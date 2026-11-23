@@ -85,6 +85,39 @@ class CrossfadeQueueTest {
     }
 
     @Test
+    fun anIncomingSongWithALongLeadingSilenceGetsAFadeThatFitsItsSound() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-silent-intro")
+        val tracks = listOf(3, 3).mapIndexed { index, seconds ->
+            val frames = 8_000 * seconds
+            val wave = ByteBuffer.allocate(44 + frames * 2).order(ByteOrder.LITTLE_ENDIAN)
+            wave.put("RIFF".toByteArray()).putInt(36 + frames * 2).put("WAVEfmt ".toByteArray())
+                .putInt(16).putShort(1).putShort(1).putInt(8_000).putInt(16_000).putShort(2).putShort(16)
+                .put("data".toByteArray()).putInt(frames * 2)
+            val file = directory.resolve("song-$index.wav")
+            Files.write(file, wave.array())
+            PlayableTrack("song-$index", file.toString())
+        }
+        // Only the last half second of the incoming song has sound, far less than the crossfade.
+        val engine = CrossfadePlaybackEngine({ track -> if (track == tracks[1]) SoundEdges(2_500, 3_000) else null }) {
+            MpvPlaybackEngine("null")
+        }
+        try {
+            engine.setCrossfadeDuration(2_000)
+            engine.loadQueue(tracks)
+            val switched = withTimeout(5_000) { engine.status.first { it.entryId == tracks[1].entryId } }
+            assertTrue(switched.positionMs >= 2_400, "The incoming song must start at its sound: $switched")
+            assertTrue(requireNotNull(switched.fadingOut).positionMs >= 2_600,
+                "The fade must fit the incoming song's half second of sound: ${switched.fadingOut}")
+            withTimeout(5_000) { engine.status.first { status ->
+                assertFalse(status.ended && status.fadingOut?.playing == true,
+                    "The incoming song ended while the outgoing song kept playing")
+                status.entryId == tracks[1].entryId && status.ended
+            } }
+            Unit
+        } finally { engine.close(); directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun singleSongQueueRepeatAndFiniteSongRepeatContinueToWorkWithCrossfadeEnabled() = runBlocking {
         val nativePlayers = mutableListOf<MpvPlaybackEngine>()
         val engine = CrossfadePlaybackEngine { MpvPlaybackEngine("null").also { nativePlayers += it } }
