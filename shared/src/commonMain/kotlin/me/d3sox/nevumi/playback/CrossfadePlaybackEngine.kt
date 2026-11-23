@@ -57,6 +57,8 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var decodersPlaying = false
     private var repeatMode = RepeatMode.OFF
     private var repeatPlays: Int? = null
+    /** See [setEndAfterCurrent]: the decoder gets no later song and no repeat, while the status keeps the listener's repeat. */
+    private var endAfterCurrent = false
     private var fadeElapsedMs = 0.0
     private var fadeDurationMs = 0.0
     private val clock = TimeSource.Monotonic.markNow()
@@ -117,9 +119,16 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         if (index >= 0) {
             // A native queue may have moved on without the worker, so a single song becomes the selected one again.
             if (!nativeQueue()) selectedEntry = tracks[index].entryId
-            active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
+            active.updateQueue(decoderQueue(index))
         }
         applyRepeat()
+    }
+
+    /** The songs the playing decoder holds when the song at [index] plays. */
+    private fun decoderQueue(index: Int) = when {
+        !nativeQueue() -> listOf(tracks[index])
+        endAfterCurrent -> tracks.subList(0, index + 1).toList()
+        else -> tracks
     }
 
     private fun nativeQueue() = activeCrossfadeMs == 0L && gapless
@@ -132,7 +141,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             val index = currentIndex()
             if (index >= 0) {
                 selectedEntry = tracks[index].entryId
-                active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
+                active.updateQueue(decoderQueue(index))
             }
             applyRepeat()
         }
@@ -199,8 +208,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             standby?.pause()
             applyRepeat()
             try {
-                active.loadQueue(if (nativeQueue()) tracks else listOf(tracks[startIndex]),
-                    if (nativeQueue()) startIndex else 0, positionMs, play)
+                active.loadQueue(decoderQueue(startIndex), if (nativeQueue()) startIndex else 0, positionMs, play)
             } catch (failure: Exception) {
                 // The decoder never adopts the entry, so stop reporting it as loading and let the failure surface.
                 if (pendingLoad === pending) pendingLoad = null
@@ -220,7 +228,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             selectedEntry = active.status.value.entryId ?: selectedEntry
         }
         val index = currentIndex()
-        if (index >= 0) active.updateQueue(if (nativeQueue()) tracks else listOf(tracks[index]))
+        if (index >= 0) active.updateQueue(decoderQueue(index))
         else active.updateQueue(emptyList())
         // A finished download or a new server route changes the next song's source, so the standby player loads it again.
         if (prepared != nextTrack()) { standby?.pause(); prepared = null }
@@ -323,12 +331,25 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     }
 
     private suspend fun applyRepeat() {
-        val nativeMode = if (!nativeQueue() && repeatMode == RepeatMode.ALL) {
-            if (tracks.size > 1) RepeatMode.OFF else RepeatMode.ONE
-        } else repeatMode
-        active.setRepeat(nativeMode, repeatPlays)
+        val nativeMode = when {
+            endAfterCurrent -> RepeatMode.OFF
+            !nativeQueue() && repeatMode == RepeatMode.ALL -> if (tracks.size > 1) RepeatMode.OFF else RepeatMode.ONE
+            else -> repeatMode
+        }
+        val nativePlays = repeatPlays.takeIf { !endAfterCurrent }
+        active.setRepeat(nativeMode, nativePlays)
         // A timeout is a CancellationException, which would stop the worker; a slow decoder only delays the repeat state.
-        withTimeoutOrNull(5_000) { active.status.first { it.repeatMode == nativeMode && it.repeatPlays == repeatPlays } }
+        withTimeoutOrNull(5_000) { active.status.first { it.repeatMode == nativeMode && it.repeatPlays == nativePlays } }
+    }
+
+    override fun setEndAfterCurrent(enabled: Boolean) = command {
+        if (endAfterCurrent == enabled) return@command
+        endAfterCurrent = enabled
+        // A crossfade into the next song may already run; the song fading in is then the one to end after.
+        val index = currentIndex()
+        if (index >= 0) active.updateQueue(decoderQueue(index))
+        if (enabled) { standby?.pause(); prepared = null }
+        applyRepeat()
     }
 
     private fun currentIndex(): Int = tracks.indexOfFirst { it.entryId == (loadingEntry ?: active.status.value.entryId ?: selectedEntry) }
@@ -342,7 +363,7 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     }
 
     private fun nextTrack(): PlayableTrack? {
-        if (repeatMode == RepeatMode.ONE) return null
+        if (repeatMode == RepeatMode.ONE || endAfterCurrent) return null
         val index = currentIndex()
         if (index < 0) return null
         return tracks.getOrNull(index + 1) ?: tracks.firstOrNull().takeIf { repeatMode == RepeatMode.ALL && tracks.size > 1 }
@@ -369,10 +390,13 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         }
         val current = active.status.value
         if (current.entryId == loadingEntry) loadingEntry = null
-        if (repeatPlays != null && current.repeatPlays == null && current.repeatMode == RepeatMode.OFF && current.durationMs > 0) {
-            repeatPlays = null
-            repeatMode = RepeatMode.OFF
-        } else if (repeatPlays != null) repeatPlays = current.repeatPlays
+        // Ending after the current song, the decoder repeats nothing, so its repeat says nothing about the listener's.
+        if (!endAfterCurrent) {
+            if (repeatPlays != null && current.repeatPlays == null && current.repeatMode == RepeatMode.OFF && current.durationMs > 0) {
+                repeatPlays = null
+                repeatMode = RepeatMode.OFF
+            } else if (repeatPlays != null) repeatPlays = current.repeatPlays
+        }
         if (activeCrossfadeMs > 0 && current.error == null) {
             if (outgoing != null) {
                 if (requestedPlaying.value && current.playing) fadeElapsedMs += elapsed

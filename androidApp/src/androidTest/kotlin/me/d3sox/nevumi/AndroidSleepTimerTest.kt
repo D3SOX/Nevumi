@@ -28,6 +28,47 @@ class AndroidSleepTimerTest {
 
     @Test fun endOfSongDoesNotCrossfadeIntoTheNextSong() = verifyEndOfSong(crossfadeMs = 2_000)
 
+    @Test fun mediaControlsCanSkipWhileWaitingForTheSongToEnd() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as MusicApplication
+        val audio = File(app.cacheDir, "sleep-skip-${UUID.randomUUID()}.flac")
+        instrumentation.context.assets.open("fixture.flac").use { input -> audio.outputStream().use(input::copyTo) }
+        val tracks = (1..3).map { app.controller.library.importTrack(TrackMetadata("Sleep skip $it"),
+            TrackSource("sleep-skip-$it-${UUID.randomUUID()}", SourceKind.LOCAL, audio.path)) }
+        var controls: androidx.media3.session.MediaController? = null
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                val controller = app.controller
+                controller.refresh()
+                controller.playTrack(tracks[0].id, tracks.map { it.id }).join()
+                withTimeout(10_000) { controller.state.first { it.playback.playing && it.playback.durationMs > 0 } }
+                controller.setSleepAfterSong().join()
+                lateinit var connection: com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>
+                instrumentation.runOnMainSync { connection = androidx.media3.session.MediaController.Builder(app,
+                    androidx.media3.session.SessionToken(app, android.content.ComponentName(app, PlaybackService::class.java))).buildAsync() }
+                val session = connection.get(10, java.util.concurrent.TimeUnit.SECONDS).also { controls = it }
+                // A headset, the notification or a car sends Next to the session, which still holds the whole queue.
+                withTimeout(5_000) {
+                    var count = 0
+                    while (count != 3) { instrumentation.runOnMainSync { count = session.mediaItemCount }; kotlinx.coroutines.delay(10) }
+                }
+                instrumentation.runOnMainSync { session.seekToNext() }
+                withTimeout(10_000) { controller.state.first { it.playback.trackId == tracks[1].id && it.playback.playing && it.playback.durationMs > 0 } }
+                assertTrue(controller.state.value.sleepAfterSong)
+                controller.seek(2_000).join()
+                val waiting = withTimeout(10_000) { controller.state.first {
+                    !it.sleepAfterSong && it.playback.trackId == tracks[2].id && it.playback.durationMs > 0
+                } }
+                assertEquals(false, waiting.playback.playWhenReady)
+            }
+        } finally {
+            app.controller.setSleepTimer(null).join()
+            app.controller.pause().join()
+            instrumentation.runOnMainSync { controls?.release() }
+            audio.delete()
+        }
+    }
+
     private fun verifyEndOfSong(crossfadeMs: Long) = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

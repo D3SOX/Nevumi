@@ -207,6 +207,9 @@ class AndroidPlaybackEngine(context: Context, service: Class<out Service>) : Pla
     override fun setSkipSilence(enabled: Boolean) = command {
         sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.SKIP_SILENCE), Bundle().apply { putBoolean("enabled", enabled) })
     }
+    override fun setEndAfterCurrent(enabled: Boolean) = command {
+        sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.END_AFTER_CURRENT), Bundle().apply { putBoolean("enabled", enabled) })
+    }
     override fun resume(entryId: String, positionMs: Long) = command {
         sendCustomCommand(SessionPlaybackCommands.command(SessionPlaybackCommands.RESUME),
             Bundle().apply { putString("entryId", entryId); putLong("positionMs", positionMs.coerceAtLeast(0)) })

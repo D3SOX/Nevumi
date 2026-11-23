@@ -95,7 +95,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 require(playback.id.isNotBlank() && playback.queue.entries.isNotEmpty() && playback.queue.currentIndex >= 0 &&
                     playback.queue.entries.map { it.id }.distinct().size == playback.queue.entries.size && playback.queue.positionMs >= 0 &&
                     playback.speed.isFinite() && playback.speed in 0.5..2.0 && playback.pitch.isFinite() && playback.pitch in 0.5..2.0) { "Invalid playback transfer" }
-                val playableIds = playableQueue(playback.queue, checkAllSources = true, forEngine = false).map { it.entryId }.toSet()
+                val playableIds = playableQueue(playback.queue, checkAllSources = true).map { it.entryId }.toSet()
                 require(playback.queue.entries.withIndex().all { (index, entry) -> entry.id in playableIds ||
                     (entry.id != playback.queue.currentEntryId && (index < playback.queue.currentIndex ||
                         entry.section != QueueSection.MANUAL)) }) {
@@ -164,9 +164,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 var snapshot = queue.snapshot()
                 // A changed engine value that the queue does not hold came from the engine itself (a finished repeat play) or
                 // another controller (a headset or watch). An unchanged one may only lag behind a request, so it is left alone.
-                // While the sleep timer waits for the song to end, the engine plays without repeat on purpose.
-                val repeatChanged = !stopsAfterSong && previous != null &&
-                    (previous.repeatMode != playback.repeatMode || previous.repeatPlays != playback.repeatPlays)
+                val repeatChanged = previous != null && (previous.repeatMode != playback.repeatMode || previous.repeatPlays != playback.repeatPlays)
                 if (snapshot.indexOf(playback.entryId) >= 0) {
                     if (snapshot.currentEntryId != playback.entryId) queue.select(requireNotNull(playback.entryId))
                     // Also when the song changed with it, as when a finite repeat ends or a controller skips right after; selecting
@@ -221,10 +219,15 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 context.update { it.copy(playback = playback, queue = snapshot,
                     error = if (playback.error != null && !recovered) playback.error else it.error) }
                 // The song the sleep timer waited for has ended. Waiting at the start of the next song, a later play continues the queue.
-                if (stopsAfterSong && playback.ended && previous?.ended != true) {
+                if (context.state.value.sleepAfterSong && playback.ended && previous?.ended != true) {
+                    // Paused first, so the engine does not move on by itself once it may again.
+                    pause().join()
                     context.update { it.copy(sleepAfterSong = false) }
+                    engine.setEndAfterCurrent(false)
                     skip(1)
                 }
+                // The sleep timer's fade-out kept the volume low while paused; playing again in any way restores it.
+                if (playback.playWhenReady && context.state.value.sleepTimerEndsAt == null) restoreSleepVolume()
             } } catch (error: Exception) {
                 rethrowCancellation(error)
                 context.update { it.copy(playback = engine.status.value, error = error.message ?: "Playback update failed") }
@@ -376,14 +379,9 @@ class PlaybackController internal constructor(private val context: ControllerCon
         sleepTimer?.cancel()
         sleepTimer = null
         restoreSleepVolume()
-        val wasAfterSong = stopsAfterSong
+        val wasAfterSong = context.state.value.sleepAfterSong
         context.update { it.copy(sleepTimerEndsAt = deadline, sleepAfterSong = afterSong) }
-        // Waiting for the song to end, the engine holds no later song and does not repeat, so it stops at the song's end.
-        if (wasAfterSong != afterSong && queueLoaded) {
-            val snapshot = queue.snapshot()
-            engine.updateQueue(playableQueue(snapshot))
-            setEngineRepeat(snapshot.repeatMode, snapshot.repeatPlays)
-        }
+        if (wasAfterSong != afterSong) engine.setEndAfterCurrent(afterSong)
         if (deadline == null) return
         sleepTimer = context.scope.launch {
             // The music fades out over the last minute, and each step holds the lock so a changed timer cannot be overridden.
@@ -403,14 +401,12 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 }
                 delay(minOf(SLEEP_FADE_STEP_MS, remaining))
             }
+            // The volume stays low while paused: restored during the play/pause fade, which still plays, it would be heard again.
             context.operations.withLock {
                 if (context.state.value.sleepTimerEndsAt != deadline) return@launch
                 pause().join()
                 context.update { it.copy(sleepTimerEndsAt = null) }
             }
-            // Raised while the music still plays, as during the play/pause fade, the volume would be heard again.
-            withTimeoutOrNull(3_000) { engine.status.first { !it.playing } }
-            context.operations.withLock { if (context.state.value.sleepTimerEndsAt == null) restoreSleepVolume() }
         }
     }
 
@@ -419,13 +415,6 @@ class PlaybackController internal constructor(private val context: ControllerCon
         sleepFadeVolume = null
         sleepFadeGain = 1.0
     }
-
-    /** Whether the sleep timer waits for the current song to end; see [startSleepTimer]. */
-    internal val stopsAfterSong get() = context.state.value.sleepAfterSong
-
-    /** Applies the queue's repeat to the engine, which plays without repeat while the sleep timer waits for the song to end. */
-    internal fun setEngineRepeat(mode: RepeatMode, playCount: Int?) =
-        if (stopsAfterSong) engine.setRepeat(RepeatMode.OFF) else engine.setRepeat(mode, playCount)
 
     private fun now() = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
@@ -551,7 +540,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
         require(index >= 0) { "This track has no available audio source" }
         transport.withLock {
             val requested = transportIntent.value.let { if (it.revision != intention.revision) it.play else play }
-            setEngineRepeat(snapshot.repeatMode, snapshot.repeatPlays)
+            engine.setRepeat(snapshot.repeatMode, snapshot.repeatPlays)
             engine.loadQueue(playable, index, snapshot.positionMs, requested)
             queueLoaded = true
             val status = engine.status.value
@@ -575,16 +564,13 @@ class PlaybackController internal constructor(private val context: ControllerCon
         }
     }
 
-    /** The songs of [entries] that can play; for the engine ([forEngine]), none after the current one while the sleep timer waits for it to end. */
     internal suspend fun playableQueue(snapshot: QueueSnapshot, entries: List<QueueEntry> = snapshot.entries,
-        checkAllSources: Boolean = false, lookup: SourceLookup? = null, forEngine: Boolean = true): List<PlayableTrack> {
+        checkAllSources: Boolean = false, lookup: SourceLookup? = null): List<PlayableTrack> {
         val sources = lookup ?: SourceLookup(library.tracks().associateBy { it.id })
         // Other snapshots are only checked against, so the song the player holds keeps its fallback.
         val kept = snapshot.entries.mapTo(mutableSetOf()) { it.id } + listOfNotNull(engine.status.value.entryId)
         lastResolved.keys.retainAll(kept)
-        val current = entries.indexOfFirst { it.id == snapshot.currentEntryId }
-        val held = if (forEngine && stopsAfterSong && current >= 0) entries.subList(0, current + 1) else entries
-        return held.mapNotNull { entry -> playable(entry, snapshot, checkAllSources, sources) }
+        return entries.mapNotNull { entry -> playable(entry, snapshot, checkAllSources, sources) }
     }
 
     private suspend fun playable(entry: QueueEntry, snapshot: QueueSnapshot, checkAllSources: Boolean, lookup: SourceLookup): PlayableTrack? {

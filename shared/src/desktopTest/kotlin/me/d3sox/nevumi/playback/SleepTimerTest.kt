@@ -1,5 +1,6 @@
 package me.d3sox.nevumi.playback
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -19,14 +20,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SleepTimerTest {
-    private fun withPlayer(engine: (PlaybackEngine) -> PlaybackEngine = { it },
+    /** Plays through the crossfade engine around mpv, as the Linux app does; [decoder] wraps each mpv decoder it creates. */
+    private fun withPlayer(decoder: (PlaybackEngine) -> PlaybackEngine = { it },
         test: suspend (MusicController, Map<String, Track>) -> Unit) = runBlocking {
         val directory = Files.createTempDirectory("sleep-timer")
         val store: MusicStore = openMusicStore(directory.resolve("library.db").toString())
         val library = MusicLibrary(store)
         val tracks = LocalFiles(library).scan(Path.of(System.getProperty("nevumi.testRoot"), ".test-environment", "music").toString())
             .associateBy { it.metadata.title }
-        val controller = MusicController(library, PlaybackQueue(store), engine(MpvPlaybackEngine("null")))
+        val controller = MusicController(library, PlaybackQueue(store), CrossfadePlaybackEngine { decoder(MpvPlaybackEngine("null")) })
         try {
             withTimeout(3_000) { controller.state.first { !it.loading } }
             test(controller, tracks)
@@ -37,6 +39,9 @@ class SleepTimerTest {
         val handed = CopyOnWriteArrayList<List<String>>()
         val repeats = CopyOnWriteArrayList<RepeatMode>()
         withPlayer({ decoder -> object : PlaybackEngine by decoder {
+            override fun loadQueue(tracks: List<PlayableTrack>, startIndex: Int, positionMs: Long, play: Boolean) {
+                handed += tracks.map { it.id }; decoder.loadQueue(tracks, startIndex, positionMs, play)
+            }
             override fun updateQueue(tracks: List<PlayableTrack>) { handed += tracks.map { it.id }; decoder.updateQueue(tracks) }
             override fun setRepeat(mode: RepeatMode, playCount: Int?) { repeats += mode; decoder.setRepeat(mode, playCount) }
         } }) { controller, tracks ->
@@ -46,22 +51,24 @@ class SleepTimerTest {
             controller.setQueueRepeat(RepeatMode.ONE).join()
             withTimeout(3_000) { controller.state.first { it.playback.playing } }
             controller.setSleepAfterSong().join()
-            assertTrue(controller.state.value.sleepAfterSong)
-            assertEquals(listOf(first), handed.last(), "The decoder holds no song to move on to")
-            assertEquals(RepeatMode.OFF, repeats.last(), "The decoder does not repeat the song")
-            assertEquals(RepeatMode.ONE, controller.state.value.queue.repeatMode, "The listener's repeat stays")
+            withTimeout(3_000) { while (handed.last() != listOf(first) || repeats.last() != RepeatMode.OFF) delay(10) }
+            assertEquals(RepeatMode.ONE, controller.engine.status.value.repeatMode, "The engine keeps reporting the listener's repeat")
+            assertEquals(listOf(first, next), controller.queue.snapshot().entries.map { it.trackId })
             controller.seek(2_700).join()
             val waiting = withTimeout(4_000) { controller.state.first { !it.sleepAfterSong && it.playback.trackId == next && it.playback.durationMs > 0 } }
             assertEquals(false, waiting.playback.playWhenReady)
             assertEquals(next, waiting.queue.currentTrackId)
             assertTrue(waiting.playback.positionMs < 500, "Waits at the start: ${waiting.playback.positionMs}")
             assertEquals(RepeatMode.ONE, waiting.queue.repeatMode)
-            assertEquals(RepeatMode.ONE, repeats.last(), "The decoder repeats again")
-            assertEquals(listOf(first, next), controller.playbackController.playableQueue(controller.queue.snapshot()).map { it.id })
+            withTimeout(3_000) { while (repeats.last() != RepeatMode.ONE) delay(10) }
+            controller.setQueueRepeat(RepeatMode.OFF).join()
+            controller.play().join()
+            withTimeout(3_000) { controller.state.first { it.playback.playing } }
+            assertEquals(listOf(first, next), handed.last(), "The decoder holds the whole queue again")
         }
     }
 
-    @Test fun endOfSongDoesNotCrossfadeIntoTheNextSong() = withPlayer({ CrossfadePlaybackEngine { MpvPlaybackEngine("null") } }) { controller, tracks ->
+    @Test fun endOfSongDoesNotCrossfadeIntoTheNextSong() = withPlayer { controller, tracks ->
         val first = tracks.getValue("Northern Light").id
         val next = tracks.getValue("Night Walk").id
         controller.updatePreferences { it.copy(crossfadeDurationMs = 2_000) }.join()
@@ -74,7 +81,21 @@ class SleepTimerTest {
         assertTrue(waiting.playback.positionMs < 500, "Waits at the start: ${waiting.playback.positionMs}")
     }
 
-    @Test fun cancelingEndOfSongGivesTheDecoderTheRestOfTheQueueAgain() = withPlayer { controller, tracks ->
+    @Test fun skippingWhileWaitingForTheSongToEndStopsAfterTheNewSong() = withPlayer { controller, tracks ->
+        val first = tracks.getValue("Northern Light").id
+        val second = tracks.getValue("Long Way Home").id
+        val third = tracks.getValue("Night Walk").id
+        controller.playTrack(first, listOf(first, second, third)).join()
+        withTimeout(3_000) { controller.state.first { it.playback.playing } }
+        controller.setSleepAfterSong().join()
+        controller.skip(1).join()
+        withTimeout(3_000) { controller.state.first { it.playback.trackId == second && it.playback.playing && it.playback.durationMs > 0 } }
+        controller.seek(controller.state.value.playback.durationMs - 300).join()
+        val waiting = withTimeout(4_000) { controller.state.first { !it.sleepAfterSong && it.playback.trackId == third && it.playback.durationMs > 0 } }
+        assertEquals(false, waiting.playback.playWhenReady)
+    }
+
+    @Test fun cancelingEndOfSongLetsTheQueueContinue() = withPlayer { controller, tracks ->
         val first = tracks.getValue("Northern Light").id
         val next = tracks.getValue("Night Walk").id
         controller.playTrack(first, listOf(first, next)).join()
@@ -86,7 +107,7 @@ class SleepTimerTest {
         withTimeout(4_000) { controller.state.first { it.playback.trackId == next && it.playback.playing } }
     }
 
-    @Test fun theTimerFadesTheMusicOutPausesAndRestoresTheVolume() = withPlayer { controller, tracks ->
+    @Test fun theTimerFadesTheMusicOutPausesAndRestoresTheVolumeOnTheNextPlay() = withPlayer { controller, tracks ->
         val first = tracks.getValue("Northern Light").id
         controller.setQueueRepeat(RepeatMode.ONE).join()
         controller.playTrack(first, listOf(first)).join()
@@ -96,7 +117,10 @@ class SleepTimerTest {
         withTimeout(3_000) { controller.state.first { it.playback.playing && it.playback.volume in .05..0.5 } }
         val paused = withTimeout(4_000) { controller.state.first { it.sleepTimerEndsAt == null && !it.playback.playWhenReady } }
         assertEquals(first, paused.playback.trackId)
-        withTimeout(3_000) { controller.state.first { abs(it.playback.volume - .8) < .01 } }
+        delay(500)
+        assertTrue(controller.state.value.playback.volume < .05, "The volume stays low while the pause fades out")
+        controller.play().join()
+        withTimeout(3_000) { controller.state.first { it.playback.playing && abs(it.playback.volume - .8) < .01 } }
     }
 
     @Test fun aVolumeChosenDuringTheFadeIsKeptAndRestored() = withPlayer { controller, tracks ->
@@ -106,12 +130,12 @@ class SleepTimerTest {
         withTimeout(3_000) { controller.state.first { it.playback.playing } }
         controller.playbackController.setSleepTimerMs(3_000).join()
         withTimeout(3_000) { controller.state.first { it.playback.volume < .7 } }
-        controller.setVolume(0.0).join()
+        controller.setVolume(.3).join()
         val volumes = CopyOnWriteArrayList<Double>()
         withTimeout(4_000) { controller.state.first { volumes += it.playback.volume; it.sleepTimerEndsAt == null && !it.playback.playWhenReady } }
-        kotlinx.coroutines.delay(500)
-        assertEquals(0.0, controller.state.value.playback.volume, "The muted volume stays: $volumes")
-        assertTrue(volumes.drop(2).all { it < .01 }, "The fade must not raise a muted volume: $volumes")
+        assertTrue(volumes.drop(2).all { it <= .3 }, "The fade must not raise the chosen volume: $volumes")
+        controller.play().join()
+        withTimeout(3_000) { controller.state.first { it.playback.playing && abs(it.playback.volume - .3) < .01 } }
     }
 
     @Test fun changingTheTimerDuringTheFadeRestoresTheVolume() = withPlayer { controller, tracks ->
