@@ -54,7 +54,7 @@ class ZeroVolumePause(private val context: Context, private val controller: Musi
         }
         // A sleep timer that ends or is turned off decides itself whether music plays, so raising the volume later must not resume it.
         MainScope().launch {
-            controller.state.map { it.sleepTimerEndsAt }.distinctUntilChanged().collect { if (it == null) pausedEntry = null }
+            controller.state.map { it.sleepTimerEndsAt != null || it.sleepAfterSong }.distinctUntilChanged().collect { if (!it) pausedEntry = null }
         }
     }
 }

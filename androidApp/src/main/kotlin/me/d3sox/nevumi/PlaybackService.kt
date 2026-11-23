@@ -73,6 +73,7 @@ class PlaybackService : MediaSessionService() {
                             SessionPlaybackCommands.REPLAY_GAIN -> player.engine.setReplayGain(SessionPlaybackCommands.decodeReplayGain(arguments))
                             SessionPlaybackCommands.PLAY_PAUSE_FADE -> player.engine.setPlayPauseFade(arguments.getBoolean("enabled"))
                             SessionPlaybackCommands.SKIP_SILENCE -> player.engine.setSkipSilence(arguments.getBoolean("enabled"))
+                            SessionPlaybackCommands.END_AFTER_CURRENT -> player.engine.setEndAfterCurrent(arguments.getBoolean("enabled"))
                             SessionPlaybackCommands.RESUME -> player.engine.resume(requireNotNull(arguments.getString("entryId")),
                                 arguments.getLong("positionMs", -1).also { require(it >= 0) })
                             SessionPlaybackCommands.CROSSFADE -> {

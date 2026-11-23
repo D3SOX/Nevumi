@@ -55,6 +55,14 @@ class PlaybackController internal constructor(private val context: ControllerCon
     private val listeningHistory: ListeningHistory?, private val scrobbling: Scrobbling?, private val pairedDevices: PairedDevices?,
     private val youTube: me.d3sox.nevumi.youtube.YouTubeSource? = null) {
     private var sleepTimer: Job? = null
+    /** The listener's volume while the sleep timer's fade-out lowers it, restored once the timer pauses or changes. */
+    private var sleepFadeVolume: Double? = null
+    /** The share of [sleepFadeVolume] the fade-out lets through. */
+    private var sleepFadeGain = 1.0
+    /** A volume sent to the engine that its status does not show yet, so a fade starting meanwhile does not take the old one. */
+    private var requestedVolume: Double? = null
+    /** Guards the fade's volume against a volume change made at the same time, which does not wait for other operations. */
+    private val volumeLock = Mutex()
     private val transport = Mutex()
     private data class TransportIntent(val revision: Long = 0, val play: Boolean = false)
     private val transportIntent = MutableStateFlow(TransportIntent())
@@ -212,6 +220,18 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 scrobbling?.onPlayback(playback)
                 context.update { it.copy(playback = playback, queue = snapshot,
                     error = if (playback.error != null && !recovered) playback.error else it.error) }
+                // The song the sleep timer waited for has ended. Waiting at the start of the next song, a later play continues the queue.
+                if (context.state.value.sleepAfterSong && playback.ended && previous?.ended != true) {
+                    // Paused first, so the engine does not move on by itself once it may again.
+                    pause().join()
+                    context.update { it.copy(sleepAfterSong = false) }
+                    engine.setEndAfterCurrent(false)
+                    skip(1)
+                }
+                // The sleep timer's fade-out kept the volume low while paused; playing again in any way restores it.
+                if (playback.playWhenReady && context.state.value.sleepTimerEndsAt == null) restoreSleepVolume()
+                // Read again under the lock: a request made since this update was captured is newer than its volume.
+                volumeLock.withLock { if (requestedVolume?.let { abs(it - engine.status.value.volume) < 0.001 } == true) requestedVolume = null }
             } } catch (error: Exception) {
                 rethrowCancellation(error)
                 context.update { it.copy(playback = engine.status.value, error = error.message ?: "Playback update failed") }
@@ -252,7 +272,14 @@ class PlaybackController internal constructor(private val context: ControllerCon
         }
     }
 
-    fun setVolume(volume: Double) = context.action(serialized = false) { engine.setVolume(volume) }
+    fun setVolume(volume: Double) = context.action(serialized = false) {
+        volumeLock.withLock {
+            // During the sleep timer's fade-out, the chosen volume is the one the fade lowers and later restores.
+            val faded = sleepFadeVolume != null
+            if (faded) sleepFadeVolume = volume.coerceIn(0.0, 1.0) else requestedVolume = volume.coerceIn(0.0, 1.0)
+            engine.setVolume(if (faded) volume * sleepFadeGain else volume)
+        }
+    }
     fun setSpeed(speed: Double) = context.action {
         engine.setSpeed(context.state.value.preferences.copy(speed = speed).forEngine(engine.supportsBitPerfectOutput).speed)
         preferences?.update { it.copy(speed = speed) }?.let { settings ->
@@ -333,23 +360,67 @@ class PlaybackController internal constructor(private val context: ControllerCon
         }
     }
     fun setSleepTimer(minutes: Int?) = context.action {
-        require(minutes == null || minutes in 1..180) { "Choose a sleep timer between 1 and 180 minutes" }
+        require(minutes == null || minutes in 1..MAX_SLEEP_TIMER_MINUTES) { "Choose a sleep timer between 1 and $MAX_SLEEP_TIMER_MINUTES minutes" }
+        startSleepTimer(minutes?.let { now() + it * 60_000L })
+    }
+    /** Starts a sleep timer of [durationMs]; [setSleepTimer] takes whole minutes. */
+    internal fun setSleepTimerMs(durationMs: Long) = context.action {
+        require(durationMs > 0)
+        startSleepTimer(now() + durationMs)
+    }
+    fun extendSleepTimer(minutes: Int) = context.action {
+        require(minutes > 0) { "Add at least one minute" }
+        val deadline = requireNotNull(context.state.value.sleepTimerEndsAt) { "No sleep timer is running" }
+        startSleepTimer((deadline + minutes * 60_000L).coerceAtMost(now() + MAX_SLEEP_TIMER_MINUTES * 60_000L))
+    }
+    /** Pauses once the current song ends, also when it would repeat. */
+    fun setSleepAfterSong() = context.action {
+        require(queue.snapshot().currentIndex >= 0) { "Choose a song first" }
+        startSleepTimer(null, afterSong = true)
+    }
+
+    private suspend fun startSleepTimer(deadline: Long?, afterSong: Boolean = false) {
         sleepTimer?.cancel()
-        val duration = minutes?.times(60_000L)
-        val deadline = duration?.let { kotlin.time.Clock.System.now().toEpochMilliseconds() + it }
-        context.update { it.copy(sleepTimerEndsAt = deadline) }
-        sleepTimer = duration?.let {
-            context.scope.launch {
-                delay(it)
+        sleepTimer = null
+        restoreSleepVolume()
+        val wasAfterSong = context.state.value.sleepAfterSong
+        context.update { it.copy(sleepTimerEndsAt = deadline, sleepAfterSong = afterSong) }
+        if (wasAfterSong != afterSong) engine.setEndAfterCurrent(afterSong)
+        if (deadline == null) return
+        sleepTimer = context.scope.launch {
+            // The music fades out over the last minute, and each step holds the lock so a changed timer cannot be overridden.
+            val fadeMs = minOf(SLEEP_FADE_MS, deadline - now())
+            delay(deadline - fadeMs - now())
+            while (true) {
+                val remaining = deadline - now()
+                if (remaining <= 0) break
                 context.operations.withLock {
-                    if (context.state.value.sleepTimerEndsAt == deadline) {
-                        pause().join()
-                        context.update { state -> state.copy(sleepTimerEndsAt = null) }
+                    if (context.state.value.sleepTimerEndsAt != deadline) return@launch
+                    volumeLock.withLock {
+                        val from = sleepFadeVolume ?: (requestedVolume ?: engine.status.value.volume).also { sleepFadeVolume = it; requestedVolume = null }
+                        // Loudness follows the square of the amplitude more closely than the amplitude itself.
+                        sleepFadeGain = (remaining.toDouble() / fadeMs).let { it * it }
+                        engine.setVolume(from * sleepFadeGain)
                     }
                 }
+                delay(minOf(SLEEP_FADE_STEP_MS, remaining))
+            }
+            // The volume stays low while paused: restored during the play/pause fade, which still plays, it would be heard again.
+            context.operations.withLock {
+                if (context.state.value.sleepTimerEndsAt != deadline) return@launch
+                pause().join()
+                context.update { it.copy(sleepTimerEndsAt = null) }
             }
         }
     }
+
+    private suspend fun restoreSleepVolume() = volumeLock.withLock {
+        sleepFadeVolume?.let { requestedVolume = it; engine.setVolume(it) }
+        sleepFadeVolume = null
+        sleepFadeGain = 1.0
+    }
+
+    private fun now() = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
     fun transferPlayback(deviceId: String): Job = context.action(serialized = false) {
         val devices = requireNotNull(pairedDevices) { "Device pairing is unavailable" }
@@ -553,8 +624,13 @@ class PlaybackController internal constructor(private val context: ControllerCon
         /** How far into a song a remembered position can still be resumed. */
         const val RESUME_WINDOW_MS = 5_000L
         const val TRANSFER_ACTIVATION_TIMEOUT_MS = 60_000L
+        const val SLEEP_FADE_MS = 60_000L
+        const val SLEEP_FADE_STEP_MS = 250L
     }
 }
+
+/** The longest sleep timer [PlaybackController.setSleepTimer] accepts, in minutes. */
+const val MAX_SLEEP_TIMER_MINUTES = 180
 
 /** Whether the player is meant to play: asked to, and neither finished nor failed. Unlike [PlaybackStatus.playing] it holds while buffering. */
 internal val PlaybackStatus.playRequested: Boolean get() = playWhenReady && !ended && error == null

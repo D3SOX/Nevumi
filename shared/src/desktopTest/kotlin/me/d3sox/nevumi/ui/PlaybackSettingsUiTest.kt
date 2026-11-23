@@ -40,7 +40,19 @@ class PlaybackSettingsUiTest {
                 waitUntil(timeoutMillis = 5_000) { !controller.state.value.preferences.gaplessPlayback }
                 onNodeWithText("15 min").performClick()
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.sleepTimerEndsAt != null }
-                onNodeWithText("Cancel timer").performClick()
+                val fifteen = requireNotNull(controller.state.value.sleepTimerEndsAt)
+                onNodeWithText("+5 min").performScrollTo().performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.sleepTimerEndsAt == fifteen + 5 * 60_000 }
+                onNodeWithText("End of song").performScrollTo().assertIsNotEnabled()
+                onNodeWithText("Custom").performScrollTo().performClick()
+                onNodeWithText("Start timer").assertIsNotEnabled()
+                onNodeWithText("Minutes").performTextInput("181")
+                onNodeWithText("Start timer").assertIsNotEnabled()
+                onNodeWithText("Minutes").performTextReplacement("45")
+                val started = System.currentTimeMillis()
+                onNodeWithText("Start timer").performClick()
+                waitUntil(timeoutMillis = 5_000) { controller.state.value.sleepTimerEndsAt?.let { it - started in 45 * 60_000L..46 * 60_000L } == true }
+                onNodeWithText("Cancel timer").performScrollTo().performClick()
                 waitUntil(timeoutMillis = 5_000) { controller.state.value.sleepTimerEndsAt == null }
                 onNodeWithText("Audio effects").performClick()
                 assertTrue(openedEffects)

@@ -70,4 +70,9 @@ interface PlaybackEngine : AutoCloseable {
     /** Continues [entryId], the current song, at [positionMs] where it was left; unlike [seek], a crossfade into it keeps going. */
     fun resume(entryId: String, positionMs: Long) { if (status.value.entryId == entryId) seek(positionMs) }
     fun setRepeat(mode: RepeatMode, playCount: Int? = null)
+    /**
+     * Pauses at the end of the current song instead of moving on or repeating, until turned off, and then reports it as ended.
+     * The queue and the repeat setting stay as they are, so media controls can still skip to another song, which it then ends after.
+     */
+    fun setEndAfterCurrent(enabled: Boolean) { require(!enabled) { "This decoder cannot stop at the end of a song" } }
 }

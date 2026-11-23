@@ -3,39 +3,50 @@ package me.d3sox.nevumi.ui
 import me.d3sox.nevumi.settings.bitPerfect
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import me.d3sox.nevumi.app.AppState
+import me.d3sox.nevumi.app.MAX_SLEEP_TIMER_MINUTES
 import me.d3sox.nevumi.app.MusicController
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import kotlin.time.Clock
 import me.d3sox.nevumi.resources.Res
 import me.d3sox.nevumi.resources.audio_effects
+import me.d3sox.nevumi.resources.cancel
 import me.d3sox.nevumi.resources.crossfade
 import me.d3sox.nevumi.resources.done
 import me.d3sox.nevumi.resources.off
+import me.d3sox.nevumi.resources.player_add_minutes
 import me.d3sox.nevumi.resources.player_blur_background
 import me.d3sox.nevumi.resources.player_cancel_timer
+import me.d3sox.nevumi.resources.player_custom_sleep_timer
+import me.d3sox.nevumi.resources.player_end_of_song
 import me.d3sox.nevumi.resources.player_dim_background
 import me.d3sox.nevumi.resources.player_gapless_playback
 import me.d3sox.nevumi.resources.player_gapless_playback_text
 import me.d3sox.nevumi.resources.player_minutes_short
 import me.d3sox.nevumi.resources.player_playback_settings
+import me.d3sox.nevumi.resources.player_playback_stops_after_song
 import me.d3sox.nevumi.resources.player_playback_stops_in
 import me.d3sox.nevumi.resources.player_seconds
 import me.d3sox.nevumi.resources.player_sleep_timer
+import me.d3sox.nevumi.resources.player_sleep_timer_fade
+import me.d3sox.nevumi.resources.player_sleep_timer_minutes
+import me.d3sox.nevumi.resources.player_sleep_timer_range
+import me.d3sox.nevumi.resources.player_start_timer
 import me.d3sox.nevumi.resources.player_visualizer_background
 import me.d3sox.nevumi.resources.player_visualizer_background_text
 import me.d3sox.nevumi.resources.settings_smart_shuffle
 import me.d3sox.nevumi.resources.settings_smart_shuffle_description
 import org.jetbrains.compose.resources.stringResource
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlaybackQuickSettings(state: AppState, controller: MusicController, audioEffects: () -> Unit, close: () -> Unit) {
     val deadline = state.sleepTimerEndsAt
@@ -79,14 +90,58 @@ internal fun PlaybackQuickSettings(state: AppState, controller: MusicController,
                         { "${(it * 100).roundToInt()}%" }) { blur -> visualizer { it.copy(backgroundBlur = blur) } }
                 }
             }
-            Text(stringResource(Res.string.player_sleep_timer), style = MaterialTheme.typography.titleSmall)
-            if (deadline != null) Text(stringResource(Res.string.player_playback_stops_in, playbackTime(remaining)), style = MaterialTheme.typography.bodyMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(15, 30, 60, 90).forEach { minutes ->
-                    OutlinedButton(onClick = { controller.setSleepTimer(minutes) }) { Text(stringResource(Res.string.player_minutes_short, minutes)) }
-                }
-                if (deadline != null) ActionButton(stringResource(Res.string.player_cancel_timer), AppIcon.CLOSE, style = ActionStyle.OUTLINED) { controller.setSleepTimer(null) }
-            }
+            SleepTimerControls(state, controller, deadline, remaining)
         }
     }, confirmButton = { TextButton(onClick = close) { Text(stringResource(Res.string.done)) } })
+}
+
+@Composable
+private fun SleepTimerControls(state: AppState, controller: MusicController, deadline: Long?, remaining: Long) {
+    var customMinutes by remember { mutableStateOf<String?>(null) }
+    // Fixed rows of equal buttons fit a phone's dialog without wrapping.
+    val compact = PaddingValues(horizontal = 4.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(Res.string.player_sleep_timer), style = MaterialTheme.typography.titleSmall)
+        when {
+            deadline != null -> Text(stringResource(Res.string.player_playback_stops_in, playbackTime(remaining)), style = MaterialTheme.typography.bodyMedium)
+            state.sleepAfterSong -> Text(stringResource(Res.string.player_playback_stops_after_song), style = MaterialTheme.typography.bodyMedium)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(15, 30, 60, 90).forEach { minutes ->
+                OutlinedButton(onClick = { controller.setSleepTimer(minutes) }, Modifier.weight(1f), contentPadding = compact) {
+                    Text(stringResource(Res.string.player_minutes_short, minutes), maxLines = 1)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // A live station never ends, so it has no end to wait for.
+            OutlinedButton(onClick = { controller.setSleepAfterSong() }, Modifier.weight(1f), contentPadding = compact,
+                enabled = state.queue.currentIndex >= 0 && state.playback.durationMs > 0) { Text(stringResource(Res.string.player_end_of_song), maxLines = 1) }
+            OutlinedButton(onClick = { customMinutes = "" }, Modifier.weight(1f), contentPadding = compact) {
+                Text(stringResource(Res.string.player_custom_sleep_timer), maxLines = 1)
+            }
+        }
+        if (deadline != null || state.sleepAfterSong) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (deadline != null) OutlinedButton(onClick = { controller.extendSleepTimer(5) }, Modifier.weight(1f), contentPadding = compact) {
+                Text(stringResource(Res.string.player_add_minutes, 5), maxLines = 1)
+            }
+            OutlinedButton(onClick = { controller.setSleepTimer(null) }, Modifier.weight(1f), contentPadding = compact) {
+                Text(stringResource(Res.string.player_cancel_timer), maxLines = 1)
+            }
+        }
+    }
+    customMinutes?.let { text ->
+        val minutes = text.toIntOrNull()?.takeIf { it in 1..MAX_SLEEP_TIMER_MINUTES }
+        fun close() { customMinutes = null }
+        KeyboardAlertDialog(onDismissRequest = ::close, title = { Text(stringResource(Res.string.player_sleep_timer)) }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.player_sleep_timer_fade))
+                OutlinedTextField(text, { customMinutes = it }, label = { Text(stringResource(Res.string.player_sleep_timer_minutes)) }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), isError = text.isNotEmpty() && minutes == null,
+                    supportingText = { Text(stringResource(Res.string.player_sleep_timer_range, MAX_SLEEP_TIMER_MINUTES)) }, modifier = Modifier.fillMaxWidth())
+            }
+        }, confirmButton = { TextButton(enabled = minutes != null, onClick = { controller.setSleepTimer(requireNotNull(minutes)); close() }) {
+            Text(stringResource(Res.string.player_start_timer))
+        } }, dismissButton = { TextButton(onClick = ::close) { Text(stringResource(Res.string.cancel)) } })
+    }
 }
