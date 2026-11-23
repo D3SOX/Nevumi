@@ -18,7 +18,7 @@ import org.jetbrains.compose.resources.stringResource
 internal expect fun PlatformBackHandler(onBack: () -> Unit)
 
 @Composable
-internal expect fun PlatformPredictiveBackHandler(enabled: Boolean, onStarted: () -> Unit,
+internal expect fun PlatformPredictiveBackHandler(enabled: Boolean, onStarted: (fromRightEdge: Boolean) -> Unit,
     onProgress: (Float) -> Unit, onCancelled: () -> Unit, onBack: () -> Unit)
 
 @Composable

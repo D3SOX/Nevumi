@@ -6,5 +6,5 @@ import androidx.compose.runtime.Composable
 internal actual fun PlatformBackHandler(onBack: () -> Unit) = Unit
 
 @Composable
-internal actual fun PlatformPredictiveBackHandler(enabled: Boolean, onStarted: () -> Unit,
+internal actual fun PlatformPredictiveBackHandler(enabled: Boolean, onStarted: (fromRightEdge: Boolean) -> Unit,
     onProgress: (Float) -> Unit, onCancelled: () -> Unit, onBack: () -> Unit) = Unit

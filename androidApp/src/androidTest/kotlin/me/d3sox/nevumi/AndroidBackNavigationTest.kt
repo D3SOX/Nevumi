@@ -68,6 +68,29 @@ class AndroidBackNavigationTest {
     }
 
     @Test
+    fun aBackGestureFromTheRightEdgeSlidesThePageLeft() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.onNodeWithContentDescription("Settings").performClick()
+            val page = compose.onNodeWithTag("settings-page")
+            val original = page.fetchSemanticsNode().boundsInRoot
+            val originalX = page.fetchSemanticsNode().positionInRoot.x
+            val width = compose.onRoot().fetchSemanticsNode().size.width
+            scenario.onActivity {
+                it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(width.toFloat(), 800f, 0f, BackEventCompat.EDGE_RIGHT))
+                it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(width - 300f, 800f, .4f, BackEventCompat.EDGE_RIGHT))
+            }
+            // Scaling to 90% moves the page's left edge right, and the clipped bounds stop at the screen's edge, so only the
+            // unclipped position of a page sliding left passes.
+            compose.waitUntil("The page follows the finger to the left", 5_000) {
+                page.fetchSemanticsNode().positionInRoot.x - originalX < -width * .1f
+            }
+            scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
+            compose.waitForIdle()
+            assertTrue(page.fetchSemanticsNode().boundsInRoot.matches(original))
+        }
+    }
+
+    @Test
     fun settingsBackPreviewsItsParentCancelsAndCommitsAtEachLevel() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             fun previewAndCancel() {
