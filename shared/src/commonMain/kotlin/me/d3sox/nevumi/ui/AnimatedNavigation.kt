@@ -80,10 +80,11 @@ internal fun <T> AnimatedNavigation(target: T, parent: T, canGoBack: Boolean,
         val (enter, exit) = if (gesture && !forward) {
             // While the back gesture is held, the page shrinks as it follows the finger away from the edge the gesture
             // started from, and its parent grows in behind it from that edge.
-            val direction = if (fromRightEdge) -1 else 1
-            slideInHorizontally(tween(350, easing = FastOutSlowInEasing)) { -direction * it / 4 } +
+            // AnimatedContent keeps a segment's transitions, and a gesture that starts while a cancelled one rolls back
+            // continues that segment, so the offsets read the edge when they run.
+            slideInHorizontally(tween(350, easing = FastOutSlowInEasing)) { if (fromRightEdge) it / 4 else -it / 4 } +
                 fadeIn(tween(75, 66, LinearEasing), initialAlpha = .75f) + scaleIn(tween(350, 66, LinearEasing), initialScale = .9f) to
-                slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { direction * it } + scaleOut(tween(250, easing = LinearEasing), targetScale = .9f)
+                slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { if (fromRightEdge) -it else it } + scaleOut(tween(250, easing = LinearEasing), targetScale = .9f)
         } else slideInHorizontally(tween(250)) { if (forward) it else -it / 4 } + fadeIn(tween(180)) to
             slideOutHorizontally(tween(250)) { if (forward) -it / 4 else it } + fadeOut(tween(180))
         // AnimatedContent keeps a page's z-index from when it was first shown, which for a restored page is not a forward
