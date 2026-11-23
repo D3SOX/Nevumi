@@ -55,8 +55,12 @@ class PlaybackController internal constructor(private val context: ControllerCon
     private val listeningHistory: ListeningHistory?, private val scrobbling: Scrobbling?, private val pairedDevices: PairedDevices?,
     private val youTube: me.d3sox.nevumi.youtube.YouTubeSource? = null) {
     private var sleepTimer: Job? = null
-    /** The volume before the sleep timer's fade-out lowered it, restored once the timer pauses or changes. */
+    /** The listener's volume while the sleep timer's fade-out lowers it, restored once the timer pauses or changes. */
     private var sleepFadeVolume: Double? = null
+    /** The share of [sleepFadeVolume] the fade-out lets through. */
+    private var sleepFadeGain = 1.0
+    /** Guards the fade's volume against a volume change made at the same time, which does not wait for other operations. */
+    private val volumeLock = Mutex()
     private val transport = Mutex()
     private data class TransportIntent(val revision: Long = 0, val play: Boolean = false)
     private val transportIntent = MutableStateFlow(TransportIntent())
@@ -261,7 +265,14 @@ class PlaybackController internal constructor(private val context: ControllerCon
         }
     }
 
-    fun setVolume(volume: Double) = context.action(serialized = false) { engine.setVolume(volume) }
+    fun setVolume(volume: Double) = context.action(serialized = false) {
+        volumeLock.withLock {
+            // During the sleep timer's fade-out, the chosen volume is the one the fade lowers and later restores.
+            val faded = sleepFadeVolume != null
+            if (faded) sleepFadeVolume = volume.coerceIn(0.0, 1.0)
+            engine.setVolume(if (faded) volume * sleepFadeGain else volume)
+        }
+    }
     fun setSpeed(speed: Double) = context.action {
         engine.setSpeed(context.state.value.preferences.copy(speed = speed).forEngine(engine.supportsBitPerfectOutput).speed)
         preferences?.update { it.copy(speed = speed) }?.let { settings ->
@@ -383,9 +394,12 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 if (remaining <= 0) break
                 context.operations.withLock {
                     if (context.state.value.sleepTimerEndsAt != deadline) return@launch
-                    val from = sleepFadeVolume ?: engine.status.value.volume.also { sleepFadeVolume = it }
-                    // Loudness follows the square of the amplitude more closely than the amplitude itself.
-                    engine.setVolume(from * (remaining.toDouble() / fadeMs).let { it * it })
+                    volumeLock.withLock {
+                        val from = sleepFadeVolume ?: engine.status.value.volume.also { sleepFadeVolume = it }
+                        // Loudness follows the square of the amplitude more closely than the amplitude itself.
+                        sleepFadeGain = (remaining.toDouble() / fadeMs).let { it * it }
+                        engine.setVolume(from * sleepFadeGain)
+                    }
                 }
                 delay(minOf(SLEEP_FADE_STEP_MS, remaining))
             }
@@ -400,9 +414,10 @@ class PlaybackController internal constructor(private val context: ControllerCon
         }
     }
 
-    private fun restoreSleepVolume() {
+    private suspend fun restoreSleepVolume() = volumeLock.withLock {
         sleepFadeVolume?.let(engine::setVolume)
         sleepFadeVolume = null
+        sleepFadeGain = 1.0
     }
 
     /** Whether the sleep timer waits for the current song to end; see [startSleepTimer]. */

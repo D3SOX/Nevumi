@@ -99,6 +99,21 @@ class SleepTimerTest {
         withTimeout(3_000) { controller.state.first { abs(it.playback.volume - .8) < .01 } }
     }
 
+    @Test fun aVolumeChosenDuringTheFadeIsKeptAndRestored() = withPlayer { controller, tracks ->
+        val first = tracks.getValue("Northern Light").id
+        controller.setQueueRepeat(RepeatMode.ONE).join()
+        controller.playTrack(first, listOf(first)).join()
+        withTimeout(3_000) { controller.state.first { it.playback.playing } }
+        controller.playbackController.setSleepTimerMs(3_000).join()
+        withTimeout(3_000) { controller.state.first { it.playback.volume < .7 } }
+        controller.setVolume(0.0).join()
+        val volumes = CopyOnWriteArrayList<Double>()
+        withTimeout(4_000) { controller.state.first { volumes += it.playback.volume; it.sleepTimerEndsAt == null && !it.playback.playWhenReady } }
+        kotlinx.coroutines.delay(500)
+        assertEquals(0.0, controller.state.value.playback.volume, "The muted volume stays: $volumes")
+        assertTrue(volumes.drop(2).all { it < .01 }, "The fade must not raise a muted volume: $volumes")
+    }
+
     @Test fun changingTheTimerDuringTheFadeRestoresTheVolume() = withPlayer { controller, tracks ->
         val first = tracks.getValue("Northern Light").id
         controller.setQueueRepeat(RepeatMode.ONE).join()
