@@ -442,7 +442,9 @@ class CrossfadePlaybackEngine(private val soundEdges: suspend (PlayableTrack) ->
                 // The incoming song only has its sound after the start it was prepared at, so a long silence leaves a shorter fade.
                 val incomingMs = (waiting?.status?.value?.durationMs ?: 0).let { duration ->
                     (opening?.endMs?.coerceAtMost(duration) ?: duration) - preparedStartMs }.coerceAtLeast(0)
-                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), current.durationMs / speed / 2, incomingMs / speed / 2)
+                // Likewise the outgoing song only has its sound between its analyzed edges.
+                val outgoingMs = ending?.let { endMs - it.startMs } ?: current.durationMs
+                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), outgoingMs / speed / 2, incomingMs / speed / 2)
                 if (next != null && waiting != null && prepared == next && requestedPlaying.value &&
                     waiting.status.value.entryId == next.entryId && waiting.status.value.durationMs > 0 &&
                     waiting.status.value.error == null && remaining <= fadeLimit &&

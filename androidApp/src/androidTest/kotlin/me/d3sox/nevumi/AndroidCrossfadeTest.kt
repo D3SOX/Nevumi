@@ -123,7 +123,8 @@ class AndroidCrossfadeTest {
             engine.loadQueue(tracks)
             val switched = withTimeout(8_000) { engine.status.first { it.entryId == "entry-1" } }
             assertEquals("The incoming song must start at its first sound: $switched", 1_000.0, switched.positionMs.toDouble(), 200.0)
-            assertEquals("The fade must end where the outgoing song falls silent: $switched", 500.0,
+            // The outgoing song's 1.5 s of sound limit the fade to 750 ms, which ends where that sound ends.
+            assertEquals("The fade must fit the outgoing song's sound and end where it falls silent: $switched", 750.0,
                 requireNotNull(switched.fadingOut).positionMs.toDouble(), 200.0)
             withTimeout(6_000) { engine.status.first { it.entryId == "entry-1" && it.ended } }
             Unit

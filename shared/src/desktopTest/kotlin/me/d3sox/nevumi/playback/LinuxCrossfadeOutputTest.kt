@@ -103,8 +103,9 @@ class LinuxCrossfadeOutputTest {
                 val switched = withTimeout(5_000) { engine.status.first { it.entryId == "second" } }
                 if (analyzed) {
                     assertEquals(1_000.0, switched.positionMs.toDouble(), 150.0, "The incoming song must start at its first sound")
-                    assertEquals(500.0, requireNotNull(switched.fadingOut).positionMs.toDouble(), 150.0,
-                        "The fade must end where the outgoing song falls silent")
+                    // The outgoing song's 1.5 s of sound limit the fade to 750 ms, which ends where that sound ends.
+                    assertEquals(750.0, requireNotNull(switched.fadingOut).positionMs.toDouble(), 150.0,
+                        "The fade must fit the outgoing song's sound and end where it falls silent")
                 }
                 withTimeout(10_000) { engine.status.first { it.entryId == "second" && it.ended } }
             }
@@ -133,7 +134,7 @@ class LinuxCrossfadeOutputTest {
         assertTrue(longestGap(plain) > 1.2, "Without analysis the trailing and leading silence stay: ${longestGap(plain)}s")
         assertTrue(longestGap(analyzed) < 0.1, "The analyzed transition must not fall silent: ${longestGap(analyzed)}s")
         val (start, end) = sound(analyzed)
-        assertEquals(2.5, (end - start) / 48_000.0, 0.3, "Both songs' sound must overlap during the fade")
+        assertEquals(2.75, (end - start) / 48_000.0, 0.3, "Both songs' sound must overlap during the fade")
         assertTrue((start until end - 9_600 step 4_800).any { amplitude(analyzed, it, 440) > 0.02 && amplitude(analyzed, it, 660) > 0.02 },
             "The two songs never overlapped")
     }
