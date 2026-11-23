@@ -27,7 +27,7 @@ class WaveformPreparationUiTest {
         val preferences = MusicPreferences(store)
         runBlocking { preferences.update { it.copy(precomputeWaveforms = false) } }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
-        val reader = CachedAudioWaveforms(directory.resolve("waves").toString()) { _, _ -> List(128) { .5f } }
+        val reader = CachedAudioWaveforms(directory.resolve("waves").toString()) { _, _ -> AudioAnalysis(List(128) { .5f }) }
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, audioWaveforms = reader) }
@@ -83,7 +83,7 @@ class WaveformPreparationUiTest {
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"), preferences = preferences)
         val decodes = AtomicInteger()
         fun reader() = CachedAudioWaveforms(directory.resolve("waves").toString()) { _, _ ->
-            kotlinx.coroutines.delay(50); decodes.incrementAndGet(); List(128) { .5f }
+            kotlinx.coroutines.delay(50); decodes.incrementAndGet(); AudioAnalysis(List(128) { .5f })
         }
         try {
             repeat(2) { restart ->
@@ -118,7 +118,7 @@ class WaveformPreparationUiTest {
         } }
         val controller = MusicController(library, PlaybackQueue(store), MpvPlaybackEngine("null"))
         val decodes = AtomicInteger()
-        val reader = CachedAudioWaveforms(directory.resolve("waves").toString()) { _, _ -> decodes.incrementAndGet(); List(128) { .5f } }
+        val reader = CachedAudioWaveforms(directory.resolve("waves").toString()) { _, _ -> decodes.incrementAndGet(); AudioAnalysis(List(128) { .5f }) }
         try {
             runComposeUiTest {
                 setContent { MusicPlayerApp(controller, audioWaveforms = reader) }

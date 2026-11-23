@@ -106,6 +106,7 @@ class PreparedAudioWaveforms(private val reader: AudioWaveforms, private val idl
     fun prepareAll() { paused.value = false; requested.value = ManualRequest() }
     fun pause() { paused.value = true; requested.value = null }
     override suspend fun cached(source: TrackSource) = reader.cached(source)
+    override suspend fun soundEdges(source: TrackSource) = reader.soundEdges(source)
     override suspend fun load(source: TrackSource, durationMs: Long): List<Float> {
         reader.cached(source)?.let { return it }
         decoding.value[source]?.let { request ->

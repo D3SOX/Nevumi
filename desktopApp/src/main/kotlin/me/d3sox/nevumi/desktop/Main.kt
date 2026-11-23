@@ -18,6 +18,8 @@ import me.d3sox.nevumi.navidrome.NavidromeConnection
 import me.d3sox.nevumi.navidrome.NavidromeChanges
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playback.CrossfadePlaybackEngine
+import me.d3sox.nevumi.playback.FfmpegAudioWaveforms
+import me.d3sox.nevumi.playback.soundEdgeLookup
 import me.d3sox.nevumi.playback.LinuxMediaSession
 import me.d3sox.nevumi.playback.LinuxTrayIcon
 import me.d3sox.nevumi.playback.MprisApplication
@@ -107,7 +109,7 @@ private suspend fun openPlayer(arguments: Array<String>, raise: () -> Unit, quit
         val scrobbling = Scrobbling(store, library, http, credentials, offline.network, connection::client)
         val equalizerProfiles = me.d3sox.nevumi.playback.AutoEqProfiles(store, http)
         val controller = MusicController(library, PlaybackQueue(store),
-            CrossfadePlaybackEngine { MpvPlaybackEngine(option("--audio-output") ?: "auto") },
+            CrossfadePlaybackEngine(soundEdgeLookup(library, FfmpegAudioWaveforms())) { MpvPlaybackEngine(option("--audio-output") ?: "auto") },
             connection, localFiles, offline, playlists, preferences = MusicPreferences(store), artwork = artwork,
             serverChanges = serverChanges,
             fileEdits = LocalFileEdits(store, library, File(directory, "file-edits").path, localSources = LocalFiles(library, artwork)),

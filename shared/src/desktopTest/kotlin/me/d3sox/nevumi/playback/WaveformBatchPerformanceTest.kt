@@ -17,7 +17,7 @@ class WaveformBatchPerformanceTest {
         val sources = (0 until 12).map { TrackSource("song:$it", SourceKind.LOCAL, "/song-$it.flac") to 240_000L }
         fun reader(cache: String) = CachedAudioWaveforms(directory.resolve(cache).toString()) { _, _ ->
             val count = active.incrementAndGet(); maximum.accumulateAndGet(count, ::maxOf)
-            try { repeat(8) { currentCoroutineContext().ensureActive(); Thread.sleep(10) }; List(128) { .5f } }
+            try { repeat(8) { currentCoroutineContext().ensureActive(); Thread.sleep(10) }; AudioAnalysis(List(128) { .5f }) }
             finally { active.decrementAndGet() }
         }
         val sequential = reader("serial")

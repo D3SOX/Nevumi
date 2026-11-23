@@ -18,7 +18,7 @@ class PreparedAudioWaveformsTest {
                 // Native codecs perform synchronous work, checking cancellation between buffers.
                 repeat(30) { currentCoroutineContext().ensureActive(); Thread.sleep(20) }
             }
-            List(128) { .5f }
+            AudioAnalysis(List(128) { .5f })
         }
         val prepared = PreparedAudioWaveforms(reader, idleDelayMs = 20)
         try {
@@ -39,7 +39,7 @@ class PreparedAudioWaveformsTest {
             if (location == next.location) {
                 nextDecodes++; started.complete(Unit); delay(200); finished.complete(Unit)
             }
-            List(128) { .5f }
+            AudioAnalysis(List(128) { .5f })
         }
         reader.load(current, 1_000)
         val prepared = PreparedAudioWaveforms(reader, idleDelayMs = 20)
@@ -61,7 +61,7 @@ class PreparedAudioWaveformsTest {
             decodes++
             started.complete(Unit)
             delay(200)
-            List(128) { .5f }
+            AudioAnalysis(List(128) { .5f })
         }
         val prepared = PreparedAudioWaveforms(reader, idleDelayMs = 20)
         try {
@@ -77,9 +77,9 @@ class PreparedAudioWaveformsTest {
         var decodes = 0
         val source = TrackSource("song", SourceKind.LOCAL, "/song.mp3", modifiedAt = 100L, indexedSize = 500L)
         try {
-            val reader = CachedAudioWaveforms(directory.toString()) { _, _ -> decodes++; List(128) { .5f } }
+            val reader = CachedAudioWaveforms(directory.toString()) { _, _ -> decodes++; AudioAnalysis(List(128) { .5f }) }
             assertEquals(128, reader.load(source, 123_456).size)
-            val reopened = CachedAudioWaveforms(directory.toString()) { _, _ -> decodes++; List(128) { .5f } }
+            val reopened = CachedAudioWaveforms(directory.toString()) { _, _ -> decodes++; AudioAnalysis(List(128) { .5f }) }
             assertEquals(128, reopened.load(source, 123_457).size)
             assertEquals(1, decodes, "Playback duration rounding must not invalidate a prepared waveform")
             assertEquals(128, reopened.load(source.copy(modifiedAt = 200L), 123_457).size)
@@ -101,7 +101,7 @@ class PreparedAudioWaveformsTest {
                 try { awaitCancellation() } finally { interrupted.complete(Unit) }
             }
             if (source == background.location) backgroundFinished.complete(Unit)
-            List(128) { .5f }
+            AudioAnalysis(List(128) { .5f })
         }
         val prepared = PreparedAudioWaveforms(cache, idleDelayMs = 20)
         try {

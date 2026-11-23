@@ -25,8 +25,9 @@ import kotlinx.coroutines.flow.first
 
 /** One public media session and one audio-focus owner for all overlapping decoders. */
 @UnstableApi
-class AndroidSessionPlayer(private val context: Context) : SimpleBasePlayer(Looper.getMainLooper()) {
-    val engine = CrossfadePlaybackEngine { AndroidExoPlaybackEngine(context) }
+class AndroidSessionPlayer(private val context: Context, soundEdges: suspend (PlayableTrack) -> SoundEdges? = { null }) :
+    SimpleBasePlayer(Looper.getMainLooper()) {
+    val engine = CrossfadePlaybackEngine(soundEdges) { AndroidExoPlaybackEngine(context) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val audio = context.getSystemService(AudioManager::class.java)
     private val audioAttributes = AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build()

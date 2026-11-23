@@ -26,7 +26,7 @@ I started it because I couldn't find a music player with all the features I want
 - **Library.** Browse songs, albums, artists, genres and folders. A song credited to several artists, as in "A feat. B", appears under each of them. You choose which separators split an artist tag, and Go to artist keeps a wrongly split name together. Search ignores accents and punctuation and finds songs that contain every word you type, in any order. Local songs without embedded artwork use a cover.jpg or folder.jpg from their folder, and you can hide short files such as ringtones. You choose the library tabs and Home sections.
 - **Playlists.** Create regular, smart and M3U playlists, sort them into folders and sync them with your music server.
 - **Queue.** Up next is a separate queue. Save queues and switch between them.
-- **Playback.** Nevumi has gapless playback, crossfade, speed and pitch control, an equalizer with AutoEQ headphone profiles and a sleep timer that fades the music out or stops at the end of the song.
+- **Playback.** Nevumi has gapless playback, crossfade that skips the silence between songs, speed and pitch control, an equalizer with AutoEQ headphone profiles and a sleep timer that fades the music out or stops at the end of the song.
 - **Lyrics.** Nevumi shows synced and plain lyrics from tags, `.lrc` files and your music server. It can also [look them up online](#online-lyrics).
 - **Waveforms.** Nevumi draws each song's waveform from its audio.
 - **Visualizer.** Nevumi plays MilkDrop visualizations through projectM and ships with over 10,000 presets.
