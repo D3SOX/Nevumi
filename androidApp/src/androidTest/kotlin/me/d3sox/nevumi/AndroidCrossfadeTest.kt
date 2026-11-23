@@ -126,6 +126,7 @@ class AndroidCrossfadeTest {
             assertEquals("The fade must end where the outgoing song falls silent: $switched", 500.0,
                 requireNotNull(switched.fadingOut).positionMs.toDouble(), 200.0)
             withTimeout(6_000) { engine.status.first { it.entryId == "entry-1" && it.ended } }
+            Unit
         } finally {
             engine.close()
             files.forEach { it.delete() }
