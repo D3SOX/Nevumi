@@ -23,8 +23,8 @@ internal class LongSongResume(private val context: ControllerContext, private va
     private suspend fun follow() {
         var previous: PlaybackStatus? = null
         var savedAt = 0L
-        /** A song whose length was unknown when it started; it can still resume once the decoder reports one. */
-        var awaitingDuration: String? = null
+        /** A song whose length was unknown when it started, and where it started; it can still resume once the decoder reports one. */
+        var awaitingDuration: Pair<String, Long>? = null
         val clock = kotlin.time.TimeSource.Monotonic.markNow()
         context.state.map { it.playback }.distinctUntilChanged().collect { current ->
             val last = previous
@@ -46,15 +46,23 @@ internal class LongSongResume(private val context: ControllerContext, private va
                 if (changed || repeated || paused || periodic || current.ended) {
                     savedAt = now
                     // The song being left saves first: the same song queued twice must not resume from the position it just finished.
+                    // A song that fades into the next one played to its end, even when the fade skipped a long silent tail.
+                    val faded = changed && current.fadingOut?.entryId == last.entryId
                     // A save that fails must not keep the next song from resuming.
-                    try { checkpoint(if (changed || repeated) last else current, repeated, minimumMs, generation) }
+                    try { checkpoint(if (changed || repeated) last else current, repeated || faded, minimumMs, generation) }
                     catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { }
                 }
-                if (changed) awaitingDuration = if (resume(current, minimumMs, generation)) null else current.entryId
-                else if (current.entryId == awaitingDuration && current.durationMs > 0) {
-                    awaitingDuration = null
-                    resume(current, minimumMs, generation)
+                if (changed) {
+                    // A crossfade starts a song at its first sound, which can lie past the first seconds of its file.
+                    val startMs = if (current.fadingOut != null) current.positionMs else 0
+                    awaitingDuration = if (resume(current, startMs, minimumMs, generation)) null else current.entryId?.let { it to startMs }
+                } else {
+                    val (entryId, startMs) = awaitingDuration ?: return@collect
+                    if (current.entryId == entryId && current.durationMs > 0) {
+                        awaitingDuration = null
+                        resume(current, startMs, minimumMs, generation)
+                    }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { }
@@ -64,13 +72,13 @@ internal class LongSongResume(private val context: ControllerContext, private va
     /** Saves where the song is when the app closes, after the collector stopped and could no longer see the final pause. */
     suspend fun saveOnClose(status: PlaybackStatus) {
         val minimumMs = context.state.value.preferences.resumeLongSongsMinutes * 60_000L
-        if (minimumMs > 0) checkpoint(status, repeated = false, minimumMs, library.songPositionGeneration)
+        if (minimumMs > 0) checkpoint(status, completed = false, minimumMs, library.songPositionGeneration)
     }
 
-    private suspend fun checkpoint(status: PlaybackStatus, repeated: Boolean, minimumMs: Long, generation: Long) {
+    private suspend fun checkpoint(status: PlaybackStatus, completed: Boolean, minimumMs: Long, generation: Long) {
         val track = findTrack(status.trackId ?: return)?.takeIf { qualifies(it, status, minimumMs) } ?: return
         val duration = status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs
-        val finished = repeated || status.ended || duration > 0 && status.positionMs >= duration - FINISHED_WITHIN_MS
+        val finished = completed || status.ended || duration > 0 && status.positionMs >= duration - FINISHED_WITHIN_MS
         // A song left within its first seconds keeps its earlier position, as does one still seeking there after a resume.
         if (!finished && status.positionMs < MINIMUM_POSITION_MS) return
         // Turning the setting off forgets every position; a save read before that, even if it runs after the setting is back on,
@@ -79,16 +87,17 @@ internal class LongSongResume(private val context: ControllerContext, private va
     }
 
     /**
-     * Continues [status]'s song where it was left when it starts from the beginning; a recovered queue already starts where it stopped.
+     * Continues [status]'s song where it was left when it starts from the beginning, or from [startMs] where a crossfade started it;
+     * a recovered queue already starts where it stopped.
      * Returns false only while neither the library nor the decoder knows the song's length, so the caller can try again.
      */
-    private suspend fun resume(status: PlaybackStatus, minimumMs: Long, generation: Long): Boolean {
+    private suspend fun resume(status: PlaybackStatus, startMs: Long, minimumMs: Long, generation: Long): Boolean {
         val entryId = status.entryId ?: return true
-        if (status.positionMs >= MINIMUM_POSITION_MS) return true
+        if (status.positionMs - startMs >= MINIMUM_POSITION_MS) return true
         val track = findTrack(status.trackId ?: return true) ?: return true
         if (status.durationMs <= 0 && track.metadata.durationMs <= 0) return false
         if (!qualifies(track, status, minimumMs)) return true
-        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it, generation) }
+        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it, generation, startMs) }
         return true
     }
 
