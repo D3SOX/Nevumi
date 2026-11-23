@@ -68,6 +68,70 @@ class AndroidBackNavigationTest {
     }
 
     @Test
+    fun aBackGestureFromTheRightEdgeSlidesThePageLeft() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.onNodeWithContentDescription("Settings").performClick()
+            val page = compose.onNodeWithTag("settings-page")
+            val original = page.fetchSemanticsNode().boundsInRoot
+            val originalX = page.fetchSemanticsNode().positionInRoot.x
+            val width = compose.onRoot().fetchSemanticsNode().size.width
+            scenario.onActivity {
+                it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(width.toFloat(), 800f, 0f, BackEventCompat.EDGE_RIGHT))
+                it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(width - 300f, 800f, .4f, BackEventCompat.EDGE_RIGHT))
+            }
+            // Scaling to 90% moves the page's left edge right, and the clipped bounds stop at the screen's edge, so only the
+            // unclipped position of a page sliding left passes.
+            compose.waitUntil("The page follows the finger to the left", 5_000) {
+                page.fetchSemanticsNode().positionInRoot.x - originalX < -width * .1f
+            }
+            scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
+            compose.waitForIdle()
+            assertTrue(page.fetchSemanticsNode().boundsInRoot.matches(original))
+        }
+    }
+
+    @Test
+    fun aRightEdgeGestureDuringALeftEdgeRollbackSlidesThePageLeft() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.onNodeWithContentDescription("Settings").performClick()
+            val page = compose.onNodeWithTag("settings-page")
+            val originalX = page.fetchSemanticsNode().positionInRoot.x
+            val width = compose.onRoot().fetchSemanticsNode().size.width
+            compose.mainClock.autoAdvance = false
+            try {
+                scenario.onActivity {
+                    it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 800f, 0f, BackEventCompat.EDGE_LEFT))
+                    it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(450f, 800f, .6f, BackEventCompat.EDGE_LEFT))
+                }
+                compose.mainClock.advanceTimeBy(64)
+                compose.waitForIdle()
+                // The next gesture continues the transition that the cancelled one started rolling back.
+                scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+                scenario.onActivity {
+                    it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(width.toFloat(), 800f, 0f, BackEventCompat.EDGE_RIGHT))
+                    it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(width - 300f, 800f, .4f, BackEventCompat.EDGE_RIGHT))
+                }
+                // The rollback cancels the first seeks, so keep moving the finger as a real gesture does.
+                listOf(.3f, .4f, .45f).forEach { progress ->
+                    compose.mainClock.advanceTimeBy(32)
+                    compose.waitForIdle()
+                    scenario.onActivity {
+                        it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(width - 750f * progress, 800f, progress, BackEventCompat.EDGE_RIGHT))
+                    }
+                }
+                compose.mainClock.advanceTimeBy(64)
+                compose.waitForIdle()
+                // Scaling down alone moves the page's left edge right, so only a slide to the left puts it left of its origin.
+                val slid = page.fetchSemanticsNode().positionInRoot.x - originalX
+                assertTrue("The page follows the finger to the left: slid=$slid", slid < 0)
+                scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
+            } finally { compose.mainClock.autoAdvance = true }
+        }
+    }
+
+    @Test
     fun settingsBackPreviewsItsParentCancelsAndCommitsAtEachLevel() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             fun previewAndCancel() {
