@@ -109,8 +109,9 @@ class SleepTimerTest {
 
     @Test fun theTimerFadesTheMusicOutPausesAndRestoresTheVolumeOnTheNextPlay() = withPlayer { controller, tracks ->
         val first = tracks.getValue("Northern Light").id
-        controller.setQueueRepeat(RepeatMode.ONE).join()
+        // A new queue starts without repeat, so the song repeats from here on and never ends before the timer does.
         controller.playTrack(first, listOf(first)).join()
+        controller.setQueueRepeat(RepeatMode.ONE).join()
         controller.setVolume(.8).join()
         withTimeout(3_000) { controller.state.first { it.playback.playing && abs(it.playback.volume - .8) < .01 } }
         controller.playbackController.setSleepTimerMs(2_000).join()
@@ -125,8 +126,9 @@ class SleepTimerTest {
 
     @Test fun aVolumeChosenDuringTheFadeIsKeptAndRestored() = withPlayer { controller, tracks ->
         val first = tracks.getValue("Northern Light").id
-        controller.setQueueRepeat(RepeatMode.ONE).join()
+        // A new queue starts without repeat, so the song repeats from here on and never ends before the timer does.
         controller.playTrack(first, listOf(first)).join()
+        controller.setQueueRepeat(RepeatMode.ONE).join()
         withTimeout(3_000) { controller.state.first { it.playback.playing } }
         controller.playbackController.setSleepTimerMs(3_000).join()
         withTimeout(3_000) { controller.state.first { it.playback.volume < .7 } }
@@ -138,10 +140,27 @@ class SleepTimerTest {
         withTimeout(3_000) { controller.state.first { it.playback.playing && abs(it.playback.volume - .3) < .01 } }
     }
 
+    @Test fun aTimerReplacingAFadingOneFadesFromTheListenersVolume() = withPlayer { controller, tracks ->
+        val first = tracks.getValue("Northern Light").id
+        // A new queue starts without repeat, so the song repeats from here on and never ends before the timer does.
+        controller.playTrack(first, listOf(first)).join()
+        controller.setQueueRepeat(RepeatMode.ONE).join()
+        controller.setVolume(.8).join()
+        withTimeout(3_000) { controller.state.first { it.playback.playing && abs(it.playback.volume - .8) < .01 } }
+        controller.playbackController.setSleepTimerMs(2_000).join()
+        withTimeout(3_000) { controller.state.first { it.playback.volume < .3 } }
+        // The engine applies the restored volume later, so the new fade must not start from the faded one it still reports.
+        controller.playbackController.setSleepTimerMs(1_500).join()
+        withTimeout(4_000) { controller.state.first { it.sleepTimerEndsAt == null && !it.playback.playWhenReady } }
+        controller.play().join()
+        withTimeout(3_000) { controller.state.first { it.playback.playing && abs(it.playback.volume - .8) < .01 } }
+    }
+
     @Test fun changingTheTimerDuringTheFadeRestoresTheVolume() = withPlayer { controller, tracks ->
         val first = tracks.getValue("Northern Light").id
-        controller.setQueueRepeat(RepeatMode.ONE).join()
+        // A new queue starts without repeat, so the song repeats from here on and never ends before the timer does.
         controller.playTrack(first, listOf(first)).join()
+        controller.setQueueRepeat(RepeatMode.ONE).join()
         withTimeout(3_000) { controller.state.first { it.playback.playing } }
         controller.playbackController.setSleepTimerMs(3_000).join()
         withTimeout(3_000) { controller.state.first { it.playback.volume < .7 } }

@@ -59,6 +59,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
     private var sleepFadeVolume: Double? = null
     /** The share of [sleepFadeVolume] the fade-out lets through. */
     private var sleepFadeGain = 1.0
+    /** A volume sent to the engine that its status does not show yet, so a fade starting meanwhile does not take the old one. */
+    private var requestedVolume: Double? = null
     /** Guards the fade's volume against a volume change made at the same time, which does not wait for other operations. */
     private val volumeLock = Mutex()
     private val transport = Mutex()
@@ -228,6 +230,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 }
                 // The sleep timer's fade-out kept the volume low while paused; playing again in any way restores it.
                 if (playback.playWhenReady && context.state.value.sleepTimerEndsAt == null) restoreSleepVolume()
+                volumeLock.withLock { if (requestedVolume?.let { abs(it - playback.volume) < 0.001 } == true) requestedVolume = null }
             } } catch (error: Exception) {
                 rethrowCancellation(error)
                 context.update { it.copy(playback = engine.status.value, error = error.message ?: "Playback update failed") }
@@ -272,7 +275,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
         volumeLock.withLock {
             // During the sleep timer's fade-out, the chosen volume is the one the fade lowers and later restores.
             val faded = sleepFadeVolume != null
-            if (faded) sleepFadeVolume = volume.coerceIn(0.0, 1.0)
+            if (faded) sleepFadeVolume = volume.coerceIn(0.0, 1.0) else requestedVolume = volume.coerceIn(0.0, 1.0)
             engine.setVolume(if (faded) volume * sleepFadeGain else volume)
         }
     }
@@ -393,7 +396,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 context.operations.withLock {
                     if (context.state.value.sleepTimerEndsAt != deadline) return@launch
                     volumeLock.withLock {
-                        val from = sleepFadeVolume ?: engine.status.value.volume.also { sleepFadeVolume = it }
+                        val from = sleepFadeVolume ?: (requestedVolume ?: engine.status.value.volume).also { sleepFadeVolume = it; requestedVolume = null }
                         // Loudness follows the square of the amplitude more closely than the amplitude itself.
                         sleepFadeGain = (remaining.toDouble() / fadeMs).let { it * it }
                         engine.setVolume(from * sleepFadeGain)
@@ -411,7 +414,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
     }
 
     private suspend fun restoreSleepVolume() = volumeLock.withLock {
-        sleepFadeVolume?.let(engine::setVolume)
+        sleepFadeVolume?.let { requestedVolume = it; engine.setVolume(it) }
         sleepFadeVolume = null
         sleepFadeGain = 1.0
     }
