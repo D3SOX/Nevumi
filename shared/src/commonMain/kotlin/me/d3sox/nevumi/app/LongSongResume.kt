@@ -23,8 +23,8 @@ internal class LongSongResume(private val context: ControllerContext, private va
     private suspend fun follow() {
         var previous: PlaybackStatus? = null
         var savedAt = 0L
-        /** A song whose length was unknown when it started, and where it started; it can still resume once the decoder reports one. */
-        var awaitingDuration: Pair<String, Long>? = null
+        /** A song whose length was unknown when it started; it can still resume once the decoder reports one. */
+        var awaitingDuration: Start? = null
         val clock = kotlin.time.TimeSource.Monotonic.markNow()
         context.state.map { it.playback }.distinctUntilChanged().collect { current ->
             val last = previous
@@ -55,13 +55,13 @@ internal class LongSongResume(private val context: ControllerContext, private va
                 }
                 if (changed) {
                     // A crossfade starts a song at its first sound, which can lie past the first seconds of its file.
-                    val startMs = if (current.fadingOut != null) current.positionMs else 0
-                    awaitingDuration = if (resume(current, startMs, minimumMs, generation)) null else current.entryId?.let { it to startMs }
+                    val start = Start(current.entryId, if (current.fadingOut != null) current.positionMs else 0, playback.seeks)
+                    awaitingDuration = if (resume(current, start, minimumMs, generation)) null else start
                 } else {
-                    val (entryId, startMs) = awaitingDuration ?: return@collect
-                    if (current.entryId == entryId && current.durationMs > 0) {
+                    val start = awaitingDuration ?: return@collect
+                    if (current.entryId == start.entryId && current.durationMs > 0) {
                         awaitingDuration = null
-                        resume(current, startMs, minimumMs, generation)
+                        resume(current, start, minimumMs, generation)
                     }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -87,17 +87,17 @@ internal class LongSongResume(private val context: ControllerContext, private va
     }
 
     /**
-     * Continues [status]'s song where it was left when it starts from the beginning, or from [startMs] where a crossfade started it;
+     * Continues [status]'s song where it was left when it starts from the beginning, or from where a crossfade started it;
      * a recovered queue already starts where it stopped.
      * Returns false only while neither the library nor the decoder knows the song's length, so the caller can try again.
      */
-    private suspend fun resume(status: PlaybackStatus, startMs: Long, minimumMs: Long, generation: Long): Boolean {
+    private suspend fun resume(status: PlaybackStatus, start: Start, minimumMs: Long, generation: Long): Boolean {
         val entryId = status.entryId ?: return true
-        if (status.positionMs - startMs >= MINIMUM_POSITION_MS) return true
+        if (status.positionMs - start.positionMs >= MINIMUM_POSITION_MS) return true
         val track = findTrack(status.trackId ?: return true) ?: return true
         if (status.durationMs <= 0 && track.metadata.durationMs <= 0) return false
         if (!qualifies(track, status, minimumMs)) return true
-        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it, generation, startMs) }
+        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it, generation, start.positionMs, start.seeks) }
         return true
     }
 
@@ -105,6 +105,9 @@ internal class LongSongResume(private val context: ControllerContext, private va
 
     private fun qualifies(track: Track, status: PlaybackStatus, minimumMs: Long) = !track.isPodcastEpisode && !track.isRadio &&
         (status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs) >= minimumMs
+
+    /** Where [entryId] started playing, and how many seeks [PlaybackController] had seen by then. */
+    private class Start(val entryId: String?, val positionMs: Long, val seeks: Long)
 
     private companion object {
         /** Longer than the longest crossfade, so a song that fades into the next one counts as finished. */

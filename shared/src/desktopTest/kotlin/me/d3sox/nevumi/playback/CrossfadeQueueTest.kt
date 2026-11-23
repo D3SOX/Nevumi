@@ -121,6 +121,31 @@ class CrossfadeQueueTest {
     }
 
     @Test
+    fun aSlowSoundEdgeLookupDoesNotHoldUpPlayback() = runBlocking {
+        val directory = Files.createTempDirectory("nevumi-slow-edges")
+        val tracks = threeSecondSongs(directory)
+        /** How long the queue takes to play, and then to pause, with the given edge lookup. */
+        suspend fun respond(lookup: suspend (PlayableTrack) -> SoundEdges?): Long {
+            val engine = CrossfadePlaybackEngine(lookup) { MpvPlaybackEngine("null") }
+            try {
+                engine.setCrossfadeDuration(1_000)
+                return kotlin.time.measureTime {
+                    engine.loadQueue(tracks)
+                    withTimeout(5_000) { engine.status.first { it.playing && it.positionMs > 0 } }
+                    engine.pause()
+                    withTimeout(5_000) { engine.status.first { !it.playing } }
+                }.inWholeMilliseconds
+            } finally { engine.close() }
+        }
+        try {
+            val instant = respond { null }
+            // A lookup that never answers is given up after a while, but playback must not wait for it.
+            val hanging = respond { kotlinx.coroutines.awaitCancellation() }
+            assertTrue(hanging < instant + 300, "Playback waited for the edge lookups: $hanging ms instead of $instant ms")
+        } finally { directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun anOutgoingSongWithLittleSoundGetsAFadeThatFitsItsSound() = runBlocking {
         val directory = Files.createTempDirectory("nevumi-short-sound")
         val tracks = threeSecondSongs(directory)

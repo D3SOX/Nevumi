@@ -38,6 +38,7 @@ class CrossfadePlaybackEngine(private val soundEdges: suspend (PlayableTrack) ->
     private var preparedStartMs = 0L
     private class EdgeLookup(val edges: SoundEdges?, val atMs: Long)
     private val edgeLookups = mutableMapOf<PlayableTrack, EdgeLookup>()
+    private val edgesInFlight = mutableSetOf<PlayableTrack>()
     private var selectedEntry: String? = null
     /** Android's decoder reports a load only once its main thread runs it, so until then the worker uses the loaded entry. */
     private var loadingEntry: String? = null
@@ -483,15 +484,24 @@ class CrossfadePlaybackEngine(private val soundEdges: suspend (PlayableTrack) ->
     }
 
     /** Looks a song's edges up once, and again later while its analysis may still be running. */
-    private suspend fun edges(track: PlayableTrack): SoundEdges? {
-        val now = clock.elapsedNow().inWholeMilliseconds
-        edgeLookups[track]?.takeIf { it.edges != null || now - it.atMs < EDGE_RETRY_MS }?.let { return it.edges }
-        // A slow lookup only costs this song its edges; the fade timing must not wait for it.
-        val found = try { withTimeoutOrNull(EDGE_LOOKUP_TIMEOUT_MS) { soundEdges(track) } }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { null }
-        edgeLookups[track] = EdgeLookup(found, now)
-        return found
+    /**
+     * The edges found for [track] so far. Lookups run beside the worker, so the fade timing never waits for one: until a lookup
+     * answers, the song crossfades as if it had none, and the next tick moves the prepared start once it does.
+     */
+    private fun edges(track: PlayableTrack): SoundEdges? {
+        val known = edgeLookups[track]
+        val stale = known == null || known.edges == null && clock.elapsedNow().inWholeMilliseconds - known.atMs >= EDGE_RETRY_MS
+        if (stale && edgesInFlight.add(track)) scope.launch {
+            val found = try { withTimeoutOrNull(EDGE_LOOKUP_TIMEOUT_MS) { soundEdges(track) } }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            // The worker owns the lookups; a closed player just drops the answer.
+            commands.trySend {
+                edgesInFlight.remove(track)
+                edgeLookups[track] = EdgeLookup(found, clock.elapsedNow().inWholeMilliseconds)
+            }
+        }
+        return known?.edges
     }
 
     private fun pendingStatus(current: PlaybackStatus, pending: PendingLoad) = current.copy(trackId = pending.track.id,
@@ -532,4 +542,4 @@ class CrossfadePlaybackEngine(private val soundEdges: suspend (PlayableTrack) ->
 private const val COMMAND_CADENCE_MS = 500L
 /** How often a song without analysis is looked up again, since its waveform may be decoded meanwhile. */
 private const val EDGE_RETRY_MS = 10_000L
-private const val EDGE_LOOKUP_TIMEOUT_MS = 500L
+private const val EDGE_LOOKUP_TIMEOUT_MS = 5_000L
