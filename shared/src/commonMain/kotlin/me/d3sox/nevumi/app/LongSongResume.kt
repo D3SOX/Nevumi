@@ -55,7 +55,7 @@ internal class LongSongResume(private val context: ControllerContext, private va
                 }
                 if (changed) {
                     // A crossfade starts a song at its first sound, which can lie past the first seconds of its file.
-                    val start = Start(current.entryId, if (current.fadingOut != null) current.positionMs else 0, playback.seeks)
+                    val start = Start(current.entryId, if (current.fadingOut != null) current.positionMs else 0)
                     awaitingDuration = if (resume(current, start, minimumMs, generation)) null else start
                 } else {
                     val start = awaitingDuration ?: return@collect
@@ -97,7 +97,7 @@ internal class LongSongResume(private val context: ControllerContext, private va
         val track = findTrack(status.trackId ?: return true) ?: return true
         if (status.durationMs <= 0 && track.metadata.durationMs <= 0) return false
         if (!qualifies(track, status, minimumMs)) return true
-        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it, generation, start.positionMs, start.seeks) }
+        library.songPosition(track.id)?.let { playback.resumeCurrentEntry(entryId, it, generation, start.positionMs) }
         return true
     }
 
@@ -106,8 +106,8 @@ internal class LongSongResume(private val context: ControllerContext, private va
     private fun qualifies(track: Track, status: PlaybackStatus, minimumMs: Long) = !track.isPodcastEpisode && !track.isRadio &&
         (status.durationMs.takeIf { it > 0 } ?: track.metadata.durationMs) >= minimumMs
 
-    /** Where [entryId] started playing, and how many seeks [PlaybackController] had seen by then. */
-    private class Start(val entryId: String?, val positionMs: Long, val seeks: Long)
+    /** Where [entryId] started playing. */
+    private class Start(val entryId: String?, val positionMs: Long)
 
     private companion object {
         /** Longer than the longest crossfade, so a song that fades into the next one counts as finished. */

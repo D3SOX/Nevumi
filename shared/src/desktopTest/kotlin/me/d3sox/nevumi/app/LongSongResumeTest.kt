@@ -179,6 +179,24 @@ class LongSongResumeTest {
         } finally { player.closeAndJoin() }
     }
 
+    @Test fun aSeekMadeWhileAResumeWaitsKeepsTheChosenPosition() = withStore("long-song-seek") { directory, store ->
+        val library = MusicLibrary(store)
+        val mix = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
+        val player = MusicController(library, PlaybackQueue(store), CrossfadePlaybackEngine { MpvPlaybackEngine("null") },
+            preferences = MusicPreferences(store))
+        try {
+            withTimeout(5_000) { player.state.first { it.libraryReady } }
+            player.updatePreferences { it.copy(resumeLongSongsMinutes = 10) }.join()
+            player.playTrack(mix.id, listOf(mix.id), 0).join()
+            val entryId = withTimeout(5_000) { player.state.first { it.playback.trackId == mix.id && it.playback.playing } }.playback.entryId!!
+            // The listener seeks into the first seconds before a resume requested earlier gets its turn.
+            player.seek(2_000).join()
+            player.playbackController.resumeCurrentEntry(entryId, 240_000, library.songPositionGeneration, startMs = 0).join()
+            delay(500)
+            assertTrue(player.state.value.playback.positionMs < 5_000, "The resume replaced the seek: ${player.state.value.playback.positionMs}")
+        } finally { player.closeAndJoin() }
+    }
+
     @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = withStore("long-song-resume") { directory, store ->
         val library = MusicLibrary(store)
         val mix = elevenMinutes(directory)
