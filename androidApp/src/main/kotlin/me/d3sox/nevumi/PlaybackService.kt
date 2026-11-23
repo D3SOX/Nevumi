@@ -33,7 +33,8 @@ class PlaybackService : MediaSessionService() {
         setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().apply {
             setSmallIcon(R.drawable.ic_launcher_monochrome)
         })
-        val player = AndroidSessionPlayer(this)
+        val player = AndroidSessionPlayer(this, me.d3sox.nevumi.playback.soundEdgeLookup(
+            (application as MusicApplication).controller.library, me.d3sox.nevumi.playback.AndroidAudioWaveforms(applicationContext)))
         scope.launch { me.d3sox.nevumi.playback.SessionAudioLevel.requested.collect(player.engine::setAudioLevelEnabled) }
         scope.launch { player.engine.audioLevel.collect(me.d3sox.nevumi.playback.SessionAudioLevel::publish) }
         scope.launch {

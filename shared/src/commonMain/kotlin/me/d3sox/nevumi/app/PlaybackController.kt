@@ -132,6 +132,7 @@ class PlaybackController internal constructor(private val context: ControllerCon
                     queue.snapshot().copy(positionMs = incoming.preparedQueue.positionMs) == incoming.preparedQueue &&
                     transportIntent.value.revision == incoming.revision) { "Playback changed on the receiving device" }
                 engine.seek(positionMs)
+                seekedPlay = engine.status.value.playbackId
                 // A timeout must fail like any other error, so the sender is told why instead of seeing a closed connection.
                 withTimeoutOrNull(5_000) { engine.status.first { it.entryId == incoming.preparedQueue.currentEntryId && abs(it.positionMs - positionMs) < 250 } }
                     ?: error("Playback did not reach the transferred position in time")
@@ -310,12 +311,14 @@ class PlaybackController internal constructor(private val context: ControllerCon
     /**
      * Continues the current [entryId] where it was left, like [seekCurrentEntry] but keeping a crossfade into it. A song that
      * already moved past its first seconds, such as by a seek made meanwhile, stays where it is, and so does every song once the
-     * positions read under [generation] were forgotten, as when the setting is turned off.
+     * positions read under [generation] were forgotten, as when the setting is turned off. [startMs] is where the song started,
+     * past the beginning when a crossfade started it at its first sound. A seek in this play, even one into its first seconds,
+     * keeps its position.
      */
-    internal fun resumeCurrentEntry(entryId: String, positionMs: Long, generation: Long) = context.action {
+    internal fun resumeCurrentEntry(entryId: String, positionMs: Long, generation: Long, startMs: Long = 0) = context.action {
         val playback = engine.status.value
-        if (generation == library.songPositionGeneration && context.state.value.preferences.resumeLongSongsMinutes > 0 && entryId == playback.entryId && positionMs >= 0 && (playback.durationMs <= 0 || positionMs < playback.durationMs) &&
-            playback.positionMs < RESUME_WINDOW_MS && queue.snapshot().positionMs < RESUME_WINDOW_MS) {
+        if (generation == library.songPositionGeneration && (playback.playbackId == null || playback.playbackId != seekedPlay) && context.state.value.preferences.resumeLongSongsMinutes > 0 && entryId == playback.entryId && positionMs >= 0 && (playback.durationMs <= 0 || positionMs < playback.durationMs) &&
+            playback.positionMs - startMs < RESUME_WINDOW_MS && queue.snapshot().positionMs - startMs < RESUME_WINDOW_MS) {
             queue.setPosition(positionMs)
             engine.resume(entryId, positionMs)
             publishSeek(positionMs)
@@ -615,7 +618,11 @@ class PlaybackController internal constructor(private val context: ControllerCon
         return PlayableTrack(track.id, location, track.metadata.title, track.metadata.artist, entry.id, source.id, live = source.kind == SourceKind.RADIO)
     }
 
+    /** The play the last seek moved, so an automatic resume that waited behind the seek leaves the position the listener chose. */
+    private var seekedPlay: String? = null
+
     private suspend fun publishSeek(positionMs: Long) {
+        seekedPlay = engine.status.value.playbackId
         queue.snapshot().currentEntryId?.let { context.mutableSeeks.emit(PlaybackSeek(it, positionMs)) }
     }
 

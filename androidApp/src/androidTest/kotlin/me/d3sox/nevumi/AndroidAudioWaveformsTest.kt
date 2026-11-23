@@ -97,4 +97,34 @@ class AndroidAudioWaveformsTest {
             } finally { file.delete() }
         }
     }
+
+    @Test fun soundEdgesSkipLeadingSilenceAndANearSilentTailForDecodedAndRawAudio() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        // One second of silence, two seconds of music, one second 50 dB down, then one second of silence.
+        val flac = File(context.cacheDir, "edges-${UUID.randomUUID()}.flac")
+        val wav = File(context.cacheDir, "edges-${UUID.randomUUID()}.wav")
+        try {
+            instrumentation.context.assets.open("sound-edges.flac").use { input -> flac.outputStream().use { input.copyTo(it) } }
+            val frames = 48_000 * 5
+            val pcm = java.nio.ByteBuffer.allocate(44 + frames * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            pcm.put("RIFF".toByteArray()).putInt(36 + frames * 2).put("WAVEfmt ".toByteArray())
+                .putInt(16).putShort(1).putShort(1).putInt(48_000).putInt(96_000).putShort(2).putShort(16)
+                .put("data".toByteArray()).putInt(frames * 2)
+            repeat(frames) { frame ->
+                val amplitude = when (frame / 48_000) { 1, 2 -> .5; 3 -> .5 * .003; else -> 0.0 }
+                pcm.putShort((kotlin.math.sin(2 * Math.PI * 440 * frame / 48_000) * amplitude * 32_767).toInt().toShort())
+            }
+            wav.writeBytes(pcm.array())
+            for (file in listOf(flac, wav)) {
+                val source = TrackSource("local:${file.name}", SourceKind.LOCAL, file.toURI().toString(),
+                    modifiedAt = file.lastModified(), indexedSize = file.length())
+                assertNull("Edges must never start a decoder", AndroidAudioWaveforms(context).soundEdges(source))
+                assertEquals(128, AndroidAudioWaveforms(context).load(source, 5_000).size)
+                val edges = requireNotNull(AndroidAudioWaveforms(context).soundEdges(source)) { "${file.name} edges must be cached" }
+                assertEquals("${file.name} sound starts after its leading silence: $edges", 1_000.0, edges.startMs.toDouble(), 100.0)
+                assertEquals("${file.name} sound ends before its near-silent tail: $edges", 3_000.0, edges.endMs.toDouble(), 100.0)
+            }
+        } finally { flac.delete(); wav.delete() }
+    }
 }

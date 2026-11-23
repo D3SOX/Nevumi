@@ -17,34 +17,38 @@ import okio.Path.Companion.toPath
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.uuid.Uuid
 
-class CachedAudioWaveforms(private val directory: String, private val decode: suspend (String, Long) -> List<Float>) : AudioWaveforms {
+class CachedAudioWaveforms(private val directory: String, private val decode: suspend (String, Long) -> AudioAnalysis) : AudioWaveforms {
     private val lock = Mutex()
     // Loads of one source share a lock, dropped once no load holds or awaits it so the registry stays bounded.
     private class SourceLock { val mutex = Mutex(); var users = 0 }
     private val sourceLocks = mutableMapOf<String, SourceLock>()
-    private val memory = linkedMapOf<String, List<Float>>()
-    private suspend fun remembered(key: String): List<Float>? = lock.withLock {
+    private val memory = linkedMapOf<String, AudioAnalysis>()
+    private suspend fun remembered(key: String): AudioAnalysis? = lock.withLock {
         memory.remove(key)?.also { memory[key] = it }
     }
-    private suspend fun remember(key: String, points: List<Float>) = lock.withLock {
+    private suspend fun remember(key: String, analysis: AudioAnalysis) = lock.withLock {
         memory.remove(key)
-        memory[key] = points
+        memory[key] = analysis
         if (memory.size > 256) memory.remove(memory.keys.first())
     }
     private fun key(source: TrackSource) = "${source.id}|${source.location}|${source.modifiedAt}|${source.indexedSize}".encodeUtf8().sha256().hex()
-    override suspend fun cached(source: TrackSource): List<Float>? {
+    override suspend fun cached(source: TrackSource): List<Float>? = analysis(source)?.peaks
+    override suspend fun soundEdges(source: TrackSource): SoundEdges? = analysis(source)?.edges
+    private suspend fun analysis(source: TrackSource): AudioAnalysis? {
         if (source.kind.streams || !source.available) return null
         val key = key(source)
         remembered(key)?.let { return it }
         // Atomic cache writes allow readers to bypass an unrelated long-running decoder.
         return withContext(Dispatchers.IO) { readCached(key) }
     }
-    private suspend fun readCached(key: String): List<Float>? {
+    private suspend fun readCached(key: String): AudioAnalysis? {
         remembered(key)?.let { return it }
-        val path = directory.toPath() / "$key.rms.json"
-        val saved = runCatching { Json.decodeFromString<List<Float>>(FileSystem.SYSTEM.read(path) { readUtf8() }) }.getOrNull()
-        return saved?.takeIf { it.size == 128 && it.all { point -> point.isFinite() && point in 0f..1f } }?.also { points -> remember(key, points) }
+        val path = directory.toPath() / "$key.json"
+        val saved = runCatching { Json.decodeFromString<AudioAnalysis>(FileSystem.SYSTEM.read(path) { readUtf8() }) }.getOrNull()
+        return saved?.takeIf(::valid)?.also { analysis -> remember(key, analysis) }
     }
+    private fun valid(analysis: AudioAnalysis) = analysis.peaks.size == 128 && analysis.peaks.all { it.isFinite() && it in 0f..1f } &&
+        analysis.edges.let { it == null || it.startMs in 0 until it.endMs }
     override suspend fun load(source: TrackSource, durationMs: Long): List<Float> {
         if (source.kind.streams || !source.available || durationMs <= 0) return emptyList()
         val dispatcher = currentCoroutineContext()[WaveformPreparationContext]?.dispatcher ?: Dispatchers.IO
@@ -53,19 +57,21 @@ class CachedAudioWaveforms(private val directory: String, private val decode: su
         return try { sourceLock.mutex.withLock { withContext(dispatcher) {
             val fs = FileSystem.SYSTEM
             val root = directory.toPath()
-            val path = root / "$key.rms.json"
+            val path = root / "$key.json"
             try {
-                readCached(key)?.let { return@withContext it }
-                val peaks = decode(source.location, durationMs)
-                require(peaks.size == 128 && peaks.all { it.isFinite() && it in 0f..1f })
+                readCached(key)?.let { return@withContext it.peaks }
+                val analysis = decode(source.location, durationMs)
+                require(valid(analysis))
                 fs.createDirectories(root)
                 val temporary = root / "${Uuid.random()}.part"
                 try {
-                    fs.write(temporary) { writeUtf8(Json.encodeToString(peaks)) }
+                    fs.write(temporary) { writeUtf8(Json.encodeToString(analysis)) }
                     fs.atomicMove(temporary, path)
-                    remember(key, peaks)
+                    remember(key, analysis)
+                    // Versions before sound edges kept only the waveform, which this analysis replaces.
+                    fs.delete(root / "$key.rms.json", mustExist = false)
                 } finally { fs.delete(temporary, mustExist = false) }
-                peaks
+                analysis.peaks
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { emptyList() }
         } } } finally {

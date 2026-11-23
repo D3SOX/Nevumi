@@ -11,6 +11,7 @@ import me.d3sox.nevumi.library.TrackSource
 import me.d3sox.nevumi.playback.CrossfadePlaybackEngine
 import me.d3sox.nevumi.playback.MpvPlaybackEngine
 import me.d3sox.nevumi.playback.RepeatMode
+import me.d3sox.nevumi.playback.SoundEdges
 import me.d3sox.nevumi.queue.PlaybackQueue
 import me.d3sox.nevumi.settings.MusicPreferences
 import me.d3sox.nevumi.storage.MusicStore
@@ -130,6 +131,70 @@ class LongSongResumeTest {
             withTimeout(8_000) { second.state.first { it.playback.playing && it.playback.positionMs in 1..5_000 } }
             withTimeout(5_000) { while (library.songPosition(mix.id) != null) delay(25) }
         } finally { second.closeAndJoin() }
+    }
+
+    @Test fun aLongSongFadedInAfterItsSilentIntroStillContinuesWhereItWasLeft() = withStore("long-song-silent-intro") { directory, store ->
+        val library = MusicLibrary(store)
+        val short = library.importTrack(TrackMetadata("Short", durationMs = 3_000),
+            TrackSource("source:short", SourceKind.LOCAL, silence(directory, "short.wav", 3).toString()))
+        val mix = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
+        library.rememberSongPosition(mix.id, 240_000)
+        // The crossfade starts the mix at its first sound, eight seconds in, past the first seconds a resume looks at.
+        val engine = CrossfadePlaybackEngine({ track -> if (track.id == mix.id) SoundEdges(8_000, 660_000) else null }) {
+            MpvPlaybackEngine("null")
+        }
+        val player = MusicController(library, PlaybackQueue(store), engine, preferences = MusicPreferences(store))
+        try {
+            withTimeout(5_000) { player.state.first { it.libraryReady } }
+            player.updatePreferences { it.copy(resumeLongSongsMinutes = 10, crossfadeDurationMs = 1_000) }.join()
+            player.playTrack(short.id, listOf(short.id, mix.id), 0).join()
+            withTimeout(5_000) { player.state.first { it.playback.trackId == mix.id && it.playback.positionMs >= 7_500 } }
+            withTimeout(5_000) { player.state.first { it.playback.trackId == mix.id && it.playback.positionMs >= 240_000 } }
+        } finally { player.closeAndJoin() }
+    }
+
+    @Test fun aLongSongThatFadesOutAtItsLastSoundCountsAsFinished() = withStore("long-song-silent-tail") { directory, store ->
+        val library = MusicLibrary(store)
+        val mix = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
+        val short = library.importTrack(TrackMetadata("Short", durationMs = 60_000),
+            TrackSource("source:short", SourceKind.LOCAL, silence(directory, "short.wav", 60).toString()))
+        // Its last half minute is silent, so the crossfade leaves it far more than the last seconds before the file ends.
+        val engine = CrossfadePlaybackEngine({ track -> if (track.id == mix.id) SoundEdges(0, 630_000) else null }) {
+            MpvPlaybackEngine("null")
+        }
+        val player = MusicController(library, PlaybackQueue(store), engine, preferences = MusicPreferences(store))
+        try {
+            withTimeout(5_000) { player.state.first { it.libraryReady } }
+            player.updatePreferences { it.copy(resumeLongSongsMinutes = 10, crossfadeDurationMs = 1_000) }.join()
+            player.playTrack(mix.id, listOf(mix.id, short.id), 0).join()
+            withTimeout(5_000) { player.state.first { it.playback.trackId == mix.id && it.playback.playing } }
+            player.seek(300_000).join()
+            withTimeout(5_000) { player.state.first { it.playback.playing && it.playback.positionMs >= 300_500 } }
+            player.pause().join()
+            withTimeout(5_000) { while (library.songPosition(mix.id) == null) delay(25) }
+            player.seek(627_000).join()
+            player.play().join()
+            withTimeout(8_000) { player.state.first { it.playback.trackId == short.id } }
+            withTimeout(5_000) { while (library.songPosition(mix.id) != null) delay(25) }
+        } finally { player.closeAndJoin() }
+    }
+
+    @Test fun aSeekMadeWhileAResumeWaitsKeepsTheChosenPosition() = withStore("long-song-seek") { directory, store ->
+        val library = MusicLibrary(store)
+        val mix = library.importTrack(TrackMetadata("Mix", durationMs = 660_000), TrackSource("source:mix", SourceKind.LOCAL, elevenMinutes(directory).toString()))
+        val player = MusicController(library, PlaybackQueue(store), CrossfadePlaybackEngine { MpvPlaybackEngine("null") },
+            preferences = MusicPreferences(store))
+        try {
+            withTimeout(5_000) { player.state.first { it.libraryReady } }
+            player.updatePreferences { it.copy(resumeLongSongsMinutes = 10) }.join()
+            player.playTrack(mix.id, listOf(mix.id), 0).join()
+            val entryId = withTimeout(5_000) { player.state.first { it.playback.trackId == mix.id && it.playback.playing } }.playback.entryId!!
+            // The listener seeks into the first seconds before a resume requested earlier gets its turn.
+            player.seek(2_000).join()
+            player.playbackController.resumeCurrentEntry(entryId, 240_000, library.songPositionGeneration, startMs = 0).join()
+            delay(500)
+            assertTrue(player.state.value.playback.positionMs < 5_000, "The resume replaced the seek: ${player.state.value.playback.positionMs}")
+        } finally { player.closeAndJoin() }
     }
 
     @Test fun longSongsContinueWhereTheyWereLeftUntilTheyFinish() = withStore("long-song-resume") { directory, store ->

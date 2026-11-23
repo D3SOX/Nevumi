@@ -14,7 +14,12 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.time.TimeSource
 
-class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : PlaybackEngine {
+/**
+ * Mixes two decoders for crossfades. [soundEdges] reads where a song's sound starts and ends from analysis that already ran,
+ * or returns null, so a crossfade ends where the outgoing song falls silent and the incoming song starts at its first sound.
+ */
+class CrossfadePlaybackEngine(private val soundEdges: suspend (PlayableTrack) -> SoundEdges? = { null },
+    private val factory: () -> PlaybackEngine) : PlaybackEngine {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val commands = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private val closing = MutableStateFlow(false)
@@ -29,6 +34,11 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
     private var outgoing: PlaybackEngine? = null
     private var tracks = emptyList<PlayableTrack>()
     private var prepared: PlayableTrack? = null
+    /** Where the standby decoder was asked to start [prepared]. */
+    private var preparedStartMs = 0L
+    private class EdgeLookup(val edges: SoundEdges?, val atMs: Long)
+    private val edgeLookups = mutableMapOf<PlayableTrack, EdgeLookup>()
+    private val edgesInFlight = mutableSetOf<PlayableTrack>()
     private var selectedEntry: String? = null
     /** Android's decoder reports a load only once its main thread runs it, so until then the worker uses the loaded entry. */
     private var loadingEntry: String? = null
@@ -406,7 +416,12 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
             } else if (loadingEntry == null) {
                 // The old song's ended state would otherwise advance past the requested song.
                 val next = nextTrack()
-                if (next != null && current.durationMs > 0 && prepared != next) {
+                val playing = tracks.getOrNull(currentIndex())
+                edgeLookups.keys.retainAll { it == playing || it == next }
+                val ending = playing?.let { edges(it) }?.takeIf { current.durationMs > 0 && it.startMs < current.durationMs }
+                val opening = next?.let { edges(it) }
+                val nextStartMs = opening?.startMs ?: 0
+                if (next != null && current.durationMs > 0 && (prepared != next || preparedStartMs != nextStartMs)) {
                     val waiting = standby ?: factory().also { standby = it }
                     waiting.setAudioLevelEnabled(audioLevelEnabled)
                     waiting.setVolume(0.0)
@@ -417,13 +432,20 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
                     waiting.setBitPerfectOutput(bitPerfect)
                     waiting.setSkipSilence(skipSilence)
                     waiting.setRepeat(RepeatMode.OFF)
-                    waiting.load(next, play = false)
+                    waiting.load(next, nextStartMs, play = false)
                     prepared = next
+                    preparedStartMs = nextStartMs
                 }
-                val remaining = (current.durationMs - current.positionMs).coerceAtLeast(0) / speed
+                // The fade ends where the song falls silent, so its trailing silence is never heard.
+                val endMs = ending?.endMs?.coerceAtMost(current.durationMs) ?: current.durationMs
+                val remaining = (endMs - current.positionMs).coerceAtLeast(0) / speed
                 val waiting = standby
-                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), current.durationMs / speed / 2,
-                    (waiting?.status?.value?.durationMs ?: 0) / speed / 2)
+                // The incoming song only has its sound after the start it was prepared at, so a long silence leaves a shorter fade.
+                val incomingMs = (waiting?.status?.value?.durationMs ?: 0).let { duration ->
+                    (opening?.endMs?.coerceAtMost(duration) ?: duration) - preparedStartMs }.coerceAtLeast(0)
+                // Likewise the outgoing song only has its sound between its analyzed edges.
+                val outgoingMs = ending?.let { endMs - it.startMs } ?: current.durationMs
+                val fadeLimit = minOf(activeCrossfadeMs.toDouble(), outgoingMs / speed / 2, incomingMs / speed / 2)
                 if (next != null && waiting != null && prepared == next && requestedPlaying.value &&
                     waiting.status.value.entryId == next.entryId && waiting.status.value.durationMs > 0 &&
                     waiting.status.value.error == null && remaining <= fadeLimit &&
@@ -459,6 +481,27 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
         mutableStatus.value = playback.copy(volume = masterVolume, speed = speed, pitch = pitch, audioEffects = effects,
             playWhenReady = requestedPlaying.value, playing = playback.playing && requestedPlaying.value,
             repeatMode = repeatMode, repeatPlays = repeatPlays, fadingOut = tail, crossfadeDurationMs = activeCrossfadeMs)
+    }
+
+    /** Looks a song's edges up once, and again later while its analysis may still be running. */
+    /**
+     * The edges found for [track] so far. Lookups run beside the worker, so the fade timing never waits for one: until a lookup
+     * answers, the song crossfades as if it had none, and the next tick moves the prepared start once it does.
+     */
+    private fun edges(track: PlayableTrack): SoundEdges? {
+        val known = edgeLookups[track]
+        val stale = known == null || known.edges == null && clock.elapsedNow().inWholeMilliseconds - known.atMs >= EDGE_RETRY_MS
+        if (stale && edgesInFlight.add(track)) scope.launch {
+            val found = try { withTimeoutOrNull(EDGE_LOOKUP_TIMEOUT_MS) { soundEdges(track) } }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            // The worker owns the lookups; a closed player just drops the answer.
+            commands.trySend {
+                edgesInFlight.remove(track)
+                edgeLookups[track] = EdgeLookup(found, clock.elapsedNow().inWholeMilliseconds)
+            }
+        }
+        return known?.edges
     }
 
     private fun pendingStatus(current: PlaybackStatus, pending: PendingLoad) = current.copy(trackId = pending.track.id,
@@ -497,3 +540,6 @@ class CrossfadePlaybackEngine(private val factory: () -> PlaybackEngine) : Playb
 
 /** How long after a command the worker keeps the fast cadence. */
 private const val COMMAND_CADENCE_MS = 500L
+/** How often a song without analysis is looked up again, since its waveform may be decoded meanwhile. */
+private const val EDGE_RETRY_MS = 10_000L
+private const val EDGE_LOOKUP_TIMEOUT_MS = 5_000L

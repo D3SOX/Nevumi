@@ -141,7 +141,7 @@
     <string name="settings_prepare_automatically_description">Prepare local and downloaded music in the background, starting with upcoming songs</string>
     <string name="settings_waveforms_prepared">%1$d of %2$d prepared</string>
     <string name="settings_waveforms_failed">%1$d could not be prepared</string>
-    <string name="settings_waveforms_cache_note">Prepared waveforms are cached and reused when you play a song or reopen Nevumi. Server tracks need to be downloaded first.</string>
+    <string name="settings_waveforms_cache_note">Prepared waveforms are cached and reused when you play a song or reopen Nevumi. Crossfades also use them to skip the silence between songs. Server tracks need to be downloaded first.</string>
     <string name="settings_pause_preparation">Pause preparation</string>
     <string name="settings_prepare_all_waveforms">Prepare all waveforms</string>
 

@@ -20,7 +20,9 @@ class AndroidAudioWaveforms(private val context: Context) : AudioWaveforms {
     override suspend fun load(source: TrackSource, durationMs: Long) = cached.load(source, durationMs)
     override suspend fun cached(source: TrackSource) = cached.cached(source)
 
-    private suspend fun decode(location: String, durationMs: Long): List<Float> {
+    override suspend fun soundEdges(source: TrackSource) = cached.soundEdges(source)
+
+    private suspend fun decode(location: String, durationMs: Long): AudioAnalysis {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
@@ -30,6 +32,7 @@ class AndroidAudioWaveforms(private val context: Context) : AudioWaveforms {
             extractor.selectTrack(track)
             val energy = DoubleArray(128)
             val counts = LongArray(128)
+            val envelope = SoundEnvelope()
             var samples = 0L
             var pcmSamples = ShortArray(32_768)
             fun accumulate(buffer: ByteBuffer, timestampUs: Long) {
@@ -54,13 +57,17 @@ class AndroidAudioWaveforms(private val context: Context) : AudioWaveforms {
                     while (sampleCount - cursor >= channels) {
                         val band = (frame * 128 / totalFrames).coerceIn(0, 127).toInt()
                         val boundary = (band + 1L) * totalFrames / 128
-                        val count = if (band == 127) (sampleCount - cursor) / channels else
-                            minOf((sampleCount - cursor) / channels, (boundary - frame).coerceAtLeast(1).toInt())
+                        // Chunks also end at sound windows, the first frame at or after the next window's start.
+                        val window = frame * 1_000 / SOUND_WINDOW_MS / rate
+                        val windowEnd = ((window + 1) * SOUND_WINDOW_MS * rate + 999) / 1_000
+                        val limit = (if (band == 127) windowEnd else minOf(boundary, windowEnd)) - frame
+                        val count = minOf(((sampleCount - cursor) / channels).toLong(), limit.coerceAtLeast(1)).toInt()
                         var squares = 0.0
                         val end = cursor + count * channels
                         while (cursor < end) { val value = pcmSamples[cursor++].toInt(); squares += value.toDouble() * value }
                         energy[band] += squares / (32_768.0 * 32_768.0)
                         counts[band] += count * channels
+                        envelope.add(window, squares / (32_768.0 * 32_768.0), count.toLong() * channels)
                         frame += count
                         samples += count * channels
                     }
@@ -70,6 +77,7 @@ class AndroidAudioWaveforms(private val context: Context) : AudioWaveforms {
                 while (buffer.remaining() >= channels * bytes) {
                     val time = timestampUs + frame++ * 1_000_000 / rate
                     val band = (time * 128 / (durationMs * 1_000)).coerceIn(0, 127).toInt()
+                    val window = time / (SOUND_WINDOW_MS * 1_000)
                     repeat(channels) {
                         val value = when (encoding) {
                             AudioFormat.ENCODING_PCM_FLOAT -> buffer.float
@@ -81,7 +89,10 @@ class AndroidAudioWaveforms(private val context: Context) : AudioWaveforms {
                             AudioFormat.ENCODING_PCM_8BIT -> ((buffer.get().toInt() and 255) - 128) / 128f
                             else -> buffer.short / 32_768f
                         }
-                        if (value.isFinite()) { energy[band] += value.toDouble() * value; counts[band]++ }
+                        if (value.isFinite()) {
+                            energy[band] += value.toDouble() * value; counts[band]++
+                            envelope.add(window, value.toDouble() * value, 1)
+                        }
                         samples++
                     }
                 }
@@ -156,7 +167,8 @@ class AndroidAudioWaveforms(private val context: Context) : AudioWaveforms {
                 }
             }
             check(samples > 0)
-            return energy.indices.map { sqrt(energy[it] / counts[it].coerceAtLeast(1)).toFloat().coerceIn(0f, 1f) }
+            return AudioAnalysis(energy.indices.map { sqrt(energy[it] / counts[it].coerceAtLeast(1)).toFloat().coerceIn(0f, 1f) },
+                envelope.edges())
         } finally {
             codec?.let { runCatching { it.stop() }; it.release() }
             extractor.release()

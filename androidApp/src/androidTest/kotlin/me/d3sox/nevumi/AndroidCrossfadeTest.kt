@@ -95,6 +95,45 @@ class AndroidCrossfadeTest {
         }
     }
 
+    @Test
+    fun crossfadeEndsWhereTheOutgoingSongFallsSilentAndStartsTheNextAtItsFirstSound() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        // The first song falls silent halfway through and the second starts after a second of silence.
+        val files = listOf<(Int) -> Boolean>({ it < 1_500 }, { it >= 1_000 }).mapIndexed { index, audible ->
+            val file = File(context.cacheDir, "edges-$index-${UUID.randomUUID()}.wav")
+            val frames = 48_000 * 3
+            val wav = ByteBuffer.allocate(44 + frames * 2).order(ByteOrder.LITTLE_ENDIAN)
+            wav.put("RIFF".toByteArray()).putInt(36 + frames * 2).put("WAVEfmt ".toByteArray())
+                .putInt(16).putShort(1).putShort(1).putInt(48_000).putInt(96_000).putShort(2).putShort(16)
+                .put("data".toByteArray()).putInt(frames * 2)
+            repeat(frames) { wav.putShort(if (audible(it / 48)) (sin(2 * PI * 440 * it / 48_000) * 6_000).toInt().toShort() else 0) }
+            file.writeBytes(wav.array())
+            file
+        }
+        val waveforms = me.d3sox.nevumi.playback.AndroidAudioWaveforms(context)
+        fun source(track: PlayableTrack) = me.d3sox.nevumi.library.TrackSource(requireNotNull(track.sourceId),
+            me.d3sox.nevumi.library.SourceKind.LOCAL, track.location)
+        val tracks = files.mapIndexed { index, file ->
+            PlayableTrack("song-$index", file.toURI().toString(), entryId = "entry-$index", sourceId = "local:${file.name}")
+        }
+        tracks.forEach { assertEquals(128, waveforms.load(source(it), 3_000).size) }
+        val engine = CrossfadePlaybackEngine({ track -> waveforms.soundEdges(source(track)) }) { AndroidExoPlaybackEngine(context) }
+        try {
+            engine.setCrossfadeDuration(1_000)
+            engine.loadQueue(tracks)
+            val switched = withTimeout(8_000) { engine.status.first { it.entryId == "entry-1" } }
+            assertEquals("The incoming song must start at its first sound: $switched", 1_000.0, switched.positionMs.toDouble(), 200.0)
+            // The outgoing song's 1.5 s of sound limit the fade to 750 ms, which ends where that sound ends.
+            assertEquals("The fade must fit the outgoing song's sound and end where it falls silent: $switched", 750.0,
+                requireNotNull(switched.fadingOut).positionMs.toDouble(), 200.0)
+            withTimeout(6_000) { engine.status.first { it.entryId == "entry-1" && it.ended } }
+            Unit
+        } finally {
+            engine.close()
+            files.forEach { it.delete() }
+        }
+    }
+
     private fun amplitude(samples: ShortArray, frequency: Int): Double {
         var real = 0.0
         var imaginary = 0.0
