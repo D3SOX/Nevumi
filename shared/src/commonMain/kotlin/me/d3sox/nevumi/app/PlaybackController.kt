@@ -230,7 +230,8 @@ class PlaybackController internal constructor(private val context: ControllerCon
                 }
                 // The sleep timer's fade-out kept the volume low while paused; playing again in any way restores it.
                 if (playback.playWhenReady && context.state.value.sleepTimerEndsAt == null) restoreSleepVolume()
-                volumeLock.withLock { if (requestedVolume?.let { abs(it - playback.volume) < 0.001 } == true) requestedVolume = null }
+                // Read again under the lock: a request made since this update was captured is newer than its volume.
+                volumeLock.withLock { if (requestedVolume?.let { abs(it - engine.status.value.volume) < 0.001 } == true) requestedVolume = null }
             } } catch (error: Exception) {
                 rethrowCancellation(error)
                 context.update { it.copy(playback = engine.status.value, error = error.message ?: "Playback update failed") }
