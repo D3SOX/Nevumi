@@ -80,6 +80,8 @@ data class AppState(
     val serverRefresh: ServerRefreshProgress? = null,
     val lastLocalScanCount: Int? = null,
     val sleepTimerEndsAt: Long? = null,
+    /** The sleep timer pauses once the current song ends. */
+    val sleepAfterSong: Boolean = false,
     val soundCloud: SoundCloudProfile? = null,
     val soundCloudJobs: List<SoundCloudJob> = emptyList(),
     val youTubeJobs: List<me.d3sox.nevumi.youtube.YouTubeJob> = emptyList(),
@@ -372,6 +374,8 @@ class MusicController(val library: MusicLibrary, val queue: PlaybackQueue, val e
     fun setSpeed(speed: Double) = playbackController.setSpeed(speed)
     fun setPitch(pitch: Double) = playbackController.setPitch(pitch)
     fun setSleepTimer(minutes: Int?) = playbackController.setSleepTimer(minutes)
+    fun extendSleepTimer(minutes: Int) = playbackController.extendSleepTimer(minutes)
+    fun setSleepAfterSong() = playbackController.setSleepAfterSong()
     fun transferPlayback(deviceId: String): kotlinx.coroutines.Job = playbackController.transferPlayback(deviceId)
 
     // Queue

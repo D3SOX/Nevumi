@@ -101,6 +101,14 @@
     <string name="player_playback_stops_in">Playback stops in %1$s</string>
     <string name="player_minutes_short">%1$d min</string>
     <string name="player_cancel_timer">Cancel timer</string>
+    <string name="player_playback_stops_after_song">Playback stops after this song</string>
+    <string name="player_end_of_song">End of song</string>
+    <string name="player_custom_sleep_timer">Custom</string>
+    <string name="player_add_minutes">+%1$d min</string>
+    <string name="player_sleep_timer_fade">The music fades out during the last minute before it pauses.</string>
+    <string name="player_sleep_timer_minutes">Minutes</string>
+    <string name="player_sleep_timer_range">From 1 to %1$d minutes</string>
+    <string name="player_start_timer">Start timer</string>
     <string name="player_in_a_playlist">In a playlist</string>
     <string name="player_not_in_a_playlist">Not in a playlist</string>
     <string name="player_previous_artwork">Previous artwork: %1$s</string>

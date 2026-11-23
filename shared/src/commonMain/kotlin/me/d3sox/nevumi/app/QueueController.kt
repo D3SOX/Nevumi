@@ -74,7 +74,7 @@ class QueueController internal constructor(private val context: ControllerContex
                             engine.updateQueue(playback.playableQueue(snapshot))
                             // Another device may have changed repeat for this queue without changing the song.
                             val status = engine.status.value
-                            if (status.repeatMode != snapshot.repeatMode || status.repeatPlays != snapshot.repeatPlays)
+                            if (!playback.stopsAfterSong && (status.repeatMode != snapshot.repeatMode || status.repeatPlays != snapshot.repeatPlays))
                                 engine.setRepeat(snapshot.repeatMode, snapshot.repeatPlays)
                         }
                     }
@@ -171,7 +171,7 @@ class QueueController internal constructor(private val context: ControllerContex
     }
     fun setQueueRepeat(mode: RepeatMode, playCount: Int? = null) = context.action {
         queue.setRepeat(mode, playCount)
-        engine.setRepeat(mode, playCount)
+        playback.setEngineRepeat(mode, playCount)
         context.update { it.copy(queue = queue.snapshot()) }
     }
     fun shuffleQueueAlbums() = context.action {
