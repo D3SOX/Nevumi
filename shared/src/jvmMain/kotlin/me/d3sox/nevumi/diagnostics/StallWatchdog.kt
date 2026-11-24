@@ -36,6 +36,8 @@ class StallWatchdog<Sample : Any>(private val limitMs: Long, private val now: ()
     @Synchronized fun check() {
         val watched = thread ?: return
         if (!running) return
+        // Reading the time first keeps a check that was descheduled from counting its own delay as a stall.
+        val checkedAt = now()
         val last = progressedAt
         val started = stallStartedAt
         if (started != null) {
@@ -44,9 +46,9 @@ class StallWatchdog<Sample : Any>(private val limitMs: Long, private val now: ()
                 stallStartedAt = null
                 healthy = sample(watched)
             }
-        } else if (now() - last >= limitMs) {
+        } else if (checkedAt - last >= limitMs) {
             stallStartedAt = last
-            stalled(watched, now() - last)
+            stalled(watched, checkedAt - last)
         } else healthy = sample(watched)
     }
 }

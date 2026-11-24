@@ -5,9 +5,11 @@ import kotlin.test.assertEquals
 
 class StallWatchdogTest {
     private var now = 0L
+    /** Runs once when the clock is next read, as the watched thread would while a check is descheduled. */
+    private var meanwhile: (() -> Unit)? = null
     private var samples = 0
     private val events = mutableListOf<String>()
-    private val watchdog = StallWatchdog(1_000, { now }, { ++samples },
+    private val watchdog = StallWatchdog(1_000, { meanwhile?.also { meanwhile = null }?.invoke(); now }, { ++samples },
         stalled = { _, stalledMs -> events += "stalled $stalledMs" },
         ended = { _, stalledMs, resumed, before, after -> events += "ended $stalledMs resumed=$resumed $before->$after" })
 
@@ -34,6 +36,15 @@ class StallWatchdogTest {
         assertEquals(listOf("stalled 1500", "ended 1800 resumed=false null->1"), events)
         now = 10_000; watchdog.check()
         assertEquals(2, events.size, "A paused thread does not move and is not stalled")
+    }
+
+    @Test fun aCheckThatResumesLateDoesNotMistakeItsOwnDelayForAStall() {
+        watchdog.start()
+        watchdog.progress()
+        now = 250; watchdog.check()
+        meanwhile = { now = 2_250; watchdog.progress() }
+        watchdog.check()
+        assertEquals(emptyList(), events)
     }
 
     @Test fun aThreadThatNeverRanIsNotWatched() {
