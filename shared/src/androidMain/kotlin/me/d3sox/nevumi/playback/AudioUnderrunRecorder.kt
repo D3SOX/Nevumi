@@ -7,19 +7,13 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.Debug
 import android.os.PowerManager
-import android.util.Log
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.analytics.AnalyticsListener
-import me.d3sox.nevumi.diagnostics.DiagnosticLog
-import java.io.File
-import java.time.OffsetDateTime
-import java.time.temporal.ChronoUnit
-import java.util.concurrent.Executors
 
 /**
  * Records each gap in our audio output with what surrounded it, so a stall during background playback names its cause.
- * The log stays in the app's private storage, which backups exclude.
+ * [PlaybackStallWatchdog] records what held the playback thread during the gap.
  */
 @UnstableApi
 internal class AudioUnderrunRecorder(context: Context, private val player: Player) : AnalyticsListener {
@@ -34,7 +28,7 @@ internal class AudioUnderrunRecorder(context: Context, private val player: Playe
     private fun record(eventTime: AnalyticsListener.EventTime, bufferSizeMs: Long, elapsedSinceLastFeedMs: Long) {
         val item = player.currentMediaItem
         // A gap longer than the output buffer since the last write means the decoder thread did not feed the output.
-        val line = listOf("${OffsetDateTime.now().truncatedTo(ChronoUnit.MILLIS)} underrun",
+        val event = listOf("underrun",
             "sinceLastFeedMs=$elapsedSinceLastFeedMs", "bufferMs=$bufferSizeMs", "bufferedAheadMs=${player.totalBufferedDuration}",
             "positionMs=${eventTime.currentPlaybackPositionMs}", "entry=${item?.mediaId}",
             "track=${item?.mediaMetadata?.extras?.getString("trackId")}", "volume=${player.volume}", "output=${output()}",
@@ -42,8 +36,7 @@ internal class AudioUnderrunRecorder(context: Context, private val player: Playe
             "importance=${ActivityManager.RunningAppProcessInfo().also(ActivityManager::getMyMemoryState).importance}",
             "gc=${stat("gc-count")}/${stat("gc-time")}ms", "blockingGc=${stat("blocking-gc-count")}/${stat("blocking-gc-time")}ms")
             .joinToString(" ")
-        Log.w(TAG, line)
-        writer.execute { runCatching { log(context).append(line) } }
+        AudioDiagnostics.record(context, event)
     }
 
     private fun output(): String {
@@ -63,14 +56,4 @@ internal class AudioUnderrunRecorder(context: Context, private val player: Playe
     }
 
     private fun stat(name: String): String? = Debug.getRuntimeStat("art.gc.$name")
-
-    private companion object {
-        const val TAG = "NevumiAudio"
-        val writer = Executors.newSingleThreadExecutor { Thread(it, "Nevumi audio diagnostics").apply { isDaemon = true } }
-        @Volatile var shared: DiagnosticLog? = null
-        // Every decoder records into one file, so one log serializes the writes.
-        fun log(context: Context) = shared ?: synchronized(this) {
-            shared ?: DiagnosticLog(File(context.filesDir, "diagnostics/audio-underruns.log")).also { shared = it }
-        }
-    }
 }

@@ -19,6 +19,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,6 +97,7 @@ class AndroidExoPlaybackEngine(context: Context, private val outputMonitor: Audi
 
     private fun createPlayer() = ExoPlayer.Builder(appContext,
         NevumiAudioRenderersFactory(appContext, outputMonitor, effects::get, meter, replayGain::get, bitPerfect))
+        .setLoadControl(localFileLoadControl())
         .setAudioAttributes(AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .setUsage(C.USAGE_MEDIA).build(), false).build().also { created ->
             created.addListener(listener)
@@ -320,3 +322,15 @@ class AndroidExoPlaybackEngine(context: Context, private val outputMonitor: Audi
         }
     }
 }
+
+/**
+ * Media3 reads a local file again only once less than a second of it is buffered. Behind Bluetooth's output latency the
+ * decoder then runs dry before the next chunk is read, which drops about a second of audio every 50 seconds of a song.
+ * Reading again at ten seconds leaves the chunk time to arrive.
+ */
+@UnstableApi
+private fun localFileLoadControl() = DefaultLoadControl.Builder().setBufferDurationsMsForLocalPlayback(LOCAL_MIN_BUFFER_MS,
+    DefaultLoadControl.DEFAULT_MAX_BUFFER_FOR_LOCAL_PLAYBACK_MS, DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_FOR_LOCAL_PLAYBACK_MS,
+    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_FOR_LOCAL_PLAYBACK_MS).build()
+
+private const val LOCAL_MIN_BUFFER_MS = 10_000
