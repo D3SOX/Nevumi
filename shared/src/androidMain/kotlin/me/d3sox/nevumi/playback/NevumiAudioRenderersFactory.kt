@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.extractor.metadata.id3.InternalFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.vorbis.VorbisComment
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicReference
 
 private val flatEffects = AudioEffects()
@@ -45,11 +46,24 @@ class NevumiAudioRenderersFactory(context: Context, private val outputMonitor: A
                 .setAudioOutputProvider(bitPerfectOutput(context))
             else setAudioProcessorChain(chain).setEnableFloatOutput(false)
         }.setEnableAudioOutputPlaybackParameters(false).build()
+        val watchdog = PlaybackStallWatchdog(context)
         return object : ForwardingAudioSink(sink) {
             override fun configure(config: AudioSink.AudioSinkConfig) {
                 tags.set(config.format.metadata?.replayGainTags())
                 super.configure(config)
             }
+            override fun handleBuffer(buffer: ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
+                watchdog.offered()
+                return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+            }
+            // The thread offers nothing once the song's last audio is written, until a seek flushes the output.
+            private var playing = false
+            override fun play() { super.play(); playing = true; watchdog.playing() }
+            override fun playToEndOfStream() { watchdog.stopped(); super.playToEndOfStream() }
+            override fun flush() { super.flush(); if (playing) watchdog.playing() }
+            override fun pause() { playing = false; watchdog.stopped(); super.pause() }
+            override fun reset() { playing = false; watchdog.stopped(); super.reset() }
+            override fun release() { playing = false; watchdog.stopped(); super.release() }
         }
     }
 }
