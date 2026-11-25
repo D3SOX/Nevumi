@@ -99,7 +99,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - if: matrix.build-mode == 'manual'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: native/tailscale/go.mod
           cache-dependency-path: native/tailscale/go.sum
@@ -116,7 +116,7 @@ jobs:
         uses: ./.github/actions/apt-install
         with:
           packages: cmake ninja-build libsdl2-dev libgl1-mesa-dev
-      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -132,6 +132,6 @@ jobs:
       - name: Compile the Tailscale client
         if: matrix.language == 'go'
         run: python3 scripts/build-tailscale.py --output shared/build/native/runtime
-      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           category: /language:${{ matrix.language }}
