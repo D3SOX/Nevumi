@@ -10,9 +10,9 @@ import tarfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = "0.41.0"
-SOURCE_URL = "https://codeload.github.com/mpv-player/mpv/tar.gz/41f6a645068483470267271e1d09966ca3b9f413"
-SOURCE_SHA256 = "068960e89211f2adc80af03f637fa393fb5e407d3dd23592c8fe8c5490bb7ae4"
+VERSION = "0.42.0"
+SOURCE_URL = "https://codeload.github.com/mpv-player/mpv/tar.gz/b0841e8c4d156b8403dc1876c4cbd9011eb583f3"
+SOURCE_SHA256 = "a4a79fa6ca728762ac407734b0f93dbcbba250c3bb3bf97b77a342042be802e4"
 
 
 def source_archive():
