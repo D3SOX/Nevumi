@@ -62,6 +62,7 @@ class AndroidPackageTest(unittest.TestCase):
                 def tree():
                     adb("shell", "uiautomator", "dump", "/data/local/tmp/nevumi-package-ui.xml")
                     return ET.fromstring(adb("shell", "cat", "/data/local/tmp/nevumi-package-ui.xml"))
+                previous = {}
                 def click(label, last=False):
                     # A loaded emulator can take seconds per UI dump, which leaves time for only a few swipes towards
                     # About Nevumi at the end of Settings.
@@ -89,7 +90,17 @@ class AndroidPackageTest(unittest.TestCase):
                             node = nodes[-1] if last else nodes[0]
                             x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
                             adb("shell", "input", "tap", str((x1+x2)//2), str((y1+y2)//2))
+                            previous.update(label=label, bounds=node.get("bounds"), time=time.monotonic())
                             return
+                        # A loaded emulator can drop a tap. If the previous target is still in place well after any page
+                        # transition, the tap didn't navigate, so repeat it.
+                        if previous and time.monotonic() - previous["time"] > 3 and any(
+                                previous["label"] in [n.get("text"), n.get("content-desc")] and n.get("bounds") == previous["bounds"]
+                                for n in root.iter("node")):
+                            x1, y1, x2, y2 = map(int, re.findall(r"\d+", previous["bounds"]))
+                            adb("shell", "input", "tap", str((x1+x2)//2), str((y1+y2)//2))
+                            previous["time"] = time.monotonic()
+                            continue
                         if label in ["About Nevumi", "Paired devices"]:
                             size = adb("shell", "wm", "size").strip().split(":")[-1].strip()
                             width, height = map(int, size.split("x"))
